@@ -1,0 +1,397 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>Compras — Central Millwork</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root {
+  --gold:#9B7200;--gold-light:#C49A00;--gold-pale:#F5EDD6;--green:#4A5240;
+  --bg:#F2F0EB;--surface:#FFFFFF;--surface2:#F8F6F2;--border:rgba(74,82,64,0.12);
+  --text:#2A2E25;--text2:#6B7A5E;--text3:#9BA898;
+  --taller-bg:#E8F2DC;--taller:#3A6B1A;--transito-bg:#FFF0D4;--transito:#8A5500;
+  --ordenado-bg:#E4EEF8;--ordenado:#1A4A7A;
+  --r:12px;--r-sm:8px;--shadow:0 1px 3px rgba(42,46,37,0.06),0 4px 12px rgba(42,46,37,0.04);
+}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
+body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;font-size:14px;line-height:1.5;}
+.header{background:var(--green);padding:16px 20px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100;}
+.header-logo{display:flex;align-items:center;gap:10px;}
+.logo-ring{width:32px;height:32px;}
+.header-title{color:rgba(255,255,255,0.9);font-size:13px;font-weight:500;letter-spacing:.03em;}
+.header-badge{background:var(--gold);color:#fff;font-size:10px;font-weight:600;padding:3px 10px;border-radius:20px;letter-spacing:.05em;text-transform:uppercase;}
+.main{padding:16px;max-width:1100px;margin:0 auto;}
+.slicer-label{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--text3);margin-bottom:6px;}
+.slicer-select{width:100%;background:var(--surface);border:1.5px solid var(--gold);border-radius:var(--r-sm);padding:10px 14px;font-family:'DM Sans',sans-serif;font-size:14px;font-weight:500;color:var(--text);appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%239B7200' d='M6 8L1 3h10z'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 14px center;cursor:pointer;margin-bottom:16px;}
+.kpi-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:16px;}
+@media(max-width:480px){.kpi-grid{grid-template-columns:1fr 1fr;}}
+.kpi-card{background:var(--surface);border:.5px solid var(--border);border-radius:var(--r);padding:14px;box-shadow:var(--shadow);position:relative;overflow:hidden;}
+.kpi-card::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;background:var(--gold);}
+.kpi-card.green::before{background:var(--green);}
+.kpi-card.light::before{background:var(--gold-light);}
+.kpi-label{font-size:9px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--text3);margin-bottom:6px;}
+.kpi-value{font-size:20px;font-weight:600;color:var(--text);font-variant-numeric:tabular-nums;}
+.kpi-value.gold{color:var(--gold);}.kpi-value.green{color:var(--green);}
+.kpi-sub{font-size:10px;color:var(--text3);margin-top:3px;}
+.kpi-bar{height:4px;background:var(--bg);border-radius:2px;margin-top:8px;overflow:hidden;}
+.kpi-bar-fill{height:100%;background:var(--gold);border-radius:2px;transition:width .8s ease;}
+.section{background:var(--surface);border:.5px solid var(--border);border-radius:var(--r);box-shadow:var(--shadow);overflow:hidden;}
+.section-header{padding:14px 16px 10px;border-bottom:.5px solid var(--border);display:flex;align-items:center;justify-content:space-between;}
+.section-title{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--text2);}
+.section-meta{font-size:10px;color:var(--text3);font-family:'DM Mono',monospace;}
+.dates-row{display:grid;grid-template-columns:repeat(3,1fr);}
+.date-cell{padding:12px 16px;border-right:.5px solid var(--border);}
+.date-cell:last-child{border-right:none;}
+.date-val{font-size:15px;font-weight:600;color:var(--text);font-family:'DM Mono',monospace;}
+@media(max-width:420px){.dates-row{grid-template-columns:1fr;}.date-cell{border-right:none;border-bottom:.5px solid var(--border);}}
+.chart-wrap{padding:14px 16px;}
+.bar-item{display:flex;align-items:center;gap:10px;margin-bottom:8px;cursor:pointer;border-radius:6px;padding:4px 6px;transition:background .15s;}
+.bar-item:hover,.bar-item.active{background:var(--gold-pale);}
+.bar-item.active .bar-vendor{font-weight:600;color:var(--gold);}
+.bar-vendor{font-size:11px;color:var(--text2);width:80px;flex-shrink:0;text-align:right;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.bar-track{flex:1;background:var(--bg);border-radius:4px;height:20px;overflow:hidden;}
+.bar-fill{height:100%;background:linear-gradient(90deg,var(--gold) 0%,var(--gold-light) 100%);border-radius:4px;display:flex;align-items:center;justify-content:flex-end;padding-right:8px;font-size:10px;font-weight:600;color:#fff;min-width:4px;transition:width .6s ease;white-space:nowrap;}
+.bar-amount{font-size:10px;color:var(--text3);width:56px;text-align:right;flex-shrink:0;font-family:'DM Mono',monospace;}
+.table-wrap{overflow-x:auto;}
+table{width:100%;border-collapse:collapse;font-size:12px;}
+thead th{padding:8px 12px;text-align:left;font-size:9px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:var(--text3);border-bottom:.5px solid var(--border);white-space:nowrap;background:var(--surface2);}
+tbody td{padding:10px 12px;border-bottom:.5px solid var(--border);color:var(--text);vertical-align:middle;cursor:pointer;}
+tbody tr:last-child td{border-bottom:none;}
+tbody tr:hover td{background:var(--gold-pale);}
+tbody tr.sel td{background:var(--gold-pale);font-weight:500;}
+.empty-row td{text-align:center;padding:24px;color:var(--text3);font-style:italic;cursor:default;}
+.badge{display:inline-flex;align-items:center;gap:4px;font-size:9px;font-weight:600;padding:3px 8px;border-radius:20px;text-transform:uppercase;letter-spacing:.04em;white-space:nowrap;}
+.badge::before{content:'';width:5px;height:5px;border-radius:50%;flex-shrink:0;}
+.badge-taller{background:var(--taller-bg);color:var(--taller);}.badge-taller::before{background:var(--taller);}
+.badge-transito{background:var(--transito-bg);color:var(--transito);}.badge-transito::before{background:var(--transito);}
+.badge-ordenado{background:var(--ordenado-bg);color:var(--ordenado);}.badge-ordenado::before{background:var(--ordenado);}
+.detail-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;padding:14px 16px;}
+@media(max-width:480px){.detail-grid{grid-template-columns:1fr;}}
+.detail-card{background:var(--surface2);border:.5px solid var(--border);border-radius:var(--r-sm);padding:12px 14px;}
+.detail-card.wide{grid-column:1/-1;}
+.detail-label{font-size:9px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--text3);margin-bottom:6px;}
+.detail-value{font-size:14px;font-weight:500;color:var(--text);}
+.detail-value.muted{color:var(--text3);font-style:italic;font-size:12px;font-weight:400;}
+.detail-value.obs{font-size:12px;font-weight:400;color:var(--text2);line-height:1.6;}
+.hint{text-align:center;padding:12px 16px;color:var(--text3);font-size:11px;font-style:italic;border-top:.5px solid var(--border);}
+.footer{text-align:center;padding:24px 16px;color:var(--text3);font-size:10px;}
+#loading{position:fixed;inset:0;background:var(--bg);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:999;gap:16px;}
+.loading-text{font-size:12px;color:var(--text3);}
+/* Side-by-side layout: bars 40% | table+detail 60% */
+.main-grid{display:grid;grid-template-columns:2fr 3fr;gap:12px;align-items:start;margin-bottom:12px;}
+@media(max-width:640px){.main-grid{grid-template-columns:1fr;}}
+.table-col{display:flex;flex-direction:column;gap:12px;}
+</style>
+</head>
+<body>
+
+<div id="loading">
+  <svg width="32" height="32" viewBox="0 0 40 40" fill="none">
+    <path d="M32 20a12 12 0 11-12-12" stroke="#9B7200" stroke-width="3" stroke-linecap="round"/>
+    <path d="M36 20a16 16 0 11-16-16" stroke="#C49A00" stroke-width="2.5" stroke-linecap="round" opacity="0.6"/>
+  </svg>
+  <div class="loading-text">Loading data...</div>
+</div>
+
+<header class="header">
+  <div class="header-logo">
+    <svg class="logo-ring" viewBox="0 0 40 40" fill="none">
+      <path d="M32 20a12 12 0 11-12-12" stroke="white" stroke-width="3" stroke-linecap="round"/>
+      <path d="M36 20a16 16 0 11-16-16" stroke="rgba(255,255,255,0.5)" stroke-width="2.5" stroke-linecap="round"/>
+    </svg>
+    <span class="header-title">central millwork</span>
+  </div>
+  <div class="header-badge">Compras</div>
+</header>
+
+<main class="main">
+  <div class="slicer-label">Proyecto</div>
+  <select class="slicer-select" id="slicer-proyecto" onchange="onProyectoChange()">
+    <option value="">— Seleccionar proyecto —</option>
+  </select>
+
+  <div class="kpi-grid">
+    <div class="kpi-card">
+      <div class="kpi-label">PROJECT BUDGET</div>
+      <div class="kpi-value gold" id="kpi-budget">—</div>
+      <div class="kpi-bar"><div class="kpi-bar-fill" id="kpi-bar" style="width:0%"></div></div>
+      <div class="kpi-sub" id="kpi-pct">0% EXECUTED</div>
+    </div>
+    <div class="kpi-card green">
+      <div class="kpi-label">TOTAL OCs</div>
+      <div class="kpi-value green" id="kpi-ocs">—</div>
+      <div class="kpi-sub" id="kpi-n-ocs">0 órdenes</div>
+    </div>
+    <div class="kpi-card light">
+      <div class="kpi-label">PROCURED MATERIALS</div>
+      <div class="kpi-value" id="kpi-mats">—</div>
+      <div class="kpi-sub" id="kpi-mats-sub">0 in stock</div>
+    </div>
+  </div>
+
+  <div class="section" id="sec-dates" style="display:none;margin-bottom:12px;">
+    <div class="dates-row">
+      <div class="date-cell"><div class="kpi-label">MTO DATE</div><div class="date-val" id="d-solicitud">—</div></div>
+      <div class="date-cell"><div class="kpi-label">OC DATE</div><div class="date-val" id="d-oc">—</div></div>
+      <div class="date-cell"><div class="kpi-label">ETA</div><div class="date-val" id="d-entrega">—</div></div>
+    </div>
+  </div>
+
+  <!-- Bars (40%) + Table+Detail (60%) side by side -->
+  <div class="main-grid" id="main-grid" style="display:none">
+    <div class="section" id="sec-bars">
+      <div class="section-header">
+        <div class="section-title">VENDORS</div>
+        <div class="section-meta" id="bars-meta"></div>
+      </div>
+      <div class="chart-wrap" id="bar-chart"></div>
+    </div>
+
+    <div class="table-col">
+      <div class="section" id="sec-table">
+        <div class="section-header">
+          <div class="section-title" id="table-title">Materials</div>
+          <div class="section-meta" id="table-meta"></div>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>CM Code</th><th>Descripción</th><th>Total</th><th>% OCs</th></tr></thead>
+            <tbody id="mat-tbody"></tbody>
+          </table>
+        </div>
+        <div class="hint" id="hint-row">↑ Select a material to view OC status and notes</div>
+      </div>
+
+      <!-- Detail panel — appears below table in the same column -->
+      <div class="section" id="sec-detail" style="display:none">
+        <div class="section-header">
+          <div class="section-title" id="detail-title">Detail</div>
+        </div>
+        <div class="detail-grid">
+          <div class="detail-card">
+            <div class="detail-label">OC STATUS</div>
+            <div class="detail-value" id="det-estado">—</div>
+          </div>
+          <div class="detail-card">
+            <div class="detail-label">RECEPTION DATE</div>
+            <div class="detail-value" id="det-fecha">—</div>
+          </div>
+          <div class="detail-card wide">
+            <div class="detail-label">OBS</div>
+            <div class="detail-value obs" id="det-obs">—</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</main>
+
+<footer class="footer">Central Millwork · Procurement System · <span id="last-update"></span></footer>
+
+<script>
+var DATA = null; // será reemplazado por VBA
+var selectedProy = null;
+var selectedVendor = null;
+var _mtoList = [];
+
+function fmt(n) {
+  if (!n && n !== 0) return '—';
+  return '$' + parseFloat(n).toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2});
+}
+function fmtDate(s) {
+  if (!s || s === '' || s === 'None') return '—';
+  var d = new Date(s);
+  if (isNaN(d)) return s.split(' ')[0] || s;
+  return (d.getMonth()+1).toString().padStart(2,'0') + '/' + d.getDate().toString().padStart(2,'0') + '/' + d.getFullYear();
+}
+function badgeClass(e) {
+  if (!e) return 'badge-ordenado';
+  var u = e.toUpperCase();
+  if (u.includes('TALLER')) return 'badge-taller';
+  if (u.includes('TRANSITO') || u.includes('TRÁNSITO')) return 'badge-transito';
+  return 'badge-ordenado';
+}
+
+function onProyectoChange() {
+  selectedProy = document.getElementById('slicer-proyecto').value;
+  selectedVendor = null;
+  renderProject();
+}
+
+function renderProject() {
+  if (!selectedProy || !DATA) {
+    document.getElementById('sec-dates').style.display = 'none';
+    document.getElementById('main-grid').style.display = 'none';
+    document.getElementById('sec-detail').style.display = 'none';
+    ['kpi-budget','kpi-ocs','kpi-mats'].forEach(function(id){ document.getElementById(id).textContent='—'; });
+    return;
+  }
+  var proy = DATA.proyectos.find(function(p){ return p.id===selectedProy; });
+  var ocsAll = DATA.ordenes.filter(function(o){ return o.id_proyecto===selectedProy; });
+  var mto = DATA.mto.filter(function(m){ return m.id_proyecto===selectedProy && m.mill_made!=='SI'; });
+
+  var budget = proy ? proy.budget : 0;
+  var totalOCs = ocsAll.reduce(function(s,o){ return s+(parseFloat(o.monto)||0); },0);
+  var pct = budget>0 ? Math.min(100,(totalOCs/budget)*100) : 0;
+  var cotizados = mto.filter(function(m){ return m.estado_cotiz==='COTIZADO'; }).length;
+
+  document.getElementById('kpi-budget').textContent = fmt(budget);
+  document.getElementById('kpi-ocs').textContent = fmt(totalOCs);
+  document.getElementById('kpi-n-ocs').textContent = ocsAll.length+' órdenes';
+  document.getElementById('kpi-mats').textContent = mto.length;
+  document.getElementById('kpi-mats-sub').textContent = cotizados+' in stock';
+  document.getElementById('kpi-pct').textContent = pct.toFixed(1)+'% EXECUTED';
+  document.getElementById('kpi-bar').style.width = pct+'%';
+
+  // Date cards — vendor-specific when a vendor is selected
+  if (selectedVendor) {
+    var vendorOC = ocsAll.find(function(o){ return o.vendor===selectedVendor; }) || null;
+    var vendorMats = mto.filter(function(m){ return m.vendor===selectedVendor; });
+    var maxMtoDate = vendorMats.reduce(function(max,m){
+      if (!m.fecha_importacion) return max;
+      return (!max || m.fecha_importacion > max) ? m.fecha_importacion : max;
+    }, null);
+    document.getElementById('d-solicitud').textContent = fmtDate(maxMtoDate);
+    document.getElementById('d-oc').textContent = vendorOC ? fmtDate(vendorOC.fecha_oc) : '—';
+    document.getElementById('d-entrega').textContent = vendorOC ? fmtDate(vendorOC.fecha_entrega) : '—';
+  } else {
+    var fechas = ocsAll.filter(function(o){ return o.fecha_oc; });
+    document.getElementById('d-solicitud').textContent = '—';
+    document.getElementById('d-oc').textContent = fechas.length ? fmtDate(fechas[0].fecha_oc) : '—';
+    var entregas = ocsAll.filter(function(o){ return o.fecha_entrega && o.fecha_entrega!==''; });
+    document.getElementById('d-entrega').textContent = entregas.length ? fmtDate(entregas[0].fecha_entrega) : '—';
+  }
+  document.getElementById('sec-dates').style.display = '';
+
+  // Bar chart — click filters table by vendor
+  var vendors = {};
+  mto.forEach(function(m){
+    if (!m.vendor) return;
+    if (!vendors[m.vendor]) vendors[m.vendor]=0;
+    vendors[m.vendor] += parseFloat(m.total_price)||0;
+  });
+  var vArr = Object.keys(vendors).map(function(v){ return {vendor:v,total:vendors[v]}; });
+  vArr.sort(function(a,b){ return b.total-a.total; });
+  var maxV = vArr.length ? vArr[0].total : 1;
+
+  document.getElementById('bars-meta').textContent = vArr.length+' vendors';
+  var bhtml='';
+  vArr.forEach(function(v){
+    var p = maxV>0 ? Math.max(2,(v.total/maxV)*100) : 2;
+    var active = selectedVendor===v.vendor ? ' active' : '';
+    bhtml += '<div class="bar-item'+active+'" onclick="selectVendor(\''+v.vendor.replace(/'/g,"\\'")+'\')">'+
+      '<div class="bar-vendor">'+v.vendor+'</div>'+
+      '<div class="bar-track"><div class="bar-fill" style="width:'+p+'%">'+(p>15?fmt(v.total):'')+'</div></div>'+
+      '<div class="bar-amount">'+(p<=15?fmt(v.total):'')+'</div>'+
+      '</div>';
+  });
+  document.getElementById('bar-chart').innerHTML = bhtml;
+
+  renderTable();
+  document.getElementById('main-grid').style.display = 'grid';
+  document.getElementById('sec-detail').style.display = 'none';
+}
+
+function selectVendor(vendor) {
+  selectedVendor = (selectedVendor===vendor) ? null : vendor;
+  renderProject();
+}
+
+function renderTable() {
+  var mto = DATA.mto.filter(function(m){
+    return m.id_proyecto===selectedProy && m.mill_made!=='SI';
+  });
+  if (selectedVendor) mto = mto.filter(function(m){ return m.vendor===selectedVendor; });
+  _mtoList = mto;
+
+  var totalOCs = DATA.ordenes.filter(function(o){ return o.id_proyecto===selectedProy; })
+    .reduce(function(s,o){ return s+(parseFloat(o.monto)||0); },0);
+
+  document.getElementById('table-title').textContent = selectedVendor ? 'Materials — '+selectedVendor : 'All Materials';
+  document.getElementById('table-meta').textContent = mto.length+' items';
+
+  if (!mto.length) {
+    document.getElementById('mat-tbody').innerHTML='<tr class="empty-row"><td colspan="4">No materials found</td></tr>';
+    return;
+  }
+  var html='';
+  mto.forEach(function(m,i){
+    var pctOC = totalOCs>0 ? ((parseFloat(m.total_price)||0)/totalOCs*100).toFixed(1)+'%' : '—';
+    html += '<tr onclick="selectMaterial(this,'+i+')" data-i="'+i+'">'+
+      '<td style="font-family:DM Mono,monospace;font-size:11px">'+(m.cm_code||'—')+'</td>'+
+      '<td>'+(m.descripcion||'—')+'</td>'+
+      '<td style="text-align:right;font-family:DM Mono,monospace">'+fmt(m.total_price)+'</td>'+
+      '<td style="text-align:right;font-family:DM Mono,monospace">'+pctOC+'</td>'+
+      '</tr>';
+  });
+  document.getElementById('mat-tbody').innerHTML=html;
+  document.getElementById('hint-row').style.display='';
+}
+
+function selectMaterial(row, idx) {
+  document.querySelectorAll('#mat-tbody tr').forEach(function(r){ r.classList.remove('sel'); });
+  row.classList.add('sel');
+  document.getElementById('hint-row').style.display='none';
+
+  var m = _mtoList[idx];
+  if (!m) return;
+
+  // Look up the specific OC for this material via id_oc, fallback to vendor+project match
+  var oc = m.id_oc ? DATA.ordenes.find(function(o){ return o.id_oc===m.id_oc; }) : null;
+  if (!oc) oc = DATA.ordenes.find(function(o){ return o.id_projeto===selectedProy && o.vendor===m.vendor; }) || null;
+
+  var rec = oc ? DATA.recepciones.find(function(r){ return r.id_oc===oc.id_oc; }) || null : null;
+
+  // OC STATUS
+  var estado = oc ? oc.estado : '—';
+  var bc = badgeClass(estado);
+  document.getElementById('det-estado').innerHTML = estado!=='—'
+    ? '<span class="badge '+bc+'">'+estado+'</span>'
+    : '<span style="color:var(--text3)">—</span>';
+
+  // RECEPTION DATE
+  document.getElementById('det-fecha').textContent = rec && rec.fecha ? fmtDate(rec.fecha) : '—';
+
+  // OBS: recepcion notes > material notes > OC notes
+  var obs = '';
+  if (rec && rec.observaciones && rec.observaciones.trim() && rec.observaciones!=='None') {
+    obs = rec.observaciones;
+  } else if (m.notas && m.notas.trim() && m.notas!=='None') {
+    obs = m.notas;
+  } else if (oc && oc.notas && oc.notas.trim() && oc.notas!=='None') {
+    obs = oc.notas;
+  }
+
+  document.getElementById('detail-title').textContent = m.cm_code+' — '+m.vendor;
+  document.getElementById('det-obs').textContent = obs || '—';
+  document.getElementById('det-obs').className = 'detail-value '+(obs?'obs':'muted');
+  document.getElementById('sec-detail').style.display='';
+}
+
+function init(data) {
+  DATA=data;
+  var sel=document.getElementById('slicer-proyecto');
+  data.proyectos.forEach(function(p){
+    var opt=document.createElement('option');
+    opt.value=p.id;
+    opt.textContent=p.id+' — '+p.nombre;
+    sel.appendChild(opt);
+  });
+  document.getElementById('last-update').textContent=new Date().toLocaleDateString('en-US');
+  document.getElementById('loading').style.display='none';
+}
+
+/*DATA_PLACEHOLDER*/
+if (typeof DATA!=='undefined' && DATA!==null) {
+  init(DATA);
+} else {
+  document.getElementById('loading').innerHTML=
+    '<div style="text-align:center;padding:32px;color:#9B7200">'+
+    '<div style="font-size:14px;font-weight:600;margin-bottom:8px">Sin datos</div>'+
+    '<div style="font-size:12px;color:#9BA898">Ejecuta la macro GenerarReporteCompras en Excel</div>'+
+    '</div>';
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,330 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>Production — Central Millwork</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root {
+  --gold: #9B7200;
+  --gold-light: #C49A00;
+  --gold-pale: #F5EDD6;
+  --green: #4A5240;
+  --green-light: #6B7A5E;
+  --bg: #F2F0EB;
+  --surface: #FFFFFF;
+  --surface2: #F8F6F2;
+  --border: rgba(74,82,64,0.12);
+  --text: #2A2E25;
+  --text2: #6B7A5E;
+  --text3: #9BA898;
+  --status-taller-bg: #E8F2DC;
+  --status-taller: #3A6B1A;
+  --status-transito-bg: #FFF0D4;
+  --status-transito: #8A5500;
+  --status-ordenado-bg: #E4EEF8;
+  --status-ordenado: #1A4A7A;
+  --r: 12px;
+  --r-sm: 8px;
+  --shadow: 0 1px 3px rgba(42,46,37,0.06), 0 4px 12px rgba(42,46,37,0.04);
+}
+* { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+body { font-family: 'DM Sans', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; font-size: 14px; line-height: 1.5; }
+
+.header { background: var(--green); padding: 16px 20px; display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; z-index: 100; }
+.header-logo { display: flex; align-items: center; gap: 10px; }
+.header-title { color: rgba(255,255,255,0.9); font-size: 13px; font-weight: 500; letter-spacing: 0.03em; }
+.header-badge { background: var(--gold); color: white; font-size: 10px; font-weight: 600; padding: 3px 10px; border-radius: 20px; letter-spacing: 0.05em; text-transform: uppercase; }
+
+.main { padding: 16px; max-width: 1100px; margin: 0 auto; }
+
+.slicer-label { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text3); margin-bottom: 6px; }
+.slicer-select { width: 100%; background: var(--surface); border: 1.5px solid var(--gold); border-radius: var(--r-sm); padding: 10px 14px; font-family: 'DM Sans', sans-serif; font-size: 14px; font-weight: 500; color: var(--text); appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%239B7200' d='M6 8L1 3h10z'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 14px center; cursor: pointer; margin-bottom: 16px; }
+
+/* KPI cards */
+.kpi-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 16px; }
+@media(max-width:600px) { .kpi-grid { grid-template-columns: 1fr 1fr; } }
+.kpi-card { background: var(--surface); border: 0.5px solid var(--border); border-radius: var(--r); padding: 14px; box-shadow: var(--shadow); position: relative; overflow: hidden; }
+.kpi-card::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px; background: var(--gold); }
+.kpi-card.green::before { background: var(--green); }
+.kpi-card.amber::before { background: #F59E0B; }
+.kpi-card.blue::before { background: #3B82F6; }
+.kpi-label { font-size: 9px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text3); margin-bottom: 6px; }
+.kpi-value { font-size: 20px; font-weight: 600; color: var(--text); font-variant-numeric: tabular-nums; }
+.kpi-value.gold { color: var(--gold); }
+.kpi-value.green { color: var(--green); }
+.kpi-value.amber { color: #D97706; }
+.kpi-sub { font-size: 10px; color: var(--text3); margin-top: 3px; }
+
+/* Main layout: table (flex:1) | detail cards (220px) */
+.layout { display: grid; grid-template-columns: 1fr 220px; gap: 12px; }
+@media(max-width:600px) { .layout { grid-template-columns: 1fr; } }
+
+.col-left { display: flex; flex-direction: column; gap: 12px; }
+.col-right { display: flex; flex-direction: column; gap: 12px; }
+
+.card { background: var(--surface); border: 0.5px solid var(--border); border-radius: var(--r); padding: 14px 16px; box-shadow: var(--shadow); }
+.card-title { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text2); margin-bottom: 12px; }
+
+.badge { display: inline-flex; align-items: center; gap: 4px; font-size: 9px; font-weight: 600; padding: 3px 8px; border-radius: 20px; text-transform: uppercase; letter-spacing: 0.04em; white-space: nowrap; }
+.badge::before { content: ''; width: 5px; height: 5px; border-radius: 50%; flex-shrink: 0; }
+.badge-taller { background: var(--status-taller-bg); color: var(--status-taller); }
+.badge-taller::before { background: var(--status-taller); }
+.badge-transito { background: var(--status-transito-bg); color: var(--status-transito); }
+.badge-transito::before { background: var(--status-transito); }
+.badge-ordenado { background: var(--status-ordenado-bg); color: var(--status-ordenado); }
+.badge-ordenado::before { background: var(--status-ordenado); }
+
+table { width: 100%; border-collapse: collapse; font-size: 12px; }
+thead th { padding: 8px 10px; text-align: left; font-size: 9px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text3); border-bottom: 0.5px solid var(--border); background: var(--surface2); white-space: nowrap; }
+tbody td { padding: 10px 10px; border-bottom: 0.5px solid var(--border); color: var(--text); vertical-align: middle; cursor: pointer; }
+tbody tr:last-child td { border-bottom: none; }
+tbody tr:hover td { background: var(--surface2); }
+tbody tr.sel td { background: var(--gold-pale); }
+
+.detail-label { font-size: 9px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text3); margin-bottom: 6px; }
+.detail-value { font-size: 15px; font-weight: 500; color: var(--text); }
+.detail-value.sm { font-size: 12px; font-weight: 400; color: var(--text2); line-height: 1.6; }
+.detail-value.muted { font-size: 12px; color: var(--text3); font-style: italic; font-weight: 400; }
+
+.empty { text-align: center; padding: 24px; color: var(--text3); font-size: 12px; font-style: italic; }
+.footer { text-align: center; padding: 24px 16px; color: var(--text3); font-size: 10px; }
+</style>
+</head>
+<body>
+
+<header class="header">
+  <div class="header-logo">
+    <svg width="32" height="32" viewBox="0 0 40 40" fill="none">
+      <path d="M32 20a12 12 0 11-12-12" stroke="white" stroke-width="3" stroke-linecap="round"/>
+      <path d="M36 20a16 16 0 11-16-16" stroke="rgba(255,255,255,0.5)" stroke-width="2.5" stroke-linecap="round"/>
+    </svg>
+    <span class="header-title">central millwork</span>
+  </div>
+  <div class="header-badge">Production</div>
+</header>
+
+<main class="main">
+
+  <div class="slicer-label">Project</div>
+  <select class="slicer-select" id="slicer" onchange="onProjectChange()">
+    <option value="">— Select project —</option>
+  </select>
+
+  <!-- KPI cards — shown after project selected -->
+  <div class="kpi-grid" id="kpi-section" style="display:none">
+    <div class="kpi-card">
+      <div class="kpi-label">Total Materials</div>
+      <div class="kpi-value" id="kpi-total">—</div>
+      <div class="kpi-sub" id="kpi-total-sub">items MTO</div>
+    </div>
+    <div class="kpi-card green">
+      <div class="kpi-label">Cotizados</div>
+      <div class="kpi-value green" id="kpi-cotizados">—</div>
+      <div class="kpi-sub">estado_cotiz = COTIZADO</div>
+    </div>
+    <div class="kpi-card amber">
+      <div class="kpi-label">Pendientes</div>
+      <div class="kpi-value amber" id="kpi-pendientes">—</div>
+      <div class="kpi-sub">sin precio capturado</div>
+    </div>
+    <div class="kpi-card blue">
+      <div class="kpi-label">Total $</div>
+      <div class="kpi-value gold" id="kpi-total-usd">—</div>
+      <div class="kpi-sub">suma total_price</div>
+    </div>
+  </div>
+
+  <div class="layout" id="layout" style="display:none">
+
+    <div class="col-left">
+      <div class="card">
+        <div class="card-title" id="table-title">Materials</div>
+        <div style="overflow-x:auto;overflow-y:auto;max-height:60vh">
+          <table>
+            <thead>
+              <tr>
+                <th>Item</th>
+                <th>CM Code</th>
+                <th>Description</th>
+                <th>QTY</th>
+                <th>Vendor</th>
+              </tr>
+            </thead>
+            <tbody id="mat-body">
+              <tr><td colspan="5"><div class="empty">Select a project</div></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-right">
+      <div class="card">
+        <div class="detail-label">OC STATUS</div>
+        <div class="detail-value" id="det-estado"><span class="muted">Select a material</span></div>
+      </div>
+      <div class="card">
+        <div class="detail-label">RECEPTION DATE</div>
+        <div class="detail-value" id="det-fecha" style="font-family:'DM Mono',monospace;font-size:14px"><span class="muted">—</span></div>
+      </div>
+      <div class="card">
+        <div class="detail-label">OBS</div>
+        <div class="detail-value sm" id="det-obs"><span class="muted">—</span></div>
+      </div>
+      <div class="card">
+        <div class="detail-label">NOTES</div>
+        <div class="detail-value sm" id="det-notes"><span class="muted">—</span></div>
+      </div>
+    </div>
+
+  </div>
+
+  <div class="empty" id="hint" style="margin-top:40px">Select a project to view materials</div>
+
+</main>
+
+<footer class="footer">
+  Central Millwork · Production Report · <span id="last-update"></span>
+</footer>
+
+<script>
+var DATA = null;
+var selProy = null;
+var _mto = [];
+
+function fmt(n) {
+  if (!n && n !== 0) return '—';
+  return '$' + parseFloat(n).toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2});
+}
+
+/*DATA_PLACEHOLDER*/
+if (typeof DATA !== 'undefined' && DATA !== null) {
+  init(DATA);
+} else {
+  document.body.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100vh;flex-direction:column;gap:12px;font-family:DM Sans,sans-serif"><div style="font-size:14px;font-weight:600;color:#9B7200">Sin datos</div><div style="font-size:12px;color:#9BA898">Ejecuta la macro GenerarReporteProduccion en Excel</div></div>';
+}
+
+function init(data) {
+  DATA = data;
+  var sel = document.getElementById('slicer');
+  data.proyectos.forEach(function(p) {
+    var opt = document.createElement('option');
+    opt.value = p.id;
+    opt.textContent = p.id + ' — ' + p.nombre;
+    sel.appendChild(opt);
+  });
+  document.getElementById('last-update').textContent = new Date().toLocaleDateString('en-US');
+}
+
+function onProjectChange() {
+  selProy = document.getElementById('slicer').value;
+  if (!selProy) {
+    document.getElementById('layout').style.display = 'none';
+    document.getElementById('kpi-section').style.display = 'none';
+    document.getElementById('hint').style.display = '';
+    return;
+  }
+  document.getElementById('layout').style.display = 'grid';
+  document.getElementById('kpi-section').style.display = 'grid';
+  document.getElementById('hint').style.display = 'none';
+  renderKpis();
+  renderTable();
+  clearCards();
+}
+
+function renderKpis() {
+  var mto = DATA.mto.filter(function(m) {
+    return m.id_proyecto === selProy && m.mill_made !== 'SI';
+  });
+  var cotizados  = mto.filter(function(m) { return m.estado_cotiz === 'COTIZADO'; }).length;
+  var pendientes = mto.filter(function(m) { return m.estado_cotiz === 'PENDIENTE'; }).length;
+  var totalUSD   = mto.reduce(function(s, m) { return s + (parseFloat(m.total_price) || 0); }, 0);
+
+  document.getElementById('kpi-total').textContent      = mto.length;
+  document.getElementById('kpi-total-sub').textContent  = mto.length + ' items MTO';
+  document.getElementById('kpi-cotizados').textContent  = cotizados;
+  document.getElementById('kpi-pendientes').textContent = pendientes;
+  document.getElementById('kpi-total-usd').textContent  = fmt(totalUSD);
+}
+
+function renderTable() {
+  var mto = DATA.mto.filter(function(m) {
+    return m.id_proyecto === selProy && m.mill_made !== 'SI';
+  });
+  _mto = mto;
+  document.getElementById('table-title').textContent = 'Materials (' + mto.length + ')';
+  if (!mto.length) {
+    document.getElementById('mat-body').innerHTML = '<tr><td colspan="5"><div class="empty">No materials found</div></td></tr>';
+    return;
+  }
+  var html = '';
+  mto.forEach(function(m, idx) {
+    html += '<tr onclick="selectRow(this,' + idx + ')" data-idx="' + idx + '">';
+    html += '<td style="font-family:DM Mono,monospace;font-size:10px;color:var(--text2)">' + (m.item || '—') + '</td>';
+    html += '<td style="font-family:DM Mono,monospace;font-size:11px;font-weight:500">' + (m.cm_code || '—') + '</td>';
+    html += '<td>' + (m.descripcion || '—') + '</td>';
+    html += '<td style="text-align:center;font-weight:600">' + (m.qty || '—') + '</td>';
+    html += '<td style="font-size:11px;color:var(--text2)">' + (m.vendor || '—') + '</td>';
+    html += '</tr>';
+  });
+  document.getElementById('mat-body').innerHTML = html;
+}
+
+function selectRow(el, idx) {
+  document.querySelectorAll('#mat-body tr').forEach(function(r) { r.classList.remove('sel'); });
+  el.classList.add('sel');
+
+  var m = _mto[idx];
+  if (!m) return;
+
+  // Find the OC for this material via id_oc (batch-assigned), fallback to vendor+project match
+  var oc = m.id_oc ? DATA.ordenes.find(function(o) { return o.id_oc === m.id_oc; }) : null;
+  if (!oc) oc = DATA.ordenes.find(function(o) { return o.id_proyecto === selProy && o.vendor === m.vendor; }) || null;
+
+  // Find reception for this OC
+  var rec = oc ? DATA.recepciones.find(function(r) { return r.id_oc === oc.id_oc; }) || null : null;
+
+  // OC STATUS badge
+  var estado = oc ? oc.estado : '—';
+  var bc = 'badge-ordenado';
+  if (estado.toUpperCase().includes('TALLER')) bc = 'badge-taller';
+  else if (estado.toUpperCase().includes('TRANSITO') || estado.toUpperCase().includes('TRÁNSITO')) bc = 'badge-transito';
+  document.getElementById('det-estado').innerHTML = estado && estado !== '—'
+    ? '<span class="badge ' + bc + '">' + estado + '</span>'
+    : '<span class="muted">—</span>';
+
+  // RECEPTION DATE
+  var fecha = rec && rec.fecha ? rec.fecha.split('T')[0] : '—';
+  document.getElementById('det-fecha').innerHTML = '<span style="font-size:14px;font-weight:500">' + fecha + '</span>';
+
+  // OBS priority: recepcion.observaciones > OC.notas > material.notas
+  var obs = '';
+  if (rec && rec.observaciones && rec.observaciones.trim() && rec.observaciones !== 'None') {
+    obs = rec.observaciones;
+  } else if (oc && oc.notas && oc.notas.trim() && oc.notas !== 'None') {
+    obs = oc.notas;
+  } else if (m.notas && m.notas.trim() && m.notas !== 'None') {
+    obs = m.notas;
+  }
+  document.getElementById('det-obs').innerHTML = obs
+    ? '<span class="sm">' + obs + '</span>'
+    : '<span class="muted">—</span>';
+
+  // NOTES: always the material's own notas field
+  var notes = m.notas && m.notas.trim() && m.notas !== 'None' ? m.notas : '';
+  document.getElementById('det-notes').innerHTML = notes
+    ? '<span class="sm">' + notes + '</span>'
+    : '<span class="muted">—</span>';
+}
+
+function clearCards() {
+  document.getElementById('det-estado').innerHTML  = '<span class="muted">Select a material</span>';
+  document.getElementById('det-fecha').innerHTML   = '<span class="muted">—</span>';
+  document.getElementById('det-obs').innerHTML     = '<span class="muted">—</span>';
+  document.getElementById('det-notes').innerHTML   = '<span class="muted">—</span>';
+}
+</script>
+</body>
+</html>

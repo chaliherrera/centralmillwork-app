@@ -1,0 +1,10 @@
+CREATE TABLE IF NOT EXISTS usuarios (
+  id            SERIAL PRIMARY KEY,
+  nombre        TEXT NOT NULL,
+  email         TEXT NOT NULL UNIQUE,
+  password_hash TEXT NOT NULL,
+  rol           TEXT NOT NULL CHECK (rol IN ('ADMIN','PROCUREMENT','PRODUCTION','PROJECT_MANAGEMENT','RECEPTION')),
+  activo        BOOLEAN NOT NULL DEFAULT true,
+  created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
