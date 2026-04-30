@@ -9,10 +9,10 @@ import type { User, UserRole } from '@/types'
 
 const ROLES: { value: UserRole; label: string }[] = [
   { value: 'ADMIN',              label: 'Admin' },
-  { value: 'PROCUREMENT',        label: 'Compras' },
-  { value: 'PRODUCTION',         label: 'Producción' },
-  { value: 'PROJECT_MANAGEMENT', label: 'Gerencia de Proyecto' },
-  { value: 'CONTABILIDAD',       label: 'Contabilidad' },
+  { value: 'PROCUREMENT',        label: 'Procurement' },
+  { value: 'PRODUCTION',         label: 'Production' },
+  { value: 'PROJECT_MANAGEMENT', label: 'Project Manager' },
+  { value: 'CONTABILIDAD',       label: 'Accounting' },
 ]
 
 const ROL_COLORS: Record<UserRole, string> = {

@@ -5,10 +5,10 @@ import type { UserRole } from '@/types'
 
 const ROL_LABEL: Record<UserRole, string> = {
   ADMIN:              'Admin',
-  PROCUREMENT:        'Compras',
-  PRODUCTION:         'Producción',
-  PROJECT_MANAGEMENT: 'Gerencia',
-  CONTABILIDAD:       'Contabilidad',
+  PROCUREMENT:        'Procurement',
+  PRODUCTION:         'Production',
+  PROJECT_MANAGEMENT: 'Project Manager',
+  CONTABILIDAD:       'Accounting',
 }
 
 interface HeaderProps { title: string }
