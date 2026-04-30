@@ -45,7 +45,7 @@ export default function Sidebar() {
         {!collapsed && (
           <div className="flex items-center overflow-hidden">
             <img
-              src="/logo_cm.jpg"
+              src="/logo_cm_sidebar.png"
               alt="Central Millwork"
               className="h-9 w-auto object-contain"
             />

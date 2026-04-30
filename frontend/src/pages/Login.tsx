@@ -30,7 +30,7 @@ export default function Login() {
       <div className="w-full max-w-sm">
         {/* Logo card */}
         <div className="bg-forest-600 rounded-t-2xl px-8 py-8 flex flex-col items-center border-b border-forest-500">
-          <img src="/logo_cm.jpg" alt="Central Millwork" className="h-16 w-auto object-contain mb-4" />
+          <img src="/logo_cm_login.png" alt="Central Millwork" className="h-16 w-auto object-contain mb-4" />
           <h1 className="text-white text-xl font-semibold tracking-tight">Central Millwork</h1>
           <p className="text-forest-300 text-sm mt-1">Sistema de Gestión de Compras</p>
         </div>
