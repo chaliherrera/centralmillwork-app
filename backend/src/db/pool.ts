@@ -1,7 +1,9 @@
 import { Pool } from 'pg'
 import dotenv from 'dotenv'
 
-dotenv.config()
+if (process.env.NODE_ENV !== 'production') {
+  dotenv.config()
+}
 
 // Railway injects DATABASE_URL automatically when a Postgres plugin is added.
 // Fall back to individual DB_* vars for local development.

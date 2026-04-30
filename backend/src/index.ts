@@ -8,8 +8,10 @@ import authRouter from './routes/auth'
 import { authenticate } from './middleware/auth'
 import { errorHandler, notFound } from './middleware/errorHandler'
 
-// Explicit path so dotenv finds backend/.env regardless of cwd (npm workspaces runs from root)
-dotenv.config({ path: path.resolve(__dirname, '../.env') })
+// Load .env only in development — Railway injects env vars directly into process.env
+if (process.env.NODE_ENV !== 'production') {
+  dotenv.config({ path: path.resolve(__dirname, '../.env') })
+}
 
 console.log('[boot] JWT_SECRET:', process.env.JWT_SECRET ? 'configurado' : 'MISSING — auth will fail')
 
