@@ -370,11 +370,27 @@ export async function generarOCs(req: Request, res: Response, next: NextFunction
       )
       if (!materiales.length) continue
 
-      // Lookup proveedor_id via case-insensitive name match
-      const { rows: [prov] } = await client.query(
+      // Lookup proveedor_id, auto-create if missing
+      let { rows: [prov] } = await client.query(
         `SELECT id FROM proveedores WHERE LOWER(TRIM(nombre)) = LOWER(TRIM($1)) LIMIT 1`,
         [vendor]
       )
+      if (!prov) {
+        const inserted = await client.query(
+          `INSERT INTO proveedores (nombre) VALUES ($1) RETURNING id`,
+          [vendor.trim()]
+        )
+        prov = inserted.rows[0]
+      }
+
+      // Get categoria from materials (one vendor → one category per project)
+      const { rows: [catRow] } = await client.query(
+        `SELECT categoria FROM materiales_mto
+         WHERE proyecto_id = $1 AND vendor = $2 AND categoria IS NOT NULL AND categoria != ''
+         LIMIT 1`,
+        [proyecto_id, vendor]
+      )
+      const categoria = catRow?.categoria ?? ''
 
       // Generate OC number — re-query inside loop so sequence is correct across iterations
       const { rows: [last] } = await client.query(
@@ -385,10 +401,10 @@ export async function generarOCs(req: Request, res: Response, next: NextFunction
 
       const { rows: [orden] } = await client.query(
         `INSERT INTO ordenes_compra
-           (numero, proyecto_id, proveedor_id, estado, fecha_emision,
+           (numero, proyecto_id, proveedor_id, categoria, estado, fecha_emision,
             fecha_entrega_estimada, fecha_mto)
-         VALUES ($1,$2,$3,'enviada',NOW(),$4,$5) RETURNING id`,
-        [numero, proyecto_id, prov?.id ?? null,
+         VALUES ($1,$2,$3,$4,'enviada',NOW(),$5,$6) RETURNING id`,
+        [numero, proyecto_id, prov?.id ?? null, categoria,
          fecha_entrega_estimada || null, fecha_mto]
       )
 
