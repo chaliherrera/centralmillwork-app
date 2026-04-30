@@ -10,7 +10,8 @@ export interface OcImagen {
   created_at: string
 }
 
-export const UPLOADS_BASE = 'http://localhost:4000/uploads'
+const BACKEND_URL = import.meta.env.VITE_BACKEND_URL ?? 'http://localhost:4000'
+export const UPLOADS_BASE = `${BACKEND_URL}/uploads`
 
 export const imagenesService = {
   getByOrden: (ordenId: number) =>
