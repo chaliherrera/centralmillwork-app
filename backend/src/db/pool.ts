@@ -1,11 +1,14 @@
 import { Pool } from 'pg'
 
-console.log('[pool] DATABASE_URL:', process.env.DATABASE_URL ? process.env.DATABASE_URL.substring(0, 50) + '...' : 'NOT FOUND')
-console.log('[pool] Using connection string:', !!process.env.DATABASE_URL)
+const connectionString = process.env.DATABASE_PUBLIC_URL || process.env.DATABASE_URL
 
-const pool = process.env.DATABASE_URL
+console.log('[pool] DATABASE_PUBLIC_URL:', process.env.DATABASE_PUBLIC_URL ? process.env.DATABASE_PUBLIC_URL.substring(0, 50) + '...' : 'NOT FOUND')
+console.log('[pool] DATABASE_URL:', process.env.DATABASE_URL ? process.env.DATABASE_URL.substring(0, 50) + '...' : 'NOT FOUND')
+console.log('[pool] Using connection string:', !!connectionString)
+
+const pool = connectionString
   ? new Pool({
-      connectionString: process.env.DATABASE_URL,
+      connectionString,
       ssl: { rejectUnauthorized: false },
     })
   : new Pool({
