@@ -1,5 +1,8 @@
 import { Pool } from 'pg'
 
+console.log('[pool] DATABASE_URL:', process.env.DATABASE_URL ? process.env.DATABASE_URL.substring(0, 50) + '...' : 'NOT FOUND')
+console.log('[pool] Using connection string:', !!process.env.DATABASE_URL)
+
 const pool = process.env.DATABASE_URL
   ? new Pool({
       connectionString: process.env.DATABASE_URL,
