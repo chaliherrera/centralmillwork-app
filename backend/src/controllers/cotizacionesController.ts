@@ -307,3 +307,4 @@ export async function enviarCotizaciones(req: Request, res: Response, next: Next
    res.json({ data: results, message: `${results.length} cotización(es) enviada(s) por correo` })
   } catch (err) { next(err) }
 }
+
