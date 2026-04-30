@@ -41,7 +41,7 @@ const router = Router()
 // Role shorthand helpers
 const ADMIN      = requireRole('ADMIN')
 const WRITE      = requireRole('ADMIN', 'PROCUREMENT')
-const REC_WRITE  = requireRole('ADMIN', 'PROCUREMENT', 'PRODUCTION', 'RECEPTION')
+const REC_WRITE  = requireRole('ADMIN', 'PROCUREMENT', 'PRODUCTION')
 
 // ─── Usuarios (ADMIN only) ────────────────────────────────────────────────────
 router.get('/usuarios',      ADMIN, getUsuarios)

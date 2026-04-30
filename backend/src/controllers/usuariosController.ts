@@ -4,7 +4,7 @@ import pool from '../db/pool'
 import { createError } from '../middleware/errorHandler'
 import { parsePagination, paginatedResponse } from '../utils/pagination'
 
-const VALID_ROLES = ['ADMIN', 'PROCUREMENT', 'PRODUCTION', 'PROJECT_MANAGEMENT', 'RECEPTION']
+const VALID_ROLES = ['ADMIN', 'PROCUREMENT', 'PRODUCTION', 'PROJECT_MANAGEMENT', 'CONTABILIDAD']
 
 export async function getUsuarios(req: Request, res: Response, next: NextFunction) {
   try {

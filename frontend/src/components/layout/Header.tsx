@@ -8,7 +8,7 @@ const ROL_LABEL: Record<UserRole, string> = {
   PROCUREMENT:        'Compras',
   PRODUCTION:         'Producción',
   PROJECT_MANAGEMENT: 'Gerencia',
-  RECEPTION:          'Recepción',
+  CONTABILIDAD:       'Contabilidad',
 }
 
 interface HeaderProps { title: string }
