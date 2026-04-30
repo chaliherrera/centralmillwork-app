@@ -1,48 +1,28 @@
 import { Request, Response, NextFunction } from 'express'
-import { exec } from 'child_process'
-import { promisify } from 'util'
-import * as fs from 'fs'
-import * as os from 'os'
-import * as path from 'path'
-import * as crypto from 'crypto'
+import nodemailer from 'nodemailer'
 import pool from '../db/pool'
 import { parsePagination, paginatedResponse } from '../utils/pagination'
 import { createError } from '../middleware/errorHandler'
 
-const execAsync = promisify(exec)
+// Reusable transporter for Outlook 365 SMTP
+const smtpTransporter = nodemailer.createTransport({
+  host: process.env.SMTP_HOST,
+  port: parseInt(process.env.SMTP_PORT || '587'),
+  secure: false, // STARTTLS on port 587
+  auth: {
+    user: process.env.SMTP_USER,
+    pass: process.env.SMTP_PASS,
+  },
+})
 
-async function sendViaOutlookCOM(to: string, subject: string, htmlBody: string): Promise<void> {
-  const id       = crypto.randomBytes(8).toString('hex')
-  const htmlFile = path.join(os.tmpdir(), `cm_mail_${id}.html`)
-  const ps1File  = path.join(os.tmpdir(), `cm_mail_${id}.ps1`)
-
-  // Single-quote escaping for PowerShell: ' → ''
-  const safe = (s: string) => s.replace(/'/g, "''")
-
-  const ps1 = [
-    `$ol   = New-Object -ComObject Outlook.Application`,
-    `$mail = $ol.CreateItem(0)`,
-    `$mail.To       = '${safe(to)}'`,
-    `$mail.Subject  = '${safe(subject)}'`,
-    `$mail.HTMLBody = [System.IO.File]::ReadAllText('${safe(htmlFile)}', [System.Text.Encoding]::UTF8)`,
-    `$mail.Send()`,
-    `Write-Output 'OK'`,
-  ].join('\r\n')
-
-  fs.writeFileSync(htmlFile, htmlBody, 'utf8')
-  fs.writeFileSync(ps1File, ps1, 'utf8')
-
-  try {
-    const { stdout, stderr } = await execAsync(
-      `powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "${ps1File}"`
-    )
-    console.log('[OutlookCOM] stdout:', stdout.trim())
-    if (stderr) console.warn('[OutlookCOM] stderr:', stderr.trim())
-  } finally {
-    for (const f of [htmlFile, ps1File]) {
-      try { fs.unlinkSync(f) } catch { /* ignore cleanup errors */ }
-    }
-  }
+async function sendViaSMTP(to: string, subject: string, htmlBody: string): Promise<void> {
+  const info = await smtpTransporter.sendMail({
+    from: process.env.SMTP_FROM,
+    to,
+    subject,
+    html: htmlBody,
+  })
+  console.log(`[SMTP] enviado a ${to} | messageId=${info.messageId}`)
 }
 
 interface MaterialRow {
@@ -303,7 +283,7 @@ export async function enviarCotizaciones(req: Request, res: Response, next: Next
       const html    = buildEmailHtml(proyecto, vendor, materiales)
       const subject = `Quote Request - ${proyecto.codigo} - ${vendor} - Central Millwork`
 
-      await sendViaOutlookCOM(email_to, subject, html)
+      await sendViaSMTP(email_to, subject, html)
 
       const folio = `COT-${new Date().getFullYear()}-${String(seq).padStart(4, '0')}`
       seq++
@@ -324,6 +304,6 @@ export async function enviarCotizaciones(req: Request, res: Response, next: Next
       results.push({ vendor, folio, preview_url: null, materiales_count: materiales.length })
     }
 
-    res.json({ data: results, message: `${results.length} cotización(es) enviada(s) vía Outlook` })
+   res.json({ data: results, message: `${results.length} cotización(es) enviada(s) por correo` })
   } catch (err) { next(err) }
 }

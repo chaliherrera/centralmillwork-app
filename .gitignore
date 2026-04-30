@@ -10,3 +10,8 @@ Thumbs.db
 backend/uploads/
 .claude/
 
+
+# Archivos temporales del deploy a Railway
+backup_local.sql
+pack_uploads.js
+uploads_payload.json
