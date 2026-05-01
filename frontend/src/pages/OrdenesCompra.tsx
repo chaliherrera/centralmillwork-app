@@ -8,6 +8,7 @@ import {
 import toast from 'react-hot-toast'
 import clsx from 'clsx'
 import OrdenCompraForm from '@/components/modules/ordenes_compra/OrdenCompraForm'
+import Modal from '@/components/ui/Modal'
 import ReporteModal from '@/components/ui/ReporteModal'
 import { ordenesCompraService } from '@/services/ordenesCompra'
 import { recepcionesService } from '@/services/recepciones'
@@ -355,6 +356,7 @@ export default function OrdenesCompra() {
   const [selectedOc, setSelectedOc]     = useState<OrdenCompra | undefined>()
   const [formOpen, setFormOpen]         = useState(false)
   const [editing, setEditing]           = useState<OrdenCompra | undefined>()
+  const [editingNotas, setEditingNotas] = useState<OrdenCompra | undefined>()
   const [reporteOpen, setReporteOpen]   = useState(false)
 
   const qc = useQueryClient()
@@ -405,7 +407,14 @@ export default function OrdenesCompra() {
     },
   })
 
-  const openEdit  = (o: OrdenCompra) => { setEditing(o); setFormOpen(true) }
+  const openEdit  = (o: OrdenCompra) => {
+    if (o.estado_display === 'EN_EL_TALLER') {
+      setEditingNotas(o)
+    } else {
+      setEditing(o)
+      setFormOpen(true)
+    }
+  }
   const openNew   = () => { setEditing(undefined); setFormOpen(true) }
   const handleClose = () => { setFormOpen(false); setEditing(undefined) }
 
@@ -663,7 +672,70 @@ export default function OrdenesCompra() {
       )}
 
       <OrdenCompraForm open={formOpen} onClose={handleClose} orden={editing} />
+      {editingNotas && (
+        <NotasModal
+          oc={editingNotas}
+          onClose={() => setEditingNotas(undefined)}
+          onSaved={() => {
+            qc.invalidateQueries({ queryKey: ['ordenes-compra-kanban'] })
+            setEditingNotas(undefined)
+          }}
+        />
+      )}
       <ReporteModal open={reporteOpen} onClose={() => setReporteOpen(false)} />
     </div>
+  )
+}
+
+/* ────────── Notas Modal — solo edita notas para OCs en taller ────────── */
+function NotasModal({
+  oc,
+  onClose,
+  onSaved,
+}: {
+  oc: OrdenCompra
+  onClose: () => void
+  onSaved: () => void
+}) {
+  const [notas, setNotas] = useState(oc.notas ?? '')
+  const [saving, setSaving] = useState(false)
+
+  const handleSave = async () => {
+    setSaving(true)
+    try {
+      await ordenesCompraService.update(oc.id, { notas } as any)
+      toast.success('Notas actualizadas')
+      onSaved()
+    } catch {
+      toast.error('Error al actualizar notas')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <Modal open={true} onClose={onClose} title={`Editar notas — ${oc.numero}`} size="md">
+      <div className="space-y-4">
+        <div>
+          <label className="label">Notas</label>
+          <textarea
+            value={notas}
+            onChange={(e) => setNotas(e.target.value)}
+            rows={6}
+            className="input resize-none"
+            placeholder="Observaciones, condiciones de pago, instrucciones de entrega..."
+            autoFocus
+          />
+        </div>
+        <div className="flex justify-end gap-3 pt-2 border-t border-gray-100">
+          <button type="button" onClick={onClose} className="btn-ghost" disabled={saving}>
+            Cancelar
+          </button>
+          <button onClick={handleSave} disabled={saving} className="btn-primary">
+            {saving ? 'Guardando…' : 'Guardar'}
+          </button>
+        </div>
+      </div>
+    </Modal>
   )
 }
