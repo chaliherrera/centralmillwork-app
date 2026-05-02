@@ -32,7 +32,7 @@ import { getImagenes, uploadImagen, deleteImagen, upload } from '../controllers/
 import {
   getCotizaciones, getCotizacion, createCotizacion,
   updateCotizacion, aprobarCotizacion, deleteCotizacion,
-  enviarCotizaciones, getVendorEmails,
+  marcarCotizacionesEnviadas,
 } from '../controllers/cotizacionesController'
 import { getReporteCompras, getReporteProduccion, compartirReporte } from '../controllers/reportesController'
 
@@ -115,9 +115,8 @@ router.post('/reportes/compartir',   WRITE, compartirReporte)
 
 // ─── Cotizaciones ────────────────────────────────────────────────────────────
 router.get('/cotizaciones',                   WRITE, getCotizaciones)
-router.get('/cotizaciones/vendor-emails',     WRITE, getVendorEmails)
 router.get('/cotizaciones/:id',               WRITE, getCotizacion)
-router.post('/cotizaciones/enviar',           WRITE, enviarCotizaciones)
+router.post('/cotizaciones/enviar',           WRITE, marcarCotizacionesEnviadas)
 router.post('/cotizaciones',                  WRITE, createCotizacion)
 router.put('/cotizaciones/:id',               WRITE, updateCotizacion)
 router.patch('/cotizaciones/:id/aprobar',     WRITE, aprobarCotizacion)

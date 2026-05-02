@@ -1,21 +1,20 @@
 import api from './api'
 import type { SolicitudCotizacion, ApiResponse, PaginationParams } from '@/types'
 
-export interface EnviarResult {
+export interface MarcarEnviadaResult {
   vendor: string
   folio: string
-  preview_url: string | null
   materiales_count: number
 }
 
 export const cotizacionesService = {
-  getVendorEmails: (proyecto_id: number) =>
-    api.get<{ data: Array<{ vendor: string; email: string | null }> }>(
-      '/cotizaciones/vendor-emails', { params: { proyecto_id } }
+  // Marca una o varias cotizaciones como enviadas (sin enviar email — el PDF
+  // se genera en el frontend y el usuario lo manda manualmente por su cliente
+  // de email). Inserta un registro en solicitudes_cotizacion con estado='enviada'.
+  marcarEnviadas: (data: { proyecto_id: number; vendors: Array<{ vendor: string }> }) =>
+    api.post<{ data: MarcarEnviadaResult[]; message: string }>(
+      '/cotizaciones/enviar', data
     ).then((r) => r.data),
-
-  enviar: (data: { proyecto_id: number; vendors: Array<{ vendor: string; email_to: string }> }) =>
-    api.post<{ data: EnviarResult[]; message: string }>('/cotizaciones/enviar', data, { timeout: 120_000 }).then((r) => r.data),
 
   getAll: (params?: PaginationParams & { estado?: string; proyecto_id?: number }) =>
     api.get<ApiResponse<SolicitudCotizacion[]>>('/cotizaciones', { params }).then((r) => r.data),

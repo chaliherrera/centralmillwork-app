@@ -521,6 +521,8 @@ export default function Materiales() {
         onClose={() => setEnviarOpen(false)}
         proyectoId={selectedProyectoId as number}
         proyectoCodigo={selectedProyecto?.codigo ?? ''}
+        proyectoNombre={selectedProyecto?.nombre}
+        proyectoCliente={selectedProyecto?.cliente}
         allMaterials={allItems?.data ?? []}
       />
       <GenerarOCsModal
