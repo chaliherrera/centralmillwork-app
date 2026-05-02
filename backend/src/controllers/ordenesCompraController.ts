@@ -41,23 +41,26 @@ const OC_COMPUTED = `
 
 export async function getOrdenesCompraImportDates(req: Request, res: Response, next: NextFunction) {
   try {
-    const { proyecto_id } = req.query
-    const where = proyecto_id
-      ? `WHERE proyecto_id = ${parseInt(String(proyecto_id))} AND fecha_mto IS NOT NULL`
-      : `WHERE fecha_mto IS NOT NULL`
-    const { rows } = await pool.query(
-      `SELECT DISTINCT fecha_mto::text AS fecha FROM ordenes_compra ${where} ORDER BY fecha_mto DESC`
-    )
+    const proyectoId = req.query.proyecto_id ? parseInt(String(req.query.proyecto_id)) : null
+    const { rows } = proyectoId
+      ? await pool.query(
+          `SELECT DISTINCT fecha_mto::text AS fecha FROM ordenes_compra
+           WHERE proyecto_id = $1 AND fecha_mto IS NOT NULL ORDER BY fecha_mto DESC`,
+          [proyectoId]
+        )
+      : await pool.query(
+          `SELECT DISTINCT fecha_mto::text AS fecha FROM ordenes_compra
+           WHERE fecha_mto IS NOT NULL ORDER BY fecha_mto DESC`
+        )
     res.json({ data: rows.map((r) => r.fecha) })
   } catch (err) { next(err) }
 }
 
 export async function getOrdenesCompraKpis(req: Request, res: Response, next: NextFunction) {
   try {
-    const { proyecto_id } = req.query
-    const extraWhere = proyecto_id
-      ? `AND o.proyecto_id = ${parseInt(String(proyecto_id))}`
-      : ''
+    const proyectoId = req.query.proyecto_id ? parseInt(String(req.query.proyecto_id)) : null
+    const extraWhere = proyectoId ? `AND o.proyecto_id = $1` : ''
+    const vals = proyectoId ? [proyectoId] : []
 
     const { rows } = await pool.query(
       `SELECT
@@ -71,24 +74,32 @@ export async function getOrdenesCompraKpis(req: Request, res: Response, next: Ne
              AND o.fecha_entrega_estimada < CURRENT_DATE
          )::text AS con_retraso
        FROM ordenes_compra o ${OC_JOINS}
-       WHERE o.estado != 'cancelada' ${extraWhere}`
+       WHERE o.estado != 'cancelada' ${extraWhere}`,
+      vals
     )
     res.json({ data: rows[0] })
   } catch (err) { next(err) }
 }
 
+const OC_SORT_WHITELIST = [
+  'o.fecha_emision', 'o.fecha_entrega_estimada', 'o.fecha_mto',
+  'o.numero', 'o.total', 'o.estado', 'o.created_at',
+] as const
+
 export async function getOrdenesCompra(req: Request, res: Response, next: NextFunction) {
   try {
-    const opts = parsePagination(req, 'o.fecha_emision')
+    const opts = parsePagination(req, 'o.fecha_emision', OC_SORT_WHITELIST)
     const conds: string[] = []
+    const vals: unknown[] = []
+    const ph = () => `$${vals.length + 1}`
 
-    if (req.query.proyecto_id)  conds.push(`o.proyecto_id = ${parseInt(String(req.query.proyecto_id))}`)
-    if (req.query.proveedor_id) conds.push(`o.proveedor_id = ${parseInt(String(req.query.proveedor_id))}`)
-    if (req.query.vendor)       conds.push(`v.nombre ILIKE '${String(req.query.vendor).replace(/'/g, "''")}'`)
-    if (req.query.categoria)    conds.push(`o.categoria = '${String(req.query.categoria).replace(/'/g, "''")}'`)
-    if (req.query.fecha_mto)       conds.push(`o.fecha_mto = '${String(req.query.fecha_mto).replace(/'/g, "''")}'`)
-    if (req.query.fecha_mto_desde) conds.push(`o.fecha_mto >= '${String(req.query.fecha_mto_desde).replace(/'/g, "''")}'`)
-    if (req.query.fecha_mto_hasta) conds.push(`o.fecha_mto <= '${String(req.query.fecha_mto_hasta).replace(/'/g, "''")}'`)
+    if (req.query.proyecto_id)  { conds.push(`o.proyecto_id = ${ph()}`); vals.push(parseInt(String(req.query.proyecto_id))) }
+    if (req.query.proveedor_id) { conds.push(`o.proveedor_id = ${ph()}`); vals.push(parseInt(String(req.query.proveedor_id))) }
+    if (req.query.vendor)       { conds.push(`v.nombre ILIKE ${ph()}`); vals.push(String(req.query.vendor)) }
+    if (req.query.categoria)    { conds.push(`o.categoria = ${ph()}`); vals.push(String(req.query.categoria)) }
+    if (req.query.fecha_mto)       { conds.push(`o.fecha_mto = ${ph()}`); vals.push(String(req.query.fecha_mto)) }
+    if (req.query.fecha_mto_desde) { conds.push(`o.fecha_mto >= ${ph()}`); vals.push(String(req.query.fecha_mto_desde)) }
+    if (req.query.fecha_mto_hasta) { conds.push(`o.fecha_mto <= ${ph()}`); vals.push(String(req.query.fecha_mto_hasta)) }
 
     const edFilter = req.query.estado_display as string | undefined
     if (edFilter === 'ORDENADO')     conds.push(`o.estado NOT IN ('cancelada','recibida','en_transito')`)
@@ -96,26 +107,37 @@ export async function getOrdenesCompra(req: Request, res: Response, next: NextFu
     if (edFilter === 'EN_TRANSITO')  conds.push(`o.estado = 'en_transito'`)
     if (edFilter === 'CANCELADA')    conds.push(`o.estado = 'cancelada'`)
 
-    const whereMain  = opts.search
-      ? [...conds, `(o.numero ILIKE $3 OR p.nombre ILIKE $3 OR v.nombre ILIKE $3)`].join(' AND ')
-      : conds.join(' AND ')
-    const whereCount = opts.search
-      ? [...conds, `(o.numero ILIKE $1 OR p.nombre ILIKE $1 OR v.nombre ILIKE $1)`].join(' AND ')
-      : conds.join(' AND ')
+    // Count query: filtros + (opcionalmente) search
+    const countVals = [...vals]
+    const countConds = [...conds]
+    if (opts.search) {
+      countConds.push(`(o.numero ILIKE $${countVals.length + 1} OR p.nombre ILIKE $${countVals.length + 1} OR v.nombre ILIKE $${countVals.length + 1})`)
+      countVals.push(`%${opts.search}%`)
+    }
+    const wc = countConds.length ? `WHERE ${countConds.join(' AND ')}` : ''
 
-    const wm = whereMain  ? `WHERE ${whereMain}`  : ''
-    const wc = whereCount ? `WHERE ${whereCount}` : ''
+    // Main query: filtros + search + LIMIT/OFFSET
+    const mainVals = [...vals]
+    const mainConds = [...conds]
+    if (opts.search) {
+      mainConds.push(`(o.numero ILIKE $${mainVals.length + 1} OR p.nombre ILIKE $${mainVals.length + 1} OR v.nombre ILIKE $${mainVals.length + 1})`)
+      mainVals.push(`%${opts.search}%`)
+    }
+    const limitPh  = `$${mainVals.length + 1}`
+    const offsetPh = `$${mainVals.length + 2}`
+    mainVals.push(opts.limit, opts.offset)
+    const wm = mainConds.length ? `WHERE ${mainConds.join(' AND ')}` : ''
 
     const [rows, countRow] = await Promise.all([
       pool.query(
         `SELECT o.*, ${OC_COMPUTED}
          FROM ordenes_compra o ${OC_JOINS} ${wm}
-         ORDER BY ${opts.sort} ${opts.order} LIMIT $1 OFFSET $2`,
-        opts.search ? [opts.limit, opts.offset, `%${opts.search}%`] : [opts.limit, opts.offset]
+         ORDER BY ${opts.sort} ${opts.order} LIMIT ${limitPh} OFFSET ${offsetPh}`,
+        mainVals
       ),
       pool.query(
         `SELECT COUNT(*) FROM ordenes_compra o ${OC_JOINS} ${wc}`,
-        opts.search ? [`%${opts.search}%`] : []
+        countVals
       ),
     ])
 

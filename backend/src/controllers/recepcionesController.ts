@@ -3,34 +3,54 @@ import pool from '../db/pool'
 import { parsePagination, paginatedResponse } from '../utils/pagination'
 import { createError } from '../middleware/errorHandler'
 
+const REC_SORT_WHITELIST = [
+  'r.fecha_recepcion', 'r.folio', 'r.estado', 'r.created_at',
+] as const
+
 export async function getRecepciones(req: Request, res: Response, next: NextFunction) {
   try {
-    const opts = parsePagination(req, 'r.fecha_recepcion')
+    const opts = parsePagination(req, 'r.fecha_recepcion', REC_SORT_WHITELIST)
     const conds: string[] = []
-    if (req.query.estado) conds.push(`r.estado = '${req.query.estado}'`)
+    const vals: unknown[] = []
+    if (req.query.estado) {
+      conds.push(`r.estado = $${vals.length + 1}`)
+      vals.push(String(req.query.estado))
+    }
 
-    const whereMain  = opts.search
-      ? [...conds, `(r.folio ILIKE $3 OR r.recibio ILIKE $3 OR oc.numero ILIKE $3)`].join(' AND ')
-      : conds.join(' AND ')
-    const whereCount = opts.search
-      ? [...conds, `(r.folio ILIKE $1 OR r.recibio ILIKE $1 OR oc.numero ILIKE $1)`].join(' AND ')
-      : conds.join(' AND ')
-
-    const wm = whereMain  ? `WHERE ${whereMain}`  : ''
-    const wc = whereCount ? `WHERE ${whereCount}` : ''
     const join = `LEFT JOIN ordenes_compra oc ON oc.id = r.orden_compra_id`
+
+    // Count query
+    const countVals = [...vals]
+    const countConds = [...conds]
+    if (opts.search) {
+      countConds.push(`(r.folio ILIKE $${countVals.length + 1} OR r.recibio ILIKE $${countVals.length + 1} OR oc.numero ILIKE $${countVals.length + 1})`)
+      countVals.push(`%${opts.search}%`)
+    }
+    const wc = countConds.length ? `WHERE ${countConds.join(' AND ')}` : ''
+
+    // Main query
+    const mainVals = [...vals]
+    const mainConds = [...conds]
+    if (opts.search) {
+      mainConds.push(`(r.folio ILIKE $${mainVals.length + 1} OR r.recibio ILIKE $${mainVals.length + 1} OR oc.numero ILIKE $${mainVals.length + 1})`)
+      mainVals.push(`%${opts.search}%`)
+    }
+    const limitPh  = `$${mainVals.length + 1}`
+    const offsetPh = `$${mainVals.length + 2}`
+    mainVals.push(opts.limit, opts.offset)
+    const wm = mainConds.length ? `WHERE ${mainConds.join(' AND ')}` : ''
 
     const [rows, countRow] = await Promise.all([
       pool.query(
         `SELECT r.*,
            json_build_object('id', oc.id, 'numero', oc.numero) AS orden_compra
          FROM recepciones r ${join} ${wm}
-         ORDER BY ${opts.sort} ${opts.order} LIMIT $1 OFFSET $2`,
-        opts.search ? [opts.limit, opts.offset, `%${opts.search}%`] : [opts.limit, opts.offset]
+         ORDER BY ${opts.sort} ${opts.order} LIMIT ${limitPh} OFFSET ${offsetPh}`,
+        mainVals
       ),
       pool.query(
         `SELECT COUNT(*) FROM recepciones r ${join} ${wc}`,
-        opts.search ? [`%${opts.search}%`] : []
+        countVals
       ),
     ])
 
