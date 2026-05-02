@@ -4,18 +4,22 @@ import path from 'path'
 import fs from 'fs'
 import pool from '../db/pool'
 import { createError } from '../middleware/errorHandler'
+import { supabase, supabaseEnabled, SUPABASE_BUCKET } from '../utils/supabase'
 
 const UPLOADS_DIR = path.join(__dirname, '../../uploads')
 if (!fs.existsSync(UPLOADS_DIR)) fs.mkdirSync(UPLOADS_DIR, { recursive: true })
 
-const storage = multer.diskStorage({
-  destination: (_req, _file, cb) => cb(null, UPLOADS_DIR),
-  filename: (_req, file, cb) => {
-    const ext  = path.extname(file.originalname)
-    const name = `${Date.now()}-${Math.random().toString(36).slice(2)}${ext}`
-    cb(null, name)
-  },
-})
+// Storage en memoria si Supabase está activo, en disco si no
+const storage = supabaseEnabled
+  ? multer.memoryStorage()
+  : multer.diskStorage({
+      destination: (_req, _file, cb) => cb(null, UPLOADS_DIR),
+      filename: (_req, file, cb) => {
+        const ext  = path.extname(file.originalname)
+        const name = `${Date.now()}-${Math.random().toString(36).slice(2)}${ext}`
+        cb(null, name)
+      },
+    })
 
 const fileFilter = (_req: Request, file: Express.Multer.File, cb: multer.FileFilterCallback) => {
   const allowed = /jpeg|jpg|png|webp|gif|pdf/
@@ -35,7 +39,17 @@ export async function getImagenes(req: Request, res: Response, next: NextFunctio
       `SELECT * FROM oc_imagenes WHERE orden_compra_id = $1 ORDER BY tipo, created_at`,
       [id]
     )
-    res.json({ data: rows })
+    // Si Supabase está activo, agregar URL pública a cada imagen
+    if (supabaseEnabled && supabase) {
+      const sb = supabase
+      const enriched = rows.map((img) => {
+        const { data } = sb.storage.from(SUPABASE_BUCKET).getPublicUrl(img.filename)
+        return { ...img, url: data.publicUrl }
+      })
+      res.json({ data: enriched })
+    } else {
+      res.json({ data: rows })
+    }
   } catch (err) { next(err) }
 }
 
@@ -45,10 +59,31 @@ export async function uploadImagen(req: Request, res: Response, next: NextFuncti
     const tipo = (req.query.tipo as string) || 'material_recibido'
     if (!req.file) return next(createError('No se recibió ningún archivo', 400))
 
+    let filename: string
+
+    if (supabaseEnabled && supabase) {
+      // Subir a Supabase Storage
+      const ext = path.extname(req.file.originalname)
+      filename = `${Date.now()}-${Math.random().toString(36).slice(2)}${ext}`
+      const { error } = await supabase.storage
+        .from(SUPABASE_BUCKET)
+        .upload(filename, req.file.buffer, {
+          contentType: req.file.mimetype,
+          upsert: false,
+        })
+      if (error) {
+        console.error('[uploadImagen] Supabase error:', error)
+        return next(createError('Error subiendo a Supabase: ' + error.message, 500))
+      }
+    } else {
+      // Fallback al filesystem local
+      filename = req.file.filename
+    }
+
     const { rows } = await pool.query(
       `INSERT INTO oc_imagenes (orden_compra_id, tipo, filename, original_name)
        VALUES ($1, $2, $3, $4) RETURNING *`,
-      [id, tipo, req.file.filename, req.file.originalname]
+      [id, tipo, filename, req.file.originalname]
     )
     res.status(201).json({ data: rows[0], message: 'Imagen guardada' })
   } catch (err) { next(err) }
@@ -62,8 +97,15 @@ export async function deleteImagen(req: Request, res: Response, next: NextFuncti
     )
     if (!img) return next(createError('Imagen no encontrada', 404))
 
-    const filePath = path.join(UPLOADS_DIR, img.filename)
-    if (fs.existsSync(filePath)) fs.unlinkSync(filePath)
+    if (supabaseEnabled && supabase) {
+      const { error } = await supabase.storage
+        .from(SUPABASE_BUCKET)
+        .remove([img.filename])
+      if (error) console.warn('[deleteImagen] Supabase remove warn:', error.message)
+    } else {
+      const filePath = path.join(UPLOADS_DIR, img.filename)
+      if (fs.existsSync(filePath)) fs.unlinkSync(filePath)
+    }
 
     res.json({ message: 'Imagen eliminada' })
   } catch (err) { next(err) }

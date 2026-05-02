@@ -2,7 +2,7 @@ import { useRef, useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { X, Plus, FileText } from 'lucide-react'
 import toast from 'react-hot-toast'
-import { imagenesService, UPLOADS_BASE } from '@/services/imagenes'
+import { imagenesService, imagenUrl } from '@/services/imagenes'
 
 export default function DynamicImageGrid({ ocId }: { ocId: number }) {
   const [lightbox, setLightbox] = useState<string | null>(null)
@@ -39,7 +39,7 @@ export default function DynamicImageGrid({ ocId }: { ocId: number }) {
       <div className="grid grid-cols-2 gap-2">
         {imagenes.map((img) => {
           const isPdf = img.filename.endsWith('.pdf')
-          const url = `${UPLOADS_BASE}/${img.filename}`
+          const url = imagenUrl(img)
           return (
             <div key={img.id} className="relative group rounded-lg border border-gray-200 overflow-hidden bg-gray-50">
               {isPdf ? (

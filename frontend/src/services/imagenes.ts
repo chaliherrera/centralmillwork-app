@@ -8,7 +8,11 @@ export interface OcImagen {
   filename: string
   original_name: string
   created_at: string
+  url?: string
 }
+
+// Devuelve la URL absoluta de una imagen (Supabase si está, fallback al volume)
+export const imagenUrl = (img: OcImagen): string => img.url ?? `${UPLOADS_BASE}/${img.filename}`
 
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL ?? 'http://localhost:4000'
 export const UPLOADS_BASE = `${BACKEND_URL}/uploads`
