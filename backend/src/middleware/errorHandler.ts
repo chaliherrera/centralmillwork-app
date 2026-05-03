@@ -1,13 +1,21 @@
 import { Request, Response, NextFunction } from 'express'
+import { logger } from '../utils/logger'
 
 export interface AppError extends Error {
   statusCode?: number
 }
 
-export function errorHandler(err: AppError, _req: Request, res: Response, _next: NextFunction) {
+export function errorHandler(err: AppError, req: Request, res: Response, _next: NextFunction) {
   const status = err.statusCode ?? 500
   const message = status === 500 ? 'Error interno del servidor' : err.message
-  if (status === 500) console.error(err)
+  if (status === 500) {
+    logger.error('unhandled error', {
+      requestId: req.id,
+      method: req.method,
+      path: req.path,
+      err,
+    })
+  }
   res.status(status).json({ message })
 }
 

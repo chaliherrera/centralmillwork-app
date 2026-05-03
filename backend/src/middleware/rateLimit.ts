@@ -1,5 +1,6 @@
 import rateLimit from 'express-rate-limit'
 import { PostgresStore } from '@acpr/rate-limit-postgresql'
+import { logger } from '../utils/logger'
 
 // Config de conexión para la store: misma lógica que el pool principal,
 // para que en Railway use DATABASE_URL y en local caiga a las vars individuales.
@@ -31,7 +32,7 @@ export const globalLimiter = rateLimit({
   store: new PostgresStore(rlDbConfig, 'rl_global'),
   message: { message: 'Demasiadas solicitudes — esperá un momento e intentá de nuevo.' },
   handler: (req, res, _next, options) => {
-    console.warn(`[ratelimit] global hit | ip=${req.ip} | path=${req.path}`)
+    logger.warn('ratelimit hit (global)', { requestId: req.id, ip: req.ip, path: req.path })
     res.status(options.statusCode).json(options.message)
   },
 })
@@ -47,7 +48,7 @@ export const loginLimiter = rateLimit({
   store: new PostgresStore(rlDbConfig, 'rl_login'),
   message: { message: 'Demasiados intentos de login — esperá 15 minutos e intentá de nuevo.' },
   handler: (req, res, _next, options) => {
-    console.warn(`[ratelimit] login hit | ip=${req.ip} | email=${req.body?.email ?? '?'}`)
+    logger.warn('ratelimit hit (login)', { requestId: req.id, ip: req.ip, email: req.body?.email ?? '?' })
     res.status(options.statusCode).json(options.message)
   },
   // No contar intentos exitosos: si vos te logueás bien 6 veces seguidas, no

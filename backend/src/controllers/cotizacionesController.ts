@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from 'express'
 import pool from '../db/pool'
 import { parsePagination, paginatedResponse } from '../utils/pagination'
 import { createError } from '../middleware/errorHandler'
+import { logger } from '../utils/logger'
 
 interface ProyectoRow { codigo: string; nombre: string; cliente: string }
 
@@ -138,7 +139,7 @@ export async function deleteCotizacion(req: Request, res: Response, next: NextFu
 // Antes mandaba via SMTP/Outlook pero la auth de M365 era inestable; ahora
 // el frontend genera un PDF y el usuario envía el mail manualmente.
 export async function marcarCotizacionesEnviadas(req: Request, res: Response, next: NextFunction) {
-  console.log(`[cotizaciones] POST marcar-enviadas - ${new Date().toISOString()} - vendors: ${JSON.stringify(req.body.vendors)}`)
+  logger.info('cotizaciones marcar-enviadas', { requestId: req.id, vendors: req.body.vendors })
   try {
     const { proyecto_id, vendors } = req.body as {
       proyecto_id: number

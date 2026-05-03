@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from 'express'
 import pool from '../db/pool'
 import { parsePagination, paginatedResponse } from '../utils/pagination'
 import { createError } from '../middleware/errorHandler'
+import { logger } from '../utils/logger'
 
 const REC_SORT_WHITELIST = [
   'r.fecha_recepcion', 'r.folio', 'r.estado', 'r.created_at',
@@ -138,10 +139,11 @@ export async function createRecepcionCompleta(req: Request, res: Response, next:
     await client.query('BEGIN')
     const { orden_compra_id, fecha_recepcion, recibio, notas, tipo, materiales = [] } = req.body
 
-    console.log(`[createRecepcionCompleta] payload recibido:`, JSON.stringify({
+    logger.info('createRecepcionCompleta payload', {
+      requestId: req.id,
       orden_compra_id, tipo, fecha_recepcion, recibio, notas,
-      materiales_count: Array.isArray(materiales) ? materiales.length : '?',
-    }))
+      materiales_count: Array.isArray(materiales) ? materiales.length : null,
+    })
 
     if (!orden_compra_id) return next(createError('orden_compra_id es requerido', 400))
     if (!tipo || !['total', 'parcial'].includes(tipo))
@@ -193,8 +195,12 @@ export async function createRecepcionCompleta(req: Request, res: Response, next:
     res.status(201).json({ data: { ...recepcion, folio }, message: `Recepción ${folio} registrada` })
   } catch (err: any) {
     await client.query('ROLLBACK')
-    console.error(`[createRecepcionCompleta] ERROR oc=${req.body?.orden_compra_id}: ${err?.message}`)
-    console.error(`[createRecepcionCompleta] body:`, JSON.stringify(req.body))
+    logger.error('createRecepcionCompleta error', {
+      requestId: req.id,
+      orden_compra_id: req.body?.orden_compra_id,
+      body: req.body,
+      err,
+    })
     next(err)
   } finally { client.release() }
 }

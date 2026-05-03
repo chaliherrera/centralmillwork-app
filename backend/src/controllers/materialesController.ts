@@ -4,6 +4,7 @@ import * as XLSX from 'xlsx'
 import pool from '../db/pool'
 import { parsePagination, paginatedResponse } from '../utils/pagination'
 import { createError } from '../middleware/errorHandler'
+import { logger } from '../utils/logger'
 
 // Defense-in-depth: extensión Y mimetype tienen que coincidir.
 // Los mimes de Excel/CSV varían según OS y cliente, por eso la lista es amplia
@@ -236,7 +237,7 @@ export async function updateMaterial(req: Request, res: Response, next: NextFunc
     const updates = present.map((f, i) => `${f} = $${i + 2}`)
     const values  = present.map((f) => coerce(f, req.body[f]))
 
-    console.log(`[updateMaterial] id=${req.params.id} fields=[${present.join(', ')}]`)
+    logger.info('updateMaterial', { requestId: req.id, materialId: req.params.id, fields: present })
 
     const { rows } = await pool.query(
       `UPDATE materiales_mto SET ${updates.join(', ')}, updated_at = NOW() WHERE id = $1 RETURNING *`,
@@ -245,8 +246,7 @@ export async function updateMaterial(req: Request, res: Response, next: NextFunc
     if (!rows[0]) return next(createError('Material no encontrado', 404))
     res.json({ data: rows[0], message: 'Material actualizado' })
   } catch (err: any) {
-    console.error(`[updateMaterial] ERROR id=${req.params.id}: ${err?.message}`)
-    console.error(`[updateMaterial] body:`, JSON.stringify(req.body))
+    logger.error('updateMaterial error', { requestId: req.id, materialId: req.params.id, body: req.body, err })
     next(err)
   }
 }
@@ -391,16 +391,19 @@ export async function importarMateriales(req: Request, res: Response, next: Next
     }
 
     // ── Debug: log detected header mapping and first 3 data rows ─────────────
-    console.log('[importar] Header row index:', headerRowIdx)
-    console.log('[importar] Column map:', colMap)
-    console.log('[importar] Raw header row:', allRows[headerRowIdx])
-    const preview = allRows.slice(headerRowIdx + 1, headerRowIdx + 4)
-    preview.forEach((row, i) => {
+    const preview = allRows.slice(headerRowIdx + 1, headerRowIdx + 4).map((row) => {
       const mapped: Record<string, string> = {}
       for (const [field, col] of Object.entries(colMap)) {
         mapped[field] = String(row[col] ?? '').trim()
       }
-      console.log(`[importar] Row ${i + 1} mapped:`, mapped)
+      return mapped
+    })
+    logger.debug('importar materiales', {
+      requestId: req.id,
+      headerRowIdx,
+      colMap,
+      rawHeaderRow: allRows[headerRowIdx],
+      preview,
     })
     // ─────────────────────────────────────────────────────────────────────────
 

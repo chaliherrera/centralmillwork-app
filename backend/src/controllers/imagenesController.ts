@@ -5,6 +5,7 @@ import fs from 'fs'
 import pool from '../db/pool'
 import { createError } from '../middleware/errorHandler'
 import { supabase, supabaseEnabled, SUPABASE_BUCKET } from '../utils/supabase'
+import { logger } from '../utils/logger'
 
 const UPLOADS_DIR = path.join(__dirname, '../../uploads')
 if (!fs.existsSync(UPLOADS_DIR)) fs.mkdirSync(UPLOADS_DIR, { recursive: true })
@@ -86,7 +87,7 @@ export async function uploadImagen(req: Request, res: Response, next: NextFuncti
           upsert: false,
         })
       if (error) {
-        console.error('[uploadImagen] Supabase error:', error)
+        logger.error('uploadImagen Supabase error', { requestId: req.id, ocId: id, err: error })
         return next(createError('Error subiendo a Supabase: ' + error.message, 500))
       }
     } else {
@@ -115,7 +116,7 @@ export async function deleteImagen(req: Request, res: Response, next: NextFuncti
       const { error } = await supabase.storage
         .from(SUPABASE_BUCKET)
         .remove([img.filename])
-      if (error) console.warn('[deleteImagen] Supabase remove warn:', error.message)
+      if (error) logger.warn('deleteImagen Supabase remove warn', { requestId: req.id, imagenId, err: error.message })
     } else {
       const filePath = path.join(UPLOADS_DIR, img.filename)
       if (fs.existsSync(filePath)) fs.unlinkSync(filePath)

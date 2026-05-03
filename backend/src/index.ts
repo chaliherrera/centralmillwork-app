@@ -8,13 +8,15 @@ import authRouter from './routes/auth'
 import { authenticate } from './middleware/auth'
 import { errorHandler, notFound } from './middleware/errorHandler'
 import { globalLimiter, loginLimiter } from './middleware/rateLimit'
+import { requestId } from './middleware/requestId'
+import { logger } from './utils/logger'
 
 // Load .env only in development — Railway injects env vars directly into process.env
 if (process.env.NODE_ENV !== 'production') {
   dotenv.config({ path: path.resolve(__dirname, '../.env') })
 }
 
-console.log('[boot] JWT_SECRET:', process.env.JWT_SECRET ? 'configurado' : 'MISSING — auth will fail')
+logger.info('boot', { jwtSecret: process.env.JWT_SECRET ? 'configurado' : 'MISSING — auth will fail' })
 
 const app  = express()
 const PORT = process.env.PORT ?? 4000
@@ -26,6 +28,9 @@ const PORT = process.env.PORT ?? 4000
 // pruebas se traducía en contadores fragmentados (cada request "frescaba" la
 // ventana porque cada proxy tenía su propio counter).
 app.set('trust proxy', true)
+
+// Asignar request ID muy temprano para que esté disponible en todos los logs.
+app.use(requestId)
 
 app.use(cors({
   origin: process.env.CORS_ORIGIN ?? 'http://localhost:3000',
@@ -65,7 +70,7 @@ if (process.env.NODE_ENV === 'production') {
 app.use(errorHandler)
 
 app.listen(PORT, () => {
-  console.log(`🚀 Central Millwork API — http://localhost:${PORT}`)
+  logger.info('server listening', { port: PORT, url: `http://localhost:${PORT}` })
 })
 
 export default app

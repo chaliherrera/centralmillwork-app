@@ -1,10 +1,13 @@
 import { Pool } from 'pg'
+import { logger } from '../utils/logger'
 
 const connectionString = process.env.DATABASE_PUBLIC_URL || process.env.DATABASE_URL
 
-console.log('[pool] DATABASE_PUBLIC_URL:', process.env.DATABASE_PUBLIC_URL ? process.env.DATABASE_PUBLIC_URL.substring(0, 50) + '...' : 'NOT FOUND')
-console.log('[pool] DATABASE_URL:', process.env.DATABASE_URL ? process.env.DATABASE_URL.substring(0, 50) + '...' : 'NOT FOUND')
-console.log('[pool] Using connection string:', !!connectionString)
+logger.info('pool init', {
+  databasePublicUrl: process.env.DATABASE_PUBLIC_URL ? `${process.env.DATABASE_PUBLIC_URL.slice(0, 50)}...` : 'NOT FOUND',
+  databaseUrl:       process.env.DATABASE_URL        ? `${process.env.DATABASE_URL.slice(0, 50)}...`        : 'NOT FOUND',
+  usingConnectionString: !!connectionString,
+})
 
 const pool = connectionString
   ? new Pool({
@@ -20,7 +23,7 @@ const pool = connectionString
     })
 
 pool.on('error', (err) => {
-  console.error('Unexpected error on idle client', err)
+  logger.error('pool idle client error', { err })
 })
 
 export default pool
