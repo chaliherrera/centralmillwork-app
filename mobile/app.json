@@ -1,0 +1,41 @@
+{
+  "expo": {
+    "name": "Central Millwork",
+    "slug": "centralmillwork",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": true,
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#2c3126"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.centralmillwork.app"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#2c3126"
+      },
+      "package": "com.centralmillwork.app"
+    },
+    "owner": "chaliherrera",
+    "extra": {
+      "eas": {
+        "projectId": "c51c210a-f0d2-482a-b420-a2aa0b626221"
+      }
+    },
+    "runtimeVersion": "1.0.0",
+    "updates": {
+      "url": "https://u.expo.dev/c51c210a-f0d2-482a-b420-a2aa0b626221"
+    },
+    "platforms": [
+      "ios",
+      "android"
+    ]
+  }
+}
