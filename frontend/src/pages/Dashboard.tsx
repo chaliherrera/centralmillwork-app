@@ -49,7 +49,9 @@ const fmtUSD = (n: number) =>
 const fmtShort = (n: number) => {
   if (n >= 1_000_000) return `$${(n / 1_000_000).toFixed(1)}M`
   if (n >= 1_000)     return `$${(n / 1_000).toFixed(0)}k`
-  return `$${n}`
+  // Para valores < 1000 evitamos el `$${n}` crudo porque emite floats raros
+  // tipo "$139.20000000000005". Usamos Intl.NumberFormat con 2 decimales.
+  return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 2 }).format(n)
 }
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
@@ -161,13 +163,13 @@ export default function Dashboard() {
         />
         <KpiCard
           icon={DollarSign}    label="Monto Total OCs"
-          value={isLoading ? '—' : fmtShort(s?.kpis.monto_total_ocs ?? 0)}
+          value={isLoading ? '—' : fmtUSD(s?.kpis.monto_total_ocs ?? 0)}
           sub="total emitido"
           iconBg="bg-gold-500"  valueColor="text-gold-700"
         />
         <KpiCard
           icon={Warehouse}     label="Monto Recibido"
-          value={isLoading ? '—' : fmtShort(s?.kpis.monto_recibido ?? 0)}
+          value={isLoading ? '—' : fmtUSD(s?.kpis.monto_recibido ?? 0)}
           sub="en taller"
           iconBg="bg-green-600" valueColor="text-green-700"
         />
