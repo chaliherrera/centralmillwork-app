@@ -313,7 +313,7 @@ export default function Dashboard() {
                         style={{ width: `${s.top_proyectos[0].monto_total > 0 ? Math.round(p.monto_total / s.top_proyectos[0].monto_total * 100) : 0}%` }} />
                     </div>
                   </div>
-                  <span className="text-sm font-bold text-gray-900 shrink-0">{fmtShort(p.monto_total)}</span>
+                  <span className="text-sm font-bold text-gray-900 shrink-0">{fmtUSD(p.monto_total)}</span>
                 </div>
               ))}
             </div>
@@ -350,11 +350,11 @@ export default function Dashboard() {
                       </div>
                     </td>
                     <td className="py-2 text-right text-gray-600">{p.cant_ocs}</td>
-                    <td className="py-2 text-right text-gray-700 font-medium">{fmtShort(p.monto_ordenado)}</td>
-                    <td className="py-2 text-right text-green-700 font-medium">{fmtShort(p.monto_recibido)}</td>
+                    <td className="py-2 text-right text-gray-700 font-medium">{fmtUSD(p.monto_ordenado)}</td>
+                    <td className="py-2 text-right text-green-700 font-medium">{fmtUSD(p.monto_recibido)}</td>
                     <td className="py-2 text-right">
                       {p.pendiente > 0
-                        ? <span className="text-amber-600 font-semibold">{fmtShort(p.pendiente)}</span>
+                        ? <span className="text-amber-600 font-semibold">{fmtUSD(p.pendiente)}</span>
                         : <span className="text-gray-300">—</span>}
                     </td>
                   </tr>
@@ -378,7 +378,7 @@ export default function Dashboard() {
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center justify-between gap-1">
                       <span className="text-xs text-gray-700 truncate">{v.proveedor}</span>
-                      <span className="text-xs font-bold text-gray-900 shrink-0">{fmtShort(v.monto)}</span>
+                      <span className="text-xs font-bold text-gray-900 shrink-0">{fmtUSD(v.monto)}</span>
                     </div>
                     <div className="mt-0.5 h-1 bg-gray-100 rounded-full overflow-hidden">
                       <div className="h-full bg-forest-600 rounded-full"
@@ -401,7 +401,7 @@ export default function Dashboard() {
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center justify-between gap-1">
                       <span className="text-xs text-gray-700 truncate">{c.categoria}</span>
-                      <span className="text-xs font-bold text-gray-900 shrink-0">{fmtShort(c.monto)}</span>
+                      <span className="text-xs font-bold text-gray-900 shrink-0">{fmtUSD(c.monto)}</span>
                     </div>
                     <div className="mt-0.5 h-1 bg-gray-100 rounded-full overflow-hidden">
                       <div className="h-full bg-gold-500 rounded-full"
