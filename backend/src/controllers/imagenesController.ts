@@ -21,13 +21,27 @@ const storage = supabaseEnabled
       },
     })
 
+// Validación defense-in-depth: extensión Y mimetype tienen que coincidir.
+// Solo extensión es trivial de bypassear renombrando un archivo. Solo mimetype
+// es controlable por el cliente. Ambos juntos hacen más difícil colar
+// algo malicioso. Para garantía total habría que leer magic bytes, pero
+// para una app interna esto alcanza.
+const ALLOWED_IMG_MIMES = new Set([
+  'image/jpeg', 'image/jpg', 'image/png', 'image/webp',
+  'image/gif', 'image/heic', 'image/heif',
+  'application/pdf',
+])
+const ALLOWED_IMG_EXT_RE = /\.(jpe?g|png|webp|gif|heic|heif|pdf)$/i
+
 const fileFilter = (_req: Request, file: Express.Multer.File, cb: multer.FileFilterCallback) => {
-  const allowed = /jpeg|jpg|png|webp|gif|pdf/
-  if (allowed.test(path.extname(file.originalname).toLowerCase())) {
-    cb(null, true)
-  } else {
-    cb(new Error('Solo se permiten imágenes (jpg, png, webp, gif) o PDF'))
-  }
+  const extOk  = ALLOWED_IMG_EXT_RE.test(file.originalname)
+  const mimeOk = ALLOWED_IMG_MIMES.has((file.mimetype ?? '').toLowerCase())
+  if (extOk && mimeOk) return cb(null, true)
+  // statusCode=400 hace que errorHandler devuelva 400 con el mensaje en vez de 500.
+  cb(Object.assign(
+    new Error(`Tipo de archivo no permitido. Solo imágenes (jpg, png, webp, gif, heic) o PDF. Recibido: nombre="${file.originalname}", mimetype="${file.mimetype}"`),
+    { statusCode: 400 }
+  ))
 }
 
 export const upload = multer({ storage, fileFilter, limits: { fileSize: 10 * 1024 * 1024 } })

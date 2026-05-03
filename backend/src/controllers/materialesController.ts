@@ -5,11 +5,30 @@ import pool from '../db/pool'
 import { parsePagination, paginatedResponse } from '../utils/pagination'
 import { createError } from '../middleware/errorHandler'
 
+// Defense-in-depth: extensión Y mimetype tienen que coincidir.
+// Los mimes de Excel/CSV varían según OS y cliente, por eso la lista es amplia
+// — incluye los habituales que mandan Chrome/Edge desde Windows y los que
+// envían algunos clientes que reportan CSV como text/plain o vacío.
+const ALLOWED_XLS_MIMES = new Set([
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', // .xlsx
+  'application/vnd.ms-excel',                                          // .xls / a veces .csv
+  'text/csv',                                                          // .csv
+  'application/csv',                                                   // .csv (algunos)
+  'text/plain',                                                        // .csv en algunos clientes
+  'application/octet-stream',                                          // fallback genérico
+])
+const ALLOWED_XLS_EXT_RE = /\.(xlsx|xls|csv)$/i
+
 export const uploadExcel = multer({
   storage: multer.memoryStorage(),
   fileFilter: (_req, file, cb) => {
-    if (/\.(xlsx|xls|csv)$/i.test(file.originalname)) cb(null, true)
-    else cb(new Error('Solo se permiten archivos Excel (.xlsx, .xls) o CSV') as any, false)
+    const extOk  = ALLOWED_XLS_EXT_RE.test(file.originalname)
+    const mimeOk = ALLOWED_XLS_MIMES.has((file.mimetype ?? '').toLowerCase())
+    if (extOk && mimeOk) return cb(null, true)
+    cb(Object.assign(
+      new Error(`Tipo de archivo no permitido. Solo Excel (.xlsx, .xls) o CSV. Recibido: nombre="${file.originalname}", mimetype="${file.mimetype}"`),
+      { statusCode: 400 }
+    ) as any, false)
   },
   limits: { fileSize: 20 * 1024 * 1024 },
 })
