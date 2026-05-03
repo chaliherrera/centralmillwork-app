@@ -19,10 +19,13 @@ console.log('[boot] JWT_SECRET:', process.env.JWT_SECRET ? 'configurado' : 'MISS
 const app  = express()
 const PORT = process.env.PORT ?? 4000
 
-// Railway corre detrás de un proxy: necesario para que rate-limit y los logs
-// vean la IP real del cliente (X-Forwarded-For) en vez del IP del proxy.
-// '1' = confía en el primer proxy upstream; suficiente para Railway.
-app.set('trust proxy', 1)
+// Railway corre detrás de varios proxies (Fastly CDN + Railway edge), no uno solo.
+// 'trust proxy=true' hace que Express tome el primer IP del X-Forwarded-For
+// (el cliente real) en vez de un IP de proxy intermedio.
+// Sin esto, el rate-limit cuenta por proxy en vez de por cliente, lo que en
+// pruebas se traducía en contadores fragmentados (cada request "frescaba" la
+// ventana porque cada proxy tenía su propio counter).
+app.set('trust proxy', true)
 
 app.use(cors({
   origin: process.env.CORS_ORIGIN ?? 'http://localhost:3000',
