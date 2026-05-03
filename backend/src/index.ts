@@ -7,6 +7,7 @@ import router from './routes'
 import authRouter from './routes/auth'
 import { authenticate } from './middleware/auth'
 import { errorHandler, notFound } from './middleware/errorHandler'
+import { globalLimiter, loginLimiter } from './middleware/rateLimit'
 
 // Load .env only in development — Railway injects env vars directly into process.env
 if (process.env.NODE_ENV !== 'production') {
@@ -17,6 +18,11 @@ console.log('[boot] JWT_SECRET:', process.env.JWT_SECRET ? 'configurado' : 'MISS
 
 const app  = express()
 const PORT = process.env.PORT ?? 4000
+
+// Railway corre detrás de un proxy: necesario para que rate-limit y los logs
+// vean la IP real del cliente (X-Forwarded-For) en vez del IP del proxy.
+// '1' = confía en el primer proxy upstream; suficiente para Railway.
+app.set('trust proxy', 1)
 
 app.use(cors({
   origin: process.env.CORS_ORIGIN ?? 'http://localhost:3000',
@@ -32,6 +38,11 @@ app.use('/uploads', express.static(uploadsDir))
 
 // Health check
 app.get('/health', (_req, res) => res.json({ status: 'ok', timestamp: new Date() }))
+
+// Rate limiting global a todo /api/* (incluye auth y rutas autenticadas).
+// Stricter limit en /api/auth/login para defender contra brute-force.
+app.use('/api', globalLimiter)
+app.use('/api/auth/login', loginLimiter)
 
 // Public auth routes — must come before authenticate middleware
 app.use('/api/auth', authRouter)
