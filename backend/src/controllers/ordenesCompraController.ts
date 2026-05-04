@@ -327,13 +327,17 @@ export async function getVendorsCotizados(req: Request, res: Response, next: Nex
     if (!proyecto_id) return next(createError('proyecto_id requerido', 400))
 
     // For each vendor, find their most recent import batch (fecha_importacion) and
-    // sum the total_price of all COTIZADO materials in that batch.
+    // sum the total_price of all materials in that batch that are eligible for an OC
+    // (cotizar='SI' AND estado_cotiz='COTIZADO'). Filtering by both campos defiende
+    // contra estados inconsistentes (ej. material con cotizar='NO' pero estado_cotiz='COTIZADO'
+    // por edición manual posterior a la captura de precios).
     const { rows } = await pool.query(
       `WITH latest_fechas AS (
          SELECT vendor, MAX(fecha_importacion) AS fecha_importacion
          FROM materiales_mto
          WHERE proyecto_id = $1
            AND vendor IS NOT NULL AND vendor != ''
+           AND cotizar = 'SI'
            AND estado_cotiz = 'COTIZADO'
          GROUP BY vendor
        )
@@ -345,6 +349,7 @@ export async function getVendorsCotizados(req: Request, res: Response, next: Nex
        FROM materiales_mto m
        JOIN latest_fechas lf ON lf.vendor = m.vendor
        WHERE m.proyecto_id = $1
+         AND m.cotizar = 'SI'
          AND m.estado_cotiz = 'COTIZADO'
          AND (m.fecha_importacion = lf.fecha_importacion
               OR (lf.fecha_importacion IS NULL AND m.fecha_importacion IS NULL))
@@ -371,20 +376,25 @@ export async function generarOCs(req: Request, res: Response, next: NextFunction
     const results: Array<{ numero: string; vendor: string; total: number; materiales_count: number }> = []
 
     for (const { vendor, fecha_entrega_estimada } of vendors) {
-      // Most recent fecha_importacion for this vendor's COTIZADO materials
+      // Most recent fecha_importacion for this vendor's eligible materials
+      // (cotizar='SI' AND estado_cotiz='COTIZADO'). El filtro doble previene
+      // que se cuelen materiales marcados cotizar='NO' o 'EN_STOCK' que
+      // hayan quedado con estado_cotiz='COTIZADO' por edición previa.
       const { rows: [fechaRow] } = await client.query(
         `SELECT MAX(fecha_importacion) AS fecha_importacion
          FROM materiales_mto
-         WHERE proyecto_id = $1 AND vendor = $2 AND estado_cotiz = 'COTIZADO'`,
+         WHERE proyecto_id = $1 AND vendor = $2
+           AND cotizar = 'SI' AND estado_cotiz = 'COTIZADO'`,
         [proyecto_id, vendor]
       )
       const fecha_mto = fechaRow?.fecha_importacion ?? null
 
-      // All COTIZADO materials for this vendor in that batch
+      // All eligible materials for this vendor in that batch
       const { rows: materiales } = await client.query(
         `SELECT id, descripcion, unidad, qty, unit_price, total_price
          FROM materiales_mto
-         WHERE proyecto_id = $1 AND vendor = $2 AND estado_cotiz = 'COTIZADO'
+         WHERE proyecto_id = $1 AND vendor = $2
+           AND cotizar = 'SI' AND estado_cotiz = 'COTIZADO'
            AND (fecha_importacion = $3
                 OR ($3::date IS NULL AND fecha_importacion IS NULL))
          ORDER BY item NULLS LAST, codigo`,

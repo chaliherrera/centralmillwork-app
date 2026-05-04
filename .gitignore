@@ -15,3 +15,7 @@ backend/uploads/
 backup_local.sql
 pack_uploads.js
 uploads_payload.json
+
+# Presentation artifacts (PPTX, Reveal HTML, generated PDFs)
+# Source markdown lives in docs/, presentations are derived/generated.
+presentations/
