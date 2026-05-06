@@ -26,6 +26,8 @@ export default function EnviarCotizacionesModal({
   const [results, setResults] = useState<MarcarEnviadaResult[] | null>(null)
 
   // Vendor summaries: count materials per vendor (cotizar='SI' only)
+  // Solo se listan vendors que tengan al menos un material PENDIENTE — no
+  // tiene sentido pedir cotización a vendors que ya tienen todo cotizado.
   const vendorSummaries = useMemo(() => {
     const map = new Map<string, { total: number; pendiente: number }>()
     for (const m of allMaterials) {
@@ -36,15 +38,18 @@ export default function EnviarCotizacionesModal({
       map.set(m.vendor, existing)
     }
     return Array.from(map.entries())
+      .filter(([, counts]) => counts.pendiente > 0)
       .map(([vendor, counts]) => ({ vendor, ...counts }))
       .sort((a, b) => a.vendor.localeCompare(b.vendor))
   }, [allMaterials])
 
-  // Materials grouped by vendor (cotizar='SI' only) — used for PDF generation
+  // Materials grouped by vendor — solo PENDIENTES (estos van al PDF y al
+  // registro de cotización enviada). Los ya cotizados no van porque ya tienen
+  // precio.
   const materialsByVendor = useMemo(() => {
     const map = new Map<string, Material[]>()
     for (const m of allMaterials) {
-      if (!m.vendor || m.cotizar !== 'SI') continue
+      if (!m.vendor || m.cotizar !== 'SI' || m.estado_cotiz !== 'PENDIENTE') continue
       const arr = map.get(m.vendor) ?? []
       arr.push(m)
       map.set(m.vendor, arr)
@@ -76,7 +81,7 @@ export default function EnviarCotizacionesModal({
     [vendorSummaries, selectedVendors]
   )
 
-  const totalSelected = selectedList.reduce((sum, v) => sum + v.total, 0)
+  const totalSelected = selectedList.reduce((sum, v) => sum + v.pendiente, 0)
   const canAct = selectedList.length > 0
 
   const handleGeneratePdf = async () => {
@@ -195,10 +200,12 @@ export default function EnviarCotizacionesModal({
                         />
                         <span className="flex-1 text-sm font-medium text-gray-800 truncate">{v.vendor}</span>
                         <div className="flex items-center gap-2 text-xs flex-shrink-0">
-                          <span className="text-gray-500">{v.total} items</span>
-                          {v.pendiente > 0 && (
-                            <span className="bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full font-medium">
-                              {v.pendiente} pending
+                          <span className="bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full font-medium">
+                            {v.pendiente} pending
+                          </span>
+                          {v.total > v.pendiente && (
+                            <span className="text-gray-400">
+                              ({v.total - v.pendiente} already quoted)
                             </span>
                           )}
                         </div>
@@ -211,7 +218,7 @@ export default function EnviarCotizacionesModal({
               {selectedList.length > 0 && (
                 <div className="bg-forest-50 border border-forest-200 rounded-lg px-4 py-3 text-sm text-forest-700">
                   <strong>{selectedList.length} vendor(s)</strong> seleccionado(s) con{' '}
-                  <strong>{totalSelected} materiales</strong> para proyecto{' '}
+                  <strong>{totalSelected} materiales pendientes</strong> para proyecto{' '}
                   <strong>{proyectoCodigo}</strong>.
                 </div>
               )}

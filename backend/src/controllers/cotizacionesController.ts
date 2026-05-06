@@ -172,10 +172,14 @@ export async function marcarCotizacionesEnviadas(req: Request, res: Response, ne
     const results: Array<{ vendor: string; folio: string; materiales_count: number }> = []
 
     for (const { vendor } of validVendors) {
+      // Solo materiales con cotizar='SI' Y estado_cotiz='PENDIENTE' — los que
+      // efectivamente se le pidieron al vendor en el PDF. Los ya COTIZADOS no
+      // forman parte de esta solicitud (ya tienen precio).
       const { rows: materiales } = await pool.query(
         `SELECT codigo, descripcion, unidad, qty
          FROM materiales_mto
-         WHERE proyecto_id = $1 AND vendor = $2 AND cotizar = 'SI'
+         WHERE proyecto_id = $1 AND vendor = $2
+           AND cotizar = 'SI' AND estado_cotiz = 'PENDIENTE'
          ORDER BY item NULLS LAST, codigo`,
         [proyecto_id, vendor]
       )
