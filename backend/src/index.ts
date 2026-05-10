@@ -5,6 +5,7 @@ import path from 'path'
 import fs from 'fs'
 import router from './routes'
 import authRouter from './routes/auth'
+import kioskRouter from './routes/kiosk'
 import { authenticate } from './middleware/auth'
 import { errorHandler, notFound } from './middleware/errorHandler'
 import { globalLimiter, loginLimiter } from './middleware/rateLimit'
@@ -54,6 +55,11 @@ app.use('/api/auth/login', loginLimiter)
 
 // Public auth routes — must come before authenticate middleware
 app.use('/api/auth', authRouter)
+
+// Kiosk routes — sistema de auth separado (PIN → JWT con shape distinto).
+// El router maneja sus propias rutas públicas (login) y protegidas
+// (todo lo demás vía authenticateKiosk).
+app.use('/api/kiosk', kioskRouter)
 
 // All other API routes require a valid JWT
 app.use('/api', authenticate, router)

@@ -13,6 +13,7 @@ const ROLES: { value: UserRole; label: string }[] = [
   { value: 'PRODUCTION',         label: 'Production' },
   { value: 'PROJECT_MANAGEMENT', label: 'Project Manager' },
   { value: 'CONTABILIDAD',       label: 'Accounting' },
+  { value: 'SHOP_MANAGER',       label: 'Shop Manager' },
 ]
 
 const ROL_COLORS: Record<UserRole, string> = {
@@ -21,6 +22,7 @@ const ROL_COLORS: Record<UserRole, string> = {
   PRODUCTION:         'bg-green-100 text-green-700',
   PROJECT_MANAGEMENT: 'bg-blue-100 text-blue-700',
   CONTABILIDAD:       'bg-gray-100 text-gray-700',
+  SHOP_MANAGER:       'bg-orange-100 text-orange-700',
 }
 
 function rolLabel(rol: UserRole) {

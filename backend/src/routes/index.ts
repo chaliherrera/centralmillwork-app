@@ -35,8 +35,14 @@ import {
   marcarCotizacionesEnviadas,
 } from '../controllers/cotizacionesController'
 import { getReporteCompras, getReporteProduccion, compartirReporte } from '../controllers/reportesController'
+import produccionRouter from './produccion'
 
 const router = Router()
+
+// ─── Módulo de Producción ────────────────────────────────────────────────────
+// Sub-router con sus propias rutas/permisos (ver routes/produccion.ts).
+router.use('/produccion', produccionRouter)
+
 
 // Role shorthand helpers
 const ADMIN      = requireRole('ADMIN')
