@@ -171,26 +171,47 @@ function EstacionCell({ est }: { est: EstacionConStatus }) {
 }
 
 // ─── Celda: carpintero individual de Assembly ────────────────────────────────
-// Cada uno tiene su propia carga (que viene del global de assembly por ahora,
-// porque no separamos carga por operario individual a nivel de query).
-// Linkea a /produccion/ordenes filtrado por assembly + personal_id.
+// Muestra la carga REAL del carpintero (sus órdenes activas en assembly) con
+// el mismo color coding que las estaciones convencionales:
+//   gris    → sin trabajo
+//   emerald → con carga normal (≤ capacidad)
+//   amber   → sobrecarga (> capacidad personal)
+// Si tiene órdenes de prioridad Alta, muestra un badge rojo con el conteo.
 function CarpinteroCell({ est, persona }: { est: EstacionConStatus; persona: EstacionPersonalRef }) {
-  // Carga del carpintero = órdenes de assembly asignadas a él.
-  // El endpoint actual no devuelve este desglose, así que mostramos solo el badge "Assembly".
-  // Mejora futura: hacer que el backend devuelva ordenes_por_personal en estaciones.
-  const sinDatos = true  // placeholder hasta que el backend desglose por persona
+  const ordenesActivas = Number(persona.ordenes_activas ?? 0)
+  const altaPrioridad  = Number(persona.ordenes_alta_prioridad ?? 0)
+  const capacidad      = est.capacidad_max ?? 3
+  const sobreCarga     = ordenesActivas > capacidad
+  const vacia          = ordenesActivas === 0
+
+  const borderColor = sobreCarga ? 'border-amber-400 bg-amber-50'
+    : vacia                       ? 'border-gray-200 bg-white'
+                                  : 'border-emerald-300 bg-emerald-50'
 
   return (
     <Link
       to={`/produccion/ordenes?estacion=assembly&personal_id=${persona.personal_id}`}
-      className="rounded-xl border-2 border-gray-200 bg-white hover:shadow-md hover:border-forest-300 transition-all flex flex-col gap-2 p-3"
+      className={clsx(
+        'rounded-xl border-2 hover:shadow-md transition-all flex flex-col gap-2 p-3',
+        borderColor
+      )}
     >
       <div className="flex items-start justify-between gap-2">
         <div className="text-[10px] uppercase tracking-widest text-gray-400 font-semibold">
           Assembly
         </div>
-        <div className="w-6 h-6 rounded-full bg-forest-700 text-white text-[10px] font-bold flex items-center justify-center">
-          {persona.iniciales}
+        <div className="flex items-center gap-1.5">
+          {altaPrioridad > 0 && (
+            <span
+              className="px-1.5 py-0.5 rounded-full bg-red-100 text-red-700 text-[10px] font-bold leading-none"
+              title={`${altaPrioridad} de alta prioridad`}
+            >
+              !{altaPrioridad}
+            </span>
+          )}
+          <div className="w-6 h-6 rounded-full bg-forest-700 text-white text-[10px] font-bold flex items-center justify-center">
+            {persona.iniciales}
+          </div>
         </div>
       </div>
 
@@ -198,10 +219,17 @@ function CarpinteroCell({ est, persona }: { est: EstacionConStatus; persona: Est
         {persona.nombre_completo.split(' ')[0]}
       </div>
 
-      <div className="mt-auto flex items-center gap-1 text-xs text-gray-500">
-        <Users size={11} />
-        Capacidad {est.capacidad_max ?? '∞'}
-        {sinDatos && <span className="text-gray-300">· órdenes:?</span>}
+      <div className="flex items-baseline gap-1 mt-auto">
+        <span className={clsx(
+          'text-2xl font-bold tabular-nums',
+          vacia ? 'text-gray-300' : sobreCarga ? 'text-amber-700' : 'text-emerald-700'
+        )}>
+          {ordenesActivas}
+        </span>
+        <span className="text-xs text-gray-500">
+          / {capacidad}
+        </span>
+        {sobreCarga && <AlertTriangle size={12} className="text-amber-600 ml-1" />}
       </div>
     </Link>
   )

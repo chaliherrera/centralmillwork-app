@@ -113,6 +113,10 @@ export interface EstacionPersonalRef {
   nombre_completo: string
   iniciales: string
   es_estacion_principal: boolean
+  /** Carga individual: órdenes asignadas a este operario, en esta estación,
+   *  en estado Pendiente / En Proceso / Pausada. */
+  ordenes_activas: number
+  ordenes_alta_prioridad: number
 }
 
 export interface EstacionConStatus {

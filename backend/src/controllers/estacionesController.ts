@@ -25,7 +25,23 @@ export async function getEstaciones(_req: Request, res: Response, next: NextFunc
              'personal_id', pt.id,
              'nombre_completo', pt.nombre_completo,
              'iniciales', pt.iniciales,
-             'es_estacion_principal', pe.es_estacion_principal
+             'es_estacion_principal', pe.es_estacion_principal,
+             'ordenes_activas', (
+               -- Carga individual del operario en ESTA estación.
+               -- Cuenta órdenes cuya estación actual es ec.nombre y están asignadas
+               -- al operario (Pendiente/En Proceso/Pausada).
+               SELECT COUNT(*) FROM ordenes_produccion o2
+               WHERE o2.estacion_actual = ec.nombre
+                 AND o2.personal_asignado_id = pt.id
+                 AND o2.status IN ('Pendiente','En Proceso','Pausada')
+             ),
+             'ordenes_alta_prioridad', (
+               SELECT COUNT(*) FROM ordenes_produccion o3
+               WHERE o3.estacion_actual = ec.nombre
+                 AND o3.personal_asignado_id = pt.id
+                 AND o3.prioridad = 'Alta'
+                 AND o3.status NOT IN ('Completada','Cancelada')
+             )
            )) FILTER (WHERE pt.id IS NOT NULL),
            '[]'::json
          ) AS personal
@@ -34,7 +50,7 @@ export async function getEstaciones(_req: Request, res: Response, next: NextFunc
        LEFT JOIN personal_estaciones pe ON pe.estacion = ec.nombre AND pe.activo = true
        LEFT JOIN personal_taller    pt  ON pt.id = pe.personal_id  AND pt.activo = true
        GROUP BY ec.id
-       ORDER BY ec.posicion_y, ec.posicion_x, ec.nombre`
+       ORDER BY ec.posicion_y NULLS LAST, ec.posicion_x, ec.nombre`
     )
     res.json({ data: rows })
   } catch (err) { next(err) }
