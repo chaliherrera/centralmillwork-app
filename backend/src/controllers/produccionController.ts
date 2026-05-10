@@ -4,7 +4,7 @@ import { createError } from '../middleware/errorHandler'
 import { parsePagination, paginatedResponse } from '../utils/pagination'
 
 const ORDEN_BASE_SECUENCIA = [
-  'cnc', 'edge_banding', 'assembly', 'lamina', 'pintura', 'final', 'packing', 'shipping',
+  'cnc', 'edge_banding', 'assembly', 'lamina', 'pintura', 'final', 'registro', 'shipping',
 ]
 
 const STATUS_VALIDOS = ['Pendiente', 'En Proceso', 'Pausada', 'Completada', 'Cancelada'] as const

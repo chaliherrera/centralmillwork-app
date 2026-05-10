@@ -13,10 +13,9 @@ const ESTACIONES_DISPONIBLES = [
   { value: 'edge_banding',  label: 'Edge Banding',  desc: 'Maquinado' },
   { value: 'lamina',        label: 'Lámina',        desc: 'Acabado' },
   { value: 'pintura',       label: 'Pintura',       desc: 'Acabado' },
-  { value: 'boot_pintura',  label: 'Boot Pintura',  desc: 'Acabado' },
   { value: 'assembly',      label: 'Assembly',      desc: 'Ensamblaje' },
   { value: 'final',         label: 'Final QC',      desc: 'QC' },
-  { value: 'packing',       label: 'Packing',       desc: 'Logística' },
+  { value: 'registro',      label: 'Registro',      desc: 'Logística' },
   { value: 'shipping',      label: 'Shipping',      desc: 'Logística' },
 ]
 

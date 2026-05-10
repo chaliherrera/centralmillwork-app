@@ -9,8 +9,8 @@ import Timer from './Timer'
 import type { KioskProyectoDisponible } from '@/types/kiosk'
 
 const ESTACIONES = [
-  'cnc', 'edge_banding', 'lamina', 'pintura', 'boot_pintura',
-  'final', 'assembly', 'packing', 'shipping',
+  'cnc', 'edge_banding', 'lamina', 'pintura',
+  'final', 'assembly', 'registro', 'shipping',
 ]
 
 export default function ProyectoActivo() {

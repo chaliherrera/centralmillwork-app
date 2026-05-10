@@ -4,13 +4,23 @@ import { useQuery } from '@tanstack/react-query'
 import { Loader2, Users, AlertTriangle } from 'lucide-react'
 import clsx from 'clsx'
 import { produccionService } from '@/services/produccion'
-import type { EstacionConStatus } from '@/types/produccion'
+import type { EstacionConStatus, EstacionPersonalRef } from '@/types/produccion'
 
-/**
- * Mapa del taller — read-only.
- * Renderiza un grid 4x4 usando posicion_x / posicion_y de estaciones_config.
- * Cada celda muestra: nombre, ordenes activas, personal asignado.
- */
+// Layout: 4 columnas × 5 filas. Assembly se "abre" en una celda por carpintero
+// en la columna 2 (posicion_x=2). El resto de las estaciones tienen posición fija
+// definida en estaciones_config (ver migración 018).
+const ASSEMBLY_COL_X = 2
+const GRID_COLS = 4
+const GRID_ROWS = 5
+
+// Cada celda de la grilla es:
+//  - una estación (`station`)
+//  - un carpintero individual de Assembly (`carpenter` con su personal info)
+//  - vacía (sin asignar)
+type Celda =
+  | { kind: 'station';   est: EstacionConStatus }
+  | { kind: 'carpenter'; est: EstacionConStatus; persona: EstacionPersonalRef }
+
 export default function MapaTaller() {
   const { data: estaciones = [], isLoading } = useQuery({
     queryKey: ['estaciones'],
@@ -18,21 +28,36 @@ export default function MapaTaller() {
     refetchInterval: 30_000,
   })
 
-  // Personal activo (clocked-in) — para mostrar en el mapa quién está trabajando ahora
   const { data: kpis } = useQuery({
     queryKey: ['ordenes-produccion-kpis'],
     queryFn:  produccionService.ordenesKpis,
     refetchInterval: 30_000,
   })
 
-  // Indexar por (x, y) para render del grid
   const matriz = useMemo(() => {
-    const m: Record<string, EstacionConStatus> = {}
+    const m: Record<string, Celda> = {}
+
+    // 1. Estaciones con posición explícita (todas menos assembly)
     for (const e of estaciones) {
+      if (e.nombre === 'assembly') continue
       if (e.posicion_x != null && e.posicion_y != null) {
-        m[`${e.posicion_x},${e.posicion_y}`] = e
+        m[`${e.posicion_x},${e.posicion_y}`] = { kind: 'station', est: e }
       }
     }
+
+    // 2. Assembly: una celda por carpintero en la columna 2.
+    //    Orden estable por personal_id ascendente.
+    const assembly = estaciones.find((e) => e.nombre === 'assembly')
+    if (assembly) {
+      const carpinteros = [...assembly.personal].sort((a, b) => a.personal_id - b.personal_id)
+      carpinteros.forEach((p, idx) => {
+        const y = idx + 1
+        if (y <= GRID_ROWS) {
+          m[`${ASSEMBLY_COL_X},${y}`] = { kind: 'carpenter', est: assembly, persona: p }
+        }
+      })
+    }
+
     return m
   }, [estaciones])
 
@@ -40,13 +65,8 @@ export default function MapaTaller() {
     return <div className="flex justify-center py-12"><Loader2 size={24} className="animate-spin text-gray-400" /></div>
   }
 
-  // Dimensiones del grid (calcular max x, max y)
-  const maxX = Math.max(1, ...estaciones.map((e) => e.posicion_x ?? 0))
-  const maxY = Math.max(1, ...estaciones.map((e) => e.posicion_y ?? 0))
-
   return (
     <div className="space-y-4">
-      {/* KPIs rápidos */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <Kpi label="Órdenes activas"  value={kpis?.activas         ?? '—'} />
         <Kpi label="Completadas hoy"  value={kpis?.completadas_hoy ?? '—'} />
@@ -59,7 +79,7 @@ export default function MapaTaller() {
           <h3>Mapa del taller</h3>
           <div className="flex items-center gap-3 text-xs">
             <Legend color="bg-emerald-500" label="Activa" />
-            <Legend color="bg-amber-400"   label="Bottleneck" />
+            <Legend color="bg-amber-400"   label="Sobrecargada" />
             <Legend color="bg-gray-200"    label="Sin órdenes" />
           </div>
         </div>
@@ -67,18 +87,19 @@ export default function MapaTaller() {
         <div
           className="grid gap-3"
           style={{
-            gridTemplateColumns: `repeat(${maxX}, minmax(0, 1fr))`,
-            gridTemplateRows:    `repeat(${maxY}, minmax(120px, 1fr))`,
+            gridTemplateColumns: `repeat(${GRID_COLS}, minmax(0, 1fr))`,
+            gridTemplateRows:    `repeat(${GRID_ROWS}, minmax(120px, 1fr))`,
           }}
         >
-          {Array.from({ length: maxY }).map((_, y) =>
-            Array.from({ length: maxX }).map((_, x) => {
-              const est = matriz[`${x + 1},${y + 1}`]
-              return est ? (
-                <EstacionCell key={`${x}-${y}`} est={est} />
-              ) : (
-                <div key={`${x}-${y}`} className="rounded-xl border-2 border-dashed border-gray-100" />
-              )
+          {Array.from({ length: GRID_ROWS }).map((_, y) =>
+            Array.from({ length: GRID_COLS }).map((_, x) => {
+              const celda = matriz[`${x + 1},${y + 1}`]
+              if (!celda) {
+                return <div key={`${x}-${y}`} className="rounded-xl border-2 border-dashed border-gray-100" />
+              }
+              if (celda.kind === 'station')  return <EstacionCell  key={`${x}-${y}`} est={celda.est} />
+              if (celda.kind === 'carpenter') return <CarpinteroCell key={`${x}-${y}`} est={celda.est} persona={celda.persona} />
+              return null
             })
           )}
         </div>
@@ -87,6 +108,7 @@ export default function MapaTaller() {
   )
 }
 
+// ─── Celda: estación común (CNC, Pintura, etc.) ──────────────────────────────
 function EstacionCell({ est }: { est: EstacionConStatus }) {
   const ordenesActivas = Number(est.ordenes_activas)
   const sobreCarga = est.capacidad_max != null && ordenesActivas > est.capacidad_max
@@ -143,6 +165,43 @@ function EstacionCell({ est }: { est: EstacionConStatus }) {
             </span>
           ))
         )}
+      </div>
+    </Link>
+  )
+}
+
+// ─── Celda: carpintero individual de Assembly ────────────────────────────────
+// Cada uno tiene su propia carga (que viene del global de assembly por ahora,
+// porque no separamos carga por operario individual a nivel de query).
+// Linkea a /produccion/ordenes filtrado por assembly + personal_id.
+function CarpinteroCell({ est, persona }: { est: EstacionConStatus; persona: EstacionPersonalRef }) {
+  // Carga del carpintero = órdenes de assembly asignadas a él.
+  // El endpoint actual no devuelve este desglose, así que mostramos solo el badge "Assembly".
+  // Mejora futura: hacer que el backend devuelva ordenes_por_personal en estaciones.
+  const sinDatos = true  // placeholder hasta que el backend desglose por persona
+
+  return (
+    <Link
+      to={`/produccion/ordenes?estacion=assembly&personal_id=${persona.personal_id}`}
+      className="rounded-xl border-2 border-gray-200 bg-white hover:shadow-md hover:border-forest-300 transition-all flex flex-col gap-2 p-3"
+    >
+      <div className="flex items-start justify-between gap-2">
+        <div className="text-[10px] uppercase tracking-widest text-gray-400 font-semibold">
+          Assembly
+        </div>
+        <div className="w-6 h-6 rounded-full bg-forest-700 text-white text-[10px] font-bold flex items-center justify-center">
+          {persona.iniciales}
+        </div>
+      </div>
+
+      <div className="font-bold text-base text-forest-700 leading-tight">
+        {persona.nombre_completo.split(' ')[0]}
+      </div>
+
+      <div className="mt-auto flex items-center gap-1 text-xs text-gray-500">
+        <Users size={11} />
+        Capacidad {est.capacidad_max ?? '∞'}
+        {sinDatos && <span className="text-gray-300">· órdenes:?</span>}
       </div>
     </Link>
   )

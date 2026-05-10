@@ -16,8 +16,8 @@ const TIPOS: { value: TipoPersonal; label: string; color: string }[] = [
 ]
 
 const ESTACIONES = [
-  'cnc', 'edge_banding', 'lamina', 'pintura', 'boot_pintura',
-  'final', 'assembly', 'packing', 'shipping',
+  'cnc', 'edge_banding', 'lamina', 'pintura',
+  'final', 'assembly', 'registro', 'shipping',
 ]
 
 function tipoLabel(t: TipoPersonal | null) {
