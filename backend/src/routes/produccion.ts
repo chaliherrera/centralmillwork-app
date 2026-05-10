@@ -17,6 +17,7 @@ import {
 } from '../controllers/qcController'
 import {
   getPersonalActivo, reportePersonal, reportePorProyecto, reporteDiario,
+  exportarHoras,
 } from '../controllers/timeTrackingController'
 import { calcularRuta } from '../utils/rutaOptimizador'
 import { createError } from '../middleware/errorHandler'
@@ -75,5 +76,6 @@ router.get('/time-tracking/activos',          getPersonalActivo)
 router.get('/time-tracking/personal/:id',     reportePersonal)
 router.get('/time-tracking/proyecto/:id',     reportePorProyecto)
 router.get('/time-tracking/diario',           reporteDiario)
+router.get('/time-tracking/exportar',         exportarHoras)
 
 export default router

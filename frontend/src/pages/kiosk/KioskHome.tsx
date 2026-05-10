@@ -4,6 +4,7 @@ import ClockCard      from '@/components/kiosk/ClockCard'
 import ProyectoActivo from '@/components/kiosk/ProyectoActivo'
 import PausaCard      from '@/components/kiosk/PausaCard'
 import MiCola         from '@/components/kiosk/MiCola'
+import ResumenDia     from '@/components/kiosk/ResumenDia'
 
 export default function KioskHome() {
   const { personal, dispositivo, logout, status } = useKioskAuth()
@@ -50,6 +51,7 @@ export default function KioskHome() {
         <ProyectoActivo />
         <PausaCard />
         <MiCola />
+        <ResumenDia />
       </main>
     </div>
   )

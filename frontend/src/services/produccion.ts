@@ -3,6 +3,7 @@ import type {
   OrdenProduccion, OrdenDetallada, OrdenesKpis,
   PersonalTaller, EstacionConStatus, EstacionDetalle, EstacionDistancia,
   RutaCalculada, Prioridad,
+  PersonalActivoReporte, ReportePersonalResp, ReporteProyectoResp, ReporteDiarioResp,
 } from '@/types/produccion'
 
 interface OrdenesFilters {
@@ -113,4 +114,36 @@ export const produccionService = {
   rutaPreview: (procesos: string[], asignaciones: Record<string, number | null> = {}) =>
     api.post<{ data: RutaCalculada }>('/produccion/ruta-preview', { procesos, asignaciones })
       .then((r) => r.data.data),
+
+  // ─── Reportes de horas (sistema, para SHOP_MANAGER/ADMIN) ────────────────
+  personalActivo: () =>
+    api.get<{ data: PersonalActivoReporte[] }>('/produccion/time-tracking/activos').then((r) => r.data.data),
+
+  reportePersonal: (personalId: number, fechaDesde: string, fechaHasta: string) =>
+    api.get<ReportePersonalResp>(`/produccion/time-tracking/personal/${personalId}`, {
+      params: { fecha_desde: fechaDesde, fecha_hasta: fechaHasta },
+    }).then((r) => r.data),
+
+  reportePorProyecto: (proyectoId: number, fechaDesde: string, fechaHasta: string) =>
+    api.get<ReporteProyectoResp>(`/produccion/time-tracking/proyecto/${proyectoId}`, {
+      params: { fecha_desde: fechaDesde, fecha_hasta: fechaHasta },
+    }).then((r) => r.data),
+
+  reporteDiario: (fecha: string) =>
+    api.get<ReporteDiarioResp>(`/produccion/time-tracking/diario`, {
+      params: { fecha },
+    }).then((r) => r.data),
+
+  /** Devuelve un Blob xlsx para descargar. */
+  exportarHoras: (params: {
+    tipo: 'personal' | 'proyecto' | 'diario'
+    fecha_desde: string
+    fecha_hasta: string
+    personal_id?: number
+    proyecto_id?: number
+  }) =>
+    api.get<Blob>(`/produccion/time-tracking/exportar`, {
+      params,
+      responseType: 'blob',
+    }).then((r) => r.data),
 }

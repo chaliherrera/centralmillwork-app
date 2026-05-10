@@ -158,3 +158,84 @@ export interface RutaCalculada {
   distancia_total_metros: number
   tiempo_traslados_segundos: number
 }
+
+// ─── Reportes de horas ────────────────────────────────────────────────────────
+
+export interface PersonalActivoReporte {
+  personal_id: number
+  nombre_completo: string
+  iniciales: string
+  tipo_personal: string | null
+  registro_id: number
+  hora_entrada: string
+  dispositivo_clockin: string | null
+  proyecto_segmento_id: number | null
+  proyecto_id: number | null
+  proyecto_codigo: string | null
+  proyecto_nombre: string | null
+  estacion: string | null
+  orden_produccion_id: number | null
+  proyecto_desde: string | null
+  pausa_id: number | null
+  pausa_desde: string | null
+  pausa_motivo: string | null
+}
+
+export interface ReportePersonalRegistro {
+  id: number
+  fecha: string
+  hora_entrada: string
+  hora_salida: string | null
+  total_horas: number | null
+  dispositivo: string | null
+  horas_proyectos: number
+  horas_pausas: number
+  proyectos: {
+    proyecto_id: number
+    proyecto_codigo: string
+    proyecto_nombre: string
+    estacion: string
+    horas: number | null
+  }[]
+}
+
+export interface ReportePersonalResp {
+  personal_id: number
+  periodo: { desde: string; hasta: string }
+  registros: ReportePersonalRegistro[]
+}
+
+export interface ReporteProyectoAsignacion {
+  personal_id: number
+  nombre_completo: string
+  iniciales: string
+  estacion: string
+  horas: number | null
+  segmentos: number
+  desde: string
+  hasta: string
+}
+
+export interface ReporteProyectoResp {
+  proyecto_id: number
+  periodo: { desde: string; hasta: string }
+  asignaciones: ReporteProyectoAsignacion[]
+}
+
+export interface ReporteDiarioPersona {
+  personal_id: number
+  nombre_completo: string
+  iniciales: string
+  registro_id: number | null
+  hora_entrada: string | null
+  hora_salida: string | null
+  total_horas: number | null
+  status: 'activo' | 'finalizado' | 'pausado' | null
+  horas_pausas: number
+  proyectos_count: number
+}
+
+export interface ReporteDiarioResp {
+  fecha: string
+  personal: ReporteDiarioPersona[]
+}

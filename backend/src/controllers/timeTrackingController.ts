@@ -1,4 +1,5 @@
 import { Request, Response, NextFunction } from 'express'
+import * as XLSX from 'xlsx'
 import pool from '../db/pool'
 import { createError } from '../middleware/errorHandler'
 
@@ -421,5 +422,169 @@ export async function reporteDiario(req: Request, res: Response, next: NextFunct
     )
 
     res.json({ fecha, personal: rows })
+  } catch (err) { next(err) }
+}
+
+/**
+ * GET /api/produccion/time-tracking/exportar
+ * Genera un xlsx con horas trabajadas por persona en el período dado.
+ *
+ * Query: ?tipo=personal|proyecto|diario&fecha_desde=&fecha_hasta=&personal_id=&proyecto_id=
+ *
+ * Devuelve el archivo directamente con Content-Disposition: attachment.
+ */
+export async function exportarHoras(req: Request, res: Response, next: NextFunction) {
+  try {
+    const tipo       = String(req.query.tipo ?? 'personal')
+    const fechaDesde = String(req.query.fecha_desde ?? '1900-01-01')
+    const fechaHasta = String(req.query.fecha_hasta ?? '2999-12-31')
+
+    const wb = XLSX.utils.book_new()
+    let nombreArchivo = `horas-${tipo}-${fechaDesde}_${fechaHasta}.xlsx`
+
+    if (tipo === 'personal') {
+      // Una hoja por persona (o filtrada por personal_id), filas = jornadas
+      const personalId = req.query.personal_id ? parseInt(String(req.query.personal_id)) : null
+      const personalQ = await pool.query(
+        personalId
+          ? `SELECT id, nombre_completo, iniciales FROM personal_taller WHERE id = $1`
+          : `SELECT id, nombre_completo, iniciales FROM personal_taller WHERE activo = true ORDER BY nombre_completo`,
+        personalId ? [personalId] : []
+      )
+
+      // Hoja resumen
+      const resumen: any[] = []
+      for (const p of personalQ.rows) {
+        const { rows: jornadas } = await pool.query(
+          `SELECT
+             tr.fecha, tr.hora_entrada, tr.hora_salida, tr.total_horas,
+             COALESCE(SUM(pa.duracion_minutos) / 60, 0) AS horas_pausas,
+             COALESCE(SUM(pa.duracion_minutos) / 60, 0) AS pausas_total
+           FROM time_registros tr
+           LEFT JOIN time_pausas pa ON pa.registro_id = tr.id
+           WHERE tr.personal_id = $1 AND tr.fecha BETWEEN $2 AND $3
+           GROUP BY tr.id
+           ORDER BY tr.fecha`,
+          [p.id, fechaDesde, fechaHasta]
+        )
+        for (const j of jornadas) {
+          resumen.push({
+            'Persona': p.nombre_completo,
+            'Iniciales': p.iniciales,
+            'Fecha': j.fecha,
+            'Entrada': j.hora_entrada ? new Date(j.hora_entrada).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' }) : '',
+            'Salida':  j.hora_salida  ? new Date(j.hora_salida).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit'  }) : '',
+            'Horas brutas': j.total_horas != null ? Number(j.total_horas).toFixed(2) : '',
+            'Horas pausas': Number(j.horas_pausas).toFixed(2),
+            'Horas netas':  j.total_horas != null
+              ? (Number(j.total_horas) - Number(j.horas_pausas)).toFixed(2)
+              : '',
+          })
+        }
+      }
+      const ws = XLSX.utils.json_to_sheet(resumen)
+      XLSX.utils.book_append_sheet(wb, ws, 'Jornadas')
+
+      // Hoja de totales por persona
+      const totales: any[] = []
+      for (const p of personalQ.rows) {
+        const { rows: [tot] } = await pool.query(
+          `SELECT
+             COALESCE(SUM(tr.total_horas), 0) AS horas_brutas,
+             COALESCE(SUM(pausas.total_pausas) / 60, 0) AS horas_pausas
+           FROM time_registros tr
+           LEFT JOIN LATERAL (
+             SELECT SUM(duracion_minutos) AS total_pausas
+             FROM time_pausas WHERE registro_id = tr.id
+           ) pausas ON true
+           WHERE tr.personal_id = $1 AND tr.fecha BETWEEN $2 AND $3`,
+          [p.id, fechaDesde, fechaHasta]
+        )
+        totales.push({
+          'Persona': p.nombre_completo,
+          'Iniciales': p.iniciales,
+          'Horas brutas': Number(tot.horas_brutas).toFixed(2),
+          'Horas pausas': Number(tot.horas_pausas).toFixed(2),
+          'Horas netas':  (Number(tot.horas_brutas) - Number(tot.horas_pausas)).toFixed(2),
+        })
+      }
+      const wsTot = XLSX.utils.json_to_sheet(totales)
+      XLSX.utils.book_append_sheet(wb, wsTot, 'Totales')
+
+    } else if (tipo === 'proyecto') {
+      // Horas por proyecto: filas = (persona, proyecto, estación, total)
+      const proyectoId = req.query.proyecto_id ? parseInt(String(req.query.proyecto_id)) : null
+      const conds: string[] = ['tp.hora_inicio::date BETWEEN $1 AND $2']
+      const vals: unknown[] = [fechaDesde, fechaHasta]
+      if (proyectoId) {
+        conds.push(`tp.proyecto_id = $${vals.length + 1}`)
+        vals.push(proyectoId)
+      }
+      const { rows } = await pool.query(
+        `SELECT
+           p.codigo, p.nombre AS proyecto_nombre,
+           pt.nombre_completo, pt.iniciales,
+           tp.estacion,
+           SUM(tp.total_horas) AS horas,
+           COUNT(*)            AS segmentos
+         FROM time_proyectos tp
+         JOIN proyectos       p  ON p.id  = tp.proyecto_id
+         JOIN personal_taller pt ON pt.id = tp.personal_id
+         WHERE ${conds.join(' AND ')}
+         GROUP BY p.id, pt.id, tp.estacion
+         ORDER BY p.codigo, pt.nombre_completo, tp.estacion`,
+        vals
+      )
+      const data = rows.map((r) => ({
+        'Proyecto': r.codigo,
+        'Nombre proyecto': r.proyecto_nombre,
+        'Persona': r.nombre_completo,
+        'Iniciales': r.iniciales,
+        'Estación': r.estacion,
+        'Horas': Number(r.horas ?? 0).toFixed(2),
+        'Segmentos': r.segmentos,
+      }))
+      const ws = XLSX.utils.json_to_sheet(data)
+      XLSX.utils.book_append_sheet(wb, ws, 'Horas por proyecto')
+
+    } else if (tipo === 'diario') {
+      // Diario: filas = (persona, fecha, entrada, salida, horas)
+      const { rows } = await pool.query(
+        `SELECT
+           pt.nombre_completo, pt.iniciales,
+           tr.fecha, tr.hora_entrada, tr.hora_salida, tr.total_horas, tr.status,
+           COALESCE(SUM(pa.duracion_minutos) / 60, 0) AS horas_pausas
+         FROM time_registros tr
+         JOIN personal_taller pt ON pt.id = tr.personal_id
+         LEFT JOIN time_pausas pa ON pa.registro_id = tr.id
+         WHERE tr.fecha BETWEEN $1 AND $2
+         GROUP BY tr.id, pt.id
+         ORDER BY tr.fecha DESC, pt.nombre_completo`,
+        [fechaDesde, fechaHasta]
+      )
+      const data = rows.map((r) => ({
+        'Fecha': r.fecha,
+        'Persona': r.nombre_completo,
+        'Iniciales': r.iniciales,
+        'Entrada': r.hora_entrada ? new Date(r.hora_entrada).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' }) : '',
+        'Salida':  r.hora_salida  ? new Date(r.hora_salida).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' }) : '',
+        'Horas brutas': r.total_horas != null ? Number(r.total_horas).toFixed(2) : '',
+        'Horas pausas': Number(r.horas_pausas).toFixed(2),
+        'Horas netas':  r.total_horas != null
+          ? (Number(r.total_horas) - Number(r.horas_pausas)).toFixed(2)
+          : '',
+        'Status': r.status,
+      }))
+      const ws = XLSX.utils.json_to_sheet(data)
+      XLSX.utils.book_append_sheet(wb, ws, 'Diario')
+
+    } else {
+      return next(createError('tipo inválido. Usá personal | proyecto | diario', 400))
+    }
+
+    const buffer = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' })
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    res.setHeader('Content-Disposition', `attachment; filename="${nombreArchivo}"`)
+    res.send(buffer)
   } catch (err) { next(err) }
 }
