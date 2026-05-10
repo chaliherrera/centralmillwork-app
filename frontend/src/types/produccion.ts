@@ -30,7 +30,7 @@ export interface OrdenProduccion {
   notas: string | null
   fecha_inicio: string | null
   fecha_completada: string | null
-  created_by: number | null
+  created_by: string | null              // UUID
   created_at: string
   updated_at: string
 }
@@ -62,7 +62,7 @@ export interface OrdenHistorial {
   personal_destino_nombre?: string | null
   accion: string
   motivo: string | null
-  usuario_id: number | null
+  usuario_id: string | null              // UUID (usuarios.id es UUID en prod)
   usuario_nombre?: string | null
   kiosk_personal_id: number | null
   kiosk_personal_nombre?: string | null
@@ -100,7 +100,7 @@ export interface PersonalTaller {
   iniciales: string
   tipo_personal: TipoPersonal | null
   activo: boolean
-  usuario_id: number | null
+  usuario_id: string | null              // UUID — vínculo opcional al login del sistema
   tiene_pin: boolean
   pin_actualizado_at: string | null
   estaciones: PersonalEstacionAsignacion[]

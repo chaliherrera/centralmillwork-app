@@ -31,7 +31,7 @@ CREATE TABLE IF NOT EXISTS ordenes_produccion (
   notas                    TEXT,
   fecha_inicio             TIMESTAMPTZ,
   fecha_completada         TIMESTAMPTZ,
-  created_by               INT REFERENCES usuarios(id) ON DELETE SET NULL,
+  created_by               UUID REFERENCES usuarios(id) ON DELETE SET NULL,
   created_at               TIMESTAMPTZ DEFAULT NOW(),
   updated_at               TIMESTAMPTZ DEFAULT NOW()
 );
@@ -72,7 +72,7 @@ CREATE TABLE IF NOT EXISTS orden_historial (
   personal_destino_id  INT,  -- FK a personal_taller en 015
   accion               TEXT NOT NULL,  -- 'crear','mover','asignar','pausar','completar','rechazar', etc.
   motivo               TEXT,
-  usuario_id           INT REFERENCES usuarios(id) ON DELETE SET NULL,
+  usuario_id           UUID REFERENCES usuarios(id) ON DELETE SET NULL,
   kiosk_personal_id    INT,  -- FK a personal_taller en 015 (cuando la acción la hace un operario)
   dispositivo          TEXT, -- ej: 'tablet-cnc-01' (nullable si la acción la hace un usuario web)
   timestamp            TIMESTAMPTZ DEFAULT NOW()

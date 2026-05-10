@@ -13,7 +13,7 @@
 -- 1. Personal del taller
 CREATE TABLE IF NOT EXISTS personal_taller (
   id                  SERIAL PRIMARY KEY,
-  usuario_id          INT REFERENCES usuarios(id) ON DELETE SET NULL,  -- opcional
+  usuario_id          UUID REFERENCES usuarios(id) ON DELETE SET NULL,  -- opcional
   nombre              TEXT NOT NULL,
   apellido            TEXT,
   nombre_completo     TEXT GENERATED ALWAYS AS (
@@ -79,12 +79,10 @@ ALTER TABLE qc_inspecciones
   ADD CONSTRAINT fk_qc_inspector
   FOREIGN KEY (inspector_id) REFERENCES personal_taller(id) ON DELETE SET NULL;
 
--- 4. Agregar SHOP_MANAGER al CHECK de roles de `usuarios`
--- El CHECK actual incluye: ADMIN, PROCUREMENT, PRODUCTION, PROJECT_MANAGEMENT, RECEPTION
--- (RECEPTION es legacy en la migración 013; no lo tocamos.)
-ALTER TABLE usuarios DROP CONSTRAINT IF EXISTS usuarios_rol_check;
-ALTER TABLE usuarios ADD  CONSTRAINT usuarios_rol_check
-  CHECK (rol IN ('ADMIN','PROCUREMENT','PRODUCTION','PROJECT_MANAGEMENT','RECEPTION','SHOP_MANAGER','CONTABILIDAD'));
+-- 4. Agregar SHOP_MANAGER al enum `user_rol` de `usuarios.rol`
+-- En producción, `usuarios.rol` es un enum tipado (`user_rol`), no TEXT con CHECK.
+-- ALTER TYPE ... ADD VALUE es idempotente con `IF NOT EXISTS` (PG 9.6+).
+ALTER TYPE user_rol ADD VALUE IF NOT EXISTS 'SHOP_MANAGER';
 
-COMMENT ON CONSTRAINT usuarios_rol_check ON usuarios
-  IS 'SHOP_MANAGER agregado para gestionar el módulo de producción (asignar órdenes, gestionar PINs del personal_taller). No tiene permisos de ADMIN sobre usuarios ni DB.';
+COMMENT ON TYPE user_rol
+  IS 'Enum de roles del sistema. SHOP_MANAGER se agregó para gestionar el módulo de producción (asignar órdenes, gestionar PINs del personal_taller). No tiene permisos de ADMIN sobre usuarios ni DB.';
