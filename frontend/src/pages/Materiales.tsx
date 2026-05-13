@@ -1,4 +1,5 @@
 import { useState, useMemo } from 'react'
+import { Link } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Plus, Search, Pencil, Trash2, Package,
@@ -376,6 +377,7 @@ export default function Materiales() {
                     <th className="px-3 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wide hidden md:table-cell w-28">Unit Price</th>
                     <th className="px-3 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wide hidden md:table-cell w-28">Total</th>
                     <th className="px-3 py-3 text-center text-xs font-semibold text-gray-500 uppercase tracking-wide hidden md:table-cell w-24">F.Import</th>
+                    <th className="px-3 py-3 text-center text-xs font-semibold text-gray-500 uppercase tracking-wide w-32">OC #</th>
                     <th className="px-3 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide hidden xl:table-cell w-36">Notas</th>
                     <th className="px-3 py-3 w-16"></th>
                   </tr>
@@ -394,7 +396,7 @@ export default function Materiales() {
                   )}
                   {!isLoading && materials.length === 0 && (
                     <tr>
-                      <td colSpan={18} className="px-4 py-16 text-center text-gray-300 text-sm">
+                      <td colSpan={19} className="px-4 py-16 text-center text-gray-300 text-sm">
                         No se encontraron materiales para este proyecto
                       </td>
                     </tr>
@@ -407,6 +409,8 @@ export default function Materiales() {
                           m.estado_cotiz === 'COTIZADO'  && 'bg-green-100 text-green-700',
                           m.estado_cotiz === 'PENDIENTE' && 'bg-yellow-100 text-yellow-700',
                           m.estado_cotiz === 'EN_STOCK'  && 'bg-blue-100 text-blue-700',
+                          m.estado_cotiz === 'ORDENADO'  && 'bg-purple-100 text-purple-700',
+                          m.estado_cotiz === 'RECIBIDO'  && 'bg-emerald-200 text-emerald-800',
                         )}>
                           {m.estado_cotiz === 'EN_STOCK' ? 'EN STOCK' : m.estado_cotiz}
                         </span>
@@ -444,6 +448,17 @@ export default function Materiales() {
                       <td className="px-3 py-3 text-xs text-gray-700 text-right hidden md:table-cell">{fmt(Number(m.unit_price))}</td>
                       <td className="px-3 py-3 text-xs font-semibold text-gray-800 text-right hidden md:table-cell">{fmt(Number(m.total_price))}</td>
                       <td className="px-3 py-3 text-xs text-gray-500 text-center hidden md:table-cell">{fmtDate(m.fecha_importacion)}</td>
+                      <td className="px-3 py-3 text-xs text-center">
+                        {m.oc_numero
+                          ? <Link
+                              to={`/ordenes-compra?ocId=${m.oc_id}`}
+                              className="font-mono text-xs text-forest-700 hover:text-gold-500 hover:underline"
+                              title={`Ver ${m.oc_numero}`}
+                            >
+                              {m.oc_numero}
+                            </Link>
+                          : <span className="text-gray-300">—</span>}
+                      </td>
                       <td className="px-3 py-3 text-xs text-gray-400 hidden xl:table-cell" title={m.notas ?? undefined}>{m.notas || '—'}</td>
                       <td className="px-3 py-3">
                         <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">

@@ -36,7 +36,7 @@ export interface MaterialPayload {
   qty: number
   unit_price: number
   total_price: number
-  estado_cotiz: 'COTIZADO' | 'PENDIENTE' | 'EN_STOCK'
+  estado_cotiz: 'COTIZADO' | 'PENDIENTE' | 'EN_STOCK' | 'ORDENADO' | 'RECIBIDO'
   mill_made?: 'SI' | 'NO'
   cotizar?: 'SI' | 'NO' | 'EN_STOCK'
   manufacturer?: string

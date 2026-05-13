@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from 'express'
 import pool from '../db/pool'
 import { parsePagination, paginatedResponse } from '../utils/pagination'
 import { createError } from '../middleware/errorHandler'
+import { recomputeMaterialesEstadoByIds } from '../utils/materialesEstado'
 
 // ─── Shared FROM/JOIN block (table + lateral recepcion) ──────────────────────
 const OC_JOINS = `
@@ -215,7 +216,9 @@ export async function getOrdenCompraMaterialesLote(req: Request, res: Response, 
          AND m.vendor ILIKE oc_info.vendor_nombre
        JOIN fi_this ON m.fecha_importacion = fi_this.fi
        LEFT JOIN fi_prev ON true
-       WHERE fi_prev.fi IS NULL OR fi_this.fi IS DISTINCT FROM fi_prev.fi
+       WHERE (fi_prev.fi IS NULL OR fi_this.fi IS DISTINCT FROM fi_prev.fi)
+         AND m.cotizar = 'SI'
+         AND m.estado_cotiz IN ('COTIZADO', 'ORDENADO', 'RECIBIDO')
        ORDER BY m.item NULLS LAST, m.descripcion`,
       [ocId]
     )
@@ -291,6 +294,7 @@ export async function createOrdenCompra(req: Request, res: Response, next: NextF
 }
 
 export async function updateOrdenCompra(req: Request, res: Response, next: NextFunction) {
+  const client = await pool.connect()
   try {
     const fields = [
       'proyecto_id', 'proveedor_id', 'estado', 'fecha_emision',
@@ -299,26 +303,74 @@ export async function updateOrdenCompra(req: Request, res: Response, next: NextF
     const updates = fields.filter((f) => req.body[f] !== undefined).map((f, i) => `${f} = $${i + 2}`)
     if (!updates.length) return next(createError('Sin campos para actualizar', 400))
     const values = fields.filter((f) => req.body[f] !== undefined).map((f) => req.body[f])
-    const { rows } = await pool.query(
+
+    await client.query('BEGIN')
+    const { rows } = await client.query(
       `UPDATE ordenes_compra SET ${updates.join(', ')}, updated_at = NOW() WHERE id = $1 RETURNING *`,
       [req.params.id, ...values]
     )
-    if (!rows[0]) return next(createError('Orden no encontrada', 404))
+    if (!rows[0]) {
+      await client.query('ROLLBACK')
+      return next(createError('Orden no encontrada', 404))
+    }
+
+    // If estado changed, sync materiales_mto.estado_cotiz
+    if (req.body.estado !== undefined) {
+      const { rows: items } = await client.query(
+        `SELECT DISTINCT material_id FROM items_orden_compra
+         WHERE orden_compra_id = $1 AND material_id IS NOT NULL`,
+        [req.params.id]
+      )
+      await recomputeMaterialesEstadoByIds(
+        client,
+        items.map((it: { material_id: number }) => it.material_id)
+      )
+    }
+
+    await client.query('COMMIT')
     res.json({ data: rows[0], message: 'Orden actualizada' })
-  } catch (err) { next(err) }
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => {})
+    next(err)
+  } finally { client.release() }
 }
 
 export async function updateEstadoOrden(req: Request, res: Response, next: NextFunction) {
+  const client = await pool.connect()
   try {
     const { estado } = req.body
     if (!estado) return next(createError('El estado es requerido', 400))
-    const { rows } = await pool.query(
+
+    await client.query('BEGIN')
+
+    const { rows } = await client.query(
       `UPDATE ordenes_compra SET estado = $2, updated_at = NOW() WHERE id = $1 RETURNING *`,
       [req.params.id, estado]
     )
-    if (!rows[0]) return next(createError('Orden no encontrada', 404))
+    if (!rows[0]) {
+      await client.query('ROLLBACK')
+      return next(createError('Orden no encontrada', 404))
+    }
+
+    // Recompute estado_cotiz for affected materials based on the OC's new state.
+    // (recibida → RECIBIDO, cancelada → COTIZADO or stay ORDENADO if material is
+    // in another active OC, etc.)
+    const { rows: items } = await client.query(
+      `SELECT DISTINCT material_id FROM items_orden_compra
+       WHERE orden_compra_id = $1 AND material_id IS NOT NULL`,
+      [req.params.id]
+    )
+    await recomputeMaterialesEstadoByIds(
+      client,
+      items.map((it: { material_id: number }) => it.material_id)
+    )
+
+    await client.query('COMMIT')
     res.json({ data: rows[0], message: `Estado actualizado a "${estado}"` })
-  } catch (err) { next(err) }
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => {})
+    next(err)
+  } finally { client.release() }
 }
 
 export async function getVendorsCotizados(req: Request, res: Response, next: NextFunction) {
@@ -458,6 +510,12 @@ export async function generarOCs(req: Request, res: Response, next: NextFunction
         [subtotal, iva, total, orden.id]
       )
 
+      // Materials that now belong to this OC pass from COTIZADO → ORDENADO
+      await recomputeMaterialesEstadoByIds(
+        client,
+        materiales.map((m: { id: number }) => m.id)
+      )
+
       results.push({ numero, vendor, total, materiales_count: materiales.length })
     }
 
@@ -470,14 +528,39 @@ export async function generarOCs(req: Request, res: Response, next: NextFunction
 }
 
 export async function deleteOrdenCompra(req: Request, res: Response, next: NextFunction) {
+  const client = await pool.connect()
   try {
-    const { rows: [orden] } = await pool.query(
+    await client.query('BEGIN')
+
+    const { rows: [orden] } = await client.query(
       `SELECT estado FROM ordenes_compra WHERE id = $1`, [req.params.id]
     )
-    if (!orden) return next(createError('Orden no encontrada', 404))
-    if (['recibida', 'confirmada'].includes(orden.estado))
+    if (!orden) {
+      await client.query('ROLLBACK')
+      return next(createError('Orden no encontrada', 404))
+    }
+    if (['recibida', 'confirmada'].includes(orden.estado)) {
+      await client.query('ROLLBACK')
       return next(createError('No se puede eliminar una orden confirmada o recibida', 409))
-    await pool.query('DELETE FROM ordenes_compra WHERE id = $1', [req.params.id])
+    }
+
+    // Capture material IDs BEFORE delete (items_orden_compra is CASCADE-deleted).
+    const { rows: items } = await client.query(
+      `SELECT DISTINCT material_id FROM items_orden_compra
+       WHERE orden_compra_id = $1 AND material_id IS NOT NULL`,
+      [req.params.id]
+    )
+    const materialIds = items.map((it: { material_id: number }) => it.material_id)
+
+    await client.query('DELETE FROM ordenes_compra WHERE id = $1', [req.params.id])
+
+    // Recompute: each material falls back to COTIZADO unless it's in another active OC.
+    await recomputeMaterialesEstadoByIds(client, materialIds)
+
+    await client.query('COMMIT')
     res.json({ message: 'Orden eliminada' })
-  } catch (err) { next(err) }
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => {})
+    next(err)
+  } finally { client.release() }
 }

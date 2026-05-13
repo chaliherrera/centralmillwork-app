@@ -51,7 +51,7 @@ export interface Proyecto {
   updated_at: string
 }
 
-export type EstadoCotizMto = 'COTIZADO' | 'PENDIENTE' | 'EN_STOCK'
+export type EstadoCotizMto = 'COTIZADO' | 'PENDIENTE' | 'EN_STOCK' | 'ORDENADO' | 'RECIBIDO'
 
 export interface Material {
   id: number
@@ -75,6 +75,9 @@ export interface Material {
   manufacturer?: string
   notas?: string | null
   fecha_importacion?: string | null
+  // OC más reciente (no cancelada) donde participa este material — null si aún no fue ordenado
+  oc_id?: number | null
+  oc_numero?: string | null
   created_at: string
   updated_at: string
 }

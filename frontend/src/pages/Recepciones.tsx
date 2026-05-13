@@ -123,11 +123,19 @@ function RecepcionPanel({
     }),
     onSuccess: (res) => {
       toast.success(res.message ?? 'Recepción registrada')
-      qc.invalidateQueries({ queryKey: ['recepciones-ocs'] })
-      qc.invalidateQueries({ queryKey: ['recepciones-ocs-transito'] })
-      qc.invalidateQueries({ queryKey: ['oc-kpis-recepciones'] })
-      qc.invalidateQueries({ queryKey: ['ordenes-compra'] })
-      qc.invalidateQueries({ queryKey: ['oc-kpis'] })
+      // refetchType: 'all' fuerza refetch incluso de queries inactivas (ej. la
+      // página Materiales cuando no está montada). Sin esto, el badge ORDENADO
+      // queda visible hasta refrescar manualmente al volver a la página.
+      qc.invalidateQueries({ queryKey: ['recepciones-ocs'],         refetchType: 'all' })
+      qc.invalidateQueries({ queryKey: ['recepciones-ocs-transito'], refetchType: 'all' })
+      qc.invalidateQueries({ queryKey: ['oc-kpis-recepciones'],      refetchType: 'all' })
+      qc.invalidateQueries({ queryKey: ['ordenes-compra'],           refetchType: 'all' })
+      qc.invalidateQueries({ queryKey: ['ordenes-compra-kanban'],    refetchType: 'all' })
+      qc.invalidateQueries({ queryKey: ['oc-kpis'],                  refetchType: 'all' })
+      qc.invalidateQueries({ queryKey: ['materiales'],               refetchType: 'all' })
+      qc.invalidateQueries({ queryKey: ['materiales-all'],           refetchType: 'all' })
+      qc.invalidateQueries({ queryKey: ['materiales-kpis'],          refetchType: 'all' })
+      qc.invalidateQueries({ queryKey: ['oc-materiales-lote'],       refetchType: 'all' })
       onSuccess()
     },
     onError: () => toast.error('Error al registrar recepción'),

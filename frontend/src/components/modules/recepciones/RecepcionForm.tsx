@@ -105,8 +105,13 @@ export default function RecepcionForm({ open, onClose, ordenId }: Props) {
       return recepcionesService.create(payload)
     },
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['recepciones'] })
-      qc.invalidateQueries({ queryKey: ['ordenes-compra'] })
+      qc.invalidateQueries({ queryKey: ['recepciones'],          refetchType: 'all' })
+      qc.invalidateQueries({ queryKey: ['ordenes-compra'],       refetchType: 'all' })
+      qc.invalidateQueries({ queryKey: ['ordenes-compra-kanban'], refetchType: 'all' })
+      qc.invalidateQueries({ queryKey: ['materiales'],           refetchType: 'all' })
+      qc.invalidateQueries({ queryKey: ['materiales-all'],       refetchType: 'all' })
+      qc.invalidateQueries({ queryKey: ['materiales-kpis'],      refetchType: 'all' })
+      qc.invalidateQueries({ queryKey: ['oc-materiales-lote'],   refetchType: 'all' })
       toast.success('Recepción registrada')
       reset()
       onClose()

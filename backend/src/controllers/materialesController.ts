@@ -70,18 +70,29 @@ export async function getMateriales(req: Request, res: Response, next: NextFunct
 
     const wm = whereMain  ? `WHERE ${whereMain}`  : ''
     const wc = whereCount ? `WHERE ${whereCount}` : ''
-    const join = `LEFT JOIN proyectos p ON p.id = m.proyecto_id`
+    const joinProy = `LEFT JOIN proyectos p ON p.id = m.proyecto_id`
+    // Lateral: most recent non-cancelled OC where this material participates as an item
+    const joinOc = `LEFT JOIN LATERAL (
+      SELECT oc.id AS oc_id, oc.numero AS oc_numero
+      FROM items_orden_compra ioc
+      JOIN ordenes_compra oc ON oc.id = ioc.orden_compra_id
+      WHERE ioc.material_id = m.id
+        AND oc.estado != 'cancelada'
+      ORDER BY oc.fecha_emision DESC
+      LIMIT 1
+    ) oc_link ON true`
 
     const [rows, countRow] = await Promise.all([
       pool.query(
         `SELECT m.*,
-           json_build_object('id', p.id, 'nombre', p.nombre, 'codigo', p.codigo) AS proyecto
-         FROM materiales_mto m ${join} ${wm}
+           json_build_object('id', p.id, 'nombre', p.nombre, 'codigo', p.codigo) AS proyecto,
+           oc_link.oc_id, oc_link.oc_numero
+         FROM materiales_mto m ${joinProy} ${joinOc} ${wm}
          ORDER BY ${opts.sort} ${opts.order} LIMIT $1 OFFSET $2`,
         opts.search ? [opts.limit, opts.offset, `%${opts.search}%`] : [opts.limit, opts.offset]
       ),
       pool.query(
-        `SELECT COUNT(*) FROM materiales_mto m ${join} ${wc}`,
+        `SELECT COUNT(*) FROM materiales_mto m ${joinProy} ${wc}`,
         opts.search ? [`%${opts.search}%`] : []
       ),
     ])

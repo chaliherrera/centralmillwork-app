@@ -1,4 +1,5 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Search, ShoppingCart, Warehouse, DollarSign, Clock,
@@ -382,6 +383,22 @@ export default function OrdenesCompra() {
     staleTime: 15_000,
   })
 
+  // Auto-select OC from URL param ?ocId=42 (e.g. when clicking from Materiales table)
+  const [searchParams, setSearchParams] = useSearchParams()
+  useEffect(() => {
+    const ocIdParam = searchParams.get('ocId')
+    if (!ocIdParam || !allData?.data) return
+    const wantedId = parseInt(ocIdParam)
+    const found = allData.data.find((o) => o.id === wantedId)
+    if (found && selectedOc?.id !== found.id) {
+      setSelectedOc(found)
+      // Limpiar el param para no re-disparar
+      const next = new URLSearchParams(searchParams)
+      next.delete('ocId')
+      setSearchParams(next, { replace: true })
+    }
+  }, [searchParams, allData?.data, selectedOc?.id, setSearchParams])
+
   const allOcs = allData?.data ?? []
 
   const vendors = useMemo(
@@ -400,8 +417,11 @@ export default function OrdenesCompra() {
   const deleteMutation = useMutation({
     mutationFn: (id: number) => ordenesCompraService.delete(id),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['ordenes-compra-kanban'] })
-      qc.invalidateQueries({ queryKey: ['oc-kpis'] })
+      qc.invalidateQueries({ queryKey: ['ordenes-compra-kanban'], refetchType: 'all' })
+      qc.invalidateQueries({ queryKey: ['oc-kpis'],               refetchType: 'all' })
+      qc.invalidateQueries({ queryKey: ['materiales'],            refetchType: 'all' })
+      qc.invalidateQueries({ queryKey: ['materiales-all'],        refetchType: 'all' })
+      qc.invalidateQueries({ queryKey: ['materiales-kpis'],       refetchType: 'all' })
       setSelectedOc(undefined)
       toast.success('Orden eliminada')
     },
