@@ -1,13 +1,14 @@
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   ArrowLeft, ArrowRight, Pause, Play, Ban, Loader2, CheckCircle2, Clock, History,
-  UserPlus,
+  UserPlus, Paperclip,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import clsx from 'clsx'
 import Modal from '@/components/ui/Modal'
+import OrdenDocumentos from '@/components/modules/produccion/OrdenDocumentos'
 import { produccionService } from '@/services/produccion'
 import type { StatusOrden, Prioridad, OrdenProceso } from '@/types/produccion'
 
@@ -37,6 +38,22 @@ export default function DetalleOrden() {
     queryFn:  () => produccionService.orden(ordenId),
     enabled:  !!ordenId,
   })
+
+  // Reaprovechamos la misma query que OrdenDocumentos (cache compartido por queryKey)
+  // para mostrar el conteo de docs en cada ProcesoRow.
+  const { data: docs = [] } = useQuery({
+    queryKey: ['orden-docs', ordenId],
+    queryFn:  () => produccionService.documentos(ordenId),
+    enabled:  !!ordenId,
+  })
+  const docsCountByEstacion = useMemo(() => {
+    const m: Record<string, number> = {}
+    for (const d of docs) {
+      const k = d.estacion ?? '__general__'
+      m[k] = (m[k] ?? 0) + 1
+    }
+    return m
+  }, [docs])
 
   function invalidate() {
     qc.invalidateQueries({ queryKey: ['orden-produccion', ordenId] })
@@ -172,11 +189,15 @@ export default function DetalleOrden() {
                   key={p.id} proceso={p}
                   esActual={orden.estacion_actual === p.estacion}
                   ordenStatus={orden.status}
+                  docsCount={docsCountByEstacion[p.estacion] ?? 0}
                   onAsignar={() => setAsignandoEst(p.estacion)}
                 />
               ))}
             </div>
           </div>
+
+          {/* Documentos adjuntos por estación */}
+          <OrdenDocumentos ordenId={ordenId} procesos={orden.procesos} />
 
           {/* Historial */}
           <div className="card space-y-3">
@@ -262,11 +283,12 @@ function Field({ label, value }: { label: string; value: string }) {
 }
 
 function ProcesoRow({
-  proceso, esActual, ordenStatus, onAsignar,
+  proceso, esActual, ordenStatus, docsCount, onAsignar,
 }: {
   proceso: OrdenProceso
   esActual: boolean
   ordenStatus: StatusOrden
+  docsCount: number
   onAsignar: () => void
 }) {
   const minutosReales = proceso.tiempo_real_minutos
@@ -291,7 +313,17 @@ function ProcesoRow({
         {proceso.completado ? <CheckCircle2 size={14} /> : proceso.secuencia}
       </div>
       <div className="flex-1">
-        <div className="font-semibold uppercase text-sm">{proceso.estacion.replace('_', ' ')}</div>
+        <div className="font-semibold uppercase text-sm flex items-center gap-2">
+          {proceso.estacion.replace('_', ' ')}
+          {docsCount > 0 && (
+            <span
+              className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full bg-gold-100 text-gold-800 text-[10px] font-bold normal-case"
+              title={`${docsCount} documento${docsCount > 1 ? 's' : ''} en esta estación`}
+            >
+              <Paperclip size={10} /> {docsCount}
+            </span>
+          )}
+        </div>
         <div className="text-xs text-gray-500 flex items-center gap-2 flex-wrap">
           {proceso.operador_iniciales ? (
             <span className="inline-flex items-center gap-1">

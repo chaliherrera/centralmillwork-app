@@ -71,6 +71,20 @@ export interface KioskOrdenEnCola {
   mi_proceso_completado: boolean
   mi_proceso_inicio: string | null
   es_estacion_activa: boolean
+  /** Documentos disponibles para esta orden + estación del operario (incluye los generales). */
+  docs_count: number
+}
+
+export interface KioskDocumento {
+  id: number
+  orden_id: number
+  estacion: string | null
+  nombre: string
+  descripcion: string | null
+  mime_type: string | null
+  size_bytes: number | null
+  url: string | null
+  created_at: string
 }
 
 export interface KioskDiaSegmento {

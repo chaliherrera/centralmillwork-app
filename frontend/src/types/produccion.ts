@@ -163,6 +163,23 @@ export interface RutaCalculada {
   tiempo_traslados_segundos: number
 }
 
+// ─── Documentos adjuntos por estación ───────────────────────────────────────
+
+export interface OrdenDocumento {
+  id: number
+  orden_id: number
+  estacion: string | null              // null = documento general de la orden
+  nombre: string
+  descripcion: string | null
+  filename: string
+  mime_type: string | null
+  size_bytes: number | null
+  url: string | null
+  uploaded_by: string | null           // UUID del usuario que subió
+  uploaded_by_nombre?: string | null
+  created_at: string
+}
+
 // ─── Reportes de horas ────────────────────────────────────────────────────────
 
 export interface PersonalActivoReporte {

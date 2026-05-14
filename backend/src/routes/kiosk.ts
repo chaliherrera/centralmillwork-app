@@ -9,6 +9,7 @@ import {
   diaActual, proyectosDisponibles,
 } from '../controllers/timeTrackingController'
 import { avanzarOrdenInterno } from '../controllers/produccionController'
+import { getDocumentosKiosk } from '../controllers/documentosController'
 import pool from '../db/pool'
 import { createError } from '../middleware/errorHandler'
 
@@ -76,6 +77,9 @@ router.post('/ordenes/:id/completar-proceso', async (req, res, next) => {
 
 // ─── Cola de trabajo del operario logueado ───────────────────────────────────
 // GET /api/kiosk/mi-cola — órdenes asignadas a este operario en cualquier estación
+// ─── Documentos de la orden (filtrados a la estación del operario) ──────────
+router.get('/ordenes/:id/documentos', getDocumentosKiosk)
+
 router.get('/mi-cola', async (req, res, next) => {
   try {
     const personalId = req.kioskUser!.personal_id
@@ -87,7 +91,14 @@ router.get('/mi-cola', async (req, res, next) => {
          op.estacion       AS mi_estacion,
          op.completado     AS mi_proceso_completado,
          op.fecha_inicio   AS mi_proceso_inicio,
-         (op.estacion = o.estacion_actual) AS es_estacion_activa
+         (op.estacion = o.estacion_actual) AS es_estacion_activa,
+         -- Docs disponibles para esta orden+estación del operario, sumando
+         -- los docs generales de la orden (estacion IS NULL). Si > 0, el
+         -- frontend muestra el botón "Ver planos".
+         (SELECT COUNT(*) FROM orden_documentos d
+          WHERE d.orden_id = o.id
+            AND (d.estacion = op.estacion OR d.estacion IS NULL)
+         )::int AS docs_count
        FROM orden_procesos op
        JOIN ordenes_produccion o ON o.id = op.orden_id
        LEFT JOIN proyectos p ON p.id = o.proyecto_id

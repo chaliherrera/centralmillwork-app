@@ -2,7 +2,7 @@ import api from './api'
 import type {
   OrdenProduccion, OrdenDetallada, OrdenesKpis,
   PersonalTaller, EstacionConStatus, EstacionDetalle, EstacionDistancia,
-  RutaCalculada, Prioridad,
+  RutaCalculada, Prioridad, OrdenDocumento,
   PersonalActivoReporte, ReportePersonalResp, ReporteProyectoResp, ReporteDiarioResp,
 } from '@/types/produccion'
 
@@ -109,6 +109,34 @@ export const produccionService = {
 
   distancias: () =>
     api.get<{ data: EstacionDistancia[] }>('/produccion/distancias').then((r) => r.data.data),
+
+  // ─── Documentos adjuntos por orden/estación ──────────────────────────────
+  /** Lista documentos de una orden. Filtro opcional `estacion`: pasar 'null' literal
+   *  para traer solo los generales (sin estación). */
+  documentos: (ordenId: number, estacion?: string | null) =>
+    api.get<{ data: OrdenDocumento[] }>(`/produccion/ordenes/${ordenId}/documentos`, {
+      params: estacion === undefined ? undefined : { estacion: estacion ?? 'null' },
+    }).then((r) => r.data.data),
+
+  subirDocumento: (ordenId: number, file: File, opts: {
+    estacion?: string | null
+    nombre?: string
+    descripcion?: string
+  } = {}) => {
+    const form = new FormData()
+    form.append('archivo', file)
+    if (opts.estacion !== undefined && opts.estacion !== null) form.append('estacion', opts.estacion)
+    if (opts.nombre)       form.append('nombre',       opts.nombre)
+    if (opts.descripcion)  form.append('descripcion',  opts.descripcion)
+    return api.post<{ data: OrdenDocumento; message: string }>(
+      `/produccion/ordenes/${ordenId}/documentos`,
+      form,
+      { headers: { 'Content-Type': 'multipart/form-data' } }
+    ).then((r) => r.data)
+  },
+
+  borrarDocumento: (docId: number) =>
+    api.delete<{ message: string }>(`/produccion/documentos/${docId}`).then((r) => r.data),
 
   // ─── Ruta preview ────────────────────────────────────────────────────────
   rutaPreview: (procesos: string[], asignaciones: Record<string, number | null> = {}) =>

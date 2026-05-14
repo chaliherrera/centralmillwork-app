@@ -16,6 +16,9 @@ import {
   createInspeccion, getInspecciones, uploadDefectoFoto, getQcStats, uploadQcFoto,
 } from '../controllers/qcController'
 import {
+  getDocumentos, createDocumento, deleteDocumento, uploadDocumento,
+} from '../controllers/documentosController'
+import {
   getPersonalActivo, reportePersonal, reportePorProyecto, reporteDiario,
   exportarHoras,
 } from '../controllers/timeTrackingController'
@@ -64,6 +67,11 @@ router.post('/ruta-preview', async (req: Request, res: Response, next: NextFunct
     res.json({ data: ruta })
   } catch (err) { next(err) }
 })
+
+// ─── Documentos adjuntos por estación (PDFs, hojas de corte, planos) ────────
+router.get('/ordenes/:id/documentos',         getDocumentos)
+router.post('/ordenes/:id/documentos',        PROD_WRITE, uploadDocumento.single('archivo'), createDocumento)
+router.delete('/documentos/:docId',           PROD_WRITE, deleteDocumento)
 
 // ─── Quality Control ──────────────────────────────────────────────────────────
 router.get('/qc/inspecciones',                getInspecciones)

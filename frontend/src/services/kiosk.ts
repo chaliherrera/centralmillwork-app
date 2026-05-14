@@ -2,6 +2,7 @@ import { kioskApi } from './kioskApi'
 import type {
   KioskLoginResponse, KioskMe, KioskProyectoDisponible,
   KioskOrdenEnCola, KioskDia, KioskRegistroActivo, KioskProyectoActivo, KioskPausaActiva,
+  KioskDocumento,
 } from '@/types/kiosk'
 
 export const kioskService = {
@@ -59,4 +60,9 @@ export const kioskService = {
     kioskApi.post<{ data: { siguiente_estacion: string | null; status: string }; message: string }>(
       `/ordenes/${ordenId}/completar-proceso`, { notas }
     ).then((r) => r.data),
+
+  // Documentos visibles para el operario (filtrados a su estación + generales)
+  documentosOrden: (ordenId: number) =>
+    kioskApi.get<{ data: KioskDocumento[] }>(`/ordenes/${ordenId}/documentos`)
+      .then((r) => r.data.data),
 }
