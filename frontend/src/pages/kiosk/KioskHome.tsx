@@ -1,15 +1,18 @@
+import { useState } from 'react'
 import { LogOut } from 'lucide-react'
 import { useKioskAuth } from '@/context/KioskAuthContext'
-import ClockCard      from '@/components/kiosk/ClockCard'
-import ProyectoActivo from '@/components/kiosk/ProyectoActivo'
-import PausaCard      from '@/components/kiosk/PausaCard'
-import MiCola         from '@/components/kiosk/MiCola'
-import ResumenDia     from '@/components/kiosk/ResumenDia'
+import ClockCard          from '@/components/kiosk/ClockCard'
+import ProyectoActivo     from '@/components/kiosk/ProyectoActivo'
+import PausaCard          from '@/components/kiosk/PausaCard'
+import AsignacionesCard   from '@/components/kiosk/AsignacionesCard'
+import AsignacionesPanel  from '@/components/kiosk/AsignacionesPanel'
+import ResumenDia         from '@/components/kiosk/ResumenDia'
 
 export default function KioskHome() {
   const { personal, dispositivo, logout, status } = useKioskAuth()
+  const [asignacionesOpen, setAsignacionesOpen] = useState(false)
 
-  if (!personal) return null  // ProtectedKioskRoute redirige antes de que esto se renderice
+  if (!personal) return null  // ProtectedKioskRoute redirige antes
 
   const hora = new Date().toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })
 
@@ -49,10 +52,21 @@ export default function KioskHome() {
       <main className="max-w-3xl mx-auto px-4 py-6 space-y-4">
         <ClockCard />
         <ProyectoActivo />
-        <PausaCard />
-        <MiCola />
+
+        {/* Paired cards: Tomar break + Asignaciones */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <PausaCard />
+          <AsignacionesCard onOpen={() => setAsignacionesOpen(true)} />
+        </div>
+
         <ResumenDia />
       </main>
+
+      {/* Slide-in panel de Asignaciones (renderizado fuera del flujo) */}
+      <AsignacionesPanel
+        open={asignacionesOpen}
+        onClose={() => setAsignacionesOpen(false)}
+      />
     </div>
   )
 }
