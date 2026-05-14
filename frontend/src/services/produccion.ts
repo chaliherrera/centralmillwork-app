@@ -2,7 +2,7 @@ import api from './api'
 import type {
   OrdenProduccion, OrdenDetallada, OrdenesKpis,
   PersonalTaller, EstacionConStatus, EstacionDetalle, EstacionDistancia,
-  RutaCalculada, Prioridad, OrdenDocumento,
+  RutaCalculada, Prioridad, OrdenDocumento, EventosRecientesResp,
   PersonalActivoReporte, ReportePersonalResp, ReporteProyectoResp, ReporteDiarioResp,
 } from '@/types/produccion'
 
@@ -51,6 +51,11 @@ export const produccionService = {
 
   ordenesKpis: () =>
     api.get<{ data: OrdenesKpis }>('/produccion/ordenes-kpis').then((r) => r.data.data),
+
+  eventosRecientes: (desde?: string) =>
+    api.get<EventosRecientesResp>('/produccion/eventos-recientes', {
+      params: desde ? { desde } : undefined,
+    }).then((r) => r.data),
 
   orden: (id: number) =>
     api.get<{ data: OrdenDetallada }>(`/produccion/ordenes/${id}`).then((r) => r.data.data),

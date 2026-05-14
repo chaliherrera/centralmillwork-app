@@ -163,6 +163,33 @@ export interface RutaCalculada {
   tiempo_traslados_segundos: number
 }
 
+// ─── Eventos de producción (para notificaciones del SHOP_MANAGER) ───────────
+
+export interface EventoProduccion {
+  id: number
+  timestamp: string
+  accion: 'mover' | 'completar' | string
+  estacion_origen: string | null
+  estacion_destino: string
+  dispositivo: string | null
+  motivo: string | null
+  orden_id: number
+  numero_orden: string
+  item_nombre: string
+  prioridad: Prioridad
+  orden_status: StatusOrden
+  proyecto_codigo: string | null
+  kiosk_personal_nombre: string | null
+  kiosk_personal_iniciales: string | null
+  usuario_nombre: string | null
+}
+
+export interface EventosRecientesResp {
+  desde: string
+  ahora: string
+  eventos: EventoProduccion[]
+}
+
 // ─── Documentos adjuntos por estación ───────────────────────────────────────
 
 export interface OrdenDocumento {

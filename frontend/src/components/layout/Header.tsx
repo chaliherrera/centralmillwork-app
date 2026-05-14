@@ -1,6 +1,7 @@
 import { LogOut, User } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '@/context/AuthContext'
+import NotificacionesPanel from './NotificacionesPanel'
 import type { UserRole } from '@/types'
 
 const ROL_LABEL: Record<UserRole, string> = {
@@ -28,6 +29,9 @@ export default function Header({ title }: HeaderProps) {
       <h1 className="text-lg font-semibold text-forest-700">{title}</h1>
 
       <div className="flex items-center gap-3">
+        {/* Campana de notificaciones — solo visible para ADMIN y SHOP_MANAGER */}
+        <NotificacionesPanel />
+
         <div className="flex items-center gap-2 pl-3 border-l border-gray-200">
           <div className="w-8 h-8 bg-forest-500 rounded-full flex items-center justify-center">
             <User size={16} className="text-white" />

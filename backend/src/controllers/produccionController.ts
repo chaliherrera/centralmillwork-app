@@ -513,6 +513,66 @@ export async function cancelarOrden(req: Request, res: Response, next: NextFunct
 }
 
 /**
+ * GET /api/produccion/eventos-recientes?desde=<ISO timestamp>
+ * Devuelve eventos del taller desde el timestamp dado, enriquecidos con
+ * info útil para mostrar en notificaciones (número de orden, item, persona
+ * que lo hizo, etc.).
+ *
+ * Filtramos a los eventos accionables para el SHOP_MANAGER:
+ *   - `mover` y `completar` cuando el actor fue un operario del kiosko
+ *     (kiosk_personal_id IS NOT NULL) — son los más relevantes
+ *
+ * Si no se manda `desde`, devuelve las últimas 24h (útil al cargar el panel
+ * por primera vez para mostrar histórico reciente).
+ */
+export async function getEventosRecientes(req: Request, res: Response, next: NextFunction) {
+  try {
+    const desde = req.query.desde
+      ? new Date(String(req.query.desde))
+      : new Date(Date.now() - 24 * 3600 * 1000)
+
+    if (isNaN(desde.getTime())) return next(createError('desde inválido', 400))
+
+    const { rows } = await pool.query(
+      `SELECT
+         h.id,
+         h.timestamp,
+         h.accion,
+         h.estacion_origen,
+         h.estacion_destino,
+         h.dispositivo,
+         h.motivo,
+         o.id            AS orden_id,
+         o.numero_orden,
+         o.item_nombre,
+         o.prioridad,
+         o.status        AS orden_status,
+         p.codigo        AS proyecto_codigo,
+         pk.nombre_completo  AS kiosk_personal_nombre,
+         pk.iniciales        AS kiosk_personal_iniciales,
+         u.nombre        AS usuario_nombre
+       FROM orden_historial h
+       JOIN ordenes_produccion o ON o.id = h.orden_id
+       LEFT JOIN proyectos       p  ON p.id  = o.proyecto_id
+       LEFT JOIN personal_taller pk ON pk.id = h.kiosk_personal_id
+       LEFT JOIN usuarios        u  ON u.id  = h.usuario_id
+       WHERE h.timestamp > $1
+         AND h.accion IN ('mover','completar')
+         AND h.kiosk_personal_id IS NOT NULL
+       ORDER BY h.timestamp DESC
+       LIMIT 50`,
+      [desde.toISOString()]
+    )
+
+    res.json({
+      desde: desde.toISOString(),
+      ahora: new Date().toISOString(),
+      eventos: rows,
+    })
+  } catch (err) { next(err) }
+}
+
+/**
  * GET /api/produccion/ordenes-kpis — métricas para el dashboard de producción.
  */
 export async function getOrdenesKpis(_req: Request, res: Response, next: NextFunction) {
