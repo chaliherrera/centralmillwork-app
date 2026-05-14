@@ -403,12 +403,18 @@ export async function avanzarOrdenInterno(opts: {
     }
 
     // 3) Historial
+    // Cuando es el último proceso, `estacionDestino` es null porque no hay
+    // siguiente — pero la columna `orden_historial.estacion_destino` es NOT NULL.
+    // Usamos el sentinel 'completada' para que la auditoría refleje el destino real
+    // ("final → completada") y la DB no se queje. La orden en sí queda con
+    // `estacion_actual = NULL`, esto es solo para el row del historial.
+    const destinoHistorial = estacionDestino ?? 'completada'
     await client.query(
       `INSERT INTO orden_historial
          (orden_id, estacion_origen, estacion_destino, accion,
           personal_origen_id, usuario_id, kiosk_personal_id, dispositivo, motivo)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
-      [opts.ordenId, orden.estacion_actual, estacionDestino, siguiente ? 'mover' : 'completar',
+      [opts.ordenId, orden.estacion_actual, destinoHistorial, siguiente ? 'mover' : 'completar',
        procesoActual?.operador_id || null,
        opts.reqUserId || null, opts.reqKioskPersonalId || null,
        opts.dispositivo || null, opts.notas || null]
