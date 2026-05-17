@@ -1,4 +1,5 @@
 import express from 'express'
+import helmet from 'helmet'
 import cors from 'cors'
 import dotenv from 'dotenv'
 import path from 'path'
@@ -31,6 +32,19 @@ app.set('trust proxy', true)
 
 // Asignar request ID muy temprano para que esté disponible en todos los logs.
 app.use(requestId)
+
+// Headers de seguridad HTTP estándar (defense-in-depth):
+//   - X-Content-Type-Options: nosniff (anti MIME sniffing)
+//   - X-Frame-Options: DENY (anti clickjacking)
+//   - Strict-Transport-Security (forzar HTTPS — ya lo hace Railway pero es bueno tenerlo)
+//   - Referrer-Policy, X-DNS-Prefetch-Control, etc.
+// contentSecurityPolicy desactivado porque interfiere con el SPA de Vite/React en dev
+// y los reportes HTML dinámicos. Si queremos CSP estricto, hay que configurarlo
+// con allowlist específico para el dominio.
+app.use(helmet({
+  contentSecurityPolicy: false,
+  crossOriginEmbedderPolicy: false,
+}))
 
 app.use(cors({
   origin: process.env.CORS_ORIGIN ?? 'http://localhost:3000',

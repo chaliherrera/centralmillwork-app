@@ -68,10 +68,18 @@ export async function getImagenes(req: Request, res: Response, next: NextFunctio
   } catch (err) { next(err) }
 }
 
+// Whitelist de tipos permitidos para imágenes asociadas a una OC.
+// Si en el futuro se agregan tipos nuevos, actualizar esta lista.
+const TIPOS_IMAGEN_VALIDOS = new Set(['delivery_ticket', 'material_recibido'])
+
 export async function uploadImagen(req: Request, res: Response, next: NextFunction) {
   try {
     const { id } = req.params
-    const tipo = (req.query.tipo as string) || 'material_recibido'
+    const tipoRequested = String(req.query.tipo ?? 'material_recibido')
+    if (!TIPOS_IMAGEN_VALIDOS.has(tipoRequested)) {
+      return next(createError(`tipo inválido. Valores permitidos: ${[...TIPOS_IMAGEN_VALIDOS].join(', ')}`, 400))
+    }
+    const tipo = tipoRequested
     if (!req.file) return next(createError('No se recibió ningún archivo', 400))
 
     let filename: string

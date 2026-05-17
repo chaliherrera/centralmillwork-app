@@ -1,5 +1,6 @@
 import { Router } from 'express'
 import { requireRole } from '../middleware/auth'
+import { validateBody } from '../middleware/validate'
 import { getUsuarios, createUsuario, updateUsuario } from '../controllers/usuariosController'
 import {
   getStats, getGastoPorMes,
@@ -9,9 +10,11 @@ import {
 import {
   getProyectos, getProyecto, createProyecto, updateProyecto, deleteProyecto,
   getProyectoResumen, getProyectoActividad,
+  createProyectoSchema, updateProyectoSchema,
 } from '../controllers/proyectosController'
 import {
   getProveedores, getProveedor, createProveedor, updateProveedor, deleteProveedor,
+  createProveedorSchema, updateProveedorSchema,
 } from '../controllers/proveedoresController'
 import {
   getMateriales, getMaterialesKpis, getMaterialesImportDates, getMaterial, getMaterialOcInfo,
@@ -62,15 +65,15 @@ router.get('/proyectos',                  getProyectos)
 router.get('/proyectos/:id/resumen',      getProyectoResumen)
 router.get('/proyectos/:id/actividad',    getProyectoActividad)
 router.get('/proyectos/:id',              getProyecto)
-router.post('/proyectos',                 WRITE, createProyecto)
-router.put('/proyectos/:id',              WRITE, updateProyecto)
+router.post('/proyectos',                 WRITE, validateBody(createProyectoSchema), createProyecto)
+router.put('/proyectos/:id',              WRITE, validateBody(updateProyectoSchema), updateProyecto)
 router.delete('/proyectos/:id',           WRITE, deleteProyecto)
 
 // ─── Proveedores ──────────────────────────────────────────────────────────────
 router.get('/proveedores',        getProveedores)
 router.get('/proveedores/:id',    getProveedor)
-router.post('/proveedores',       WRITE, createProveedor)
-router.put('/proveedores/:id',    WRITE, updateProveedor)
+router.post('/proveedores',       WRITE, validateBody(createProveedorSchema), createProveedor)
+router.put('/proveedores/:id',    WRITE, validateBody(updateProveedorSchema), updateProveedor)
 router.delete('/proveedores/:id', WRITE, deleteProveedor)
 
 // ─── Materiales MTO ──────────────────────────────────────────────────────────

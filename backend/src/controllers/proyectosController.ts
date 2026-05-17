@@ -1,7 +1,36 @@
 import { Request, Response, NextFunction } from 'express'
+import { z } from 'zod'
 import pool from '../db/pool'
 import { parsePagination, paginatedResponse } from '../utils/pagination'
 import { createError } from '../middleware/errorHandler'
+
+// ─── Schemas de validación ──────────────────────────────────────────────────
+const ESTADOS_PROYECTO = ['cotizacion', 'activo', 'en_pausa', 'completado', 'cancelado'] as const
+
+export const createProyectoSchema = z.object({
+  codigo:               z.string().trim().min(1, 'requerido').max(30),
+  nombre:               z.string().trim().min(1, 'requerido').max(300),
+  cliente:              z.string().trim().min(1, 'requerido').max(200),
+  descripcion:          z.string().max(2000).nullable().optional(),
+  estado:               z.enum(ESTADOS_PROYECTO).optional(),
+  fecha_inicio:         z.string().regex(/^\d{4}-\d{2}-\d{2}/, 'formato YYYY-MM-DD').nullable().optional(),
+  fecha_fin_estimada:   z.string().regex(/^\d{4}-\d{2}-\d{2}/, 'formato YYYY-MM-DD').nullable().optional(),
+  presupuesto:          z.coerce.number().min(0, 'debe ser ≥ 0').optional(),
+  responsable:          z.string().max(150).nullable().optional(),
+})
+
+export const updateProyectoSchema = z.object({
+  codigo:               z.string().trim().min(1).max(30).optional(),
+  nombre:               z.string().trim().min(1).max(300).optional(),
+  cliente:              z.string().trim().min(1).max(200).optional(),
+  descripcion:          z.string().max(2000).nullable().optional(),
+  estado:               z.enum(ESTADOS_PROYECTO).optional(),
+  fecha_inicio:         z.string().regex(/^\d{4}-\d{2}-\d{2}/).nullable().optional(),
+  fecha_fin_estimada:   z.string().regex(/^\d{4}-\d{2}-\d{2}/).nullable().optional(),
+  fecha_fin_real:       z.string().regex(/^\d{4}-\d{2}-\d{2}/).nullable().optional(),
+  presupuesto:          z.coerce.number().min(0).optional(),
+  responsable:          z.string().max(150).nullable().optional(),
+})
 
 export async function getProyectos(req: Request, res: Response, next: NextFunction) {
   try {
