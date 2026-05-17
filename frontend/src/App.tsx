@@ -4,6 +4,7 @@ import MainLayout from '@/components/layout/MainLayout'
 import Login from '@/pages/Login'
 import Dashboard from '@/pages/Dashboard'
 import Proyectos from '@/pages/Proyectos'
+import ProyectoDetalle from '@/pages/ProyectoDetalle'
 import OrdenesCompra from '@/pages/OrdenesCompra'
 import Materiales from '@/pages/Materiales'
 import Recepciones from '@/pages/Recepciones'
@@ -37,7 +38,8 @@ export default function App() {
 
       <Route element={<ProtectedRoute><MainLayout /></ProtectedRoute>}>
         <Route index element={<Dashboard />} />
-        <Route path="proyectos/*"      element={<Proyectos />} />
+        <Route path="proyectos"        element={<Proyectos />} />
+        <Route path="proyectos/:id"    element={<ProyectoDetalle />} />
         <Route path="ordenes-compra/*" element={<OrdenesCompra />} />
         <Route path="materiales/*"     element={<Materiales />} />
         <Route path="recepciones/*"    element={<Recepciones />} />

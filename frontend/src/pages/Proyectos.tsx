@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Plus, Search, Pencil, Trash2,
@@ -146,6 +147,7 @@ export default function Proyectos() {
   const [viewMode, setViewMode]     = useState<'grid' | 'list'>('grid')
   const [estadoFilter, setEstadoFilter] = useState('')
   const [selectedId, setSelectedId] = useState<number | null>(null)
+  const navigate = useNavigate()
 
   const qc = useQueryClient()
 
@@ -169,7 +171,8 @@ export default function Proyectos() {
   const confirmDelete = (p: Proyecto) => {
     if (window.confirm(`¿Eliminar el proyecto "${p.nombre}"?`)) deleteMutation.mutate(p.id)
   }
-  const handleSelect = (id: number) => setSelectedId((prev) => (prev === id ? null : id))
+  // Click sobre la card → navega al detalle del proyecto
+  const handleSelect = (id: number) => navigate(`/proyectos/${id}`)
 
   const allProyectos = data?.data ?? []
   const ocByProject: Record<number, number> = Object.fromEntries(
