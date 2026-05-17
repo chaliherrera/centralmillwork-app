@@ -52,6 +52,7 @@ export interface Proyecto {
 }
 
 export type EstadoCotizMto = 'COTIZADO' | 'PENDIENTE' | 'EN_STOCK' | 'ORDENADO' | 'RECIBIDO'
+export type OrigenMaterial = 'MTO' | 'DIRECTA' | 'URGENTE'
 
 export interface Material {
   id: number
@@ -78,6 +79,8 @@ export interface Material {
   // OC más reciente (no cancelada) donde participa este material — null si aún no fue ordenado
   oc_id?: number | null
   oc_numero?: string | null
+  // Origen de la compra: MTO (default, importado del Excel), DIRECTA (compra puntual fuera del MTO), URGENTE (crítica)
+  origen?: OrigenMaterial
   created_at: string
   updated_at: string
 }
@@ -99,8 +102,10 @@ export interface OrdenCompra {
   categoria?: string
   subtotal: number
   iva: number
+  freight?: number
   total: number
   notas: string
+  origen?: OrigenMaterial  // 'MTO' (default) | 'DIRECTA' | 'URGENTE'
   created_at: string
   updated_at: string
   items?: ItemOrdenCompra[]

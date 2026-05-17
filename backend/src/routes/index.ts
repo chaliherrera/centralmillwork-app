@@ -22,7 +22,7 @@ import {
   getOrdenesCompra, getOrdenesCompraKpis, getOrdenesCompraImportDates,
   getOrdenCompra, getOrdenCompraMaterialesLote,
   createOrdenCompra, updateOrdenCompra, updateEstadoOrden, deleteOrdenCompra,
-  getVendorsCotizados, generarOCs,
+  getVendorsCotizados, generarOCs, crearOCNoMTO,
 } from '../controllers/ordenesCompraController'
 import {
   getRecepciones, getRecepcion, createRecepcion, createRecepcionCompleta,
@@ -89,6 +89,7 @@ router.get('/ordenes-compra/kpis',             getOrdenesCompraKpis)
 router.get('/ordenes-compra/import-dates',     getOrdenesCompraImportDates)
 router.get('/ordenes-compra/vendors-cotizados', getVendorsCotizados)
 router.post('/ordenes-compra/generar',          WRITE, generarOCs)
+router.post('/ordenes-compra/no-mto',           WRITE, crearOCNoMTO)
 router.get('/ordenes-compra/:id',                   getOrdenCompra)
 router.get('/ordenes-compra/:id/materiales-lote',   getOrdenCompraMaterialesLote)
 router.get('/ordenes-compra/:id/imagenes',          getImagenes)

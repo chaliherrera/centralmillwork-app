@@ -61,6 +61,16 @@ export async function getMateriales(req: Request, res: Response, next: NextFunct
     if (req.query.categoria)         conds.push(`m.categoria = '${String(req.query.categoria).replace(/'/g, "''")}'`)
     if (req.query.fecha_importacion) conds.push(`m.fecha_importacion = '${String(req.query.fecha_importacion).replace(/'/g, "''")}'`)
 
+    // Filtro origen: 'MTO' | 'DIRECTA' | 'URGENTE' | 'NO_MTO' (combina DIRECTA+URGENTE)
+    if (req.query.origen) {
+      const o = String(req.query.origen).toUpperCase()
+      if (o === 'NO_MTO') {
+        conds.push(`m.origen IN ('DIRECTA','URGENTE')`)
+      } else if (['MTO','DIRECTA','URGENTE'].includes(o)) {
+        conds.push(`m.origen = '${o}'`)
+      }
+    }
+
     const whereMain  = opts.search
       ? [...conds, `(m.descripcion ILIKE $3 OR m.codigo ILIKE $3 OR m.vendor ILIKE $3)`].join(' AND ')
       : conds.join(' AND ')

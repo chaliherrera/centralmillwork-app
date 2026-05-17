@@ -3,12 +3,13 @@ import { useSearchParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Search, ShoppingCart, Warehouse, DollarSign, Clock,
-  AlertTriangle, FileText, X, Plus, Pencil, Trash2,
+  AlertTriangle, FileText, X, Pencil, Trash2,
   CheckCircle2, Calendar, Package, Timer, AlertCircle, ImageIcon,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import clsx from 'clsx'
 import OrdenCompraForm from '@/components/modules/ordenes_compra/OrdenCompraForm'
+import NuevaCompraNoMTOModal from '@/components/modules/ordenes_compra/NuevaCompraNoMTOModal'
 import Modal from '@/components/ui/Modal'
 import ReporteModal from '@/components/ui/ReporteModal'
 import { ordenesCompraService } from '@/services/ordenesCompra'
@@ -162,7 +163,7 @@ function OcDetailPanel({
       <div className="bg-forest-700 text-white px-4 py-3 flex-shrink-0">
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0">
-            <div className="flex items-center gap-2 mb-0.5">
+            <div className="flex items-center gap-2 mb-0.5 flex-wrap">
               <span className="font-mono text-sm font-bold">{oc.numero}</span>
               {oc.estado_display === 'EN_EL_TALLER' ? (
                 <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-bold bg-green-400/20 text-green-200 border border-green-400/30">
@@ -171,6 +172,16 @@ function OcDetailPanel({
               ) : (
                 <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-bold bg-orange-400/20 text-orange-200 border border-orange-400/30">
                   <ShoppingCart size={10} /> ORDENADO
+                </span>
+              )}
+              {oc.origen === 'DIRECTA' && (
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-bold bg-cyan-400/20 text-cyan-100 border border-cyan-400/40">
+                  DIRECTA
+                </span>
+              )}
+              {oc.origen === 'URGENTE' && (
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-bold bg-red-400/30 text-red-100 border border-red-400/60 animate-pulse">
+                  <AlertTriangle size={10} /> URGENTE
                 </span>
               )}
             </div>
@@ -203,6 +214,7 @@ function OcDetailPanel({
             { label: 'Fecha OC',     value: fmtDate(oc.fecha_emision) },
             { label: 'ETA',          value: fmtDate(oc.fecha_entrega_estimada), warn: oc.flag_vencida },
             { label: 'F. Recepción', value: fmtDate(oc.fecha_entrega_real) },
+            ...(Number(oc.freight) > 0 ? [{ label: 'Freight', value: fmt(Number(oc.freight)) }] : []),
           ].map(({ label, value, warn }) => (
             <div key={label} className="bg-gray-50 rounded-lg px-3 py-2">
               <p className="text-xs text-gray-400 mb-0.5">{label}</p>
@@ -311,9 +323,19 @@ function OcCard({ oc, selected, onClick }: { oc: OrdenCompra; selected: boolean;
               : 'border-orange-200 hover:border-orange-300 bg-orange-50/20'
       )}
     >
-      {/* OC # + flags */}
+      {/* OC # + origen + flags */}
       <div className="flex items-center justify-between gap-2">
-        <span className="font-mono text-xs font-bold text-forest-700">{oc.numero}</span>
+        <div className="flex items-center gap-1.5 min-w-0">
+          <span className="font-mono text-xs font-bold text-forest-700">{oc.numero}</span>
+          {oc.origen === 'DIRECTA' && (
+            <span className="text-[10px] px-1.5 py-0 rounded font-bold tracking-wide bg-cyan-100 text-cyan-700">DIRECTA</span>
+          )}
+          {oc.origen === 'URGENTE' && (
+            <span className="text-[10px] px-1.5 py-0 rounded font-bold tracking-wide bg-red-100 text-red-700 inline-flex items-center gap-0.5">
+              <AlertTriangle size={9} /> URGENTE
+            </span>
+          )}
+        </div>
         <div className="flex items-center gap-1">
           {oc.flag_vencida && <span className="w-2 h-2 rounded-full bg-red-500 flex-shrink-0" title="ETA vencida" />}
           {oc.flag_2dias && !oc.flag_vencida && <span className="w-2 h-2 rounded-full bg-orange-400 flex-shrink-0" title="Vence en 2 días" />}
@@ -356,6 +378,7 @@ export default function OrdenesCompra() {
   const [fechaHasta, setFechaHasta]     = useState('')
   const [selectedOc, setSelectedOc]     = useState<OrdenCompra | undefined>()
   const [formOpen, setFormOpen]         = useState(false)
+  const [noMtoOpen, setNoMtoOpen]       = useState(false)
   const [editing, setEditing]           = useState<OrdenCompra | undefined>()
   const [editingNotas, setEditingNotas] = useState<OrdenCompra | undefined>()
   const [reporteOpen, setReporteOpen]   = useState(false)
@@ -435,7 +458,6 @@ export default function OrdenesCompra() {
       setFormOpen(true)
     }
   }
-  const openNew   = () => { setEditing(undefined); setFormOpen(true) }
   const handleClose = () => { setFormOpen(false); setEditing(undefined) }
 
   const confirmDelete = (o: OrdenCompra) => {
@@ -578,9 +600,13 @@ export default function OrdenesCompra() {
             )}
           </div>
 
-          {/* Nueva Orden */}
-          <button onClick={openNew} className="btn-primary">
-            <Plus size={15} /> Nueva Orden
+          {/* Compra SIN-MTO (DIRECTA / URGENTE) */}
+          <button
+            onClick={() => setNoMtoOpen(true)}
+            className="px-3 py-2 rounded-lg text-white font-medium text-sm flex items-center gap-1.5 bg-cyan-600 hover:bg-cyan-700 transition-colors"
+            title="Compra fuera del MTO (DIRECTA o URGENTE)"
+          >
+            <AlertTriangle size={15} /> Compra SIN-MTO
           </button>
         </div>
       </div>
@@ -692,6 +718,7 @@ export default function OrdenesCompra() {
       )}
 
       <OrdenCompraForm open={formOpen} onClose={handleClose} orden={editing} />
+      <NuevaCompraNoMTOModal open={noMtoOpen} onClose={() => setNoMtoOpen(false)} />
       {editingNotas && (
         <NotasModal
           oc={editingNotas}

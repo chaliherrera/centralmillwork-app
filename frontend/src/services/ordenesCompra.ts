@@ -86,4 +86,18 @@ export const ordenesCompraService = {
   generar: (data: { proyecto_id: number; vendors: Array<{ vendor: string; fecha_entrega_estimada: string | null }> }) =>
     api.post<{ data: GenerarOCResult[]; message: string }>('/ordenes-compra/generar', data)
       .then((r) => r.data),
+
+  crearNoMTO: (data: {
+    proyecto_id: number | null
+    vendor: string
+    origen: 'DIRECTA' | 'URGENTE'
+    fecha_entrega_estimada: string | null
+    categoria: string | null
+    notas: string | null
+    freight: number
+    items: { descripcion: string; unidad: string; qty: number; unit_price: number }[]
+  }) =>
+    api.post<{ data: { id: number; numero: string; total: number; freight: number; materiales_count: number; origen: string }; message: string }>(
+      '/ordenes-compra/no-mto', data
+    ).then((r) => r.data),
 }
