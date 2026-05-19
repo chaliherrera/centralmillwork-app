@@ -588,7 +588,7 @@ export async function crearOCNoMTO(req: Request, res: Response, next: NextFuncti
     } = req.body as {
       proyecto_id: number | null
       vendor: string
-      origen: 'DIRECTA' | 'URGENTE'
+      origen: 'DIRECTA' | 'URGENTE' | 'OPERATIVA'
       fecha_entrega_estimada: string | null
       categoria: string | null
       notas: string | null
@@ -598,8 +598,18 @@ export async function crearOCNoMTO(req: Request, res: Response, next: NextFuncti
 
     // Validations
     if (!vendor || !String(vendor).trim()) return next(createError('vendor es requerido', 400))
-    if (!origen || !['DIRECTA', 'URGENTE'].includes(origen))
-      return next(createError("origen debe ser 'DIRECTA' o 'URGENTE'", 400))
+    if (!origen || !['DIRECTA', 'URGENTE', 'OPERATIVA'].includes(origen))
+      return next(createError("origen debe ser 'DIRECTA', 'URGENTE' u 'OPERATIVA'", 400))
+
+    // OPERATIVA es ADMIN-only (gastos del taller, controlados por el dueño)
+    if (origen === 'OPERATIVA' && req.user?.rol !== 'ADMIN') {
+      return next(createError('Solo ADMIN puede registrar compras OPERATIVAS', 403))
+    }
+    // OPERATIVA no tiene proyecto asociado (es un gasto del taller, no de obra)
+    if (origen === 'OPERATIVA' && proyecto_id != null) {
+      return next(createError('Compras OPERATIVAS no pueden tener proyecto asociado', 400))
+    }
+
     if (!Array.isArray(items) || items.length === 0)
       return next(createError('items: al menos 1 línea requerida', 400))
     if (Number(freight) < 0)
@@ -613,6 +623,12 @@ export async function crearOCNoMTO(req: Request, res: Response, next: NextFuncti
       if (!(Number(it.unit_price) > 0))
         return next(createError(`item ${i + 1}: unit_price debe ser > 0`, 400))
     }
+
+    // OPERATIVAS saltan directo a recibida (ya están compradas al momento de registrar)
+    const ocEstado    = origen === 'OPERATIVA' ? 'recibida' : 'enviada'
+    const matEstado   = origen === 'OPERATIVA' ? 'RECIBIDO' : 'COTIZADO'
+    // Para OPERATIVA, fecha_entrega_real = hoy (porque ya se recibió)
+    const fechaRealOp = origen === 'OPERATIVA' ? new Date().toISOString().slice(0, 10) : null
 
     await client.query('BEGIN')
 
@@ -637,16 +653,17 @@ export async function crearOCNoMTO(req: Request, res: Response, next: NextFuncti
     const numero = `OC-${new Date().getFullYear()}-${String(seq).padStart(4, '0')}`
 
     // Create OC (incluye origen + freight; sin IVA — opera en USD)
+    // OPERATIVA arranca como 'recibida' + fecha_entrega_real=hoy
     const { rows: [orden] } = await client.query(
       `INSERT INTO ordenes_compra
          (numero, proyecto_id, proveedor_id, categoria, estado, fecha_emision,
-          fecha_entrega_estimada, notas, origen, freight)
-       VALUES ($1,$2,$3,$4,'enviada',NOW(),$5,$6,$7,$8)
+          fecha_entrega_estimada, fecha_entrega_real, notas, origen, freight)
+       VALUES ($1,$2,$3,$4,$5::estado_orden,NOW(),$6,$7,$8,$9,$10)
        RETURNING id`,
       [
         numero, proyecto_id ?? null, prov?.id ?? null, categoria ?? '',
-        fecha_entrega_estimada || null, notas ?? null,
-        origen, Number(freight) || 0,
+        ocEstado, fecha_entrega_estimada || null, fechaRealOp,
+        notas ?? null, origen, Number(freight) || 0,
       ]
     )
 
@@ -666,10 +683,10 @@ export async function crearOCNoMTO(req: Request, res: Response, next: NextFuncti
         `INSERT INTO materiales_mto
            (codigo, descripcion, unidad, proyecto_id, vendor, qty, unit_price,
             total_price, cotizar, estado_cotiz, origen, fecha_importacion)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'SI','COTIZADO',$9,CURRENT_DATE)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'SI',$9,$10,CURRENT_DATE)
          RETURNING id`,
         [codigo, it.descripcion, it.unidad, proyecto_id ?? null,
-         String(vendor).trim(), qty, price, lineTotal, origen]
+         String(vendor).trim(), qty, price, lineTotal, matEstado, origen]
       )
       materialIds.push(mat.id)
 
@@ -689,7 +706,9 @@ export async function crearOCNoMTO(req: Request, res: Response, next: NextFuncti
       [subtotal, total, orden.id]
     )
 
-    // Recompute estados → ORDENADO (since OC is 'enviada')
+    // Para DIRECTA/URGENTE el helper transiciona COTIZADO → ORDENADO.
+    // Para OPERATIVA los materiales ya nacen como RECIBIDO; el helper igual los
+    // chequea pero al recomputar verá la OC en estado 'recibida' y los dejará en RECIBIDO.
     await recomputeMaterialesEstadoByIds(client, materialIds)
 
     await client.query('COMMIT')

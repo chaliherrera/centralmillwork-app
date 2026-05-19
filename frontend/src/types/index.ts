@@ -52,7 +52,7 @@ export interface Proyecto {
 }
 
 export type EstadoCotizMto = 'COTIZADO' | 'PENDIENTE' | 'EN_STOCK' | 'ORDENADO' | 'RECIBIDO'
-export type OrigenMaterial = 'MTO' | 'DIRECTA' | 'URGENTE'
+export type OrigenMaterial = 'MTO' | 'DIRECTA' | 'URGENTE' | 'OPERATIVA'
 
 export interface Material {
   id: number

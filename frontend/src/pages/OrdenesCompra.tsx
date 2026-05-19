@@ -184,6 +184,11 @@ function OcDetailPanel({
                   <AlertTriangle size={10} /> URGENTE
                 </span>
               )}
+              {oc.origen === 'OPERATIVA' && (
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-bold bg-orange-400/25 text-orange-100 border border-orange-400/50">
+                  OPERATIVA
+                </span>
+              )}
             </div>
             <p className="text-xs text-white/70 truncate">{oc.proyecto?.codigo} · {oc.proyecto?.nombre}</p>
             <p className="text-base font-bold text-gold-300 mt-0.5">{fmt(Number(oc.total))}</p>
@@ -334,6 +339,9 @@ function OcCard({ oc, selected, onClick }: { oc: OrdenCompra; selected: boolean;
             <span className="text-[10px] px-1.5 py-0 rounded font-bold tracking-wide bg-red-100 text-red-700 inline-flex items-center gap-0.5">
               <AlertTriangle size={9} /> URGENTE
             </span>
+          )}
+          {oc.origen === 'OPERATIVA' && (
+            <span className="text-[10px] px-1.5 py-0 rounded font-bold tracking-wide bg-orange-100 text-orange-700">OPERATIVA</span>
           )}
         </div>
         <div className="flex items-center gap-1">

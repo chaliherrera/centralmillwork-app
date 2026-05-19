@@ -4,15 +4,21 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
-import { Plus, Trash2, AlertTriangle, ShoppingCart } from 'lucide-react'
+import { Plus, Trash2, AlertTriangle, ShoppingCart, Wrench } from 'lucide-react'
 import toast from 'react-hot-toast'
 import clsx from 'clsx'
 import Modal from '@/components/ui/Modal'
 import { ordenesCompraService } from '@/services/ordenesCompra'
 import { proyectosService } from '@/services/proyectos'
 import { proveedoresService } from '@/services/proveedores'
+import { useAuth } from '@/context/AuthContext'
 
-const CATEGORIAS = ['MILLWORK', 'HARDWARE', 'PAINT', 'SOLID WOOD', 'EDGE BANDING', 'METAL', 'LAMINATE', 'GLASS', 'OTHER']
+// Categorías para compras vinculadas a proyectos (DIRECTA / URGENTE)
+const CATEGORIAS_PROYECTO = ['MILLWORK', 'HARDWARE', 'PAINT', 'SOLID WOOD', 'EDGE BANDING', 'METAL', 'LAMINATE', 'GLASS', 'OTHER']
+
+// Categorías para gastos OPERATIVOS del taller (sin proyecto)
+const CATEGORIAS_OPERATIVAS = ['INSUMOS_TALLER', 'LIMPIEZA', 'OFICINA', 'ALIMENTACION', 'COMBUSTIBLE', 'MANTENIMIENTO', 'HERRAMIENTAS', 'OTROS']
+
 const UNIDADES = ['EACH', 'SF', 'LF', 'SHT', 'GAL', 'LB', 'BOX', 'ROLL', 'SET', 'PR', 'pza', 'm²', 'm³', 'ml', 'kg', 'lt', 'par', 'jgo', 'cja']
 
 const itemSchema = z.object({
@@ -26,7 +32,7 @@ const schema = z.object({
   // Stored as string in the form; converted to number|null at submit time
   proyecto_id:            z.string().optional(),
   vendor:                 z.string().min(1, 'Requerido').max(200),
-  origen:                 z.enum(['DIRECTA', 'URGENTE']),
+  origen:                 z.enum(['DIRECTA', 'URGENTE', 'OPERATIVA']),
   categoria:              z.string().optional(),
   fecha_entrega_estimada: z.string().optional(),
   notas:                  z.string().optional(),
@@ -48,6 +54,8 @@ interface Props {
 export default function NuevaCompraNoMTOModal({ open, onClose, defaultProyectoId }: Props) {
   const qc = useQueryClient()
   const navigate = useNavigate()
+  const { user } = useAuth()
+  const isAdmin = user?.rol === 'ADMIN'
 
   const { data: proyectosData } = useQuery({
     queryKey: ['proyectos-select'],
@@ -100,10 +108,12 @@ export default function NuevaCompraNoMTOModal({ open, onClose, defaultProyectoId
 
   const mutation = useMutation({
     mutationFn: (data: FormValues) => ordenesCompraService.crearNoMTO({
-      proyecto_id:            data.proyecto_id && data.proyecto_id !== '' ? Number(data.proyecto_id) : null,
+      // OPERATIVA fuerza proyecto_id=null y ETA=null (no aplican a gastos del taller)
+      proyecto_id:            data.origen === 'OPERATIVA' ? null
+                                : (data.proyecto_id && data.proyecto_id !== '' ? Number(data.proyecto_id) : null),
       vendor:                 data.vendor.trim(),
       origen:                 data.origen,
-      fecha_entrega_estimada: data.fecha_entrega_estimada || null,
+      fecha_entrega_estimada: data.origen === 'OPERATIVA' ? null : (data.fecha_entrega_estimada || null),
       categoria:              data.categoria || null,
       notas:                  data.notas || null,
       freight:                Number(data.freight) || 0,
@@ -125,7 +135,8 @@ export default function NuevaCompraNoMTOModal({ open, onClose, defaultProyectoId
       qc.invalidateQueries({ queryKey: ['materiales-kpis'],       refetchType: 'all' })
       qc.invalidateQueries({ queryKey: ['proveedores-select'],    refetchType: 'all' })
       onClose()
-      // Navigate to the new OC for immediate visibility
+      // Navegamos a la OC nueva para inspección inmediata.
+      // OPERATIVA: ya queda como 'recibida' → aparece en EN EL TALLER del kanban.
       navigate(`/ordenes-compra?ocId=${res.data.id}`)
     },
     onError: (err: any) => {
@@ -135,14 +146,18 @@ export default function NuevaCompraNoMTOModal({ open, onClose, defaultProyectoId
 
   const handleClose = () => { reset(defaultValues); onClose() }
 
+  const isOperativa = watchOrigen === 'OPERATIVA'
+  const categorias  = isOperativa ? CATEGORIAS_OPERATIVAS : CATEGORIAS_PROYECTO
+  const modalTitle  = isOperativa ? 'Registrar Gasto Operativo' : 'Nueva Compra SIN-MTO'
+
   return (
-    <Modal open={open} onClose={handleClose} title="Nueva Compra SIN-MTO" size="xl">
+    <Modal open={open} onClose={handleClose} title={modalTitle} size="xl">
       <form onSubmit={handleSubmit((d) => mutation.mutate(d))} className="space-y-5">
 
         {/* Tipo de compra (radio) */}
         <div>
           <label className="label">Tipo de compra</label>
-          <div className="grid grid-cols-2 gap-3">
+          <div className={clsx('grid gap-3', isAdmin ? 'grid-cols-3' : 'grid-cols-2')}>
             <label className={clsx(
               'flex items-start gap-3 p-3 border rounded-lg cursor-pointer transition-colors',
               watchOrigen === 'DIRECTA' ? 'border-cyan-400 bg-cyan-50' : 'border-gray-200 hover:border-gray-300'
@@ -169,20 +184,38 @@ export default function NuevaCompraNoMTOModal({ open, onClose, defaultProyectoId
                 <p className="text-xs text-gray-500 mt-0.5">Crítica: rotura en obra, cliente parado, etc.</p>
               </div>
             </label>
+            {/* OPERATIVA solo visible para ADMIN — control de gastos del taller */}
+            {isAdmin && (
+              <label className={clsx(
+                'flex items-start gap-3 p-3 border rounded-lg cursor-pointer transition-colors',
+                watchOrigen === 'OPERATIVA' ? 'border-orange-400 bg-orange-50' : 'border-gray-200 hover:border-gray-300'
+              )}>
+                <input type="radio" value="OPERATIVA" {...register('origen')} className="mt-1" />
+                <div className="flex-1">
+                  <div className="flex items-center gap-2">
+                    <Wrench size={16} className="text-orange-600" />
+                    <span className="text-sm font-semibold text-gray-800">OPERATIVA</span>
+                  </div>
+                  <p className="text-xs text-gray-500 mt-0.5">Gasto del taller (insumos, café, limpieza).</p>
+                </div>
+              </label>
+            )}
           </div>
         </div>
 
-        {/* Proyecto + Vendor */}
-        <div className="grid grid-cols-2 gap-4">
-          <div>
-            <label className="label">Proyecto</label>
-            <select className="input w-full" {...register('proyecto_id')}>
-              <option value="">— Sin proyecto —</option>
-              {proyectos.map((p) => (
-                <option key={p.id} value={p.id}>{p.codigo} — {p.nombre}</option>
-              ))}
-            </select>
-          </div>
+        {/* Proyecto + Vendor — Proyecto oculto si es OPERATIVA */}
+        <div className={clsx('grid gap-4', isOperativa ? 'grid-cols-1' : 'grid-cols-2')}>
+          {!isOperativa && (
+            <div>
+              <label className="label">Proyecto</label>
+              <select className="input w-full" {...register('proyecto_id')}>
+                <option value="">— Sin proyecto —</option>
+                {proyectos.map((p) => (
+                  <option key={p.id} value={p.id}>{p.codigo} — {p.nombre}</option>
+                ))}
+              </select>
+            </div>
+          )}
           <div>
             <label className="label">Vendor *</label>
             <Controller
@@ -207,30 +240,36 @@ export default function NuevaCompraNoMTOModal({ open, onClose, defaultProyectoId
           </div>
         </div>
 
-        {/* Categoría + ETA */}
-        <div className="grid grid-cols-2 gap-4">
+        {/* Categoría + ETA — ETA oculto si es OPERATIVA (gasto ya hecho, no se espera) */}
+        <div className={clsx('grid gap-4', isOperativa ? 'grid-cols-1' : 'grid-cols-2')}>
           <div>
-            <label className="label">Categoría</label>
+            <label className="label">Categoría {isOperativa && <span className="text-orange-600 text-xs">(gasto operativo)</span>}</label>
             <select className="input w-full" {...register('categoria')}>
               <option value="">— Sin categoría —</option>
-              {CATEGORIAS.map((c) => <option key={c} value={c}>{c}</option>)}
+              {categorias.map((c) => <option key={c} value={c}>{c}</option>)}
             </select>
           </div>
-          <div>
-            <label className="label">ETA (fecha de entrega)</label>
-            <input type="date" className="input w-full" {...register('fecha_entrega_estimada')} />
-          </div>
+          {!isOperativa && (
+            <div>
+              <label className="label">ETA (fecha de entrega)</label>
+              <input type="date" className="input w-full" {...register('fecha_entrega_estimada')} />
+            </div>
+          )}
         </div>
 
         {/* Notas */}
         <div>
           <label className="label">
-            Notas {watchOrigen === 'URGENTE' && <span className="text-red-500">(recomendado para urgentes)</span>}
+            Notas
+            {watchOrigen === 'URGENTE'   && <span className="text-red-500"> (recomendado para urgentes)</span>}
+            {watchOrigen === 'OPERATIVA' && <span className="text-orange-600"> (qué se compró y para qué)</span>}
           </label>
           <textarea
             className="input w-full resize-none"
             rows={2}
-            placeholder="¿Por qué fuera del MTO? — útil para auditoría"
+            placeholder={isOperativa
+              ? 'Ej: café y agua para el taller, semana del 15-mayo'
+              : '¿Por qué fuera del MTO? — útil para auditoría'}
             {...register('notas')}
           />
         </div>
@@ -344,13 +383,17 @@ export default function NuevaCompraNoMTOModal({ open, onClose, defaultProyectoId
             disabled={mutation.isPending}
             className={clsx(
               'px-4 py-2 rounded-lg text-white font-medium transition-colors',
-              watchOrigen === 'URGENTE'
-                ? 'bg-red-500 hover:bg-red-600'
-                : 'bg-gold-500 hover:bg-gold-600',
+              watchOrigen === 'URGENTE'   && 'bg-red-500 hover:bg-red-600',
+              watchOrigen === 'DIRECTA'   && 'bg-gold-500 hover:bg-gold-600',
+              watchOrigen === 'OPERATIVA' && 'bg-orange-600 hover:bg-orange-700',
               mutation.isPending && 'opacity-50 cursor-not-allowed'
             )}
           >
-            {mutation.isPending ? 'Creando…' : (watchOrigen === 'URGENTE' ? 'Crear OC Urgente' : 'Crear OC Directa')}
+            {mutation.isPending
+              ? 'Guardando…'
+              : watchOrigen === 'URGENTE'   ? 'Crear OC Urgente'
+              : watchOrigen === 'DIRECTA'   ? 'Crear OC Directa'
+              :                                'Registrar Gasto Operativo'}
           </button>
         </div>
       </form>

@@ -30,7 +30,7 @@ export default function Materiales() {
   const [selectedProyectoId, setSelectedProyectoId] = useState<number | ''>('')
   const [importDateFilter, setImportDateFilter]     = useState('')
   const [vendorFilter, setVendorFilter]             = useState('')
-  const [origenFilter, setOrigenFilter]             = useState<'' | 'MTO' | 'DIRECTA' | 'URGENTE' | 'NO_MTO'>('')
+  const [origenFilter, setOrigenFilter]             = useState<'' | 'MTO' | 'DIRECTA' | 'URGENTE' | 'OPERATIVA' | 'NO_MTO'>('')
   const [search, setSearch]                         = useState('')
   const [page, setPage]                             = useState(1)
   const [formOpen, setFormOpen]                     = useState(false)
@@ -308,8 +308,9 @@ export default function Materiales() {
                 className={clsx(
                   'input text-sm w-40',
                   origenFilter && (
-                    origenFilter === 'URGENTE' ? 'border-red-400 text-red-700 bg-red-50' :
-                    origenFilter === 'DIRECTA' ? 'border-cyan-400 text-cyan-700 bg-cyan-50' :
+                    origenFilter === 'URGENTE'   ? 'border-red-400 text-red-700 bg-red-50' :
+                    origenFilter === 'DIRECTA'   ? 'border-cyan-400 text-cyan-700 bg-cyan-50' :
+                    origenFilter === 'OPERATIVA' ? 'border-orange-400 text-orange-700 bg-orange-50' :
                     'border-forest-400 text-forest-700 bg-forest-50'
                   )
                 )}
@@ -318,6 +319,7 @@ export default function Materiales() {
                 <option value="MTO">MTO</option>
                 <option value="DIRECTA">Directa</option>
                 <option value="URGENTE">Urgente</option>
+                <option value="OPERATIVA">Operativa (taller)</option>
                 <option value="NO_MTO">No-MTO (todas)</option>
               </select>
 
@@ -440,8 +442,9 @@ export default function Materiales() {
                           {m.origen && m.origen !== 'MTO' && (
                             <span className={clsx(
                               'inline-block text-[10px] px-1.5 py-0 rounded font-bold tracking-wide',
-                              m.origen === 'DIRECTA' && 'bg-cyan-100 text-cyan-700',
-                              m.origen === 'URGENTE' && 'bg-red-100 text-red-700',
+                              m.origen === 'DIRECTA'   && 'bg-cyan-100 text-cyan-700',
+                              m.origen === 'URGENTE'   && 'bg-red-100 text-red-700',
+                              m.origen === 'OPERATIVA' && 'bg-orange-100 text-orange-700',
                             )}>
                               {m.origen}
                             </span>

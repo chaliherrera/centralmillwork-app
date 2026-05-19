@@ -81,13 +81,13 @@ export async function getMateriales(req: Request, res: Response, next: NextFunct
       filterVals.push(String(req.query.fecha_importacion))
     }
 
-    // Filtro origen: 'MTO' | 'DIRECTA' | 'URGENTE' | 'NO_MTO' (combina DIRECTA+URGENTE)
+    // Filtro origen: 'MTO' | 'DIRECTA' | 'URGENTE' | 'OPERATIVA' | 'NO_MTO' (combina DIRECTA+URGENTE+OPERATIVA)
     // Aquí los valores son una whitelist hardcoded, no input directo del usuario.
     if (req.query.origen) {
       const o = String(req.query.origen).toUpperCase()
       if (o === 'NO_MTO') {
-        conds.push(`m.origen IN ('DIRECTA','URGENTE')`)
-      } else if (['MTO','DIRECTA','URGENTE'].includes(o)) {
+        conds.push(`m.origen IN ('DIRECTA','URGENTE','OPERATIVA')`)
+      } else if (['MTO','DIRECTA','URGENTE','OPERATIVA'].includes(o)) {
         conds.push(`m.origen = $${filterVals.length + 1}`)
         filterVals.push(o)
       }

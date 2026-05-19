@@ -90,7 +90,7 @@ export const ordenesCompraService = {
   crearNoMTO: (data: {
     proyecto_id: number | null
     vendor: string
-    origen: 'DIRECTA' | 'URGENTE'
+    origen: 'DIRECTA' | 'URGENTE' | 'OPERATIVA'
     fecha_entrega_estimada: string | null
     categoria: string | null
     notas: string | null
