@@ -1,16 +1,19 @@
-import { CalendarDays, Clock4, Coffee, Briefcase, Loader2 } from 'lucide-react'
+import { CalendarDays, Clock4, Coffee, Wrench, HelpCircle, Loader2 } from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'
 import { kioskService } from '@/services/kiosk'
 import { useKioskAuth } from '@/context/KioskAuthContext'
 
 /**
- * Resumen del día del operario logueado:
- * - Horas trabajadas (registro)
- * - Horas netas (sin pausas)
- * - Lista de proyectos del día con tiempo
- * - Pausas tomadas
+ * Resumen del día del operario logueado: 4 buckets de la jornada.
  *
- * Se muestra solo si el operario clockeó hoy.
+ * Los totales vienen calculados desde el backend (`data.totales`) — son
+ * más precisos que sumar segmentos en el cliente porque consideran:
+ *  - Segmentos abiertos (usan NOW() como fin implícito)
+ *  - Diferencia entre items asignados vs "Otro trabajo"
+ *  - Tiempo "sin asignar" = jornada − items − otro − pausas (capturado en
+ *    silencio: análisis, agua, llamadas, baño rápido entre items, etc.)
+ *
+ * Sólo se muestra si el operario clockeó hoy.
  */
 export default function ResumenDia() {
   const { status } = useKioskAuth()
@@ -20,7 +23,7 @@ export default function ResumenDia() {
     queryKey: ['kiosk', 'dia'],
     queryFn:  kioskService.dia,
     enabled:  tieneClockIn,
-    refetchInterval: 60_000,   // refresca por minuto mientras el operario está en pantalla
+    refetchInterval: 60_000,   // refresca cada minuto
     staleTime: 30_000,
   })
 
@@ -28,23 +31,7 @@ export default function ResumenDia() {
 
   const proyectos = data?.proyectos ?? []
   const pausas    = data?.pausas    ?? []
-
-  // Totales calculados desde los segmentos (incluye los que están abiertos)
-  const horasProyectos = proyectos.reduce((acc, p) => {
-    if (p.total_horas != null) return acc + Number(p.total_horas)
-    // Segmento abierto: calculamos desde hora_inicio hasta ahora
-    const desde = new Date(p.hora_inicio).getTime()
-    return acc + (Date.now() - desde) / 3_600_000
-  }, 0)
-
-  const minutosPausas = pausas.reduce((acc, p) => {
-    if (p.duracion_minutos != null) return acc + Number(p.duracion_minutos)
-    if (!p.hora_fin) {
-      const desde = new Date(p.hora_inicio).getTime()
-      return acc + (Date.now() - desde) / 60_000
-    }
-    return acc
-  }, 0)
+  const totales   = data?.totales
 
   return (
     <div className="bg-white rounded-2xl border border-gray-200 p-6 shadow-sm">
@@ -60,31 +47,38 @@ export default function ResumenDia() {
         </div>
       </div>
 
-      {isLoading ? (
+      {isLoading || !totales ? (
         <div className="py-4 flex justify-center">
           <Loader2 size={18} className="animate-spin text-gray-400" />
         </div>
       ) : (
         <>
-          {/* Métricas */}
-          <div className="grid grid-cols-3 gap-3 mb-4">
+          {/* 4 buckets de la jornada */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
             <Metric
               icon={<Clock4 size={16} className="text-emerald-600" />}
-              label="Trabajadas"
-              value={formatH(horasProyectos)}
+              label="En items"
+              value={formatMin(totales.minutos_items)}
               color="text-emerald-700"
+            />
+            <Metric
+              icon={<Wrench size={16} className="text-gold-600" />}
+              label="Otro trabajo"
+              value={formatMin(totales.minutos_otro_trabajo)}
+              color="text-gold-700"
             />
             <Metric
               icon={<Coffee size={16} className="text-blue-600" />}
               label="En pausa"
-              value={formatMin(minutosPausas)}
+              value={formatMin(totales.minutos_pausas)}
               color="text-blue-700"
             />
             <Metric
-              icon={<Briefcase size={16} className="text-gold-600" />}
-              label="Proyectos"
-              value={String(new Set(proyectos.map((p) => p.proyecto_id)).size)}
-              color="text-gold-700"
+              icon={<HelpCircle size={16} className="text-gray-500" />}
+              label="Sin asignar"
+              value={formatMin(totales.minutos_sin_asignar)}
+              color="text-gray-600"
+              tip="Tiempo entre items: análisis, agua, llamadas, baño, etc. Capturado automáticamente."
             />
           </div>
 
@@ -156,11 +150,11 @@ export default function ResumenDia() {
 }
 
 function Metric({
-  icon, label, value, color,
-}: { icon: React.ReactNode; label: string; value: string; color: string }) {
+  icon, label, value, color, tip,
+}: { icon: React.ReactNode; label: string; value: string; color: string; tip?: string }) {
   return (
-    <div className="bg-gray-50 rounded-xl px-3 py-2.5">
-      <div className="flex items-center gap-1.5 text-xs text-gray-500 mb-0.5">
+    <div className="bg-gray-50 rounded-xl px-3 py-2.5" title={tip}>
+      <div className="flex items-center gap-1.5 text-[11px] text-gray-500 mb-0.5">
         {icon}
         <span className="uppercase tracking-wider">{label}</span>
       </div>

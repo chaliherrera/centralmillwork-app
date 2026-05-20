@@ -171,13 +171,16 @@ function TabPorPersona() {
   })
 
   const totales = useMemo(() => {
-    if (!data?.registros) return { brutas: 0, pausas: 0, netas: 0 }
-    let brutas = 0, pausas = 0
+    if (!data?.registros) return { brutas: 0, items: 0, otro: 0, pausas: 0, sinAsignar: 0 }
+    let brutas = 0, items = 0, otro = 0, pausas = 0, sinAsignar = 0
     for (const r of data.registros) {
-      brutas += Number(r.total_horas ?? 0)
-      pausas += Number(r.horas_pausas ?? 0)
+      brutas     += Number(r.horas_brutas ?? r.total_horas ?? 0)
+      items      += Number(r.horas_items ?? 0)
+      otro       += Number(r.horas_otro_trabajo ?? 0)
+      pausas     += Number(r.horas_pausas ?? 0)
+      sinAsignar += Number(r.horas_sin_asignar ?? 0)
     }
-    return { brutas, pausas, netas: brutas - pausas }
+    return { brutas, items, otro, pausas, sinAsignar }
   }, [data])
 
   async function exportar() {
@@ -236,11 +239,13 @@ function TabPorPersona() {
         <div className="py-12 flex justify-center"><Loader2 size={20} className="animate-spin text-gray-400" /></div>
       ) : (
         <>
-          {/* Totales */}
-          <div className="grid grid-cols-3 gap-3">
-            <Total label="Horas brutas" value={formatH(totales.brutas)} />
-            <Total label="Pausas"       value={formatH(totales.pausas)} />
-            <Total label="Horas netas"  value={formatH(totales.netas)}  highlight />
+          {/* Totales — 5 buckets para análisis de productividad */}
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+            <Total label="Brutas"      value={formatH(totales.brutas)} highlight />
+            <Total label="En items"    value={formatH(totales.items)} />
+            <Total label="Otro trabajo" value={formatH(totales.otro)} />
+            <Total label="Pausas"      value={formatH(totales.pausas)} />
+            <Total label="Sin asignar" value={formatH(totales.sinAsignar)} />
           </div>
 
           {/* Tabla */}
@@ -252,17 +257,21 @@ function TabPorPersona() {
                   <th className="table-header">Entrada</th>
                   <th className="table-header">Salida</th>
                   <th className="table-header text-right">Brutas</th>
+                  <th className="table-header text-right">En items</th>
+                  <th className="table-header text-right">Otro</th>
                   <th className="table-header text-right">Pausas</th>
-                  <th className="table-header text-right">Netas</th>
-                  <th className="table-header">Proyectos</th>
+                  <th className="table-header text-right">Sin asignar</th>
                 </tr>
               </thead>
               <tbody>
                 {data!.registros.length === 0 ? (
-                  <tr><td colSpan={7} className="py-12 text-center text-gray-400 text-sm">Sin registros en el período</td></tr>
+                  <tr><td colSpan={8} className="py-12 text-center text-gray-400 text-sm">Sin registros en el período</td></tr>
                 ) : data!.registros.map((r) => {
-                  const brutas = Number(r.total_horas ?? 0)
+                  const brutas = Number(r.horas_brutas ?? r.total_horas ?? 0)
+                  const items  = Number(r.horas_items ?? 0)
+                  const otro   = Number(r.horas_otro_trabajo ?? 0)
                   const pausas = Number(r.horas_pausas ?? 0)
+                  const sinAs  = Number(r.horas_sin_asignar ?? 0)
                   return (
                     <tr key={r.id} className="table-row">
                       <td className="table-cell font-medium">{r.fecha}</td>
@@ -274,24 +283,11 @@ function TabPorPersona() {
                           ? new Date(r.hora_salida).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })
                           : <span className="text-emerald-600 italic">en curso</span>}
                       </td>
-                      <td className="table-cell text-right tabular-nums">{r.total_horas != null ? formatH(brutas) : '—'}</td>
-                      <td className="table-cell text-right tabular-nums">{formatH(pausas)}</td>
-                      <td className="table-cell text-right tabular-nums font-semibold">
-                        {r.total_horas != null ? formatH(brutas - pausas) : '—'}
-                      </td>
-                      <td className="table-cell text-xs">
-                        {r.proyectos.length === 0 ? (
-                          <span className="text-gray-400">—</span>
-                        ) : (
-                          <div className="flex flex-wrap gap-1">
-                            {r.proyectos.map((p, i) => (
-                              <span key={i} className="px-1.5 py-0.5 bg-gray-100 rounded text-[11px]">
-                                {p.proyecto_codigo} {formatH(Number(p.horas ?? 0))}
-                              </span>
-                            ))}
-                          </div>
-                        )}
-                      </td>
+                      <td className="table-cell text-right tabular-nums font-semibold">{brutas > 0 ? formatH(brutas) : '—'}</td>
+                      <td className="table-cell text-right tabular-nums text-emerald-700">{formatH(items)}</td>
+                      <td className="table-cell text-right tabular-nums text-gold-700">{formatH(otro)}</td>
+                      <td className="table-cell text-right tabular-nums text-blue-700">{formatH(pausas)}</td>
+                      <td className="table-cell text-right tabular-nums text-gray-600" title="Tiempo entre items: análisis, agua, llamadas, etc.">{formatH(sinAs)}</td>
                     </tr>
                   )
                 })}

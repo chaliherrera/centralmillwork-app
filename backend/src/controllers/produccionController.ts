@@ -343,23 +343,53 @@ export async function avanzarOrdenInterno(opts: {
       throw createError('La orden no tiene estación actual', 400)
     }
 
-    // 1) Marcar el proceso actual como completado
+    // 1) Cerrar cualquier segmento de time_proyectos abierto para el operario
+    //    responsable de este proceso en esta orden+estación. Esto cubre el caso
+    //    "operario click 'Item completado' mientras tiene el timer corriendo".
+    //    Si el llamador es SHOP_MANAGER (no hay kiosk_personal_id), igual cerramos
+    //    el segmento del operador asignado al proceso — la jornada de horas
+    //    queda consistente sin importar quién dispare el avance.
+    const { rows: [opActual] } = await client.query(
+      `SELECT operador_id FROM orden_procesos
+       WHERE orden_id = $1 AND estacion = $2`,
+      [opts.ordenId, orden.estacion_actual]
+    )
+    const operadorIdResp = opActual?.operador_id ?? null
+    if (operadorIdResp) {
+      await client.query(
+        `UPDATE time_proyectos SET hora_fin = NOW(), completado = true
+         WHERE personal_id = $1
+           AND orden_produccion_id = $2
+           AND estacion = $3
+           AND hora_fin IS NULL`,
+        [operadorIdResp, opts.ordenId, orden.estacion_actual]
+      )
+    }
+
+    // 2) Marcar el proceso completado y recalcular tiempo_real_minutos como
+    //    SUM de todos los segmentos cerrados del operador en esta orden+estación.
+    //    Esto da el tiempo REAL trabajado (multi-día friendly): si Victor empezó
+    //    martes 4pm y terminó jueves 10am, NOT (NOW - fecha_inicio) = 42h sino
+    //    SUM(segmentos) = ~16h reales.
     const { rows: [procesoActual] } = await client.query(
       `UPDATE orden_procesos
        SET completado = true,
            fecha_fin  = NOW(),
-           tiempo_real_minutos = CASE
-             WHEN fecha_inicio IS NOT NULL
-             THEN ROUND(EXTRACT(EPOCH FROM (NOW() - fecha_inicio)) / 60)::INT
-             ELSE tiempo_real_minutos
-           END,
+           tiempo_real_minutos = COALESCE((
+             SELECT ROUND(SUM(EXTRACT(EPOCH FROM (hora_fin - hora_inicio)) / 60))::INT
+             FROM time_proyectos
+             WHERE orden_produccion_id = $1
+               AND estacion = $2
+               AND hora_fin IS NOT NULL
+               AND ($4::int IS NULL OR personal_id = $4)
+           ), tiempo_real_minutos),
            notas = COALESCE($3, notas)
        WHERE orden_id = $1 AND estacion = $2
        RETURNING *`,
-      [opts.ordenId, orden.estacion_actual, opts.notas ?? null]
+      [opts.ordenId, orden.estacion_actual, opts.notas ?? null, operadorIdResp]
     )
 
-    // 2) Buscar la siguiente estación pendiente en secuencia
+    // 3) Buscar la siguiente estación pendiente en secuencia
     const { rows: [siguiente] } = await client.query(
       `SELECT estacion, operador_id FROM orden_procesos
        WHERE orden_id = $1 AND completado = false
@@ -382,12 +412,11 @@ export async function avanzarOrdenInterno(opts: {
          WHERE id = $4`,
         [estacionDestino, siguiente.operador_id || null, nuevoStatus, opts.ordenId]
       )
-      // Si la siguiente estación nunca fue iniciada, registrar fecha_inicio
-      await client.query(
-        `UPDATE orden_procesos SET fecha_inicio = NOW()
-         WHERE orden_id = $1 AND estacion = $2 AND fecha_inicio IS NULL`,
-        [opts.ordenId, estacionDestino]
-      )
+      // Nota: NO auto-seteamos `fecha_inicio` de la siguiente estación.
+      // Ahora el operario tiene que hacer click en "Iniciar item" para
+      // arrancarla. El status 'En Proceso' refleja que la orden avanzó,
+      // pero el proceso siguiente queda 'no_iniciado' hasta que alguien
+      // lo arranque explícitamente.
     } else {
       // No hay más procesos → orden completada
       nuevoStatus = 'Completada'
@@ -426,6 +455,150 @@ export async function avanzarOrdenInterno(opts: {
   } catch (err) {
     await client.query('ROLLBACK')
     throw err
+  } finally {
+    client.release()
+  }
+}
+
+/**
+ * POST /api/kiosk/ordenes/:id/iniciar-item
+ *
+ * Click "Iniciar item" / "Continuar item" desde el kiosko.
+ *
+ * Comportamiento:
+ *  1. Valida que el operario está asignado a la estación actual de la orden
+ *  2. Cierra cualquier OTRO segmento de time_proyectos abierto del operario
+ *     (sólo puede tener 1 a la vez — viola el índice único parcial si no)
+ *  3. Si la orden tiene status 'Pendiente', la pasa a 'En Proceso'
+ *  4. Si orden_procesos.fecha_inicio es NULL → la setea a NOW() (primer inicio)
+ *     Si ya tenía valor → NO la toca (preserva el primer arranque histórico)
+ *  5. Abre un nuevo segmento de time_proyectos con orden_produccion_id, estacion,
+ *     personal_id, hora_inicio = NOW()
+ *  6. Registra evento en orden_historial (accion='iniciar')
+ *
+ * Reutilizable como concepto:
+ *  - Primer inicio (fecha_inicio era NULL)  → "Iniciar item"
+ *  - Continuación (fecha_inicio existía)    → "Continuar item"
+ * El frontend decide la etiqueta del botón en base a fecha_inicio + minutos_previos.
+ */
+export async function iniciarItemKiosk(req: Request, res: Response, next: NextFunction) {
+  const client = await pool.connect()
+  try {
+    const ordenId    = parseInt(String(req.params.id))
+    if (Number.isNaN(ordenId)) return next(createError('id inválido', 400))
+    const personalId = req.kioskUser!.personal_id
+    const dispositivo = req.kioskUser!.dispositivo ?? null
+
+    await client.query('BEGIN')
+
+    // 1) Validar orden + estación + asignación del operario
+    const { rows: [orden] } = await client.query(
+      `SELECT id, estacion_actual, status FROM ordenes_produccion WHERE id = $1 FOR UPDATE`,
+      [ordenId]
+    )
+    if (!orden) {
+      await client.query('ROLLBACK')
+      return next(createError('Orden no encontrada', 404))
+    }
+    if (orden.status === 'Completada' || orden.status === 'Cancelada') {
+      await client.query('ROLLBACK')
+      return next(createError(`La orden está ${orden.status} y no se puede iniciar`, 400))
+    }
+    if (!orden.estacion_actual) {
+      await client.query('ROLLBACK')
+      return next(createError('La orden no tiene estación actual', 400))
+    }
+
+    const { rows: [proceso] } = await client.query(
+      `SELECT id, fecha_inicio, completado, operador_id
+       FROM orden_procesos
+       WHERE orden_id = $1 AND estacion = $2`,
+      [ordenId, orden.estacion_actual]
+    )
+    if (!proceso) {
+      await client.query('ROLLBACK')
+      return next(createError('La orden no tiene proceso en la estación actual', 400))
+    }
+    if (proceso.completado) {
+      await client.query('ROLLBACK')
+      return next(createError('Este item ya está completado', 400))
+    }
+    if (proceso.operador_id && proceso.operador_id !== personalId) {
+      await client.query('ROLLBACK')
+      return next(createError('No estás asignado a este item', 403))
+    }
+
+    // 2) Verificar que tenga clock-in activo (es requisito de time_proyectos)
+    const { rows: [registro] } = await client.query(
+      `SELECT id FROM time_registros WHERE personal_id = $1 AND status = 'activo' LIMIT 1`,
+      [personalId]
+    )
+    if (!registro) {
+      await client.query('ROLLBACK')
+      return next(createError('Hacé clock-in antes de iniciar un item', 400))
+    }
+
+    // 3) Cerrar cualquier OTRO segmento abierto del operario
+    //    (sólo uno puede estar activo a la vez por el índice único parcial)
+    await client.query(
+      `UPDATE time_proyectos SET hora_fin = NOW(), completado = false
+       WHERE personal_id = $1 AND hora_fin IS NULL`,
+      [personalId]
+    )
+
+    // 4) Si el proceso nunca fue iniciado, setear fecha_inicio
+    const eraPrimerInicio = !proceso.fecha_inicio
+    if (eraPrimerInicio) {
+      await client.query(
+        `UPDATE orden_procesos SET fecha_inicio = NOW() WHERE id = $1`,
+        [proceso.id]
+      )
+    }
+
+    // 5) Pasar orden a 'En Proceso' si era 'Pendiente' o 'Pausada'
+    if (orden.status === 'Pendiente' || orden.status === 'Pausada') {
+      await client.query(
+        `UPDATE ordenes_produccion SET status = 'En Proceso', updated_at = NOW(), fecha_inicio = COALESCE(fecha_inicio, NOW()) WHERE id = $1`,
+        [ordenId]
+      )
+    }
+
+    // 6) Abrir segmento nuevo en time_proyectos
+    //    proyecto_id de la orden (puede ser null)
+    const { rows: [ordenProy] } = await client.query(
+      `SELECT proyecto_id FROM ordenes_produccion WHERE id = $1`,
+      [ordenId]
+    )
+    if (!ordenProy?.proyecto_id) {
+      await client.query('ROLLBACK')
+      return next(createError('La orden no tiene proyecto asociado — no se puede iniciar el item desde el kiosko', 400))
+    }
+    const { rows: [segmento] } = await client.query(
+      `INSERT INTO time_proyectos
+         (registro_id, personal_id, proyecto_id, estacion, orden_produccion_id, hora_inicio, dispositivo)
+       VALUES ($1,$2,$3,$4,$5, NOW(), $6)
+       RETURNING *`,
+      [registro.id, personalId, ordenProy.proyecto_id, orden.estacion_actual, ordenId, dispositivo]
+    )
+
+    // 7) Historial
+    await client.query(
+      `INSERT INTO orden_historial
+         (orden_id, estacion_origen, estacion_destino, accion, kiosk_personal_id, dispositivo, motivo)
+       VALUES ($1, $2, $2, $3, $4, $5, $6)`,
+      [ordenId, orden.estacion_actual, eraPrimerInicio ? 'iniciar' : 'continuar',
+       personalId, dispositivo, null]
+    )
+
+    await client.query('COMMIT')
+
+    res.status(201).json({
+      data: { segmento, era_primer_inicio: eraPrimerInicio },
+      message: eraPrimerInicio ? 'Item iniciado' : 'Item retomado',
+    })
+  } catch (err) {
+    await client.query('ROLLBACK')
+    next(err)
   } finally {
     client.release()
   }

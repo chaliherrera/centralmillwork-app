@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { LogOut } from 'lucide-react'
 import { useKioskAuth } from '@/context/KioskAuthContext'
 import ClockCard          from '@/components/kiosk/ClockCard'
-import ProyectoActivo     from '@/components/kiosk/ProyectoActivo'
+import OtroTrabajo        from '@/components/kiosk/OtroTrabajo'
 import PausaCard          from '@/components/kiosk/PausaCard'
 import AsignacionesCard   from '@/components/kiosk/AsignacionesCard'
 import AsignacionesPanel  from '@/components/kiosk/AsignacionesPanel'
@@ -51,13 +51,17 @@ export default function KioskHome() {
       {/* Contenido */}
       <main className="max-w-3xl mx-auto px-4 py-6 space-y-4">
         <ClockCard />
-        <ProyectoActivo />
 
-        {/* Paired cards: Tomar break + Asignaciones */}
+        {/* Paired cards: Tomar break + Asignaciones (centro de gravedad del kiosko) */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <PausaCard />
           <AsignacionesCard onOpen={() => setAsignacionesOpen(true)} />
         </div>
+
+        {/* "Otro trabajo" — secundario, sólo aparece cuando hay sesión activa
+            o cuando el operario está en un trabajo no-asignado. Si está
+            haciendo un item, este componente no muestra nada. */}
+        <OtroTrabajo />
 
         <ResumenDia />
       </main>

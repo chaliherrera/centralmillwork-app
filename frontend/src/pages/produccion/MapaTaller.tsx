@@ -1,9 +1,10 @@
 import { useMemo } from 'react'
 import { Link } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
-import { Loader2, Users, AlertTriangle } from 'lucide-react'
+import { Loader2, Users, AlertTriangle, Activity } from 'lucide-react'
 import clsx from 'clsx'
 import { produccionService } from '@/services/produccion'
+import Timer from '@/components/kiosk/Timer'
 import type { EstacionConStatus, EstacionPersonalRef } from '@/types/produccion'
 
 // Layout: 4 columnas × 5 filas. Assembly se "abre" en una celda por carpintero
@@ -166,7 +167,37 @@ function EstacionCell({ est }: { est: EstacionConStatus }) {
           ))
         )}
       </div>
+
+      {/* Items activos AHORA en esta estación (uno por operario que esté
+          trabajando). En estaciones multi-persona como Pintura puede haber
+          varios simultáneos. */}
+      {est.personal.some((p) => p.item_activo) && (
+        <div className="border-t border-gray-200/70 pt-2 mt-1 space-y-1">
+          {est.personal.filter((p) => p.item_activo).map((p) => (
+            <ItemActivoLine key={p.personal_id} persona={p} />
+          ))}
+        </div>
+      )}
     </Link>
+  )
+}
+
+// Línea compacta para mostrar el item que un operario tiene en curso.
+// Re-tickea cada segundo a través del componente Timer compartido.
+function ItemActivoLine({ persona }: { persona: EstacionPersonalRef }) {
+  if (!persona.item_activo) return null
+  const it = persona.item_activo
+  return (
+    <div className="flex items-center gap-1.5 text-[11px] leading-tight">
+      <Activity size={10} className="text-emerald-600 shrink-0 animate-pulse" />
+      <span className="font-bold text-forest-700">{persona.iniciales}</span>
+      <span className="text-gray-600 truncate">{it.numero_orden}</span>
+      <Timer
+        startISO={it.hora_inicio}
+        format="hm"
+        className="ml-auto font-bold text-emerald-700 tabular-nums shrink-0"
+      />
+    </div>
   )
 }
 
@@ -219,7 +250,7 @@ function CarpinteroCell({ est, persona }: { est: EstacionConStatus; persona: Est
         {persona.nombre_completo.split(' ')[0]}
       </div>
 
-      <div className="flex items-baseline gap-1 mt-auto">
+      <div className="flex items-baseline gap-1">
         <span className={clsx(
           'text-2xl font-bold tabular-nums',
           vacia ? 'text-gray-300' : sobreCarga ? 'text-amber-700' : 'text-emerald-700'
@@ -231,6 +262,21 @@ function CarpinteroCell({ est, persona }: { est: EstacionConStatus; persona: Est
         </span>
         {sobreCarga && <AlertTriangle size={12} className="text-amber-600 ml-1" />}
       </div>
+
+      {/* Item activo del carpintero AHORA (timer en vivo) */}
+      {persona.item_activo && (
+        <div className="mt-auto border-t border-emerald-200/70 pt-1.5 flex items-center gap-1.5 text-[11px]">
+          <Activity size={10} className="text-emerald-600 shrink-0 animate-pulse" />
+          <span className="text-forest-700 font-semibold truncate">
+            {persona.item_activo.numero_orden}
+          </span>
+          <Timer
+            startISO={persona.item_activo.hora_inicio}
+            format="hm"
+            className="ml-auto font-bold text-emerald-700 tabular-nums"
+          />
+        </div>
+      )}
     </Link>
   )
 }

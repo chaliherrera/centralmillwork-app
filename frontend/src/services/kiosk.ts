@@ -55,6 +55,14 @@ export const kioskService = {
   dia: () =>
     kioskApi.get<{ data: KioskDia }>('/time-tracking/dia').then((r) => r.data.data),
 
+  // Operario inicia/continúa el item asignado: abre time_proyectos linkeado.
+  // El backend setea fecha_inicio si era el primer arranque, o sólo abre
+  // segmento si era continuación. La respuesta incluye `era_primer_inicio`.
+  iniciarItemOrden: (ordenId: number) =>
+    kioskApi.post<{ data: { era_primer_inicio: boolean }; message: string }>(
+      `/ordenes/${ordenId}/iniciar-item`
+    ).then((r) => r.data),
+
   // Operario completa proceso de una orden
   completarProcesoOrden: (ordenId: number, notas?: string) =>
     kioskApi.post<{ data: { siguiente_estacion: string | null; status: string }; message: string }>(

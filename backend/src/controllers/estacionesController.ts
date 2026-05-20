@@ -41,6 +41,25 @@ export async function getEstaciones(_req: Request, res: Response, next: NextFunc
                  AND o3.personal_asignado_id = pt.id
                  AND o3.prioridad = 'Alta'
                  AND o3.status NOT IN ('Completada','Cancelada')
+             ),
+             -- Item ACTIVO ahora mismo del operario en ESTA estación.
+             -- Si tiene un segmento de time_proyectos abierto que matchea
+             -- (personal, estación), devolvemos info para mostrar timer en vivo.
+             'item_activo', (
+               SELECT jsonb_build_object(
+                 'orden_id',        op2.id,
+                 'numero_orden',    op2.numero_orden,
+                 'item_nombre',     op2.item_nombre,
+                 'hora_inicio',     tp.hora_inicio,
+                 'proyecto_codigo', pr2.codigo
+               )
+               FROM time_proyectos tp
+               JOIN ordenes_produccion op2 ON op2.id = tp.orden_produccion_id
+               LEFT JOIN proyectos pr2 ON pr2.id = op2.proyecto_id
+               WHERE tp.personal_id = pt.id
+                 AND tp.estacion    = ec.nombre
+                 AND tp.hora_fin   IS NULL
+               LIMIT 1
              )
            )) FILTER (WHERE pt.id IS NOT NULL),
            '[]'::json

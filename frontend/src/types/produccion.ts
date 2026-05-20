@@ -108,6 +108,15 @@ export interface PersonalTaller {
 
 // ─── Estaciones ──────────────────────────────────────────────────────────────
 
+/** Item activo de un operario (segmento de time_proyectos abierto AHORA). */
+export interface EstacionPersonalItemActivo {
+  orden_id: number
+  numero_orden: string
+  item_nombre: string
+  hora_inicio: string       // ISO — para el timer en vivo
+  proyecto_codigo: string | null
+}
+
 export interface EstacionPersonalRef {
   personal_id: number
   nombre_completo: string
@@ -117,6 +126,9 @@ export interface EstacionPersonalRef {
    *  en estado Pendiente / En Proceso / Pausada. */
   ordenes_activas: number
   ordenes_alta_prioridad: number
+  /** Item que el operario está trabajando AHORA en esta estación (si hay un
+   *  segmento de time_proyectos abierto). Null si está idle o en otra estación. */
+  item_activo: EstacionPersonalItemActivo | null
 }
 
 export interface EstacionConStatus {
@@ -235,9 +247,17 @@ export interface ReportePersonalRegistro {
   hora_entrada: string
   hora_salida: string | null
   total_horas: number | null
+  horas_brutas: number | null
   dispositivo: string | null
+  /** Trabajo en items asignados (orden_produccion_id != null) */
+  horas_items: number
+  /** Otro trabajo libre (orden_produccion_id = null) */
+  horas_otro_trabajo: number
+  /** items + otro_trabajo (compat con UI vieja) */
   horas_proyectos: number
   horas_pausas: number
+  /** Tiempo sin asignar = brutas − items − otro − pausas */
+  horas_sin_asignar: number
   proyectos: {
     proyecto_id: number
     proyecto_codigo: string

@@ -8,7 +8,7 @@ import {
   iniciarPausa, finalizarPausa,
   diaActual, proyectosDisponibles,
 } from '../controllers/timeTrackingController'
-import { avanzarOrdenInterno } from '../controllers/produccionController'
+import { avanzarOrdenInterno, iniciarItemKiosk } from '../controllers/produccionController'
 import { getDocumentosKiosk } from '../controllers/documentosController'
 import pool from '../db/pool'
 import { createError } from '../middleware/errorHandler'
@@ -41,6 +41,10 @@ router.post('/time-tracking/pausa/finalizar',     finalizarPausa)
 router.get('/time-tracking/dia',          diaActual)
 
 // ─── Acción del operario sobre una orden de producción ───────────────────────
+// El operario hace click "Iniciar item" / "Continuar item" en su Asignación.
+// Abre un segmento de time_proyectos linkeado a la orden + estación + persona.
+router.post('/ordenes/:id/iniciar-item', iniciarItemKiosk)
+
 // El operario marca "terminé mi proceso" desde la tablet → la orden avanza.
 router.post('/ordenes/:id/completar-proceso', async (req, res, next) => {
   try {
@@ -92,6 +96,32 @@ router.get('/mi-cola', async (req, res, next) => {
          op.completado     AS mi_proceso_completado,
          op.fecha_inicio   AS mi_proceso_inicio,
          (op.estacion = o.estacion_actual) AS es_estacion_activa,
+         -- Estado del proceso desde el punto de vista del operario:
+         --   'no_iniciado' = nunca se hizo "Iniciar item" (fecha_inicio NULL)
+         --   'en_curso'    = hay un segmento abierto de time_proyectos AHORA
+         --   'pausado'     = se inició antes pero no hay segmento abierto
+         -- (ej: se cerró por clock-out o por cambio a otro item)
+         CASE
+           WHEN op.fecha_inicio IS NULL THEN 'no_iniciado'
+           WHEN EXISTS (
+             SELECT 1 FROM time_proyectos tp
+             WHERE tp.personal_id = $1
+               AND tp.orden_produccion_id = o.id
+               AND tp.estacion = op.estacion
+               AND tp.hora_fin IS NULL
+           ) THEN 'en_curso'
+           ELSE 'pausado'
+         END AS proceso_estado,
+         -- Minutos ya trabajados en este proceso (sum de segmentos cerrados).
+         -- Permite mostrar "Continuar · 2h ayer" en el frontend.
+         COALESCE((
+           SELECT ROUND(SUM(EXTRACT(EPOCH FROM (tp.hora_fin - tp.hora_inicio)) / 60))::int
+           FROM time_proyectos tp
+           WHERE tp.personal_id = $1
+             AND tp.orden_produccion_id = o.id
+             AND tp.estacion = op.estacion
+             AND tp.hora_fin IS NOT NULL
+         ), 0) AS minutos_previos,
          -- Docs disponibles para esta orden+estación del operario, sumando
          -- los docs generales de la orden (estacion IS NULL). Si > 0, el
          -- frontend muestra el botón "Ver planos".
@@ -106,8 +136,21 @@ router.get('/mi-cola', async (req, res, next) => {
          AND o.status IN ('Pendiente','En Proceso','Pausada')
          AND op.completado = false
        ORDER BY
+         -- 1. Lo que estoy haciendo AHORA (segmento abierto)
+         CASE WHEN EXISTS (
+           SELECT 1 FROM time_proyectos tp
+           WHERE tp.personal_id = $1
+             AND tp.orden_produccion_id = o.id
+             AND tp.estacion = op.estacion
+             AND tp.hora_fin IS NULL
+         ) THEN 0 ELSE 1 END,
+         -- 2. Lo que dejé pausado (fecha_inicio NOT NULL, sin segmento abierto)
+         CASE WHEN op.fecha_inicio IS NOT NULL THEN 0 ELSE 1 END,
+         -- 3. Mi turno actual en la orden
          (op.estacion = o.estacion_actual) DESC,
+         -- 4. Por prioridad
          CASE o.prioridad WHEN 'Alta' THEN 0 WHEN 'Media' THEN 1 ELSE 2 END,
+         -- 5. Por fecha de entrega
          o.fecha_entrega ASC NULLS LAST`,
       [personalId]
     )

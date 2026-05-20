@@ -55,6 +55,8 @@ export interface KioskProyectoDisponible {
   estado: string
 }
 
+export type ProcesoEstado = 'no_iniciado' | 'en_curso' | 'pausado'
+
 export interface KioskOrdenEnCola {
   id: number
   numero_orden: string
@@ -71,6 +73,13 @@ export interface KioskOrdenEnCola {
   mi_proceso_completado: boolean
   mi_proceso_inicio: string | null
   es_estacion_activa: boolean
+  /** Estado del proceso desde el punto de vista del operario:
+   *   - 'no_iniciado': nunca se hizo click "Iniciar item" (fecha_inicio NULL)
+   *   - 'en_curso':    hay un segmento de time_proyectos ABIERTO ahora
+   *   - 'pausado':     se inició antes pero no hay segmento abierto (clock-out o cambio) */
+  proceso_estado: ProcesoEstado
+  /** Minutos ya trabajados en este proceso (suma de segmentos cerrados). */
+  minutos_previos: number
   /** Documentos disponibles para esta orden + estación del operario (incluye los generales). */
   docs_count: number
 }
@@ -109,8 +118,22 @@ export interface KioskDiaPausa {
   duracion_minutos: number | null
 }
 
+export interface KioskDiaTotales {
+  /** Minutos totales de la jornada (entrada → ahora o salida) */
+  minutos_jornada: number
+  /** Trabajo en items asignados (orden_produccion_id != null) */
+  minutos_items: number
+  /** Otro trabajo libre (orden_produccion_id = null) */
+  minutos_otro_trabajo: number
+  /** Pausas formales */
+  minutos_pausas: number
+  /** Tiempo "muerto" capturado en silencio: jornada − items − otro − pausas */
+  minutos_sin_asignar: number
+}
+
 export interface KioskDia {
   registro: KioskRegistroActivo | null
   proyectos: KioskDiaSegmento[]
   pausas: KioskDiaPausa[]
+  totales: KioskDiaTotales
 }

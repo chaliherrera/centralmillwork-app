@@ -211,12 +211,21 @@ export async function finalizarPausa(req: Request, res: Response, next: NextFunc
 /**
  * GET /api/kiosk/time-tracking/dia
  * Resumen del día del operario logueado: registro, proyectos del día, pausas, totales.
+ *
+ * Totales derivados (los 4 buckets de la jornada):
+ *   - minutos_items        = trabajo en items asignados (orden_produccion_id != null)
+ *   - minutos_otro_trabajo = "Otro trabajo" libre (orden_produccion_id = null)
+ *   - minutos_pausas       = breaks formales
+ *   - minutos_sin_asignar  = jornada total − los 3 anteriores (tiempo entre items,
+ *                            análisis, ir al baño, llamadas, etc. — capturado en
+ *                            silencio)
+ * Para segmentos abiertos se usa NOW() como hora_fin implícita.
  */
 export async function diaActual(req: Request, res: Response, next: NextFunction) {
   try {
     const personal_id = req.kioskUser!.personal_id
 
-    const [registroQ, proyectosQ, pausasQ] = await Promise.all([
+    const [registroQ, proyectosQ, pausasQ, totalesQ] = await Promise.all([
       pool.query(
         `SELECT * FROM time_registros
          WHERE personal_id = $1 AND fecha = CURRENT_DATE
@@ -237,13 +246,74 @@ export async function diaActual(req: Request, res: Response, next: NextFunction)
          ORDER BY hora_inicio`,
         [personal_id]
       ),
+      pool.query(
+        `WITH reg AS (
+          SELECT id, hora_entrada,
+                 COALESCE(hora_salida, NOW()) AS fin_efectivo
+          FROM time_registros
+          WHERE personal_id = $1 AND fecha = CURRENT_DATE
+          ORDER BY hora_entrada DESC LIMIT 1
+        )
+        SELECT
+          reg.id IS NOT NULL AS hay_jornada,
+          COALESCE(
+            ROUND(EXTRACT(EPOCH FROM (reg.fin_efectivo - reg.hora_entrada)) / 60), 0
+          )::int AS minutos_jornada,
+          COALESCE((
+            SELECT ROUND(SUM(
+              EXTRACT(EPOCH FROM (COALESCE(tp.hora_fin, NOW()) - tp.hora_inicio)) / 60
+            ))::int
+            FROM time_proyectos tp
+            WHERE tp.personal_id = $1
+              AND tp.hora_inicio::date = CURRENT_DATE
+              AND tp.orden_produccion_id IS NOT NULL
+          ), 0) AS minutos_items,
+          COALESCE((
+            SELECT ROUND(SUM(
+              EXTRACT(EPOCH FROM (COALESCE(tp.hora_fin, NOW()) - tp.hora_inicio)) / 60
+            ))::int
+            FROM time_proyectos tp
+            WHERE tp.personal_id = $1
+              AND tp.hora_inicio::date = CURRENT_DATE
+              AND tp.orden_produccion_id IS NULL
+          ), 0) AS minutos_otro_trabajo,
+          COALESCE((
+            SELECT ROUND(SUM(
+              EXTRACT(EPOCH FROM (COALESCE(pa.hora_fin, NOW()) - pa.hora_inicio)) / 60
+            ))::int
+            FROM time_pausas pa
+            WHERE pa.personal_id = $1
+              AND pa.hora_inicio::date = CURRENT_DATE
+          ), 0) AS minutos_pausas
+        FROM reg`,
+        [personal_id]
+      ),
     ])
+
+    // Si no hay jornada aún, devolvemos todos los buckets en 0
+    const totRow = totalesQ.rows[0]
+    const totales = totRow ? {
+      minutos_jornada:        Number(totRow.minutos_jornada)        || 0,
+      minutos_items:          Number(totRow.minutos_items)          || 0,
+      minutos_otro_trabajo:   Number(totRow.minutos_otro_trabajo)   || 0,
+      minutos_pausas:         Number(totRow.minutos_pausas)         || 0,
+      minutos_sin_asignar:    Math.max(0,
+        (Number(totRow.minutos_jornada) || 0)
+        - (Number(totRow.minutos_items) || 0)
+        - (Number(totRow.minutos_otro_trabajo) || 0)
+        - (Number(totRow.minutos_pausas) || 0)
+      ),
+    } : {
+      minutos_jornada: 0, minutos_items: 0, minutos_otro_trabajo: 0,
+      minutos_pausas: 0, minutos_sin_asignar: 0,
+    }
 
     res.json({
       data: {
         registro:  registroQ.rows[0]  ?? null,
         proyectos: proyectosQ.rows,
         pausas:    pausasQ.rows,
+        totales,
       },
     })
   } catch (err) { next(err) }
@@ -315,42 +385,79 @@ export async function reportePersonal(req: Request, res: Response, next: NextFun
     const fechaDesde = String(req.query.fecha_desde ?? '1900-01-01')
     const fechaHasta = String(req.query.fecha_hasta ?? '2999-12-31')
 
+    // Calculamos los 4 buckets como subqueries por jornada (no via JOIN para
+    // evitar el cartesian product de tp × pa que distorsiona el SUM):
+    //   - horas_items        = trabajo en items (orden_produccion_id != null)
+    //   - horas_otro_trabajo = trabajo libre   (orden_produccion_id = null)
+    //   - horas_pausas       = breaks formales
+    //   - horas_sin_asignar  = brutas − los 3 anteriores (tiempo muerto)
     const { rows } = await pool.query(
       `SELECT
          tr.id,
          tr.fecha,
          tr.hora_entrada,
          tr.hora_salida,
-         tr.total_horas,
+         tr.total_horas AS horas_brutas,
          tr.dispositivo,
-         COALESCE(SUM(EXTRACT(EPOCH FROM (
-           COALESCE(tp.hora_fin, tr.hora_salida) - tp.hora_inicio
-         )) / 3600) FILTER (WHERE tp.id IS NOT NULL), 0) AS horas_proyectos,
-         COALESCE(SUM(EXTRACT(EPOCH FROM (
-           COALESCE(pa.hora_fin, tr.hora_salida) - pa.hora_inicio
-         )) / 3600) FILTER (WHERE pa.id IS NOT NULL), 0) AS horas_pausas,
-         COALESCE(json_agg(DISTINCT jsonb_build_object(
-           'proyecto_id',     tp.proyecto_id,
-           'proyecto_codigo', p.codigo,
-           'proyecto_nombre', p.nombre,
-           'estacion',        tp.estacion,
-           'horas',           tp.total_horas
-         )) FILTER (WHERE tp.id IS NOT NULL), '[]'::json) AS proyectos
+         COALESCE((
+           SELECT SUM(EXTRACT(EPOCH FROM (
+             COALESCE(tp.hora_fin, tr.hora_salida, NOW()) - tp.hora_inicio
+           )) / 3600)
+           FROM time_proyectos tp
+           WHERE tp.registro_id = tr.id AND tp.orden_produccion_id IS NOT NULL
+         ), 0) AS horas_items,
+         COALESCE((
+           SELECT SUM(EXTRACT(EPOCH FROM (
+             COALESCE(tp.hora_fin, tr.hora_salida, NOW()) - tp.hora_inicio
+           )) / 3600)
+           FROM time_proyectos tp
+           WHERE tp.registro_id = tr.id AND tp.orden_produccion_id IS NULL
+         ), 0) AS horas_otro_trabajo,
+         COALESCE((
+           SELECT SUM(EXTRACT(EPOCH FROM (
+             COALESCE(pa.hora_fin, tr.hora_salida, NOW()) - pa.hora_inicio
+           )) / 3600)
+           FROM time_pausas pa
+           WHERE pa.registro_id = tr.id
+         ), 0) AS horas_pausas,
+         COALESCE((
+           SELECT json_agg(DISTINCT jsonb_build_object(
+             'proyecto_id',     tp.proyecto_id,
+             'proyecto_codigo', p.codigo,
+             'proyecto_nombre', p.nombre,
+             'estacion',        tp.estacion,
+             'horas',           tp.total_horas
+           ))
+           FROM time_proyectos tp
+           LEFT JOIN proyectos p ON p.id = tp.proyecto_id
+           WHERE tp.registro_id = tr.id
+         ), '[]'::json) AS proyectos
        FROM time_registros tr
-       LEFT JOIN time_proyectos tp ON tp.registro_id = tr.id
-       LEFT JOIN proyectos       p  ON p.id  = tp.proyecto_id
-       LEFT JOIN time_pausas    pa ON pa.registro_id = tr.id
        WHERE tr.personal_id = $1
          AND tr.fecha BETWEEN $2 AND $3
-       GROUP BY tr.id
        ORDER BY tr.fecha DESC`,
       [req.params.id, fechaDesde, fechaHasta]
     )
 
+    // Calcular "sin asignar" en JS (brutas - items - otro - pausas)
+    const registros = rows.map((r) => {
+      const brutas = Number(r.horas_brutas ?? 0)
+      const items  = Number(r.horas_items ?? 0)
+      const otro   = Number(r.horas_otro_trabajo ?? 0)
+      const pausas = Number(r.horas_pausas ?? 0)
+      return {
+        ...r,
+        // alias para compatibilidad con UI vieja
+        total_horas:     brutas,
+        horas_proyectos: items + otro,
+        horas_sin_asignar: Math.max(0, brutas - items - otro - pausas),
+      }
+    })
+
     res.json({
       personal_id: parseInt(String(req.params.id)),
       periodo: { desde: fechaDesde, hasta: fechaHasta },
-      registros: rows,
+      registros,
     })
   } catch (err) { next(err) }
 }
@@ -452,33 +559,55 @@ export async function exportarHoras(req: Request, res: Response, next: NextFunct
         personalId ? [personalId] : []
       )
 
-      // Hoja resumen
+      // Hoja resumen — incluye los 4 buckets de tiempo para nómina y análisis
       const resumen: any[] = []
       for (const p of personalQ.rows) {
         const { rows: jornadas } = await pool.query(
           `SELECT
              tr.fecha, tr.hora_entrada, tr.hora_salida, tr.total_horas,
-             COALESCE(SUM(pa.duracion_minutos) / 60, 0) AS horas_pausas,
-             COALESCE(SUM(pa.duracion_minutos) / 60, 0) AS pausas_total
+             COALESCE((
+               SELECT SUM(EXTRACT(EPOCH FROM (
+                 COALESCE(tp.hora_fin, tr.hora_salida, NOW()) - tp.hora_inicio
+               )) / 3600)
+               FROM time_proyectos tp
+               WHERE tp.registro_id = tr.id AND tp.orden_produccion_id IS NOT NULL
+             ), 0) AS horas_items,
+             COALESCE((
+               SELECT SUM(EXTRACT(EPOCH FROM (
+                 COALESCE(tp.hora_fin, tr.hora_salida, NOW()) - tp.hora_inicio
+               )) / 3600)
+               FROM time_proyectos tp
+               WHERE tp.registro_id = tr.id AND tp.orden_produccion_id IS NULL
+             ), 0) AS horas_otro_trabajo,
+             COALESCE((
+               SELECT SUM(EXTRACT(EPOCH FROM (
+                 COALESCE(pa.hora_fin, tr.hora_salida, NOW()) - pa.hora_inicio
+               )) / 3600)
+               FROM time_pausas pa
+               WHERE pa.registro_id = tr.id
+             ), 0) AS horas_pausas
            FROM time_registros tr
-           LEFT JOIN time_pausas pa ON pa.registro_id = tr.id
            WHERE tr.personal_id = $1 AND tr.fecha BETWEEN $2 AND $3
-           GROUP BY tr.id
            ORDER BY tr.fecha`,
           [p.id, fechaDesde, fechaHasta]
         )
         for (const j of jornadas) {
+          const brutas = j.total_horas != null ? Number(j.total_horas) : 0
+          const items  = Number(j.horas_items ?? 0)
+          const otro   = Number(j.horas_otro_trabajo ?? 0)
+          const pausas = Number(j.horas_pausas ?? 0)
+          const sinAsignar = Math.max(0, brutas - items - otro - pausas)
           resumen.push({
             'Persona': p.nombre_completo,
             'Iniciales': p.iniciales,
             'Fecha': j.fecha,
             'Entrada': j.hora_entrada ? new Date(j.hora_entrada).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' }) : '',
             'Salida':  j.hora_salida  ? new Date(j.hora_salida).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit'  }) : '',
-            'Horas brutas': j.total_horas != null ? Number(j.total_horas).toFixed(2) : '',
-            'Horas pausas': Number(j.horas_pausas).toFixed(2),
-            'Horas netas':  j.total_horas != null
-              ? (Number(j.total_horas) - Number(j.horas_pausas)).toFixed(2)
-              : '',
+            'Horas brutas':  j.total_horas != null ? brutas.toFixed(2) : '',
+            'En items':      items.toFixed(2),
+            'Otro trabajo':  otro.toFixed(2),
+            'Pausas':        pausas.toFixed(2),
+            'Sin asignar':   sinAsignar.toFixed(2),
           })
         }
       }
