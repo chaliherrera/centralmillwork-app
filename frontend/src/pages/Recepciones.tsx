@@ -521,8 +521,21 @@ function OcCard({ oc, selected, onClick }: { oc: OrdenCompra; selected: boolean;
               : 'border-orange-200 hover:border-orange-300 bg-orange-50/10'
       )}>
       <div className="flex items-center justify-between gap-2">
-        <span className="font-mono text-xs font-bold text-forest-700">{oc.numero}</span>
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-1.5 min-w-0">
+          <span className="font-mono text-xs font-bold text-forest-700">{oc.numero}</span>
+          {oc.origen === 'DIRECTA' && (
+            <span className="text-[10px] px-1.5 py-0 rounded font-bold tracking-wide bg-cyan-100 text-cyan-700">DIRECTA</span>
+          )}
+          {oc.origen === 'URGENTE' && (
+            <span className="text-[10px] px-1.5 py-0 rounded font-bold tracking-wide bg-red-100 text-red-700 inline-flex items-center gap-0.5">
+              <AlertTriangle size={9} /> URGENTE
+            </span>
+          )}
+          {oc.origen === 'OPERATIVA' && (
+            <span className="text-[10px] px-1.5 py-0 rounded font-bold tracking-wide bg-orange-100 text-orange-700">OPERATIVA</span>
+          )}
+        </div>
+        <div className="flex items-center gap-1 flex-shrink-0">
           {oc.flag_vencida && <span className="w-2 h-2 rounded-full bg-red-500" title="ETA vencida" />}
           {oc.flag_2dias && !oc.flag_vencida && <span className="w-2 h-2 rounded-full bg-orange-400" title="Vence en 2 días" />}
           {isTransito && <Truck size={12} className="text-blue-500" />}
@@ -637,9 +650,36 @@ export default function Recepciones() {
     if (fechaHasta) l = l.filter((o) => (o.fecha_emision ?? '') <= fechaHasta)
     return l
   }
-  const ordenados  = useMemo(() => applyDateFilter(allOrdenados), [allOrdenados, fechaDesde, fechaHasta])
-  const enTransito = useMemo(() => applyDateFilter(allTransito),  [allTransito,  fechaDesde, fechaHasta])
-  const enTaller   = useMemo(() => applyDateFilter(allTaller),    [allTaller,    fechaDesde, fechaHasta])
+
+  // Sort de prioridad para Recepciones:
+  // 1) Las URGENTE siempre arriba (origen='URGENTE') — visibilidad crítica
+  //    sin importar la fecha, decisión del usuario
+  // 2) Después, por fecha_entrega_estimada ASC con NULLs al final:
+  //    - Vencidas (fechas pasadas) → arriba dentro de su grupo
+  //    - Próximas: de más cerca a más lejos
+  //    - Sin ETA: al final (no estorban)
+  // Aplica a las columnas ORDENADO y EN TRÁNSITO. EN_EL_TALLER no se sortea
+  // por ETA porque ya está recibida — se mantiene el orden default (fecha_emision desc).
+  const sortByEta = (list: OrdenCompra[]) =>
+    [...list].sort((a, b) => {
+      // URGENTE arriba siempre
+      const aUrg = a.origen === 'URGENTE'
+      const bUrg = b.origen === 'URGENTE'
+      if (aUrg && !bUrg) return -1
+      if (!aUrg && bUrg) return 1
+
+      // Dentro de su grupo, sort por ETA ASC con NULLs al final
+      const aEta = a.fecha_entrega_estimada
+      const bEta = b.fecha_entrega_estimada
+      if (!aEta && !bEta) return 0
+      if (!aEta) return 1
+      if (!bEta) return -1
+      return aEta.localeCompare(bEta)
+    })
+
+  const ordenados  = useMemo(() => sortByEta(applyDateFilter(allOrdenados)), [allOrdenados, fechaDesde, fechaHasta])
+  const enTransito = useMemo(() => sortByEta(applyDateFilter(allTransito)),  [allTransito,  fechaDesde, fechaHasta])
+  const enTaller   = useMemo(() => applyDateFilter(allTaller),               [allTaller,    fechaDesde, fechaHasta])
 
   const clearFilters = () => { setSearch(''); setVendorFilter(''); setFechaDesde(''); setFechaHasta(''); setSelectedOc(undefined) }
   const hasFilters   = !!(search || vendorFilter || fechaDesde || fechaHasta)
