@@ -11,6 +11,7 @@ export default defineConfig({
   },
   server: {
     port: 3000,
+    host: true,  // escucha en 0.0.0.0 — permite acceso desde iPad/celular vía IP local
     proxy: {
       '/api': {
         target: 'http://localhost:4000',
