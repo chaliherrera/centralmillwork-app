@@ -219,14 +219,21 @@ notas,
 fecha_importacion (DATE),
 manufacturer,
 cotizar (SI|NO|EN_STOCK, DEFAULT 'SI'),
-estado_cotiz (COTIZADO|PENDIENTE|EN_STOCK, DEFAULT 'PENDIENTE'),
+estado_cotiz (COTIZADO|PENDIENTE|EN_STOCK|ORDENADO|RECIBIDO, DEFAULT 'PENDIENTE'),
+origen (MTO|DIRECTA|URGENTE|OPERATIVA, DEFAULT 'MTO', CHECK constraint),
 created_at, updated_at
 ```
 
+> **NOTAS** (post-2026-05-16):
+> - `estado_cotiz` ahora soporta `ORDENADO` y `RECIBIDO` además de los 3 originales. Transiciones automáticas via `recomputeMaterialesEstadoByIds` (en `backend/src/utils/materialesEstado.ts`) llamado desde `generarOCs`, `updateEstadoOrden`, `deleteOrdenCompra`, `createRecepcion`, `createRecepcionCompleta`.
+> - `origen` distingue compras planificadas (MTO) de compras puntuales fuera del MTO (DIRECTA, URGENTE) y gastos del taller sin proyecto (OPERATIVA).
+
 **`ordenes_compra`**
 ```sql
-id, numero (UNIQUE), proyecto_id (FK), proveedor_id (FK),
-estado (ENUM: borrador|enviada|confirmada|parcial|recibida|cancelada),
+id, numero (UNIQUE), proyecto_id (FK, nullable para OPERATIVA), proveedor_id (FK),
+estado (ENUM: borrador|enviada|confirmada|parcial|recibida|cancelada|en_transito),
+origen (MTO|DIRECTA|URGENTE|OPERATIVA, DEFAULT 'MTO'),
+freight (NUMERIC(14,2) DEFAULT 0),
 fecha_emision, fecha_entrega_estimada, fecha_entrega_real,
 subtotal, iva, total, notas,
 -- Agregados:
@@ -299,15 +306,17 @@ GET    /api/dashboard/proyectos-recientes         — Proyectos paginados con st
 # Proyectos
 GET    /api/proyectos
 GET    /api/proyectos/:id
-POST   /api/proyectos
-PUT    /api/proyectos/:id
+GET    /api/proyectos/:id/resumen              — KPIs agregados (materiales, OCs, recepciones, top_vendors, gasto_mensual)
+GET    /api/proyectos/:id/actividad            — Timeline cronológico de eventos (MTO imports, OCs, recepciones)
+POST   /api/proyectos                          — Con validateBody(createProyectoSchema) zod
+PUT    /api/proyectos/:id                      — Con validateBody(updateProyectoSchema) zod
 DELETE /api/proyectos/:id
 
 # Proveedores
 GET    /api/proveedores
 GET    /api/proveedores/:id
-POST   /api/proveedores
-PUT    /api/proveedores/:id
+POST   /api/proveedores                        — Con validateBody(createProveedorSchema) zod
+PUT    /api/proveedores/:id                    — Con validateBody(updateProveedorSchema) zod
 DELETE /api/proveedores/:id
 
 # Materiales MTO
@@ -329,8 +338,9 @@ GET    /api/ordenes-compra/import-dates
 GET    /api/ordenes-compra/:id
 GET    /api/ordenes-compra/:id/materiales-lote    — Materiales agrupados por vendor para la OC
 GET    /api/ordenes-compra/:id/imagenes
-POST   /api/ordenes-compra/:id/imagenes           — Upload imagen (multipart/form-data)
+POST   /api/ordenes-compra/:id/imagenes           — Upload imagen (multipart/form-data, ?tipo=delivery_ticket|material_recibido)
 DELETE /api/imagenes/:imagenId
+POST   /api/ordenes-compra/no-mto                 — Crear OC DIRECTA/URGENTE/OPERATIVA (OPERATIVA solo ADMIN)
 POST   /api/ordenes-compra
 PUT    /api/ordenes-compra/:id
 PATCH  /api/ordenes-compra/:id/estado
@@ -423,13 +433,51 @@ Refleja el estado del proceso de cotización para cada material.
 ```
 borrador → enviada → confirmada → parcial → recibida
                                           ↘ cancelada
+                  ↘ en_transito
 ```
-Display en UI: `ORDENADO` (enviada/confirmada/parcial) | `EN_EL_TALLER` (recibida) | `CANCELADA`
+Display en UI: `ORDENADO` (enviada/confirmada/parcial) | `EN_TRANSITO` | `EN_EL_TALLER` (recibida) | `CANCELADA`
 
 Flags visuales calculados en backend:
 - `flag_vencida`: fecha_entrega_estimada < hoy y no recibida
 - `flag_retraso`: vencida > 3 días
 - `flag_2dias`: vence en ≤ 2 días
+
+### Origen de compras (campo `origen`, agregado 2026-05-16/17)
+
+Toda compra está clasificada con uno de 4 valores en `materiales_mto.origen` y `ordenes_compra.origen`:
+
+| Origen | Cuándo | Quién | Comportamiento |
+|---|---|---|---|
+| **MTO** (default) | Compras planificadas desde Excel | ADMIN+PROCUREMENT | Flujo normal cotización → OC → recepción |
+| **DIRECTA** | Puntual fuera del MTO (cliente cambió, vendor llegó con tema) | ADMIN+PROCUREMENT | OC dedicada, estado='enviada', total = subtotal + freight (sin IVA) |
+| **URGENTE** | Crítica (rotura en obra, cliente parado) | ADMIN+PROCUREMENT | Mismo flow que DIRECTA, badge rojo pulsante, sort URGENTE-first en kanban Recepciones |
+| **OPERATIVA** | Gasto del taller sin proyecto (insumos, café, herramientas) | **SOLO ADMIN** | proyecto_id=NULL obligatorio, OC nace en 'recibida', materiales en RECIBIDO directo |
+
+**Endpoint único**: `POST /api/ordenes-compra/no-mto` (controller `crearOCNoMTO`) maneja los 3 tipos no-MTO.
+
+**Categorías**:
+- MTO/DIRECTA/URGENTE: `MILLWORK | HARDWARE | PAINT | SOLID WOOD | EDGE BANDING | METAL | LAMINATE | GLASS | OTHER`
+- OPERATIVA: `INSUMOS_TALLER | LIMPIEZA | OFICINA | ALIMENTACION | COMBUSTIBLE | MANTENIMIENTO | HERRAMIENTAS | OTROS`
+
+### Estados de materiales con ORDENADO/RECIBIDO (agregado 2026-05-11)
+
+`materiales_mto.estado_cotiz` tiene 5 valores:
+
+| Valor | Significado | Color |
+|---|---|---|
+| `PENDIENTE` | cotizar='SI' sin precio | amarillo |
+| `COTIZADO` | con precio, listo para OC | verde claro |
+| `ORDENADO` | está en una OC activa (enviada/confirmada/parcial/en_transito) | morado |
+| `RECIBIDO` | está en una OC con estado='recibida' | verde oscuro |
+| `EN_STOCK` | stock propio (cotizar='EN_STOCK') | azul |
+
+**Transiciones automáticas** vía helper `recomputeMaterialesEstadoByIds` (en `backend/src/utils/materialesEstado.ts`):
+- Crear OC (generarOCs, crearOCNoMTO) → COTIZADO/PENDIENTE → ORDENADO
+- OC pasa a recibida (updateEstadoOrden, createRecepcion, createRecepcionCompleta) → ORDENADO → RECIBIDO
+- OC cancelada o eliminada (updateEstadoOrden, deleteOrdenCompra) → recompute (RECIBIDO si otra OC; ORDENADO si en otra OC activa; sino COTIZADO)
+- OPERATIVA: salta directo a RECIBIDO al crear (no pasa por flujo)
+
+**Regla defensiva**: el helper solo toca materiales con `estado_cotiz IN ('COTIZADO','ORDENADO','RECIBIDO')`. NO toca PENDIENTE ni EN_STOCK.
 
 ---
 
@@ -489,39 +537,53 @@ Usa proxy de Vite: `/api/*` → `http://localhost:4000/api/*`. No requiere `.env
 
 ## Estado actual y pendientes
 
-### Funcionalidad activa
+### Funcionalidad activa (al 2026-05-17, lanzamiento oficial 2026-05-18)
+
 - [x] Dashboard con filtros, 8 KPIs, 5 gráficas, resumen estados, proyectos recientes
-- [x] Proyectos CRUD completo
-- [x] Materiales MTO: importación, filtros, toggle cotizar 3 estados, captura de precios
-- [x] Órdenes de Compra CRUD + adjuntos de imágenes + estados
-- [x] Recepciones
-- [x] Proveedores CRUD
+- [x] Proyectos CRUD completo + **vista de detalle** `/proyectos/:id` con 5 tabs (Materiales, OCs, Recepciones, Actividad timeline, Gráficas)
+- [x] Materiales MTO: importación, filtros (incluye `origen`), toggle cotizar 3 estados, captura de precios
+- [x] Órdenes de Compra CRUD + adjuntos de imágenes + estados + **compras SIN-MTO** (DIRECTA/URGENTE/OPERATIVA)
+- [x] Recepciones con kanban URGENTE-first ordenado por ETA
+- [x] Proveedores CRUD con validación zod
+- [x] Cotizaciones (PDF cliente + email manual, sin SMTP)
+- [x] **Autenticación implementada** con JWT, 5 roles (ADMIN, PROCUREMENT, PRODUCTION, PROJECT_MANAGEMENT, CONTABILIDAD)
+- [x] **Seguridad endurecida** (2026-05-16): helmet, parameterized queries, role guards, validateBody, escape XSS en reportes, whitelist tipos upload
+- [x] App móvil iOS (Expo) con flujo de recepciones; build 1.0.0 (3) en TestFlight "Ready to Submit"
 
 ### Pendientes conocidos
 
-1. **Migración 009 puede no estar aplicada** — verificar con:
+1. **Rotar password de Postgres en Railway** — `DATABASE_URL` se compartió múltiples veces por chat. Acción de usuario en Railway dashboard.
+
+2. **Migración 009 puede no estar aplicada** — verificar con:
    ```sql
    SELECT cotizar, estado_cotiz, COUNT(*) FROM materiales_mto GROUP BY cotizar, estado_cotiz;
    ```
-   Si aparecen filas con `cotizar='NO'` y `unit_price > 0`, correr el script de backfill.
 
-2. **Botones "Reporte Compras" / "Reporte Producción"** en Dashboard — están renderizados pero sin funcionalidad (PDF/Excel export no implementado).
+3. **Migrations 004, 008, 009 fallan en fresh install** (asumen columnas que se agregan en otras migraciones). Hay un workaround en `database/seed_local_test.sql` (no commiteado).
 
-3. **Cotizaciones** — la página `Cotizaciones.tsx` y sus rutas de API existen pero el módulo fue removido del menú de navegación. La funcionalidad fue absorbida por el flujo de cotizar en Materiales MTO.
+4. **Botón "Reporte Producción"** en Dashboard — sigue sin funcionalidad. "Reporte Compras" sí funciona. Decisión 2026-06-15: si nadie usa Reportes en 30 días, eliminar el módulo entero (decisión "Opción C" del 2026-05-16).
 
-4. **Autenticación** — las tablas `usuarios` y dependencias (`bcryptjs`, `jsonwebtoken`) están instaladas pero el sistema no tiene login implementado. La app corre sin autenticación.
+5. **Cotizaciones** — la página `Cotizaciones.tsx` y sus rutas de API existen pero el módulo fue removido del menú. La funcionalidad fue absorbida por el flujo de cotizar en Materiales MTO.
 
-5. **`mto_freight` en la tabla** — el freight se guarda en `mto_freight` por `(proyecto_id, vendor)`. Si un material no tiene `proyecto_id`, el freight no se puede asociar.
+6. **`mto_freight`** — el freight se guarda en `mto_freight` por `(proyecto_id, vendor)` para flujo MTO. Las OCs SIN-MTO guardan freight directamente en `ordenes_compra.freight`.
 
-6. **`getDashboardProyectosRecientes`** no acepta los mismos filtros de material que los demás endpoints de dashboard — los stats de proyectos son siempre globales, sin filtrar por vendor/categoría/fecha.
+7. **Validaciones zod faltan en endpoints write restantes** — materiales, ordenes_compra, recepciones, cotizaciones tienen validación manual inline pero no usan el patrón `validateBody(schema)` de proyectos/proveedores. ~2 hs replicar.
+
+8. **JWT en localStorage** — vulnerable a XSS si la app crece con inputs externos. Acceptado como debt para usuarios internos. Migrar a httpOnly cookies requiere refactor (~6 hs).
+
+9. **Branch `claude/jovial-ride-64bfff`** con módulo Producción + Kiosko (migraciones 014-019) pendiente de mergear a main. Conflicto de numeración con migrations 019-023 ya aplicadas en main.
 
 ---
 
 ## Notas para Claude
 
-- El backend usa **queries dinámicas con arrays de condiciones** — al agregar filtros, siempre construir `conds: string[]` + `vals: any[]` con índices `$i` explícitos.
-- El campo `cotizar` en `materiales_mto` es `TEXT` (no ENUM) para permitir `EN_STOCK` sin ALTER TYPE. Los valores válidos son `'SI'`, `'NO'`, `'EN_STOCK'`.
-- **`replace_all` es peligroso** en archivos de tipos/servicios — siempre reemplazar strings puntuales, no patrones amplios, para evitar afectar campos similares (ej: `mill_made` y `cotizar` comparten el tipo `'SI' | 'NO'`).
+- El backend usa **queries dinámicas con arrays de condiciones** — al agregar filtros, siempre construir `conds: string[]` + `vals: any[]` con índices `$i` explícitos. **NUNCA** interpolar `req.query.*` directo en SQL (SQL injection); el patrón seguro está en `ordenesCompraController.getOrdenesCompra` y `materialesController.getMateriales`.
+- El campo `cotizar` en `materiales_mto` es `TEXT` (no ENUM) para permitir `EN_STOCK` sin ALTER TYPE. Los valores válidos son `'SI'`, `'NO'`, `'EN_STOCK'`. Lo mismo `estado_cotiz` y `origen`.
+- **`replace_all` es peligroso** en archivos de tipos/servicios — siempre reemplazar strings puntuales, no patrones amplios, para evitar afectar campos similares.
 - El `unit_price` en `materiales_mto` viene originalmente de importación Excel; puede ser `0` si el material aún no tiene precio cotizado.
 - `SELECT DISTINCT` en PostgreSQL requiere que las columnas de `ORDER BY` estén en el `SELECT`. Siempre incluir la columna raw (sin cast) cuando se ordena y se selecciona con cast.
-- Las imágenes de OC se sirven como archivos estáticos desde `http://localhost:4000/uploads/<filename>`.
+- Las imágenes de OC viven en Supabase Storage (bucket `oc-imagenes`); el código en `imagenesController.ts` cubre fallback a filesystem local si Supabase no está configurado.
+- **Helper crítico**: `backend/src/utils/materialesEstado.ts` — siempre llamarlo dentro de cualquier endpoint que cambie `ordenes_compra.estado` o cree/elimine items_orden_compra. Mantiene la sincronía de `materiales_mto.estado_cotiz`.
+- **Middleware crítico**: `backend/src/middleware/validate.ts` con `validateBody(zodSchema)` — usar en TODOS los nuevos endpoints write. Pattern establecido en proyectos/proveedores.
+- **Working directory activo**: `C:\dev\centralmillwork-app\` (fuera de OneDrive). El clon viejo en OneDrive ya no se usa.
+- **Frontend invalidations**: usar `qc.invalidateQueries({ queryKey: [...], refetchType: 'all' })` para refrescar queries que pueden estar inactivas en otras páginas. Sin `refetchType: 'all'` los datos quedan stale hasta que el usuario vuelve a la página.
