@@ -131,6 +131,17 @@ export interface EstacionPersonalRef {
   item_activo: EstacionPersonalItemActivo | null
 }
 
+/** Orden destacada de una estación (la "running" o la primera de cola).
+ *  Usada por el Blueprint Map. Null si la estación está sin órdenes. */
+export interface EstacionOrdenRunning {
+  numero_orden: string
+  proyecto_nombre: string | null
+  proyecto_codigo: string | null
+  fecha_entrega: string | null
+  prioridad: Prioridad
+  state: 'running' | 'queued'
+}
+
 export interface EstacionConStatus {
   nombre: string
   tipo: string | null
@@ -141,6 +152,8 @@ export interface EstacionConStatus {
   ordenes_activas: number
   ordenes_pausadas: number
   ordenes_alta_prioridad: number
+  /** Orden destacada de la estación (running o primera de cola). Null si vacía. */
+  orden_running: EstacionOrdenRunning | null
   personal: EstacionPersonalRef[]
 }
 

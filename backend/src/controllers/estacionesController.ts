@@ -13,7 +13,7 @@ export async function getEstaciones(_req: Request, res: Response, next: NextFunc
       `-- ─── CTEs para evitar subconsultas correlacionadas dentro de json_agg(DISTINCT …)
        -- que pueden producir resultados incorrectos en PostgreSQL.
        WITH
-       -- 1. Segmento activo (hora_fin IS NULL) por (personal_id, estacion)
+       -- 1. Segmento activo (hora_fin IS NULL) por (personal_id, estacion) — para timer en vivo
        item_activos AS (
          SELECT DISTINCT ON (tp.personal_id, tp.estacion)
            tp.personal_id,
@@ -42,6 +42,37 @@ export async function getEstaciones(_req: Request, res: Response, next: NextFunc
          FROM ordenes_produccion
          WHERE personal_asignado_id IS NOT NULL
          GROUP BY personal_asignado_id, estacion_actual
+       ),
+       -- 3. Orden "running" por estación (la primera con segmento abierto en esa estación)
+       --    Usado por el Blueprint Map para mostrar el item en curso por estación
+       --    Si no hay segmento abierto, fallback al primer Pendiente/En Proceso por prioridad+fecha_entrega.
+       orden_running AS (
+         SELECT DISTINCT ON (estacion_actual)
+           o.estacion_actual                                          AS estacion,
+           o.numero_orden,
+           o.prioridad,
+           o.fecha_entrega,
+           p.nombre                                                   AS proyecto_nombre,
+           p.codigo                                                   AS proyecto_codigo,
+           CASE
+             WHEN EXISTS (SELECT 1 FROM time_proyectos tp
+                          WHERE tp.orden_produccion_id = o.id
+                            AND tp.hora_fin IS NULL)            THEN 'running'
+             ELSE 'queued'
+           END                                                        AS state
+         FROM ordenes_produccion o
+         LEFT JOIN proyectos p ON p.id = o.proyecto_id
+         WHERE o.estacion_actual IS NOT NULL
+           AND o.status IN ('Pendiente','En Proceso','Pausada')
+         ORDER BY
+           o.estacion_actual,
+           -- Items con segmento abierto primero
+           CASE WHEN EXISTS (SELECT 1 FROM time_proyectos tp
+                             WHERE tp.orden_produccion_id = o.id
+                               AND tp.hora_fin IS NULL) THEN 0 ELSE 1 END,
+           CASE o.prioridad WHEN 'Alta' THEN 0 WHEN 'Media' THEN 1 ELSE 2 END,
+           o.fecha_entrega ASC NULLS LAST,
+           o.created_at ASC
        )
        SELECT
          ec.nombre,
@@ -54,6 +85,17 @@ export async function getEstaciones(_req: Request, res: Response, next: NextFunc
          COUNT(o.id) FILTER (WHERE o.status = 'Pausada')                                          AS ordenes_pausadas,
          COUNT(o.id) FILTER (WHERE o.prioridad = 'Alta'
                                AND o.status NOT IN ('Completada','Cancelada'))                    AS ordenes_alta_prioridad,
+         -- Orden "running" para el Blueprint Map (puede ser null si la estación está vacía)
+         CASE WHEN orun.numero_orden IS NOT NULL THEN
+           jsonb_build_object(
+             'numero_orden',    orun.numero_orden,
+             'proyecto_nombre', orun.proyecto_nombre,
+             'proyecto_codigo', orun.proyecto_codigo,
+             'fecha_entrega',   orun.fecha_entrega,
+             'prioridad',       orun.prioridad,
+             'state',           orun.state
+           )
+         END                                                                                      AS orden_running,
          COALESCE(
            json_agg(DISTINCT jsonb_build_object(
              'personal_id',            pt.id,
@@ -72,7 +114,9 @@ export async function getEstaciones(_req: Request, res: Response, next: NextFunc
        LEFT JOIN personal_taller    pt  ON pt.id = pe.personal_id  AND pt.activo = true
        LEFT JOIN carga              c   ON c.personal_id = pt.id AND c.estacion  = ec.nombre
        LEFT JOIN item_activos       ia  ON ia.personal_id = pt.id AND ia.estacion = ec.nombre
-       GROUP BY ec.id
+       LEFT JOIN orden_running      orun ON orun.estacion = ec.nombre
+       GROUP BY ec.id, orun.numero_orden, orun.proyecto_nombre, orun.proyecto_codigo,
+                orun.fecha_entrega, orun.prioridad, orun.state
        ORDER BY ec.posicion_y NULLS LAST, ec.posicion_x, ec.nombre`
     )
     res.json({ data: rows })

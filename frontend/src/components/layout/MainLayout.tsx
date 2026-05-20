@@ -10,6 +10,8 @@ const pageTitles: Record<string, string> = {
   '/recepciones':     'Recepciones',
   '/proveedores':     'Proveedores',
   '/cotizaciones':    'Solicitudes de Cotización',
+  '/produccion':      'Producción',
+  '/usuarios':        'Usuarios',
 }
 
 export default function MainLayout() {
@@ -22,7 +24,7 @@ export default function MainLayout() {
       <Sidebar />
       <div className="flex flex-col flex-1 overflow-hidden">
         <Header title={title} />
-        <main className="flex-1 overflow-y-auto bg-gray-50">
+        <main className="flex-1 overflow-y-auto" style={{ backgroundColor: '#F6F4EE' }}>
           <div className="max-w-[1400px] mx-auto px-6 py-6">
             <Outlet />
           </div>

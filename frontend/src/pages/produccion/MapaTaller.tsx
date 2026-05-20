@@ -1,27 +1,68 @@
 import { useMemo } from 'react'
 import { Link } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
-import { Loader2, Users, AlertTriangle, Activity } from 'lucide-react'
-import clsx from 'clsx'
+import { Loader2 } from 'lucide-react'
 import { produccionService } from '@/services/produccion'
 import Timer from '@/components/kiosk/Timer'
-import type { EstacionConStatus, EstacionPersonalRef } from '@/types/produccion'
+import type { EstacionOrdenRunning } from '@/types/produccion'
 
-// Layout: 4 columnas × 5 filas. Assembly se "abre" en una celda por carpintero
-// en la columna 2 (posicion_x=2). El resto de las estaciones tienen posición fija
-// definida en estaciones_config (ver migración 018).
+// ─── Tokens blueprint (también definidos en tailwind, acá inline para SVGs y style) ────
+const BP = {
+  paper:      '#F2EEE4',
+  line:       '#C9C0AC',
+  ink:        '#1F1B14',
+  inkMuted:   '#7A6F58',
+  inkSubtle:  '#9C9384',
+  active:     '#16A34A',
+  warn:       '#D89412',
+  idle:       '#9C9384',
+  overdue:    '#B53A3A',
+}
+
+// ─── Tipo unificado de Card ──────────────────────────────────────────────────
+// Cada celda del Blueprint Map puede ser:
+//  - una estación normal (CNC, Edge, Pintura, …)
+//  - un carpintero individual de Assembly (Juan, Rolando, …)
+type CardData = {
+  id: string
+  col: 1 | 2 | 3 | 4
+  row: number
+  name: string
+  kind: 'machine' | 'assembly' | 'finishing' | 'output'
+  cap: number
+  status: 'active' | 'warn' | 'idle'
+  ordenes_activas: number
+  // Solo aplica a estaciones (no a celdas de carpintero individual)
+  workers: { ini: string; name: string }[]
+  // Item activo "running" para mostrar timer + datos del item
+  itemActivo: { numero_orden: string; hora_inicio: string } | null
+  // Orden destacada (running o queued) para mostrar proyecto + due
+  ordenRunning: EstacionOrdenRunning | null
+  // Solo para carpinteros: link directo a filtrar órdenes por personal
+  href: string
+}
+
+// ─── Layout: zonas y columnas ────────────────────────────────────────────────
+const ZONE_CODES = ['MAQ', 'ENS', 'ACA', 'SAL'] as const
+const ZONE_LABELS = ['Maquinado', 'Ensamble', 'Acabados', 'Salida'] as const
 const ASSEMBLY_COL_X = 2
-const GRID_COLS = 4
-const GRID_ROWS = 5
 
-// Cada celda de la grilla es:
-//  - una estación (`station`)
-//  - un carpintero individual de Assembly (`carpenter` con su personal info)
-//  - vacía (sin asignar)
-type Celda =
-  | { kind: 'station';   est: EstacionConStatus }
-  | { kind: 'carpenter'; est: EstacionConStatus; persona: EstacionPersonalRef }
+// Map de tipo de estación → kind del blueprint
+function estacionKind(nombre: string): CardData['kind'] {
+  if (nombre === 'cnc' || nombre === 'edge_banding') return 'machine'
+  if (nombre === 'assembly')                          return 'assembly'
+  if (nombre === 'pintura' || nombre === 'lamina')    return 'finishing'
+  return 'output'  // final / registro / shipping
+}
 
+function deriveStatus(activas: number, cap: number, hasOverdue = false): CardData['status'] {
+  if (activas === 0)        return 'idle'
+  if (activas > cap)        return 'warn'
+  if (hasOverdue)           return 'warn'
+  return 'active'
+}
+
+// ─── Componente principal ────────────────────────────────────────────────────
 export default function MapaTaller() {
   const { data: estaciones = [], isLoading } = useQuery({
     queryKey: ['estaciones'],
@@ -35,31 +76,85 @@ export default function MapaTaller() {
     refetchInterval: 30_000,
   })
 
-  const matriz = useMemo(() => {
-    const m: Record<string, Celda> = {}
+  // Convertir estaciones del backend en CardData[] (assembly se expande por carpintero)
+  const cards: CardData[] = useMemo(() => {
+    const out: CardData[] = []
 
-    // 1. Estaciones con posición explícita (todas menos assembly)
     for (const e of estaciones) {
-      if (e.nombre === 'assembly') continue
-      if (e.posicion_x != null && e.posicion_y != null) {
-        m[`${e.posicion_x},${e.posicion_y}`] = { kind: 'station', est: e }
+      if (e.nombre === 'assembly') {
+        // Una card por carpintero (col 2, rows 1..N)
+        const carpinteros = [...e.personal].sort((a, b) => a.personal_id - b.personal_id)
+        carpinteros.forEach((p, idx) => {
+          const cap = e.capacidad_max ?? 3
+          const status = deriveStatus(p.ordenes_activas, cap, p.ordenes_alta_prioridad > 0)
+          out.push({
+            id: `assembly-${p.personal_id}`,
+            col: ASSEMBLY_COL_X as 2,
+            row: idx + 1,
+            name: p.nombre_completo.split(' ')[0],
+            kind: 'assembly',
+            cap,
+            status,
+            ordenes_activas: p.ordenes_activas,
+            workers: [{ ini: p.iniciales, name: p.nombre_completo }],
+            itemActivo: p.item_activo ? {
+              numero_orden: p.item_activo.numero_orden,
+              hora_inicio:  p.item_activo.hora_inicio,
+            } : null,
+            // Para carpinteros, el "ordenRunning" se construye desde item_activo si existe
+            // (no tenemos fecha_entrega en item_activo, sólo numero_orden + proyecto_codigo)
+            ordenRunning: p.item_activo ? {
+              numero_orden:    p.item_activo.numero_orden,
+              proyecto_nombre: null,
+              proyecto_codigo: p.item_activo.proyecto_codigo,
+              fecha_entrega:   null,
+              prioridad:       'Media',
+              state:           'running',
+            } : null,
+            href: `/produccion/ordenes?estacion=assembly&personal_id=${p.personal_id}`,
+          })
+        })
+      } else if (e.posicion_x != null && e.posicion_y != null) {
+        const cap = e.capacidad_max ?? 1
+        const hasOverdue = (e.ordenes_alta_prioridad ?? 0) > 0
+        const status = deriveStatus(e.ordenes_activas, cap, hasOverdue)
+        // Buscar primer item_activo de cualquier operador en esa estación
+        const personaTrabajando = e.personal.find((p) => p.item_activo)
+        out.push({
+          id: e.nombre,
+          col: e.posicion_x as 1 | 2 | 3 | 4,
+          row: e.posicion_y,
+          name: prettyName(e.nombre),
+          kind: estacionKind(e.nombre),
+          cap,
+          status,
+          ordenes_activas: e.ordenes_activas,
+          workers: e.personal.map((p) => ({ ini: p.iniciales, name: p.nombre_completo })),
+          itemActivo: personaTrabajando?.item_activo ? {
+            numero_orden: personaTrabajando.item_activo.numero_orden,
+            hora_inicio:  personaTrabajando.item_activo.hora_inicio,
+          } : null,
+          ordenRunning: e.orden_running,
+          href: `/produccion/ordenes?estacion=${e.nombre}`,
+        })
       }
     }
+    return out
+  }, [estaciones])
 
-    // 2. Assembly: una celda por carpintero en la columna 2.
-    //    Orden estable por personal_id ascendente.
-    const assembly = estaciones.find((e) => e.nombre === 'assembly')
-    if (assembly) {
-      const carpinteros = [...assembly.personal].sort((a, b) => a.personal_id - b.personal_id)
-      carpinteros.forEach((p, idx) => {
-        const y = idx + 1
-        if (y <= GRID_ROWS) {
-          m[`${ASSEMBLY_COL_X},${y}`] = { kind: 'carpenter', est: assembly, persona: p }
-        }
-      })
-    }
+  // Agrupar por columnas
+  const columnas = useMemo(() => {
+    return [1, 2, 3, 4].map((c) =>
+      cards.filter((card) => card.col === c).sort((a, b) => a.row - b.row)
+    )
+  }, [cards])
 
-    return m
+  const totalEstaciones = cards.length
+  const totalOperadores = useMemo(() => {
+    // Operadores únicos por estación (no double-counting cuando un carp aparece en assembly)
+    const set = new Set<string>()
+    estaciones.forEach((e) => e.personal.forEach((p) => set.add(p.iniciales)))
+    return set.size
   }, [estaciones])
 
   if (isLoading) {
@@ -67,236 +162,397 @@ export default function MapaTaller() {
   }
 
   return (
-    <div className="space-y-4">
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <Kpi label="Órdenes activas"  value={kpis?.activas         ?? '—'} />
-        <Kpi label="Completadas hoy"  value={kpis?.completadas_hoy ?? '—'} />
-        <Kpi label="Pausadas"         value={kpis?.pausadas        ?? '—'} />
-        <Kpi label="Vencidas"         value={kpis?.vencidas        ?? '—'} alert={(kpis?.vencidas ?? 0) > 0} />
+    <div className="space-y-5" style={{ fontFamily: 'Inter, system-ui, sans-serif' }}>
+      {/* KPI Row — estilo handoff */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <KpiCard label="Órdenes activas"  value={kpis?.activas         ?? '—'} />
+        <KpiCard label="Completadas hoy"  value={kpis?.completadas_hoy ?? '—'} />
+        <KpiCard label="Pausadas"         value={kpis?.pausadas        ?? '—'} muted />
+        <KpiCard label="Vencidas"         value={kpis?.vencidas        ?? '—'} alert={(kpis?.vencidas ?? 0) > 0} />
       </div>
 
-      <div className="card">
-        <div className="flex items-center justify-between mb-4">
-          <h3>Mapa del taller</h3>
-          <div className="flex items-center gap-3 text-xs">
-            <Legend color="bg-emerald-500" label="Activa" />
-            <Legend color="bg-amber-400"   label="Sobrecargada" />
-            <Legend color="bg-gray-200"    label="Sin órdenes" />
+      {/* Blueprint Panel */}
+      <div
+        className="relative"
+        style={{
+          backgroundColor: BP.paper,
+          border: `1px solid ${BP.line}`,
+          borderRadius: 4,
+          padding: '24px 28px',
+          backgroundImage:
+            `linear-gradient(${BP.line}55 1px, transparent 1px), ` +
+            `linear-gradient(90deg, ${BP.line}55 1px, transparent 1px)`,
+          backgroundSize: '40px 40px',
+        }}
+      >
+        <CornerTicks />
+
+        {/* Header del panel */}
+        <div className="flex items-end justify-between mb-5">
+          <div>
+            <div
+              className="font-mono text-[10px] font-bold"
+              style={{ color: BP.inkMuted, letterSpacing: 1.5 }}
+            >
+              PLANTA · NIVEL 1 · ESC 1:50
+            </div>
+            <h2 className="text-[22px] font-semibold mt-1" style={{ color: BP.ink, letterSpacing: -0.4 }}>
+              Mapa del taller
+            </h2>
+          </div>
+          <div className="flex items-center gap-[18px] font-mono text-[11px]">
+            <span style={{ color: BP.inkMuted }}>FLUJO →</span>
+            <Legend />
           </div>
         </div>
 
-        <div
-          className="grid gap-3"
-          style={{
-            gridTemplateColumns: `repeat(${GRID_COLS}, minmax(0, 1fr))`,
-            gridTemplateRows:    `repeat(${GRID_ROWS}, minmax(120px, 1fr))`,
-          }}
-        >
-          {Array.from({ length: GRID_ROWS }).map((_, y) =>
-            Array.from({ length: GRID_COLS }).map((_, x) => {
-              const celda = matriz[`${x + 1},${y + 1}`]
-              if (!celda) {
-                return <div key={`${x}-${y}`} className="rounded-xl border-2 border-dashed border-gray-100" />
-              }
-              if (celda.kind === 'station')  return <EstacionCell  key={`${x}-${y}`} est={celda.est} />
-              if (celda.kind === 'carpenter') return <CarpinteroCell key={`${x}-${y}`} est={celda.est} persona={celda.persona} />
-              return null
-            })
-          )}
-        </div>
-      </div>
-    </div>
-  )
-}
-
-// ─── Celda: estación común (CNC, Pintura, etc.) ──────────────────────────────
-function EstacionCell({ est }: { est: EstacionConStatus }) {
-  const ordenesActivas = Number(est.ordenes_activas)
-  const sobreCarga = est.capacidad_max != null && ordenesActivas > est.capacidad_max
-  const vacia = ordenesActivas === 0
-
-  const borderColor = sobreCarga ? 'border-amber-400 bg-amber-50'
-    : vacia                       ? 'border-gray-200 bg-white'
-                                  : 'border-emerald-300 bg-emerald-50'
-
-  return (
-    <Link
-      to={`/produccion/ordenes?estacion=${est.nombre}`}
-      className={clsx(
-        'rounded-xl border-2 p-3 hover:shadow-md transition-all flex flex-col gap-2',
-        borderColor
-      )}
-    >
-      <div className="flex items-start justify-between gap-2">
-        <div className="font-bold text-sm uppercase text-forest-700">
-          {est.nombre.replace('_', ' ')}
-        </div>
-        {sobreCarga && <AlertTriangle size={14} className="text-amber-600 shrink-0" />}
-      </div>
-
-      <div className="flex items-baseline gap-1">
-        <span className={clsx(
-          'text-3xl font-bold tabular-nums',
-          vacia ? 'text-gray-300' : sobreCarga ? 'text-amber-700' : 'text-emerald-700'
-        )}>
-          {ordenesActivas}
-        </span>
-        <span className="text-xs text-gray-500">
-          / {est.capacidad_max ?? '∞'} órdenes
-        </span>
-      </div>
-
-      <div className="flex items-center gap-1 mt-auto flex-wrap">
-        <Users size={11} className="text-gray-400" />
-        {est.personal.length === 0 ? (
-          <span className="text-[11px] text-gray-400 italic">Sin personal</span>
-        ) : (
-          est.personal.map((p) => (
-            <span
-              key={p.personal_id}
-              className={clsx(
-                'inline-flex items-center justify-center w-6 h-6 rounded-full text-[10px] font-bold',
-                p.es_estacion_principal
-                  ? 'bg-forest-700 text-white'
-                  : 'bg-gray-200 text-gray-700'
-              )}
-              title={p.nombre_completo}
-            >
-              {p.iniciales}
-            </span>
-          ))
-        )}
-      </div>
-
-      {/* Items activos AHORA en esta estación (uno por operario que esté
-          trabajando). En estaciones multi-persona como Pintura puede haber
-          varios simultáneos. */}
-      {est.personal.some((p) => p.item_activo) && (
-        <div className="border-t border-gray-200/70 pt-2 mt-1 space-y-1">
-          {est.personal.filter((p) => p.item_activo).map((p) => (
-            <ItemActivoLine key={p.personal_id} persona={p} />
+        {/* Body: 4 columnas + 3 flow arrows */}
+        <div className="flex items-stretch gap-0">
+          {columnas.map((col, i) => (
+            <div key={i} className="contents">
+              <div className="flex-1 min-w-0">
+                <ZoneHeader idx={i + 1} code={ZONE_CODES[i]} label={ZONE_LABELS[i]} />
+                <div className="flex flex-col gap-2.5">
+                  {col.map((card) => <StationCard key={card.id} card={card} />)}
+                </div>
+              </div>
+              {i < columnas.length - 1 && <FlowArrow />}
+            </div>
           ))}
         </div>
-      )}
-    </Link>
-  )
-}
 
-// Línea compacta para mostrar el item que un operario tiene en curso.
-// Re-tickea cada segundo a través del componente Timer compartido.
-function ItemActivoLine({ persona }: { persona: EstacionPersonalRef }) {
-  if (!persona.item_activo) return null
-  const it = persona.item_activo
-  return (
-    <div className="flex items-center gap-1.5 text-[11px] leading-tight">
-      <Activity size={10} className="text-emerald-600 shrink-0 animate-pulse" />
-      <span className="font-bold text-forest-700">{persona.iniciales}</span>
-      <span className="text-gray-600 truncate">{it.numero_orden}</span>
-      <Timer
-        startISO={it.hora_inicio}
-        format="hm"
-        className="ml-auto font-bold text-emerald-700 tabular-nums shrink-0"
-      />
+        {/* Footer de dimensión */}
+        <div
+          className="mt-[18px] pt-3 flex justify-between font-mono text-[10px]"
+          style={{ borderTop: `1px dashed ${BP.line}`, color: BP.inkMuted, letterSpacing: 1 }}
+        >
+          <span>← MATERIA PRIMA</span>
+          <span>{totalEstaciones} ESTACIONES · {totalOperadores} OPERADORES</span>
+          <span>PRODUCTO TERMINADO →</span>
+        </div>
+      </div>
     </div>
   )
 }
 
-// ─── Celda: carpintero individual de Assembly ────────────────────────────────
-// Muestra la carga REAL del carpintero (sus órdenes activas en assembly) con
-// el mismo color coding que las estaciones convencionales:
-//   gris    → sin trabajo
-//   emerald → con carga normal (≤ capacidad)
-//   amber   → sobrecarga (> capacidad personal)
-// Si tiene órdenes de prioridad Alta, muestra un badge rojo con el conteo.
-function CarpinteroCell({ est, persona }: { est: EstacionConStatus; persona: EstacionPersonalRef }) {
-  const ordenesActivas = Number(persona.ordenes_activas ?? 0)
-  const altaPrioridad  = Number(persona.ordenes_alta_prioridad ?? 0)
-  const capacidad      = est.capacidad_max ?? 3
-  const sobreCarga     = ordenesActivas > capacidad
-  const vacia          = ordenesActivas === 0
+// ─── KPI Card ─────────────────────────────────────────────────────────────────
+function KpiCard({ label, value, alert, muted }: { label: string; value: number | string; alert?: boolean; muted?: boolean }) {
+  return (
+    <div
+      className="bg-white"
+      style={{
+        border: '1px solid #ECE7DC',
+        borderRadius: 10,
+        padding: '18px 20px',
+      }}
+    >
+      <div
+        className="text-[11px] font-semibold uppercase"
+        style={{ color: '#6B6356', letterSpacing: 0.6 }}
+      >
+        {label}
+      </div>
+      <div
+        className="text-[32px] font-semibold mt-1.5"
+        style={{
+          color: alert ? '#B53A3A' : muted ? '#6B6356' : '#1F1B14',
+          letterSpacing: -1,
+        }}
+      >
+        {value}
+      </div>
+    </div>
+  )
+}
 
-  const borderColor = sobreCarga ? 'border-amber-400 bg-amber-50'
-    : vacia                       ? 'border-gray-200 bg-white'
-                                  : 'border-emerald-300 bg-emerald-50'
+// ─── Zone Header ──────────────────────────────────────────────────────────────
+function ZoneHeader({ idx, code, label }: { idx: number; code: string; label: string }) {
+  return (
+    <div className="mb-3">
+      <div
+        className="font-mono text-[9.5px] font-bold"
+        style={{ color: BP.inkMuted, letterSpacing: 1.5 }}
+      >
+        ZONE {String(idx).padStart(2, '0')} · {code}
+      </div>
+      <div
+        className="text-[14px] font-semibold mt-px"
+        style={{ color: BP.ink, letterSpacing: -0.1 }}
+      >
+        {label}
+      </div>
+    </div>
+  )
+}
+
+// ─── Flow Arrow entre columnas ────────────────────────────────────────────────
+function FlowArrow() {
+  return (
+    <div
+      className="flex items-center justify-center"
+      style={{ flex: '0 0 28px' }}
+    >
+      <svg width="28" height="14" viewBox="0 0 28 14" style={{ opacity: 0.55 }}>
+        <line x1="0" y1="7" x2="22" y2="7" stroke={BP.line} strokeWidth="1" strokeDasharray="2 3" />
+        <path d="M22 3 28 7 22 11" fill="none" stroke={BP.line} strokeWidth="1" />
+      </svg>
+    </div>
+  )
+}
+
+// ─── Corner Ticks (en panel y cards) ──────────────────────────────────────────
+function CornerTicks({ size = 10, color = BP.line }: { size?: number; color?: string }) {
+  const Tick = ({ style }: { style: React.CSSProperties }) => (
+    <svg width={size} height={size} viewBox="0 0 10 10" style={style}>
+      <path d={`M0 5h5V0`} stroke={color} strokeWidth="1" fill="none" />
+    </svg>
+  )
+  return (
+    <>
+      <Tick style={{ position: 'absolute', top: -1, left: -1 }} />
+      <Tick style={{ position: 'absolute', top: -1, right: -1, transform: 'scaleX(-1)' }} />
+      <Tick style={{ position: 'absolute', bottom: -1, left: -1, transform: 'scaleY(-1)' }} />
+      <Tick style={{ position: 'absolute', bottom: -1, right: -1, transform: 'scale(-1)' }} />
+    </>
+  )
+}
+
+// ─── Legend ───────────────────────────────────────────────────────────────────
+function Legend() {
+  const items = [
+    { color: BP.active, label: 'Activa' },
+    { color: BP.warn,   label: 'Sobrecargada' },
+    { color: BP.idle,   label: 'Sin órdenes' },
+  ]
+  return (
+    <div className="flex items-center gap-3.5">
+      {items.map((i) => (
+        <div key={i.label} className="flex items-center gap-1.5">
+          <span style={{ width: 10, height: 10, borderRadius: 3, backgroundColor: i.color, display: 'inline-block' }} />
+          <span className="text-[12px] font-medium" style={{ color: '#6B6356' }}>{i.label}</span>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+// ─── Station Card (V2Card del handoff) ────────────────────────────────────────
+function StationCard({ card }: { card: CardData }) {
+  const filled = card.ordenes_activas
+  const pct = card.cap === 0 ? 0 : Math.min(1, filled / card.cap)
+  const accent = card.status === 'active' ? BP.active : card.status === 'warn' ? BP.warn : BP.idle
+  const kindTag = { machine: 'M', assembly: 'A', finishing: 'F', output: 'O' }[card.kind]
+  const kindFull = { machine: 'MAQ', assembly: 'ENS', finishing: 'ACA', output: 'SAL' }[card.kind]
+  const dueLabel = formatDue(card.ordenRunning?.fecha_entrega ?? null)
+  const isOverdue = dueLabel === 'Vencida'
 
   return (
     <Link
-      to={`/produccion/ordenes?estacion=assembly&personal_id=${persona.personal_id}`}
-      className={clsx(
-        'rounded-xl border-2 hover:shadow-md transition-all flex flex-col gap-2 p-3',
-        borderColor
-      )}
+      to={card.href}
+      className="relative block transition-all"
+      style={{
+        backgroundColor: 'rgba(255,255,255,0.55)',
+        border: `1px solid ${BP.line}`,
+        textDecoration: 'none',
+        color: BP.ink,
+      }}
+      onMouseEnter={(e) => (e.currentTarget.style.borderColor = '#A89E84')}
+      onMouseLeave={(e) => (e.currentTarget.style.borderColor = BP.line)}
     >
-      <div className="flex items-start justify-between gap-2">
-        <div className="text-[10px] uppercase tracking-widest text-gray-400 font-semibold">
-          Assembly
-        </div>
-        <div className="flex items-center gap-1.5">
-          {altaPrioridad > 0 && (
-            <span
-              className="px-1.5 py-0.5 rounded-full bg-red-100 text-red-700 text-[10px] font-bold leading-none"
-              title={`${altaPrioridad} de alta prioridad`}
-            >
-              !{altaPrioridad}
-            </span>
-          )}
-          <div className="w-6 h-6 rounded-full bg-forest-700 text-white text-[10px] font-bold flex items-center justify-center">
-            {persona.iniciales}
+      <CornerTicks />
+      {/* Stripe de status */}
+      <div
+        style={{
+          position: 'absolute', left: 0, top: 0, bottom: 0,
+          width: 3, backgroundColor: accent,
+        }}
+      />
+
+      <div style={{ padding: '10px 12px 10px 16px' }}>
+        {/* Línea 1: código + tag */}
+        <div className="flex items-baseline justify-between">
+          <div
+            className="font-mono text-[9.5px] font-bold"
+            style={{ color: BP.inkMuted, letterSpacing: 1.5 }}
+          >
+            {kindFull}-{card.col}.{String(card.row).padStart(2, '0')}
+          </div>
+          <div
+            className="font-mono text-[10px]"
+            style={{ color: BP.inkMuted, letterSpacing: 1 }}
+          >
+            {kindTag}
           </div>
         </div>
-      </div>
 
-      <div className="font-bold text-base text-forest-700 leading-tight">
-        {persona.nombre_completo.split(' ')[0]}
-      </div>
-
-      <div className="flex items-baseline gap-1">
-        <span className={clsx(
-          'text-2xl font-bold tabular-nums',
-          vacia ? 'text-gray-300' : sobreCarga ? 'text-amber-700' : 'text-emerald-700'
-        )}>
-          {ordenesActivas}
-        </span>
-        <span className="text-xs text-gray-500">
-          / {capacidad}
-        </span>
-        {sobreCarga && <AlertTriangle size={12} className="text-amber-600 ml-1" />}
-      </div>
-
-      {/* Item activo del carpintero AHORA (timer en vivo) */}
-      {persona.item_activo && (
-        <div className="mt-auto border-t border-emerald-200/70 pt-1.5 flex items-center gap-1.5 text-[11px]">
-          <Activity size={10} className="text-emerald-600 shrink-0 animate-pulse" />
-          <span className="text-forest-700 font-semibold truncate">
-            {persona.item_activo.numero_orden}
-          </span>
-          <Timer
-            startISO={persona.item_activo.hora_inicio}
-            format="hm"
-            className="ml-auto font-bold text-emerald-700 tabular-nums"
-          />
+        {/* Línea 2: nombre estación */}
+        <div
+          className="text-[18px] font-semibold uppercase mt-0.5"
+          style={{ color: BP.ink, letterSpacing: -0.3, lineHeight: 1.1 }}
+        >
+          {card.name}
         </div>
-      )}
+
+        {/* Bloque de orden running */}
+        {card.ordenRunning ? (
+          <div className="mt-2.5" style={{ lineHeight: 1.4 }}>
+            <div className="font-mono text-[11px]" style={{ color: BP.inkMuted }}>
+              ▸ {card.ordenRunning.numero_orden}
+            </div>
+            <div className="text-[11px] font-medium" style={{ color: BP.ink }}>
+              {card.ordenRunning.proyecto_nombre || card.ordenRunning.proyecto_codigo || '—'}
+            </div>
+            {dueLabel && (
+              <div
+                className="font-mono text-[11px] mt-0.5"
+                style={{ color: isOverdue ? BP.overdue : BP.inkMuted }}
+              >
+                due {dueLabel}
+              </div>
+            )}
+            {/* Timer en vivo si hay segmento abierto en esta estación */}
+            {card.itemActivo && (
+              <div
+                className="font-mono text-[11px] mt-0.5 font-semibold"
+                style={{ color: BP.active }}
+              >
+                ● <Timer startISO={card.itemActivo.hora_inicio} format="hm" className="inline tabular-nums" />
+              </div>
+            )}
+          </div>
+        ) : (
+          <div className="mt-2.5 text-[11px] italic" style={{ color: BP.inkSubtle }}>
+            — vacante —
+          </div>
+        )}
+
+        {/* Barra de capacidad */}
+        <div className="mt-3">
+          <div
+            className="flex justify-between font-mono text-[9.5px] mb-1"
+            style={{ color: BP.inkMuted, letterSpacing: 1 }}
+          >
+            <span>OCUPACIÓN</span>
+            <span className="font-semibold" style={{ color: BP.ink }}>
+              {filled}/{card.cap}
+            </span>
+          </div>
+          <div
+            className="relative"
+            style={{ height: 6, backgroundColor: 'rgba(0,0,0,0.05)' }}
+          >
+            {/* Notches (líneas verticales entre slots) */}
+            {Array.from({ length: card.cap - 1 }, (_, i) => (
+              <div
+                key={i}
+                style={{
+                  position: 'absolute', top: 0, bottom: 0,
+                  left: `${((i + 1) / card.cap) * 100}%`,
+                  width: 1, backgroundColor: BP.paper,
+                }}
+              />
+            ))}
+            {/* Fill */}
+            <div
+              style={{
+                height: '100%',
+                width: `${pct * 100}%`,
+                backgroundColor: accent,
+              }}
+            />
+          </div>
+        </div>
+
+        {/* Footer: avatares + cola */}
+        <div className="mt-2.5 flex items-center justify-between">
+          {card.workers.length > 0 ? (
+            <AvatarStack workers={card.workers} />
+          ) : (
+            <span
+              className="text-[10px] italic"
+              style={{ color: BP.inkSubtle }}
+            >
+              sin operadores
+            </span>
+          )}
+          {card.ordenes_activas > 1 && (
+            <div
+              className="font-mono text-[10px]"
+              style={{ color: BP.inkMuted, letterSpacing: 0.5 }}
+            >
+              +{card.ordenes_activas - 1} EN COLA
+            </div>
+          )}
+        </div>
+      </div>
     </Link>
   )
 }
 
-function Kpi({ label, value, alert }: { label: string; value: number | string; alert?: boolean }) {
+// ─── Avatar Stack ─────────────────────────────────────────────────────────────
+function AvatarStack({ workers, max = 4 }: { workers: { ini: string; name: string }[]; max?: number }) {
+  const shown = workers.slice(0, max)
+  const extra = workers.length - shown.length
+  const size = 18
   return (
-    <div className="kpi-card">
-      <div>
-        <div className="kpi-label">{label}</div>
-        <div className={clsx('kpi-value', alert ? 'text-red-700' : 'text-forest-700')}>{value}</div>
-      </div>
+    <div className="inline-flex items-center">
+      {shown.map((w, i) => (
+        <div
+          key={w.ini + i}
+          style={{
+            marginLeft: i === 0 ? 0 : -6,
+            border: '2px solid #fff',
+            borderRadius: '50%',
+            display: 'inline-flex',
+          }}
+          title={w.name}
+        >
+          <div
+            style={{
+              width: size, height: size, borderRadius: '50%',
+              backgroundColor: '#1F1B14', color: '#F2EAD8',
+              display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+              fontSize: size * 0.42, fontWeight: 600,
+            }}
+          >
+            {w.ini}
+          </div>
+        </div>
+      ))}
+      {extra > 0 && (
+        <div
+          style={{
+            marginLeft: -6,
+            width: size, height: size, borderRadius: '50%',
+            backgroundColor: '#F1EEE6', color: '#6B6356',
+            display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+            fontSize: size * 0.38, fontWeight: 600,
+            border: '2px solid #fff',
+          }}
+        >
+          +{extra}
+        </div>
+      )}
     </div>
   )
 }
 
-function Legend({ color, label }: { color: string; label: string }) {
-  return (
-    <span className="inline-flex items-center gap-1.5 text-gray-500">
-      <span className={clsx('w-3 h-3 rounded-sm', color)} />
-      {label}
-    </span>
-  )
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+function prettyName(nombre: string): string {
+  // 'edge_banding' → 'Edge Banding'
+  return nombre.split('_').map((s) => s.charAt(0).toUpperCase() + s.slice(1)).join(' ')
+}
+
+function formatDue(fecha: string | null): string | null {
+  if (!fecha) return null
+  const d = new Date(fecha)
+  const now = new Date()
+  const hoy = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+  const target = new Date(d.getFullYear(), d.getMonth(), d.getDate())
+  const diffDias = Math.floor((target.getTime() - hoy.getTime()) / 86_400_000)
+
+  if (diffDias < 0)  return 'Vencida'
+  if (diffDias === 0) return 'Hoy'
+  if (diffDias === 1) return 'Mañana'
+  return d.toLocaleDateString('es-MX', { day: 'numeric', month: 'short' })
 }
