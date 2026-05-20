@@ -10,57 +10,59 @@ import { createError } from '../middleware/errorHandler'
 export async function getEstaciones(_req: Request, res: Response, next: NextFunction) {
   try {
     const { rows } = await pool.query(
-      `SELECT
+      `-- ─── CTEs para evitar subconsultas correlacionadas dentro de json_agg(DISTINCT …)
+       -- que pueden producir resultados incorrectos en PostgreSQL.
+       WITH
+       -- 1. Segmento activo (hora_fin IS NULL) por (personal_id, estacion)
+       item_activos AS (
+         SELECT DISTINCT ON (tp.personal_id, tp.estacion)
+           tp.personal_id,
+           tp.estacion,
+           jsonb_build_object(
+             'orden_id',        op.id,
+             'numero_orden',    op.numero_orden,
+             'item_nombre',     op.item_nombre,
+             'hora_inicio',     tp.hora_inicio,
+             'proyecto_codigo', pr.codigo
+           ) AS data
+         FROM time_proyectos tp
+         JOIN  ordenes_produccion op ON op.id = tp.orden_produccion_id
+         LEFT JOIN proyectos      pr ON pr.id = op.proyecto_id
+         WHERE tp.hora_fin IS NULL
+         ORDER BY tp.personal_id, tp.estacion, tp.hora_inicio DESC
+       ),
+       -- 2. Carga (órdenes activas + alta prioridad) por (personal_id, estacion)
+       carga AS (
+         SELECT
+           personal_asignado_id                                                     AS personal_id,
+           estacion_actual                                                           AS estacion,
+           COUNT(*) FILTER (WHERE status IN ('Pendiente','En Proceso','Pausada'))   AS ordenes_activas,
+           COUNT(*) FILTER (WHERE prioridad = 'Alta'
+                              AND status NOT IN ('Completada','Cancelada'))          AS ordenes_alta_prioridad
+         FROM ordenes_produccion
+         WHERE personal_asignado_id IS NOT NULL
+         GROUP BY personal_asignado_id, estacion_actual
+       )
+       SELECT
          ec.nombre,
          ec.tipo,
          ec.posicion_x,
          ec.posicion_y,
          ec.capacidad_max,
          ec.activa,
-         COUNT(o.id) FILTER (WHERE o.status IN ('Pendiente','En Proceso')) AS ordenes_activas,
-         COUNT(o.id) FILTER (WHERE o.status = 'Pausada')                    AS ordenes_pausadas,
-         COUNT(o.id) FILTER (WHERE o.prioridad = 'Alta' AND o.status NOT IN ('Completada','Cancelada')) AS ordenes_alta_prioridad,
+         COUNT(o.id) FILTER (WHERE o.status IN ('Pendiente','En Proceso'))                        AS ordenes_activas,
+         COUNT(o.id) FILTER (WHERE o.status = 'Pausada')                                          AS ordenes_pausadas,
+         COUNT(o.id) FILTER (WHERE o.prioridad = 'Alta'
+                               AND o.status NOT IN ('Completada','Cancelada'))                    AS ordenes_alta_prioridad,
          COALESCE(
            json_agg(DISTINCT jsonb_build_object(
-             'personal_id', pt.id,
-             'nombre_completo', pt.nombre_completo,
-             'iniciales', pt.iniciales,
-             'es_estacion_principal', pe.es_estacion_principal,
-             'ordenes_activas', (
-               -- Carga individual del operario en ESTA estación.
-               -- Cuenta órdenes cuya estación actual es ec.nombre y están asignadas
-               -- al operario (Pendiente/En Proceso/Pausada).
-               SELECT COUNT(*) FROM ordenes_produccion o2
-               WHERE o2.estacion_actual = ec.nombre
-                 AND o2.personal_asignado_id = pt.id
-                 AND o2.status IN ('Pendiente','En Proceso','Pausada')
-             ),
-             'ordenes_alta_prioridad', (
-               SELECT COUNT(*) FROM ordenes_produccion o3
-               WHERE o3.estacion_actual = ec.nombre
-                 AND o3.personal_asignado_id = pt.id
-                 AND o3.prioridad = 'Alta'
-                 AND o3.status NOT IN ('Completada','Cancelada')
-             ),
-             -- Item ACTIVO ahora mismo del operario en ESTA estación.
-             -- Si tiene un segmento de time_proyectos abierto que matchea
-             -- (personal, estación), devolvemos info para mostrar timer en vivo.
-             'item_activo', (
-               SELECT jsonb_build_object(
-                 'orden_id',        op2.id,
-                 'numero_orden',    op2.numero_orden,
-                 'item_nombre',     op2.item_nombre,
-                 'hora_inicio',     tp.hora_inicio,
-                 'proyecto_codigo', pr2.codigo
-               )
-               FROM time_proyectos tp
-               JOIN ordenes_produccion op2 ON op2.id = tp.orden_produccion_id
-               LEFT JOIN proyectos pr2 ON pr2.id = op2.proyecto_id
-               WHERE tp.personal_id = pt.id
-                 AND tp.estacion    = ec.nombre
-                 AND tp.hora_fin   IS NULL
-               LIMIT 1
-             )
+             'personal_id',            pt.id,
+             'nombre_completo',        pt.nombre_completo,
+             'iniciales',              pt.iniciales,
+             'es_estacion_principal',  pe.es_estacion_principal,
+             'ordenes_activas',        COALESCE(c.ordenes_activas,        0),
+             'ordenes_alta_prioridad', COALESCE(c.ordenes_alta_prioridad, 0),
+             'item_activo',            ia.data          -- NULL si el operario está idle
            )) FILTER (WHERE pt.id IS NOT NULL),
            '[]'::json
          ) AS personal
@@ -68,6 +70,8 @@ export async function getEstaciones(_req: Request, res: Response, next: NextFunc
        LEFT JOIN ordenes_produccion o   ON o.estacion_actual = ec.nombre
        LEFT JOIN personal_estaciones pe ON pe.estacion = ec.nombre AND pe.activo = true
        LEFT JOIN personal_taller    pt  ON pt.id = pe.personal_id  AND pt.activo = true
+       LEFT JOIN carga              c   ON c.personal_id = pt.id AND c.estacion  = ec.nombre
+       LEFT JOIN item_activos       ia  ON ia.personal_id = pt.id AND ia.estacion = ec.nombre
        GROUP BY ec.id
        ORDER BY ec.posicion_y NULLS LAST, ec.posicion_x, ec.nombre`
     )
