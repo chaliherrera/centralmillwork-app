@@ -6,6 +6,7 @@ import path from 'path'
 import fs from 'fs'
 import router from './routes'
 import authRouter from './routes/auth'
+import webhooksRouter from './routes/webhooks'
 import { authenticate } from './middleware/auth'
 import { errorHandler, notFound } from './middleware/errorHandler'
 import { globalLimiter, loginLimiter } from './middleware/rateLimit'
@@ -68,6 +69,10 @@ app.use('/api/auth/login', loginLimiter)
 
 // Public auth routes — must come before authenticate middleware
 app.use('/api/auth', authRouter)
+
+// Webhooks (machine-to-machine, autenticados con WEBHOOK_API_TOKEN, no JWT).
+// Deben ir ANTES del authenticate global para que no exija JWT de usuario.
+app.use('/api/webhooks', webhooksRouter)
 
 // All other API routes require a valid JWT
 app.use('/api', authenticate, router)
