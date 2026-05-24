@@ -39,6 +39,10 @@ import {
   marcarCotizacionesEnviadas,
 } from '../controllers/cotizacionesController'
 import { getReporteCompras, getReporteProduccion, compartirReporte } from '../controllers/reportesController'
+import {
+  getTareas, getTarea, updateTarea, getTareasStats,
+  updateTareaSchema,
+} from '../controllers/tareasController'
 
 const router = Router()
 
@@ -119,6 +123,12 @@ router.put('/recepciones/:id',               REC_WRITE, updateRecepcion)
 router.get('/reportes/compras',      getReporteCompras)
 router.get('/reportes/produccion',   getReporteProduccion)
 router.post('/reportes/compartir',   WRITE, compartirReporte)
+
+// ─── Tareas (solo ADMIN) ─────────────────────────────────────────────────────
+router.get('/tareas',                ADMIN, getTareas)
+router.get('/tareas/stats',          ADMIN, getTareasStats)
+router.get('/tareas/:id',            ADMIN, getTarea)
+router.patch('/tareas/:id',          ADMIN, validateBody(updateTareaSchema), updateTarea)
 
 // ─── Cotizaciones ────────────────────────────────────────────────────────────
 router.get('/cotizaciones',                   WRITE, getCotizaciones)
