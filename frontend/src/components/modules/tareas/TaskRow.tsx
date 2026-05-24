@@ -14,23 +14,47 @@ interface Props {
 }
 
 function EstadoButton({ estado, onClick }: { estado: Tarea['estado']; onClick: () => void }) {
-  const labels: Record<Tarea['estado'], string> = {
-    pendiente:   'Pendiente · click para iniciar',
-    en_progreso: 'En curso · click para completar',
-    completada:  'Hecho · click para reabrir',
+  const tooltips: Record<Tarea['estado'], string> = {
+    pendiente:   'Click para iniciar',
+    en_progreso: 'Click para completar',
+    completada:  'Click para reabrir',
     descartada:  'Descartada',
   }
+
+  // Variantes por estado: cada una con su icono, label, color y fondo distintos
+  // para que sea visualmente claro en qué estado está sin necesidad de hover.
+  const variant = {
+    pendiente: {
+      icon: <Circle size={13} strokeWidth={1.8} />,
+      label: 'Pendiente',
+      className: 'text-gray-500 bg-white border border-gray-300 hover:border-gray-500',
+    },
+    en_progreso: {
+      icon: <CircleDot size={13} strokeWidth={2} />,
+      label: 'En curso',
+      className: 'text-gold-600 bg-gold-50 border border-gold-400 hover:bg-gold-100',
+    },
+    completada: {
+      icon: <Check size={13} strokeWidth={3} />,
+      label: 'Hecho',
+      className: 'text-white bg-forest-600 border border-forest-600 hover:bg-forest-700',
+    },
+    descartada: {
+      icon: <Circle size={13} strokeWidth={1.5} />,
+      label: 'Descartada',
+      className: 'text-gray-400 bg-gray-50 border border-gray-200',
+    },
+  }[estado]
+
   return (
     <button
       onClick={onClick}
-      title={labels[estado]}
-      aria-label={labels[estado]}
-      className="shrink-0 w-6 h-6 rounded-full flex items-center justify-center transition-colors text-gray-400 hover:text-gray-900"
+      title={tooltips[estado]}
+      aria-label={`${variant.label} — ${tooltips[estado]}`}
+      className={`shrink-0 inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium transition-all ${variant.className}`}
     >
-      {estado === 'pendiente'   && <Circle    size={18} strokeWidth={1.5} />}
-      {estado === 'en_progreso' && <CircleDot size={18} strokeWidth={1.5} className="text-gold-500" />}
-      {estado === 'completada'  && <Check     size={18} strokeWidth={2.5} className="text-forest-600" />}
-      {estado === 'descartada'  && <Circle    size={18} strokeWidth={1.5} className="text-gray-300" />}
+      {variant.icon}
+      <span>{variant.label}</span>
     </button>
   )
 }

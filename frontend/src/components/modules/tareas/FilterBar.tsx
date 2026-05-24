@@ -50,6 +50,18 @@ export default function FilterBar({ filters, onChange, showCompletadas, onToggle
 
       <span className="h-5 w-px bg-gray-200 mx-1" aria-hidden />
 
+      {/* Priority — "Todas" pill para limpiar */}
+      <button
+        onClick={() => setPriority(undefined)}
+        className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${
+          !filters.priority
+            ? 'bg-gray-900 text-white border-gray-900'
+            : 'bg-white text-gray-700 border-gray-200 hover:border-gray-300'
+        }`}
+      >
+        Todas
+      </button>
+
       {/* Priority pills */}
       {prios.map(([key, meta]) => {
         const active = filters.priority === key
