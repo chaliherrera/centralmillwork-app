@@ -1,6 +1,6 @@
 import { useMemo, useRef, useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Loader2, Keyboard } from 'lucide-react'
+import { Loader2, Keyboard, RefreshCw } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { useTheme } from '@/context/ThemeContext'
 import { tareasService } from '@/services/tareas'
@@ -65,6 +65,17 @@ export default function Tareas() {
       qc.invalidateQueries({ queryKey: ['tareas-stats'] })
     },
     onError: () => toast.error('No se pudo actualizar la tarea'),
+  })
+
+  const syncMut = useMutation({
+    mutationFn: () => tareasService.syncSystem(),
+    onSuccess: (res) => {
+      const r = res.data
+      qc.invalidateQueries({ queryKey: ['tareas'] })
+      qc.invalidateQueries({ queryKey: ['tareas-stats'] })
+      toast.success(`Sync OK · ${r.created} nuevas · ${r.autoClosed} autocerradas`)
+    },
+    onError: () => toast.error('No se pudo sincronizar el sistema'),
   })
 
   const tareas = tareasResp?.data ?? []
@@ -136,6 +147,23 @@ export default function Tareas() {
                 Última tarea: {timeAgo(lastSyncIso)}
               </p>
             )}
+            <button
+              onClick={() => syncMut.mutate()}
+              disabled={syncMut.isPending}
+              className="flex items-center gap-1.5 px-2.5 py-1 text-xs rounded-md transition-colors disabled:opacity-50"
+              style={isGlass
+                ? {
+                    background: 'rgba(255,255,250,0.06)',
+                    border: '0.5px solid rgba(255,255,250,0.18)',
+                    color: 'rgba(255,255,250,0.78)',
+                  }
+                : { border: '1px solid #e5e7eb', color: '#6b7280' }
+              }
+              title="Forzar sync de tareas del sistema (cotizaciones, ETAs, parciales)"
+            >
+              <RefreshCw size={13} className={syncMut.isPending ? 'animate-spin' : ''} />
+              <span>Sync</span>
+            </button>
             <button
               onClick={() => setPaletteOpen(true)}
               className="flex items-center gap-1.5 px-2.5 py-1 text-xs rounded-md transition-colors"
