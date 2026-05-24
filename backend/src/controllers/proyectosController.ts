@@ -298,8 +298,25 @@ export async function getProyectoActividad(req: Request, res: Response, next: Ne
       [proyecto_id]
     )
 
+    // 4) Cotizaciones enviadas a vendors
+    // Cada solicitud_cotizacion con fecha_solicitud no nula = 1 evento
+    // (la cotización fue solicitada/enviada al vendor)
+    const { rows: cotizaciones } = await pool.query(
+      `SELECT
+         'cotizacion'                        AS tipo,
+         sc.created_at                       AS ts,
+         sc.id, sc.folio, sc.estado, sc.fecha_solicitud, sc.fecha_respuesta,
+         sc.monto_cotizado, sc.notas,
+         v.nombre                            AS vendor
+       FROM solicitudes_cotizacion sc
+       LEFT JOIN proveedores v ON v.id = sc.proveedor_id
+       WHERE sc.proyecto_id = $1
+       ORDER BY sc.created_at DESC`,
+      [proyecto_id]
+    )
+
     // Merge + sort desc por ts
-    const eventos = [...imports, ...ocs, ...recepciones].sort(
+    const eventos = [...imports, ...ocs, ...recepciones, ...cotizaciones].sort(
       (a: any, b: any) => new Date(b.ts).getTime() - new Date(a.ts).getTime()
     )
 

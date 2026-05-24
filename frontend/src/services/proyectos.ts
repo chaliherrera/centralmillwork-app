@@ -46,7 +46,7 @@ export type ActividadEvento =
       tipo: 'mto_import'
       ts: string
       fecha: string | null
-      origen: 'MTO' | 'DIRECTA' | 'URGENTE'
+      origen: 'MTO' | 'DIRECTA' | 'URGENTE' | 'OPERATIVA'
       items_count: number
       cotizar_si: number
       en_stock: number
@@ -58,7 +58,7 @@ export type ActividadEvento =
       id: number
       numero: string
       estado: string
-      origen: 'MTO' | 'DIRECTA' | 'URGENTE'
+      origen: 'MTO' | 'DIRECTA' | 'URGENTE' | 'OPERATIVA'
       fecha_emision: string
       fecha_entrega_estimada: string | null
       fecha_entrega_real: string | null
@@ -81,6 +81,18 @@ export type ActividadEvento =
       oc_numero: string
       oc_id: number
       diffs_count: number
+    }
+  | {
+      tipo: 'cotizacion'
+      ts: string
+      id: number
+      folio: string
+      estado: 'pendiente' | 'enviada' | 'recibida' | 'aprobada' | 'rechazada'
+      fecha_solicitud: string | null
+      fecha_respuesta: string | null
+      monto_cotizado: string | null
+      notas: string | null
+      vendor: string | null
     }
 
 export const proyectosService = {

@@ -3,8 +3,9 @@ import { useParams, Link } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import {
   ArrowLeft, Package, ShoppingCart, Warehouse, Clock, AlertTriangle,
-  Activity, BarChart3, Calendar, User, DollarSign,
-  CheckCircle2, AlertCircle, MessageSquare, Truck, Layers,
+  Activity, BarChart3, Calendar, CalendarDays, User, DollarSign,
+  CheckCircle2, AlertCircle, MessageSquare, Truck, Layers, FileText,
+  ChevronLeft, ChevronRight,
 } from 'lucide-react'
 import clsx from 'clsx'
 import { proyectosService, type ActividadEvento } from '@/services/proyectos'
@@ -33,7 +34,7 @@ const fmtDateTime = (d: string | null | undefined) => {
   return dt.toLocaleString('es-MX', { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
 }
 
-type TabKey = 'materiales' | 'ocs' | 'recepciones' | 'actividad' | 'graficas'
+type TabKey = 'materiales' | 'ocs' | 'recepciones' | 'actividad' | 'calendar' | 'graficas'
 
 export default function ProyectoDetalle() {
   const { id } = useParams<{ id: string }>()
@@ -143,6 +144,7 @@ export default function ProyectoDetalle() {
           { key: 'ocs',         label: `Órdenes (${oc.total})`,           icon: ShoppingCart },
           { key: 'recepciones', label: `Recepciones (${kpis.recepciones.total})`, icon: Warehouse },
           { key: 'actividad',   label: 'Actividad',                       icon: Activity },
+          { key: 'calendar',    label: 'Calendar',                        icon: CalendarDays },
           { key: 'graficas',    label: 'Gráficas',                        icon: BarChart3 },
         ] as { key: TabKey; label: string; icon: typeof Package }[]).map(({ key, label, icon: Icon }) => (
           <button
@@ -165,6 +167,7 @@ export default function ProyectoDetalle() {
       {tab === 'ocs'         && <OcsTab         proyectoId={proyectoId} />}
       {tab === 'recepciones' && <RecepcionesTab proyectoId={proyectoId} />}
       {tab === 'actividad'   && <ActividadTab   proyectoId={proyectoId} />}
+      {tab === 'calendar'    && <CalendarTab    proyectoId={proyectoId} proyectoNombre={proyecto.nombre} />}
       {tab === 'graficas'    && <GraficasTab    kpis={kpis} presupuesto={Number(proyecto.presupuesto)} />}
     </div>
   )
@@ -637,7 +640,349 @@ function EventoRow({ ev }: { ev: ActividadEvento }) {
     )
   }
 
+  if (ev.tipo === 'cotizacion') {
+    return (
+      <div className="flex gap-3 relative">
+        <span className="w-7 h-7 rounded-full bg-amber-100 text-amber-700 flex items-center justify-center flex-shrink-0 z-10 border-2 border-white">
+          <FileText size={13} />
+        </span>
+        <div className="flex-1 min-w-0">
+          <p className="text-xs text-gray-400">{fmtDateTime(ev.ts)}</p>
+          <p className="text-sm text-gray-800 mt-0.5">
+            <strong>📄 Cotización {ev.estado}</strong>{' '}
+            <span className="font-mono">{ev.folio}</span>
+            {ev.vendor && <> a <strong>{ev.vendor}</strong></>}
+          </p>
+          <p className="text-xs text-gray-500 mt-0.5">
+            {ev.fecha_solicitud && <>Solicitada: {fmtDate(ev.fecha_solicitud)}</>}
+            {ev.fecha_respuesta && <> · Respondida: {fmtDate(ev.fecha_respuesta)}</>}
+            {ev.monto_cotizado && Number(ev.monto_cotizado) > 0 && <> · Monto: {fmt(ev.monto_cotizado)}</>}
+          </p>
+          {ev.notas && (
+            <div className="flex items-start gap-1.5 mt-1.5 text-xs text-gray-600 italic">
+              <MessageSquare size={11} className="mt-0.5 flex-shrink-0 text-gray-400" />
+              <span>{ev.notas}</span>
+            </div>
+          )}
+        </div>
+      </div>
+    )
+  }
+
   return null
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Tab: Calendar — mismos eventos que Actividad pero en grilla mensual
+// ──────────────────────────────────────────────────────────────────────────────
+function CalendarTab({ proyectoId, proyectoNombre }: { proyectoId: number; proyectoNombre: string }) {
+  const today = new Date()
+  const [cursor, setCursor] = useState<{ year: number; month: number }>({
+    year: today.getFullYear(),
+    month: today.getMonth(), // 0-indexed
+  })
+
+  const { data, isLoading } = useQuery({
+    queryKey: ['proyecto-detalle', proyectoId, 'actividad'],
+    queryFn: () => proyectosService.getActividad(proyectoId),
+    staleTime: 15_000,
+  })
+  const eventos = data?.data ?? []
+
+  // Agrupar eventos por fecha YYYY-MM-DD (usando el campo de fecha relevante por tipo)
+  const eventosPorDia = useMemo(() => {
+    const map = new Map<string, ActividadEvento[]>()
+    for (const ev of eventos) {
+      const fechaStr = getEventoFecha(ev)
+      if (!fechaStr) continue
+      const key = fechaStr.slice(0, 10)
+      if (!map.has(key)) map.set(key, [])
+      map.get(key)!.push(ev)
+    }
+    return map
+  }, [eventos])
+
+  // Build the grid: 6 rows × 7 cols
+  const grid = useMemo(() => buildMonthGrid(cursor.year, cursor.month), [cursor])
+
+  // Cuántos eventos hay en el mes mostrado vs fuera del mes
+  // (para guiar al usuario: si hay actividad en otros meses, le decimos)
+  const { eventosMesActual, eventosOtrosMeses, primerMesActivo, ultimoMesActivo } = useMemo(() => {
+    const ymCursor = `${cursor.year}-${String(cursor.month + 1).padStart(2, '0')}`
+    let enMes = 0
+    let fueraMes = 0
+    const yms = new Set<string>()
+    for (const ev of eventos) {
+      const fecha = getEventoFecha(ev)
+      if (!fecha) continue
+      const ym = fecha.slice(0, 7)
+      yms.add(ym)
+      if (ym === ymCursor) enMes++
+      else fueraMes++
+    }
+    const sorted = [...yms].sort()
+    return {
+      eventosMesActual:  enMes,
+      eventosOtrosMeses: fueraMes,
+      primerMesActivo:   sorted[0] ?? null,
+      ultimoMesActivo:   sorted[sorted.length - 1] ?? null,
+    }
+  }, [eventos, cursor])
+
+  const monthName = new Date(cursor.year, cursor.month, 1).toLocaleString('es-MX', { month: 'long', year: 'numeric' })
+  const todayISO  = today.toISOString().slice(0, 10)
+
+  const prevMonth = () => setCursor((c) => c.month === 0 ? { year: c.year - 1, month: 11 } : { ...c, month: c.month - 1 })
+  const nextMonth = () => setCursor((c) => c.month === 11 ? { year: c.year + 1, month: 0 } : { ...c, month: c.month + 1 })
+  const goToday   = () => setCursor({ year: today.getFullYear(), month: today.getMonth() })
+  const goToYm    = (ym: string) => {
+    const [y, m] = ym.split('-')
+    setCursor({ year: parseInt(y), month: parseInt(m) - 1 })
+  }
+
+  if (isLoading) return <div className="text-center text-gray-400 py-12">Cargando…</div>
+
+  const DIAS = ['LUN', 'MAR', 'MIÉ', 'JUE', 'VIE', 'SÁB', 'DOM']
+
+  return (
+    <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+
+      {/* Header con gradient forest, mismo look del header principal */}
+      <div className="bg-gradient-to-r from-forest-700 to-forest-600 text-white px-6 py-4">
+        <div className="flex items-start justify-between gap-4 flex-wrap">
+          <div className="min-w-0">
+            <div className="flex items-center gap-2 mb-0.5">
+              <CalendarDays size={16} className="text-gold-300" />
+              <h3 className="text-base font-bold">{proyectoNombre}</h3>
+            </div>
+            <p className="text-xs text-white/70">Calendario de hitos · <span className="text-gold-300 font-semibold">{capitalize(monthName)}</span></p>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <button onClick={prevMonth} className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium text-white/90 hover:text-white bg-white/10 hover:bg-white/20 rounded-lg transition-colors">
+              <ChevronLeft size={13} /> Anterior
+            </button>
+            <button onClick={goToday} className="px-3 py-1.5 text-xs font-bold bg-gold-500 hover:bg-gold-600 text-white rounded-lg transition-colors">
+              Hoy
+            </button>
+            <button onClick={nextMonth} className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium text-white/90 hover:text-white bg-white/10 hover:bg-white/20 rounded-lg transition-colors">
+              Siguiente <ChevronRight size={13} />
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Hint de eventos fuera del mes actual */}
+      {(eventosMesActual > 0 || eventosOtrosMeses > 0) && (
+        <div className="bg-forest-50/40 border-b border-gray-100 px-6 py-2.5 flex items-center justify-between flex-wrap gap-2 text-xs">
+          <div className="text-gray-600">
+            <strong className="text-forest-700">{eventosMesActual}</strong> {eventosMesActual === 1 ? 'evento' : 'eventos'} este mes
+            {eventosOtrosMeses > 0 && (
+              <> · <strong className="text-gray-700">{eventosOtrosMeses}</strong> en otros meses</>
+            )}
+          </div>
+          {eventosOtrosMeses > 0 && primerMesActivo && ultimoMesActivo && (
+            <div className="flex items-center gap-2 text-gray-500">
+              <span>Ir a:</span>
+              {primerMesActivo !== `${cursor.year}-${String(cursor.month + 1).padStart(2, '0')}` && (
+                <button
+                  onClick={() => goToYm(primerMesActivo)}
+                  className="px-2 py-0.5 rounded text-forest-700 hover:bg-forest-100 font-medium transition-colors"
+                >
+                  Primer evento ({formatYmShort(primerMesActivo)})
+                </button>
+              )}
+              {ultimoMesActivo !== primerMesActivo && ultimoMesActivo !== `${cursor.year}-${String(cursor.month + 1).padStart(2, '0')}` && (
+                <button
+                  onClick={() => goToYm(ultimoMesActivo)}
+                  className="px-2 py-0.5 rounded text-forest-700 hover:bg-forest-100 font-medium transition-colors"
+                >
+                  Último evento ({formatYmShort(ultimoMesActivo)})
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Grid */}
+      <div className="p-5">
+        <div className="grid grid-cols-7 gap-2 mb-2">
+          {DIAS.map((d) => (
+            <div key={d} className="text-[10px] font-bold text-gray-400 uppercase tracking-wider text-center pb-1.5">{d}</div>
+          ))}
+        </div>
+        <div className="grid grid-cols-7 gap-2">
+          {grid.map((cell, idx) => {
+            const isCurrentMonth = cell.month === cursor.month
+            const isToday        = cell.dateISO === todayISO
+            const dayEvents      = eventosPorDia.get(cell.dateISO) ?? []
+            const isWeekend      = idx % 7 === 5 || idx % 7 === 6
+            return (
+              <div
+                key={idx}
+                className={clsx(
+                  'min-h-[105px] rounded-xl border p-2 flex flex-col gap-1 transition-shadow',
+                  isCurrentMonth
+                    ? 'bg-white border-gray-200 hover:shadow-sm'
+                    : 'bg-gray-50/60 border-gray-100',
+                  isWeekend && isCurrentMonth && 'bg-gray-50/30',
+                  isToday && '!bg-gradient-to-br from-gold-50 to-white !border-gold-400 ring-2 ring-gold-300/60 shadow-sm',
+                )}
+              >
+                <div className="flex items-center justify-between">
+                  <span className={clsx(
+                    'text-sm font-bold tabular-nums',
+                    isToday ? 'text-gold-700' :
+                      isCurrentMonth ? 'text-gray-800' : 'text-gray-300'
+                  )}>{cell.day}</span>
+                  {isToday && (
+                    <span className="text-[9px] font-bold uppercase tracking-wider bg-gold-500 text-white px-1.5 py-0.5 rounded-full shadow-sm">
+                      HOY
+                    </span>
+                  )}
+                </div>
+                <div className="flex flex-col gap-1 overflow-hidden">
+                  {dayEvents.slice(0, 3).map((ev, i) => <CalendarEventChip key={i} ev={ev} />)}
+                  {dayEvents.length > 3 && (
+                    <span className="text-[9px] text-gray-400 italic pl-1 font-medium">+ {dayEvents.length - 3} más</span>
+                  )}
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      </div>
+
+      {/* Leyenda */}
+      <div className="bg-gray-50/60 border-t border-gray-100 px-6 py-3">
+        <p className="text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-2">Leyenda</p>
+        <div className="flex flex-wrap gap-2 text-[11px]">
+          <LeyendaChip color="bg-blue-100 text-blue-700" icon={<Package size={10} />} label="MTO importado" />
+          <LeyendaChip color="bg-amber-100 text-amber-700" icon={<FileText size={10} />} label="Cotización" />
+          <LeyendaChip color="bg-purple-100 text-purple-700" icon={<ShoppingCart size={10} />} label="OC enviada" />
+          <LeyendaChip color="bg-cyan-100 text-cyan-700" icon={<ShoppingCart size={10} />} label="OC Directa" />
+          <LeyendaChip color="bg-red-100 text-red-700" icon={<AlertTriangle size={10} />} label="OC Urgente" />
+          <LeyendaChip color="bg-orange-100 text-orange-700" icon={<ShoppingCart size={10} />} label="OC Operativa" />
+          <LeyendaChip color="bg-emerald-100 text-emerald-700" icon={<Truck size={10} />} label="Recepción" />
+          <LeyendaChip color="bg-yellow-100 text-yellow-700" icon={<AlertCircle size={10} />} label="Recepción c/ dif." />
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// Format '2026-04' → 'abr 26'
+function formatYmShort(ym: string): string {
+  const [y, m] = ym.split('-')
+  const meses = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic']
+  return `${meses[parseInt(m) - 1] ?? m} ${y.slice(2)}`
+}
+
+function CalendarEventChip({ ev }: { ev: ActividadEvento }) {
+  const { color, icon, label } = getEventoChipMeta(ev)
+  return (
+    <Link
+      to={getEventoLink(ev)}
+      className={clsx(
+        'text-[10px] px-1.5 py-0.5 rounded font-medium flex items-center gap-1 truncate hover:opacity-80 transition-opacity',
+        color
+      )}
+      title={getEventoTooltip(ev)}
+    >
+      <span className="flex-shrink-0">{icon}</span>
+      <span className="truncate">{label}</span>
+    </Link>
+  )
+}
+
+function LeyendaChip({ color, icon, label }: { color: string; icon: React.ReactNode; label: string }) {
+  return (
+    <span className={clsx('inline-flex items-center gap-1 px-1.5 py-0.5 rounded font-medium', color)}>
+      {icon} {label}
+    </span>
+  )
+}
+
+// ─── Helpers para el calendario ──────────────────────────────────────────────
+
+function getEventoFecha(ev: ActividadEvento): string | null {
+  if (ev.tipo === 'mto_import')  return ev.fecha ?? ev.ts
+  if (ev.tipo === 'oc')          return ev.fecha_emision ?? ev.ts
+  if (ev.tipo === 'recepcion')   return ev.fecha_recepcion ?? ev.ts
+  if (ev.tipo === 'cotizacion')  return ev.fecha_solicitud ?? ev.ts
+  return null
+}
+
+function getEventoLink(ev: ActividadEvento): string {
+  if (ev.tipo === 'oc')        return `/ordenes-compra?ocId=${ev.id}`
+  if (ev.tipo === 'recepcion') return `/ordenes-compra?ocId=${ev.oc_id}`
+  return '#'
+}
+
+function getEventoTooltip(ev: ActividadEvento): string {
+  if (ev.tipo === 'mto_import') return `MTO importado: ${ev.items_count} ítems${ev.vendor_principal ? ` (${ev.vendor_principal})` : ''}`
+  if (ev.tipo === 'oc') {
+    const base = `${ev.numero} · ${ev.vendor ?? 'Sin vendor'} · ${fmt(ev.total)}`
+    return ev.estado === 'cancelada' ? `❌ CANCELADA — ${base}` : base
+  }
+  if (ev.tipo === 'recepcion')  return `${ev.folio} · ${ev.estado === 'con_diferencias' ? 'Con diferencias' : 'Completa'}`
+  if (ev.tipo === 'cotizacion') return `${ev.folio} · ${ev.estado}${ev.vendor ? ` · ${ev.vendor}` : ''}`
+  return ''
+}
+
+function getEventoChipMeta(ev: ActividadEvento): { color: string; icon: React.ReactNode; label: string } {
+  if (ev.tipo === 'mto_import') {
+    return { color: 'bg-blue-100 text-blue-700', icon: <Package size={9} />, label: `MTO · ${ev.items_count}` }
+  }
+  if (ev.tipo === 'oc') {
+    if (ev.estado === 'cancelada') {
+      return { color: 'bg-gray-200 text-gray-500 line-through', icon: <ShoppingCart size={9} />, label: ev.numero }
+    }
+    if (ev.origen === 'URGENTE')   return { color: 'bg-red-100 text-red-700',     icon: <AlertTriangle size={9} />, label: ev.numero }
+    if (ev.origen === 'DIRECTA')   return { color: 'bg-cyan-100 text-cyan-700',   icon: <ShoppingCart size={9} />,  label: ev.numero }
+    if (ev.origen === 'OPERATIVA') return { color: 'bg-orange-100 text-orange-700', icon: <ShoppingCart size={9} />, label: ev.numero }
+    return { color: 'bg-purple-100 text-purple-700', icon: <ShoppingCart size={9} />, label: ev.numero }
+  }
+  if (ev.tipo === 'recepcion') {
+    if (ev.estado === 'con_diferencias') {
+      return { color: 'bg-yellow-100 text-yellow-700', icon: <AlertCircle size={9} />, label: ev.folio }
+    }
+    return { color: 'bg-emerald-100 text-emerald-700', icon: <Truck size={9} />, label: ev.folio }
+  }
+  if (ev.tipo === 'cotizacion') {
+    return { color: 'bg-amber-100 text-amber-700', icon: <FileText size={9} />, label: ev.folio }
+  }
+  return { color: 'bg-gray-100 text-gray-500', icon: null, label: '?' }
+}
+
+// Construye una grilla de 42 celdas (6 semanas × 7 días) empezando el lunes
+// para el mes dado. Cada celda tiene { day, month, dateISO }.
+function buildMonthGrid(year: number, month: number) {
+  const firstOfMonth = new Date(year, month, 1)
+  // JS: Sunday=0..Saturday=6. Lo convertimos a Lunes=0..Domingo=6
+  const firstDayWeekday = (firstOfMonth.getDay() + 6) % 7
+  const gridStart = new Date(year, month, 1 - firstDayWeekday)
+
+  return Array.from({ length: 42 }, (_, i) => {
+    const d = new Date(gridStart)
+    d.setDate(gridStart.getDate() + i)
+    return {
+      day:     d.getDate(),
+      month:   d.getMonth(),
+      dateISO: toIsoDate(d),
+    }
+  })
+}
+
+function toIsoDate(d: Date): string {
+  const y  = d.getFullYear()
+  const m  = String(d.getMonth() + 1).padStart(2, '0')
+  const dd = String(d.getDate()).padStart(2, '0')
+  return `${y}-${m}-${dd}`
+}
+
+function capitalize(s: string): string {
+  return s.charAt(0).toUpperCase() + s.slice(1)
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
