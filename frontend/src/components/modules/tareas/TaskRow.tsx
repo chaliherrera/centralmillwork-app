@@ -1,5 +1,5 @@
 import { Check, Circle, CircleDot, MoreHorizontal, Trash2, RotateCcw } from 'lucide-react'
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import type { Tarea } from '@/types'
 import { AREA_META, PRIORITY_META, ESTADO_NEXT, shortSender, timeAgo, extractProjectCode } from './constants'
 
@@ -7,6 +7,7 @@ interface Props {
   tarea: Tarea
   highlighted?: boolean    // project lens activo
   dimmed?: boolean         // project lens activo en otra
+  focused?: boolean        // foco de teclado (j/k navigation)
   onStatusCycle: (next: Tarea['estado']) => void
   onDescartar: () => void
   onReactivar: () => void
@@ -60,29 +61,39 @@ function EstadoButton({ estado, onClick }: { estado: Tarea['estado']; onClick: (
   )
 }
 
-export default function TaskRow({ tarea, highlighted, dimmed, onStatusCycle, onDescartar, onReactivar, onProjectClick, onOpen }: Props) {
+export default function TaskRow({ tarea, highlighted, dimmed, focused, onStatusCycle, onDescartar, onReactivar, onProjectClick, onOpen }: Props) {
   const [menuOpen, setMenuOpen] = useState(false)
+  const rowRef = useRef<HTMLDivElement>(null)
   const area = AREA_META[tarea.area]
   const prio = PRIORITY_META[tarea.priority]
   const code = extractProjectCode(tarea.subject)
   const isDone = tarea.estado === 'completada'
   const isDiscarded = tarea.estado === 'descartada'
 
+  // Auto-scroll cuando esta tarea recibe foco de teclado (j/k)
+  useEffect(() => {
+    if (focused) {
+      rowRef.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+    }
+  }, [focused])
+
   // stop propagation helper para los buttons internos
   const stop = (e: React.MouseEvent) => e.stopPropagation()
 
   return (
     <div
+      ref={rowRef}
       onClick={onOpen}
       role="button"
       tabIndex={0}
-      onKeyDown={(e) => { if (e.key === 'Enter') onOpen() }}
-      className={`group relative pl-4 pr-3 py-2.5 rounded-lg border border-transparent transition-all cursor-pointer ${
-        highlighted
+      className={`group relative pl-4 pr-3 py-2.5 rounded-lg border transition-all cursor-pointer ${
+        focused
+          ? 'bg-white border-forest-500 ring-2 ring-forest-500/20'
+          : highlighted
           ? 'bg-white shadow-sm border-gray-200'
           : dimmed
-          ? 'opacity-40'
-          : 'hover:bg-white hover:border-gray-200'
+          ? 'opacity-40 border-transparent'
+          : 'border-transparent hover:bg-white hover:border-gray-200'
       } ${isDone || isDiscarded ? 'opacity-60' : ''}`}
     >
       {/* Borde izquierdo coloreado por área */}

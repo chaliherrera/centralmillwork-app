@@ -7,9 +7,10 @@ interface Props {
   onChange: (next: TareasFilters) => void
   showCompletadas: boolean
   onToggleCompletadas: () => void
+  searchRef?: React.Ref<HTMLInputElement>
 }
 
-export default function FilterBar({ filters, onChange, showCompletadas, onToggleCompletadas }: Props) {
+export default function FilterBar({ filters, onChange, showCompletadas, onToggleCompletadas, searchRef }: Props) {
   const setArea = (a: TareaArea | undefined) => onChange({ ...filters, area: a })
   const setPriority = (p: TareaPriority | undefined) => onChange({ ...filters, priority: p })
   const setSearch = (s: string) => onChange({ ...filters, search: s || undefined })
@@ -81,8 +82,9 @@ export default function FilterBar({ filters, onChange, showCompletadas, onToggle
         <div className="relative">
           <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" />
           <input
+            ref={searchRef}
             type="search"
-            placeholder="Buscar tareas..."
+            placeholder="Buscar tareas... ( / )"
             value={filters.search ?? ''}
             onChange={(e) => setSearch(e.target.value)}
             className="pl-8 pr-7 py-1.5 text-sm border border-gray-200 rounded-lg w-56 focus:ring-1 focus:ring-forest-500 focus:border-forest-500 outline-none"

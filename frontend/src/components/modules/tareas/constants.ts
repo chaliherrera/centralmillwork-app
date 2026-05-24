@@ -1,4 +1,4 @@
-import type { TareaArea, TareaPriority, TareaEstado } from '@/types'
+import type { Tarea, TareaArea, TareaPriority, TareaEstado } from '@/types'
 
 // Pigmentos de marca: oak/walnut/mahogany/forest. Una paleta tipo madera
 // trabajada — coherente entre áreas y preparada para el Glass theme futuro.
@@ -38,6 +38,41 @@ export const ESTADO_NEXT: Record<TareaEstado, TareaEstado> = {
   en_progreso: 'completada',
   completada:  'pendiente',
   descartada:  'pendiente',
+}
+
+// Cycle de prioridad para shortcut 'p'.
+export const PRIORITY_NEXT: Record<TareaPriority, TareaPriority> = {
+  low:    'medium',
+  medium: 'high',
+  high:   'low',
+}
+
+export interface TareaGroup {
+  code: string | null    // null = sin proyecto
+  tareas: Tarea[]
+}
+
+// Agrupa tareas por código de proyecto (XX-XXX detectado en subject).
+// Sort: códigos numéricos desc, "Sin proyecto" al final.
+const NO_PROJECT_KEY = '__none__'
+export function groupByProject(tareas: Tarea[]): TareaGroup[] {
+  const map = new Map<string, Tarea[]>()
+  for (const t of tareas) {
+    const code = extractProjectCode(t.subject)
+    const key = code ?? NO_PROJECT_KEY
+    const arr = map.get(key) ?? []
+    arr.push(t)
+    map.set(key, arr)
+  }
+  const groups: TareaGroup[] = []
+  const codes = Array.from(map.keys()).filter((k) => k !== NO_PROJECT_KEY).sort().reverse()
+  for (const code of codes) {
+    groups.push({ code, tareas: map.get(code)! })
+  }
+  if (map.has(NO_PROJECT_KEY)) {
+    groups.push({ code: null, tareas: map.get(NO_PROJECT_KEY)! })
+  }
+  return groups
 }
 
 // Extrae el código de proyecto del subject (formato XX-XXX).

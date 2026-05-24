@@ -1,47 +1,19 @@
 import { useMemo, useState } from 'react'
 import { ChevronDown, ChevronRight, Inbox } from 'lucide-react'
 import type { Tarea } from '@/types'
-import { extractProjectCode } from './constants'
+import { groupByProject } from './constants'
 import TaskRow from './TaskRow'
 
 interface Props {
   tareas: Tarea[]
   projectLens: string | null
+  focusedId: number | null
   onProjectLens: (code: string | null) => void
   onStatusChange: (id: number, next: Tarea['estado']) => void
   onOpenTarea: (id: number) => void
 }
 
-interface Group {
-  code: string | null     // null = sin proyecto
-  tareas: Tarea[]
-}
-
-function groupByProject(tareas: Tarea[]): Group[] {
-  const map = new Map<string, Tarea[]>()
-  const NO_PROJECT_KEY = '__none__'
-
-  for (const t of tareas) {
-    const code = extractProjectCode(t.subject)
-    const key = code ?? NO_PROJECT_KEY
-    const arr = map.get(key) ?? []
-    arr.push(t)
-    map.set(key, arr)
-  }
-
-  // Orden: códigos numéricos primero (más recientes XX más alto = más reciente), "Sin proyecto" al final
-  const groups: Group[] = []
-  const codes = Array.from(map.keys()).filter((k) => k !== NO_PROJECT_KEY).sort().reverse()
-  for (const code of codes) {
-    groups.push({ code, tareas: map.get(code)! })
-  }
-  if (map.has(NO_PROJECT_KEY)) {
-    groups.push({ code: null, tareas: map.get(NO_PROJECT_KEY)! })
-  }
-  return groups
-}
-
-export default function InboxView({ tareas, projectLens, onProjectLens, onStatusChange, onOpenTarea }: Props) {
+export default function InboxView({ tareas, projectLens, focusedId, onProjectLens, onStatusChange, onOpenTarea }: Props) {
   const groups = useMemo(() => groupByProject(tareas), [tareas])
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set())
 
@@ -56,10 +28,12 @@ export default function InboxView({ tareas, projectLens, onProjectLens, onStatus
 
   if (!tareas.length) {
     return (
-      <div className="flex flex-col items-center justify-center py-20 text-center">
-        <Inbox size={32} className="text-gray-300 mb-3" />
-        <p className="text-sm font-medium text-gray-700">Sin tareas para mostrar</p>
-        <p className="text-xs text-gray-500 mt-1">El agente postea cada 30 minutos. Ajustá los filtros o esperá.</p>
+      <div className="flex flex-col items-center justify-center py-24 text-center">
+        <Inbox size={36} className="text-gray-300 mb-4" strokeWidth={1.5} />
+        <p className="text-base font-medium text-gray-700">Tu inbox está despejado</p>
+        <p className="text-sm text-gray-500 mt-1.5 max-w-sm">
+          Sin tareas que coincidan. Probá quitar filtros, o esperá: el agente sincroniza cada 30 minutos.
+        </p>
       </div>
     )
   }
@@ -103,6 +77,7 @@ export default function InboxView({ tareas, projectLens, onProjectLens, onStatus
                     tarea={t}
                     highlighted={isLensActive}
                     dimmed={false}
+                    focused={focusedId === t.id}
                     onStatusCycle={(next) => onStatusChange(t.id, next)}
                     onDescartar={() => onStatusChange(t.id, 'descartada')}
                     onReactivar={() => onStatusChange(t.id, 'pendiente')}
