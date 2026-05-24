@@ -91,6 +91,20 @@ export function shortSender(email: string | null | undefined): string {
   return `@${local}`
 }
 
+// Mapea source_ref de tareas de sistema a un label humano.
+// Format esperado: 'rule-key:entity_id' — ej 'eta-today:1234'
+export function ruleLabel(sourceRef: string | null | undefined): string {
+  if (!sourceRef) return 'Sistema'
+  const prefix = sourceRef.split(':')[0]
+  const labels: Record<string, string> = {
+    'quote-stale':   'Cotización estancada',
+    'eta-today':     'ETA hoy',
+    'eta-overdue':   'ETA vencida',
+    'partial-stale': 'Parcial sin movimiento',
+  }
+  return labels[prefix] ?? prefix
+}
+
 // "hace 2h" / "hace 3d" / "ahora" — sin libs externas, mínimo.
 export function timeAgo(iso: string): string {
   const diff = (Date.now() - new Date(iso).getTime()) / 1000

@@ -1,4 +1,4 @@
-import { Check, Circle, CircleDot, MoreHorizontal, Trash2, RotateCcw } from 'lucide-react'
+import { Check, Circle, CircleDot, MoreHorizontal, Trash2, RotateCcw, Cpu } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import type { Tarea } from '@/types'
 import {
@@ -161,6 +161,22 @@ export default function GlassTaskRow({
         >
           {area.short}
         </span>
+
+        {/* Origen sistema: badge sutil */}
+        {tarea.origen === 'sistema' && (
+          <span
+            className="shrink-0 inline-flex items-center gap-0.5 text-[10px] font-medium px-1.5 py-0.5 rounded"
+            title="Generada por el sistema"
+            style={{
+              background: 'rgba(255,255,250,0.06)',
+              border: '0.5px solid rgba(255,255,250,0.18)',
+              color: 'rgba(255,255,250,0.78)',
+            }}
+          >
+            <Cpu size={10} strokeWidth={2} />
+            <span>SIS</span>
+          </span>
+        )}
 
         {/* Title */}
         <p

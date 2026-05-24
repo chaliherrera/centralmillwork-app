@@ -272,6 +272,7 @@ export interface DashboardProyecto {
 export type TareaArea     = 'procurement' | 'despachos' | 'recepcion' | 'administracion'
 export type TareaPriority = 'low' | 'medium' | 'high'
 export type TareaEstado   = 'pendiente' | 'en_progreso' | 'completada' | 'descartada'
+export type TareaOrigen   = 'email' | 'sistema'
 
 export interface Tarea {
   id: number
@@ -286,6 +287,15 @@ export interface Tarea {
   asignado_a: string | null
   created_at: string
   completed_at: string | null
+  origen: TareaOrigen
+  source_ref: string | null
+}
+
+export interface SyncSystemResult {
+  created: number
+  autoClosed: number
+  kept: number
+  byRule: Record<string, { created: number; autoClosed: number; kept: number }>
 }
 
 export interface TareasStats {

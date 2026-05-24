@@ -40,7 +40,7 @@ import {
 } from '../controllers/cotizacionesController'
 import { getReporteCompras, getReporteProduccion, compartirReporte } from '../controllers/reportesController'
 import {
-  getTareas, getTarea, updateTarea, getTareasStats,
+  getTareas, getTarea, updateTarea, getTareasStats, syncSystemHandler,
   updateTareaSchema,
 } from '../controllers/tareasController'
 
@@ -127,6 +127,7 @@ router.post('/reportes/compartir',   WRITE, compartirReporte)
 // ─── Tareas (solo ADMIN) ─────────────────────────────────────────────────────
 router.get('/tareas',                ADMIN, getTareas)
 router.get('/tareas/stats',          ADMIN, getTareasStats)
+router.post('/tareas/sync-system',   ADMIN, syncSystemHandler)
 router.get('/tareas/:id',            ADMIN, getTarea)
 router.patch('/tareas/:id',          ADMIN, validateBody(updateTareaSchema), updateTarea)
 

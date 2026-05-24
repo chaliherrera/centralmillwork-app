@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from 'express'
 import { z } from 'zod'
 import pool from '../db/pool'
 import { createError } from '../middleware/errorHandler'
+import { syncSystemTareas } from '../jobs/tareasFromSystem'
 
 // ─── Schemas ─────────────────────────────────────────────────────────────────
 
@@ -188,6 +189,19 @@ export async function getTarea(req: Request, res: Response, next: NextFunction) 
     const { rows } = await pool.query('SELECT * FROM tareas WHERE id = $1', [req.params.id])
     if (!rows[0]) return next(createError('Tarea no encontrada', 404))
     res.json({ data: rows[0] })
+  } catch (err) {
+    next(err)
+  }
+}
+
+// ─── POST /api/tareas/sync-system ────────────────────────────────────────────
+// Trigger manual del job que genera tareas desde la DB de Compras.
+// El job tambien corre automaticamente cada 30 min (ver index.ts).
+
+export async function syncSystemHandler(_req: Request, res: Response, next: NextFunction) {
+  try {
+    const result = await syncSystemTareas()
+    res.json({ data: result, message: 'Sync ejecutado' })
   } catch (err) {
     next(err)
   }

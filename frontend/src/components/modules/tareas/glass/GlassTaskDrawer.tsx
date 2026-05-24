@@ -1,12 +1,12 @@
 import { useEffect } from 'react'
 import {
   X, Mail, Calendar, Circle, CircleDot, Check,
-  Trash2, RotateCcw, AtSign,
+  Trash2, RotateCcw, AtSign, Cpu,
 } from 'lucide-react'
 import type { Tarea } from '@/types'
 import {
   AREA_META, PRIORITY_META, ESTADO_META,
-  extractProjectCode, timeAgo, shortSender,
+  extractProjectCode, timeAgo, shortSender, ruleLabel,
 } from '../constants'
 
 interface Props {
@@ -161,7 +161,7 @@ export default function GlassTaskDrawer({ tarea, onClose, onStatusChange, onDesc
             )}
           </section>
 
-          {/* Email source */}
+          {/* Origen */}
           <section>
             <h3 className="text-[10px] uppercase tracking-wider font-semibold mb-1.5" style={{ color: TEXT4 }}>Origen</h3>
             <div
@@ -172,18 +172,39 @@ export default function GlassTaskDrawer({ tarea, onClose, onStatusChange, onDesc
                 boxShadow: 'inset 1px 1.5px 1px rgba(255,255,255,0.06)',
               }}
             >
-              <div className="flex items-start gap-2.5 mb-2">
-                <Mail size={14} className="shrink-0 mt-0.5" style={{ color: TEXT4 }} />
-                <p className="text-sm font-medium leading-snug" style={{ color: TEXT }}>
-                  {tarea.subject ?? '(sin subject)'}
-                </p>
-              </div>
-              <div className="flex items-center gap-2 text-xs ml-6" style={{ color: TEXT3 }}>
-                <AtSign size={11} style={{ color: TEXT4 }} />
-                <span>{tarea.from_email ?? 'desconocido'}</span>
-                <span style={{ color: TEXT4 }}>·</span>
-                <span>{shortSender(tarea.from_email)}</span>
-              </div>
+              {tarea.origen === 'sistema' ? (
+                <>
+                  <div className="flex items-start gap-2.5 mb-2">
+                    <Cpu size={14} className="shrink-0 mt-0.5" style={{ color: TEXT4 }} />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium leading-snug" style={{ color: TEXT }}>
+                        Generada por el sistema · {ruleLabel(tarea.source_ref)}
+                      </p>
+                      {tarea.source_ref && (
+                        <p className="text-xs font-mono mt-1" style={{ color: TEXT3 }}>{tarea.source_ref}</p>
+                      )}
+                    </div>
+                  </div>
+                  <p className="text-xs ml-6 leading-relaxed" style={{ color: TEXT3 }}>
+                    Esta tarea se autocierra cuando la situación se resuelve (recepción, respuesta del proveedor, etc.).
+                  </p>
+                </>
+              ) : (
+                <>
+                  <div className="flex items-start gap-2.5 mb-2">
+                    <Mail size={14} className="shrink-0 mt-0.5" style={{ color: TEXT4 }} />
+                    <p className="text-sm font-medium leading-snug" style={{ color: TEXT }}>
+                      {tarea.subject ?? '(sin subject)'}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2 text-xs ml-6" style={{ color: TEXT3 }}>
+                    <AtSign size={11} style={{ color: TEXT4 }} />
+                    <span>{tarea.from_email ?? 'desconocido'}</span>
+                    <span style={{ color: TEXT4 }}>·</span>
+                    <span>{shortSender(tarea.from_email)}</span>
+                  </div>
+                </>
+              )}
             </div>
           </section>
         </div>

@@ -1,5 +1,5 @@
 import api from './api'
-import type { Tarea, TareasStats, TareasFilters, ApiResponse } from '@/types'
+import type { Tarea, TareasStats, TareasFilters, ApiResponse, SyncSystemResult } from '@/types'
 
 export const tareasService = {
   getAll: (filters?: TareasFilters) => {
@@ -20,4 +20,7 @@ export const tareasService = {
 
   getStats: () =>
     api.get<ApiResponse<TareasStats>>('/tareas/stats').then((r) => r.data),
+
+  syncSystem: () =>
+    api.post<ApiResponse<SyncSystemResult>>('/tareas/sync-system').then((r) => r.data),
 }

@@ -7,6 +7,7 @@ import fs from 'fs'
 import router from './routes'
 import authRouter from './routes/auth'
 import webhooksRouter from './routes/webhooks'
+import { syncSystemTareas } from './jobs/tareasFromSystem'
 import { authenticate } from './middleware/auth'
 import { errorHandler, notFound } from './middleware/errorHandler'
 import { globalLimiter, loginLimiter } from './middleware/rateLimit'
@@ -90,6 +91,20 @@ app.use(errorHandler)
 
 app.listen(PORT, () => {
   logger.info('server listening', { port: PORT, url: `http://localhost:${PORT}` })
+
+  // Sistema de tareas auto-generadas desde la DB (cotizaciones estancadas, ETAs, etc.)
+  // Corre 60s despues del boot y cada 30 minutos en adelante.
+  const SYNC_INTERVAL_MS = 30 * 60 * 1000
+  const runSystemSync = async () => {
+    try {
+      const result = await syncSystemTareas()
+      logger.info('system tareas sync', result)
+    } catch (err) {
+      logger.error('system tareas sync failed', { err: String(err) })
+    }
+  }
+  setTimeout(runSystemSync, 60_000)
+  setInterval(runSystemSync, SYNC_INTERVAL_MS)
 })
 
 export default app

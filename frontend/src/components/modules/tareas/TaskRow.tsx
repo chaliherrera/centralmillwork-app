@@ -1,4 +1,4 @@
-import { Check, Circle, CircleDot, MoreHorizontal, Trash2, RotateCcw } from 'lucide-react'
+import { Check, Circle, CircleDot, MoreHorizontal, Trash2, RotateCcw, Cpu } from 'lucide-react'
 import { useState, useEffect, useRef } from 'react'
 import type { Tarea } from '@/types'
 import { AREA_META, PRIORITY_META, ESTADO_NEXT, shortSender, timeAgo, extractProjectCode } from './constants'
@@ -133,6 +133,17 @@ export default function TaskRow({ tarea, highlighted, dimmed, focused, onStatusC
         >
           {area.short}
         </span>
+
+        {/* Origen sistema: badge sutil */}
+        {tarea.origen === 'sistema' && (
+          <span
+            className="shrink-0 inline-flex items-center gap-0.5 text-[10px] font-medium text-gray-500 px-1.5 py-0.5 rounded border border-gray-200"
+            title="Generada por el sistema"
+          >
+            <Cpu size={10} strokeWidth={2} />
+            <span>SIS</span>
+          </span>
+        )}
 
         {/* Title — el row entero abre drawer */}
         <p

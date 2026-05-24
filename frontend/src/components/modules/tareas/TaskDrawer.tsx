@@ -1,12 +1,12 @@
 import { useEffect } from 'react'
 import {
   X, Mail, Calendar, Circle, CircleDot, Check,
-  Trash2, RotateCcw, AtSign,
+  Trash2, RotateCcw, AtSign, Cpu,
 } from 'lucide-react'
 import type { Tarea } from '@/types'
 import {
   AREA_META, PRIORITY_META, ESTADO_META,
-  extractProjectCode, timeAgo, shortSender,
+  extractProjectCode, timeAgo, shortSender, ruleLabel,
 } from './constants'
 
 interface Props {
@@ -139,23 +139,42 @@ export default function TaskDrawer({ tarea, onClose, onStatusChange, onDescartar
             )}
           </section>
 
-          {/* Email source */}
+          {/* Origen */}
           <section>
             <h3 className="text-[10px] uppercase tracking-wider font-semibold text-gray-400 mb-1.5">Origen</h3>
-            <div className="border border-gray-200 rounded-lg p-3 bg-gray-50">
-              <div className="flex items-start gap-2.5 mb-2">
-                <Mail size={14} className="text-gray-400 shrink-0 mt-0.5" />
-                <p className="text-sm font-medium text-gray-900 leading-snug">
-                  {tarea.subject ?? '(sin subject)'}
+            {tarea.origen === 'sistema' ? (
+              <div className="border border-gray-200 rounded-lg p-3 bg-gray-50">
+                <div className="flex items-start gap-2.5 mb-2">
+                  <Cpu size={14} className="text-gray-400 shrink-0 mt-0.5" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-gray-900 leading-snug">
+                      Generada por el sistema · {ruleLabel(tarea.source_ref)}
+                    </p>
+                    {tarea.source_ref && (
+                      <p className="text-xs text-gray-500 font-mono mt-1">{tarea.source_ref}</p>
+                    )}
+                  </div>
+                </div>
+                <p className="text-xs text-gray-500 ml-6 leading-relaxed">
+                  Esta tarea se autocierra cuando la situación se resuelve (recepción, respuesta del proveedor, etc.).
                 </p>
               </div>
-              <div className="flex items-center gap-2 text-xs text-gray-500 ml-6">
-                <AtSign size={11} className="text-gray-400" />
-                <span>{tarea.from_email ?? 'desconocido'}</span>
-                <span className="text-gray-300">·</span>
-                <span>{shortSender(tarea.from_email)}</span>
+            ) : (
+              <div className="border border-gray-200 rounded-lg p-3 bg-gray-50">
+                <div className="flex items-start gap-2.5 mb-2">
+                  <Mail size={14} className="text-gray-400 shrink-0 mt-0.5" />
+                  <p className="text-sm font-medium text-gray-900 leading-snug">
+                    {tarea.subject ?? '(sin subject)'}
+                  </p>
+                </div>
+                <div className="flex items-center gap-2 text-xs text-gray-500 ml-6">
+                  <AtSign size={11} className="text-gray-400" />
+                  <span>{tarea.from_email ?? 'desconocido'}</span>
+                  <span className="text-gray-300">·</span>
+                  <span>{shortSender(tarea.from_email)}</span>
+                </div>
               </div>
-            </div>
+            )}
           </section>
         </div>
 
