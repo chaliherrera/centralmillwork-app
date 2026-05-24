@@ -8,12 +8,14 @@ import { timeAgo } from '@/components/modules/tareas/constants'
 import KpiStrip from '@/components/modules/tareas/KpiStrip'
 import FilterBar from '@/components/modules/tareas/FilterBar'
 import InboxView from '@/components/modules/tareas/InboxView'
+import TaskDrawer from '@/components/modules/tareas/TaskDrawer'
 
 export default function Tareas() {
   const qc = useQueryClient()
   const [filters, setFilters] = useState<TareasFilters>({})
   const [showCompletadas, setShowCompletadas] = useState(false)
   const [projectLens, setProjectLens] = useState<string | null>(null)
+  const [selectedId, setSelectedId] = useState<number | null>(null)
 
   // Estados visibles dependen del toggle "mostrar hechas"
   const queryFilters: TareasFilters = useMemo(() => ({
@@ -47,6 +49,10 @@ export default function Tareas() {
 
   const tareas = tareasResp?.data ?? []
   const stats = statsResp?.data
+  const selectedTarea = useMemo(
+    () => tareas.find((t) => t.id === selectedId) ?? null,
+    [tareas, selectedId],
+  )
 
   // Última sync = la tarea más reciente (created_at)
   const lastSyncIso = useMemo(() => {
@@ -90,8 +96,17 @@ export default function Tareas() {
           projectLens={projectLens}
           onProjectLens={setProjectLens}
           onStatusChange={(id, estado) => updateMut.mutate({ id, estado })}
+          onOpenTarea={setSelectedId}
         />
       )}
+
+      <TaskDrawer
+        tarea={selectedTarea}
+        onClose={() => setSelectedId(null)}
+        onStatusChange={(estado) => selectedTarea && updateMut.mutate({ id: selectedTarea.id, estado })}
+        onDescartar={() => selectedTarea && updateMut.mutate({ id: selectedTarea.id, estado: 'descartada' })}
+        onReactivar={() => selectedTarea && updateMut.mutate({ id: selectedTarea.id, estado: 'pendiente' })}
+      />
     </div>
   )
 }

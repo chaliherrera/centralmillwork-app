@@ -11,6 +11,7 @@ interface Props {
   onDescartar: () => void
   onReactivar: () => void
   onProjectClick?: (code: string) => void
+  onOpen: () => void
 }
 
 function EstadoButton({ estado, onClick }: { estado: Tarea['estado']; onClick: () => void }) {
@@ -59,7 +60,7 @@ function EstadoButton({ estado, onClick }: { estado: Tarea['estado']; onClick: (
   )
 }
 
-export default function TaskRow({ tarea, highlighted, dimmed, onStatusCycle, onDescartar, onReactivar, onProjectClick }: Props) {
+export default function TaskRow({ tarea, highlighted, dimmed, onStatusCycle, onDescartar, onReactivar, onProjectClick, onOpen }: Props) {
   const [menuOpen, setMenuOpen] = useState(false)
   const area = AREA_META[tarea.area]
   const prio = PRIORITY_META[tarea.priority]
@@ -67,9 +68,16 @@ export default function TaskRow({ tarea, highlighted, dimmed, onStatusCycle, onD
   const isDone = tarea.estado === 'completada'
   const isDiscarded = tarea.estado === 'descartada'
 
+  // stop propagation helper para los buttons internos
+  const stop = (e: React.MouseEvent) => e.stopPropagation()
+
   return (
     <div
-      className={`group relative pl-4 pr-3 py-2.5 rounded-lg border border-transparent transition-all ${
+      onClick={onOpen}
+      role="button"
+      tabIndex={0}
+      onKeyDown={(e) => { if (e.key === 'Enter') onOpen() }}
+      className={`group relative pl-4 pr-3 py-2.5 rounded-lg border border-transparent transition-all cursor-pointer ${
         highlighted
           ? 'bg-white shadow-sm border-gray-200'
           : dimmed
@@ -84,7 +92,7 @@ export default function TaskRow({ tarea, highlighted, dimmed, onStatusCycle, onD
         style={{ background: area.color }}
       />
 
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-3" onClick={stop}>
         <EstadoButton estado={tarea.estado} onClick={() => onStatusCycle(ESTADO_NEXT[tarea.estado])} />
 
         {/* Priority dot */}
@@ -97,7 +105,7 @@ export default function TaskRow({ tarea, highlighted, dimmed, onStatusCycle, onD
         {/* Project code chip */}
         {code && (
           <button
-            onClick={() => onProjectClick?.(code)}
+            onClick={(e) => { e.stopPropagation(); onProjectClick?.(code) }}
             className="shrink-0 font-mono text-[11px] font-medium tracking-tight px-1.5 py-0.5 rounded border border-gray-200 text-gray-600 hover:bg-gray-50 hover:border-gray-300 transition-colors"
             title="Filtrar por este proyecto"
           >
@@ -113,8 +121,11 @@ export default function TaskRow({ tarea, highlighted, dimmed, onStatusCycle, onD
           {area.short}
         </span>
 
-        {/* Title */}
-        <p className={`flex-1 text-sm font-medium text-gray-900 truncate ${isDone ? 'line-through' : ''}`}>
+        {/* Title — click abre drawer (propaga al row) */}
+        <p
+          onClick={(e) => { e.stopPropagation(); onOpen() }}
+          className={`flex-1 text-sm font-medium text-gray-900 truncate cursor-pointer ${isDone ? 'line-through' : ''}`}
+        >
           {tarea.title}
         </p>
 
@@ -126,7 +137,7 @@ export default function TaskRow({ tarea, highlighted, dimmed, onStatusCycle, onD
         {/* Actions */}
         <div className="relative shrink-0">
           <button
-            onClick={() => setMenuOpen((v) => !v)}
+            onClick={(e) => { e.stopPropagation(); setMenuOpen((v) => !v) }}
             className="opacity-0 group-hover:opacity-100 transition-opacity text-gray-400 hover:text-gray-900 p-1"
             title="Más acciones"
           >
@@ -134,8 +145,8 @@ export default function TaskRow({ tarea, highlighted, dimmed, onStatusCycle, onD
           </button>
           {menuOpen && (
             <>
-              <div className="fixed inset-0 z-10" onClick={() => setMenuOpen(false)} />
-              <div className="absolute right-0 top-full mt-1 z-20 bg-white border border-gray-200 rounded-lg shadow-lg py-1 min-w-[180px] text-sm">
+              <div className="fixed inset-0 z-10" onClick={(e) => { e.stopPropagation(); setMenuOpen(false) }} />
+              <div className="absolute right-0 top-full mt-1 z-20 bg-white border border-gray-200 rounded-lg shadow-lg py-1 min-w-[180px] text-sm" onClick={stop}>
                 {!isDiscarded ? (
                   <button
                     onClick={() => { setMenuOpen(false); onDescartar() }}

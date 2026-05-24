@@ -9,6 +9,7 @@ interface Props {
   projectLens: string | null
   onProjectLens: (code: string | null) => void
   onStatusChange: (id: number, next: Tarea['estado']) => void
+  onOpenTarea: (id: number) => void
 }
 
 interface Group {
@@ -40,7 +41,7 @@ function groupByProject(tareas: Tarea[]): Group[] {
   return groups
 }
 
-export default function InboxView({ tareas, projectLens, onProjectLens, onStatusChange }: Props) {
+export default function InboxView({ tareas, projectLens, onProjectLens, onStatusChange, onOpenTarea }: Props) {
   const groups = useMemo(() => groupByProject(tareas), [tareas])
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set())
 
@@ -106,6 +107,7 @@ export default function InboxView({ tareas, projectLens, onProjectLens, onStatus
                     onDescartar={() => onStatusChange(t.id, 'descartada')}
                     onReactivar={() => onStatusChange(t.id, 'pendiente')}
                     onProjectClick={(code) => onProjectLens(projectLens === code ? null : code)}
+                    onOpen={() => onOpenTarea(t.id)}
                   />
                 ))}
               </div>

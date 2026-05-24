@@ -13,9 +13,12 @@ export default function FilterBar({ filters, onChange, showCompletadas, onToggle
   const setArea = (a: TareaArea | undefined) => onChange({ ...filters, area: a })
   const setPriority = (p: TareaPriority | undefined) => onChange({ ...filters, priority: p })
   const setSearch = (s: string) => onChange({ ...filters, search: s || undefined })
+  const resetAll = () => onChange({})
 
   const areas = Object.entries(AREA_META) as [TareaArea, typeof AREA_META[TareaArea]][]
   const prios = Object.entries(PRIORITY_META) as [TareaPriority, typeof PRIORITY_META[TareaPriority]][]
+
+  const noFilters = !filters.area && !filters.priority && !filters.search
 
   return (
     <div className="space-y-2.5">
@@ -23,9 +26,10 @@ export default function FilterBar({ filters, onChange, showCompletadas, onToggle
       <div className="flex flex-wrap items-center gap-2">
         <span className="text-[10px] uppercase tracking-wider font-semibold text-gray-400 mr-1">Área</span>
         <button
-          onClick={() => setArea(undefined)}
+          onClick={resetAll}
+          title="Limpiar todos los filtros"
           className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${
-            !filters.area
+            noFilters
               ? 'bg-gray-900 text-white border-gray-900'
               : 'bg-white text-gray-700 border-gray-200 hover:border-gray-300'
           }`}
@@ -54,16 +58,6 @@ export default function FilterBar({ filters, onChange, showCompletadas, onToggle
       {/* Row 2 — Priority + search + completadas */}
       <div className="flex flex-wrap items-center gap-2">
         <span className="text-[10px] uppercase tracking-wider font-semibold text-gray-400 mr-1">Prioridad</span>
-        <button
-          onClick={() => setPriority(undefined)}
-          className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${
-            !filters.priority
-              ? 'bg-gray-900 text-white border-gray-900'
-              : 'bg-white text-gray-700 border-gray-200 hover:border-gray-300'
-          }`}
-        >
-          Cualquier
-        </button>
         {prios.map(([key, meta]) => {
           const active = filters.priority === key
           return (
