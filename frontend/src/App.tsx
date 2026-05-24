@@ -9,6 +9,7 @@ import OrdenesCompra from '@/pages/OrdenesCompra'
 import Materiales from '@/pages/Materiales'
 import Recepciones from '@/pages/Recepciones'
 import Proveedores from '@/pages/Proveedores'
+import Tareas from '@/pages/Tareas'
 import Usuarios from '@/pages/Usuarios'
 import { Loader2 } from 'lucide-react'
 
@@ -44,6 +45,7 @@ export default function App() {
         <Route path="materiales/*"     element={<Materiales />} />
         <Route path="recepciones/*"    element={<Recepciones />} />
         <Route path="proveedores/*"    element={<Proveedores />} />
+        <Route path="tareas"           element={<AdminRoute><Tareas /></AdminRoute>} />
         <Route path="usuarios"         element={<AdminRoute><Usuarios /></AdminRoute>} />
       </Route>
 

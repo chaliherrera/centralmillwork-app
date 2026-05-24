@@ -266,3 +266,44 @@ export interface DashboardProyecto {
   cotizados: number
   en_stock: number
 }
+
+// ─── Tareas (generadas por Task Agent) ────────────────────────────────────────
+
+export type TareaArea     = 'procurement' | 'despachos' | 'recepcion' | 'administracion'
+export type TareaPriority = 'low' | 'medium' | 'high'
+export type TareaEstado   = 'pendiente' | 'en_progreso' | 'completada' | 'descartada'
+
+export interface Tarea {
+  id: number
+  area: TareaArea
+  title: string
+  description: string | null
+  priority: TareaPriority
+  from_email: string | null
+  subject: string | null
+  source_email_id: string | null
+  estado: TareaEstado
+  asignado_a: string | null
+  created_at: string
+  completed_at: string | null
+}
+
+export interface TareasStats {
+  totals: {
+    total: number
+    activas: number
+    hoy: number
+    completadas_hoy: number
+  }
+  by_area: Partial<Record<TareaArea, number>>
+  by_estado: Partial<Record<TareaEstado, number>>
+  by_priority: Partial<Record<TareaPriority, number>>
+}
+
+export interface TareasFilters {
+  area?: TareaArea
+  priority?: TareaPriority
+  estado?: TareaEstado[]
+  search?: string
+  project_code?: string
+}
