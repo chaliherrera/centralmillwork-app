@@ -92,8 +92,10 @@ export default function TaskRow({ tarea, highlighted, dimmed, onStatusCycle, onD
         style={{ background: area.color }}
       />
 
-      <div className="flex items-center gap-3" onClick={stop}>
-        <EstadoButton estado={tarea.estado} onClick={() => onStatusCycle(ESTADO_NEXT[tarea.estado])} />
+      <div className="flex items-center gap-3">
+        <span onClick={stop}>
+          <EstadoButton estado={tarea.estado} onClick={() => onStatusCycle(ESTADO_NEXT[tarea.estado])} />
+        </span>
 
         {/* Priority dot */}
         <span
@@ -121,10 +123,9 @@ export default function TaskRow({ tarea, highlighted, dimmed, onStatusCycle, onD
           {area.short}
         </span>
 
-        {/* Title — click abre drawer (propaga al row) */}
+        {/* Title — el row entero abre drawer */}
         <p
-          onClick={(e) => { e.stopPropagation(); onOpen() }}
-          className={`flex-1 text-sm font-medium text-gray-900 truncate cursor-pointer ${isDone ? 'line-through' : ''}`}
+          className={`flex-1 text-sm font-medium text-gray-900 truncate ${isDone ? 'line-through' : ''}`}
         >
           {tarea.title}
         </p>
