@@ -366,11 +366,29 @@ function AsignarModal({
   onSaved: () => void
 }) {
   const [selected, setSelected] = useState<number | null>(currentPersonalId)
+  const [soloAsignados, setSoloAsignados] = useState(false)
 
+  // Traemos TODOS los activos para no quedar trabados si nadie tiene la
+  // estación asignada. Los que SÍ la tienen como estación habitual reciben
+  // un badge ⭐ (sugerido).
   const { data: personal = [] } = useQuery({
-    queryKey: ['personal-taller', 'estacion', estacion],
-    queryFn:  () => produccionService.personal({ estacion, activo: true }),
+    queryKey: ['personal-taller', 'todos-activos'],
+    queryFn:  () => produccionService.personal({ activo: true }),
   })
+
+  // Marcar quién tiene esta estación asignada (sugerido vs cualquiera)
+  const personalConFlag = personal.map((p) => ({
+    ...p,
+    asignadoAEstacion: p.estaciones?.some((e) => e.estacion === estacion && e.activo) ?? false,
+  }))
+  // Sugeridos primero, luego el resto. Si filtro activo, solo sugeridos.
+  const personalVisible = (soloAsignados
+    ? personalConFlag.filter((p) => p.asignadoAEstacion)
+    : personalConFlag
+  ).sort((a, b) => Number(b.asignadoAEstacion) - Number(a.asignadoAEstacion) ||
+                    a.nombre_completo.localeCompare(b.nombre_completo))
+
+  const totalSugeridos = personalConFlag.filter((p) => p.asignadoAEstacion).length
 
   const mut = useMutation({
     mutationFn: () => produccionService.asignarOperador(ordenId, { estacion, personal_id: selected }),
@@ -380,6 +398,22 @@ function AsignarModal({
   return (
     <Modal open onClose={onClose} title={`Asignar a ${estacion.replace('_', ' ').toUpperCase()}`} size="md">
       <div className="space-y-3">
+        {/* Toggle de filtro */}
+        <div className="flex items-center justify-between text-xs">
+          <span className="text-gray-500">
+            {totalSugeridos} con esta estación asignada · {personal.length} activos en total
+          </span>
+          <label className="flex items-center gap-1.5 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={soloAsignados}
+              onChange={(e) => setSoloAsignados(e.target.checked)}
+              className="w-3.5 h-3.5"
+            />
+            <span className="text-gray-600">Solo asignados a esta estación</span>
+          </label>
+        </div>
+
         <button
           onClick={() => setSelected(null)}
           className={clsx(
@@ -390,9 +424,13 @@ function AsignarModal({
           <div className="font-medium text-sm italic text-gray-600">Sin asignar</div>
           <div className="text-xs text-gray-500">Asignar después</div>
         </button>
-        {personal.length === 0 ? (
-          <p className="text-sm text-gray-500 italic">No hay personal asignado a esta estación.</p>
-        ) : personal.map((p) => (
+        {personalVisible.length === 0 ? (
+          <p className="text-sm text-gray-500 italic">
+            {soloAsignados
+              ? 'Ningún operario tiene esta estación asignada. Desmarca el filtro para ver todos.'
+              : 'No hay personal activo.'}
+          </p>
+        ) : personalVisible.map((p) => (
           <button
             key={p.id}
             onClick={() => setSelected(p.id)}
@@ -405,7 +443,17 @@ function AsignarModal({
               {p.iniciales}
             </span>
             <div className="flex-1">
-              <div className="font-semibold text-sm">{p.nombre_completo}</div>
+              <div className="font-semibold text-sm flex items-center gap-1.5">
+                {p.nombre_completo}
+                {p.asignadoAEstacion && (
+                  <span
+                    title="Tiene esta estación asignada como habitual"
+                    className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-bold bg-gold-100 text-gold-800"
+                  >
+                    ⭐ Sugerido
+                  </span>
+                )}
+              </div>
               <div className="text-xs text-gray-500">{p.tipo_personal}</div>
             </div>
           </button>

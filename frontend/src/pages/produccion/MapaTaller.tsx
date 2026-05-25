@@ -35,7 +35,12 @@ type CardData = {
   // Solo aplica a estaciones (no a celdas de carpintero individual)
   workers: { ini: string; name: string }[]
   // Item activo "running" para mostrar timer + datos del item
-  itemActivo: { numero_orden: string; hora_inicio: string } | null
+  // Si pausa_activa tiene valor, el operario está en pausa AHORA — no mostrar timer
+  itemActivo: {
+    numero_orden: string
+    hora_inicio: string
+    pausa_activa: { motivo: string | null; hora_inicio: string } | null
+  } | null
   // Orden destacada (running o queued) para mostrar proyecto + due
   ordenRunning: EstacionOrdenRunning | null
   // Solo para carpinteros: link directo a filtrar órdenes por personal
@@ -100,6 +105,7 @@ export default function MapaTaller() {
             itemActivo: p.item_activo ? {
               numero_orden: p.item_activo.numero_orden,
               hora_inicio:  p.item_activo.hora_inicio,
+              pausa_activa: p.item_activo.pausa_activa,
             } : null,
             // Para carpinteros, el "ordenRunning" se construye desde item_activo si existe
             // (no tenemos fecha_entrega en item_activo, sólo numero_orden + proyecto_codigo)
@@ -133,6 +139,7 @@ export default function MapaTaller() {
           itemActivo: personaTrabajando?.item_activo ? {
             numero_orden: personaTrabajando.item_activo.numero_orden,
             hora_inicio:  personaTrabajando.item_activo.hora_inicio,
+            pausa_activa: personaTrabajando.item_activo.pausa_activa,
           } : null,
           ordenRunning: e.orden_running,
           href: `/produccion/ordenes?estacion=${e.nombre}`,
@@ -320,16 +327,18 @@ function CornerTicks({ size = 10, color = BP.line }: { size?: number; color?: st
 // ─── Legend ───────────────────────────────────────────────────────────────────
 function Legend() {
   const items = [
-    { color: BP.active, label: 'Activa' },
-    { color: BP.warn,   label: 'Sobrecargada' },
-    { color: BP.idle,   label: 'Sin órdenes' },
+    { color: '#DCFCE7', label: 'Trabajando' },
+    { color: '#FFEDD5', label: '1-2 días' },
+    { color: '#FEF3C7', label: 'Vence hoy' },
+    { color: '#FECACA', label: 'Vencida' },
+    { color: '#DBEAFE', label: 'En pausa' },
   ]
   return (
-    <div className="flex items-center gap-3.5">
+    <div className="flex items-center gap-3 flex-wrap">
       {items.map((i) => (
         <div key={i.label} className="flex items-center gap-1.5">
-          <span style={{ width: 10, height: 10, borderRadius: 3, backgroundColor: i.color, display: 'inline-block' }} />
-          <span className="text-[12px] font-medium" style={{ color: '#6B6356' }}>{i.label}</span>
+          <span style={{ width: 14, height: 10, borderRadius: 2, backgroundColor: i.color, border: '1px solid rgba(0,0,0,0.08)', display: 'inline-block' }} />
+          <span className="text-[11px] font-medium" style={{ color: '#6B6356' }}>{i.label}</span>
         </div>
       ))}
     </div>
@@ -340,18 +349,44 @@ function Legend() {
 function StationCard({ card }: { card: CardData }) {
   const filled = card.ordenes_activas
   const pct = card.cap === 0 ? 0 : Math.min(1, filled / card.cap)
-  const accent = card.status === 'active' ? BP.active : card.status === 'warn' ? BP.warn : BP.idle
+  const enPausa = !!card.itemActivo?.pausa_activa
+  const trabajando = !!card.itemActivo && !enPausa  // hay segmento abierto y NO está en pausa
+  const urgency = computeUrgency(card.ordenRunning?.fecha_entrega ?? null)
+  const accent = enPausa
+    ? '#1d4ed8'  // azul de pausa
+    : urgency === 'overdue' ? BP.overdue
+    : urgency === 'today'   ? BP.warn
+    : trabajando            ? BP.active
+    : card.status === 'active' ? BP.active
+    : card.status === 'warn'    ? BP.warn
+    : BP.idle
+
+  // Fondo de la card según estado. Hace mucho más evidente cuándo se está
+  // trabajando algo o cuándo una orden vence pronto:
+  //  - en pausa  → azul muy claro
+  //  - vencida   → rojo claro (gana sobre todo lo demás excepto pausa)
+  //  - vence hoy → amarillo claro
+  //  - vence en 1-2 días → naranja muy claro
+  //  - trabajando ahora → verde claro
+  //  - default → blanco translúcido del paper
+  const cardBg = enPausa             ? '#DBEAFE'        // azul-100
+              : urgency === 'overdue' ? '#FECACA'        // red-200
+              : urgency === 'today'   ? '#FEF3C7'        // amber-100
+              : urgency === 'soon'    ? '#FFEDD5'        // orange-100
+              : trabajando            ? '#DCFCE7'        // green-100
+                                      : 'rgba(255,255,255,0.55)'
+
   const kindTag = { machine: 'M', assembly: 'A', finishing: 'F', output: 'O' }[card.kind]
   const kindFull = { machine: 'MAQ', assembly: 'ENS', finishing: 'ACA', output: 'SAL' }[card.kind]
   const dueLabel = formatDue(card.ordenRunning?.fecha_entrega ?? null)
-  const isOverdue = dueLabel === 'Vencida'
+  const isOverdue = urgency === 'overdue'
 
   return (
     <Link
       to={card.href}
       className="relative block transition-all"
       style={{
-        backgroundColor: 'rgba(255,255,255,0.55)',
+        backgroundColor: cardBg,
         border: `1px solid ${BP.line}`,
         textDecoration: 'none',
         color: BP.ink,
@@ -360,11 +395,11 @@ function StationCard({ card }: { card: CardData }) {
       onMouseLeave={(e) => (e.currentTarget.style.borderColor = BP.line)}
     >
       <CornerTicks />
-      {/* Stripe de status */}
+      {/* Stripe de status — más ancha y vibrante para hacerla evidente */}
       <div
         style={{
           position: 'absolute', left: 0, top: 0, bottom: 0,
-          width: 3, backgroundColor: accent,
+          width: 5, backgroundColor: accent,
         }}
       />
 
@@ -410,15 +445,23 @@ function StationCard({ card }: { card: CardData }) {
                 due {dueLabel}
               </div>
             )}
-            {/* Timer en vivo si hay segmento abierto en esta estación */}
-            {card.itemActivo && (
+            {/* Estado en vivo del operario: trabajando (● timer verde) o en pausa (⏸ azul) */}
+            {card.itemActivo && card.itemActivo.pausa_activa ? (
+              <div
+                className="font-mono text-[11px] mt-0.5 font-semibold"
+                style={{ color: '#1d4ed8' }}
+                title={`Pausa desde ${new Date(card.itemActivo.pausa_activa.hora_inicio).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })}`}
+              >
+                ⏸ Pausa{card.itemActivo.pausa_activa.motivo ? `: ${card.itemActivo.pausa_activa.motivo.toLowerCase()}` : ''} · <Timer startISO={card.itemActivo.pausa_activa.hora_inicio} format="hm" className="inline tabular-nums" />
+              </div>
+            ) : card.itemActivo ? (
               <div
                 className="font-mono text-[11px] mt-0.5 font-semibold"
                 style={{ color: BP.active }}
               >
                 ● <Timer startISO={card.itemActivo.hora_inicio} format="hm" className="inline tabular-nums" />
               </div>
-            )}
+            ) : null}
           </div>
         ) : (
           <div className="mt-2.5 text-[11px] italic" style={{ color: BP.inkSubtle }}>
@@ -541,6 +584,25 @@ function AvatarStack({ workers, max = 4 }: { workers: { ini: string; name: strin
 function prettyName(nombre: string): string {
   // 'edge_banding' → 'Edge Banding'
   return nombre.split('_').map((s) => s.charAt(0).toUpperCase() + s.slice(1)).join(' ')
+}
+
+/** Categoría de urgencia según días al vencimiento. Tipos:
+ *   - 'overdue': pasó la fecha (rojo)
+ *   - 'today':   vence hoy (amarillo)
+ *   - 'soon':    1-2 días (naranja)
+ *   - 'normal':  3+ días o sin fecha
+ */
+function computeUrgency(fecha: string | null): 'overdue' | 'today' | 'soon' | 'normal' {
+  if (!fecha) return 'normal'
+  const d = new Date(fecha)
+  const now = new Date()
+  const hoy = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+  const target = new Date(d.getFullYear(), d.getMonth(), d.getDate())
+  const diffDias = Math.floor((target.getTime() - hoy.getTime()) / 86_400_000)
+  if (diffDias < 0)  return 'overdue'
+  if (diffDias === 0) return 'today'
+  if (diffDias <= 2)  return 'soon'
+  return 'normal'
 }
 
 function formatDue(fecha: string | null): string | null {

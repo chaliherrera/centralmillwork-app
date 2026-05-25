@@ -463,6 +463,208 @@ export async function reportePersonal(req: Request, res: Response, next: NextFun
 }
 
 /**
+ * GET /api/produccion/time-tracking/semanal?desde=YYYY-MM-DD&hasta=YYYY-MM-DD
+ * Grid semanal: para cada operario activo y cada día del rango, devuelve los
+ * proyectos trabajados (con horas totales y desglose por estación).
+ *
+ * Pensado para el reporte de viernes a fin de día: ver de un vistazo qué hizo
+ * el equipo completo durante toda la semana.
+ *
+ * Estructura de respuesta:
+ *   {
+ *     periodo: { desde, hasta },
+ *     dias: ['2026-05-17', '2026-05-18', ...],  // ordenado asc
+ *     personal: [
+ *       {
+ *         personal_id, nombre_completo, iniciales,
+ *         total_horas_items,  // total del período
+ *         dias: {
+ *           '2026-05-17': {
+ *             total_horas, horas_brutas,
+ *             proyectos: [{proyecto_id, codigo, nombre, total_horas, estaciones: [{estacion, horas}]}]
+ *           },
+ *           '2026-05-18': null  // no clockeó
+ *         }
+ *       }
+ *     ]
+ *   }
+ */
+export async function reporteSemanal(req: Request, res: Response, next: NextFunction) {
+  try {
+    const fechaDesde = String(req.query.desde ?? req.query.fecha_desde ?? '1900-01-01')
+    const fechaHasta = String(req.query.hasta ?? req.query.fecha_hasta ?? '2999-12-31')
+
+    // 1) Lista de días del rango (incluye días sin actividad para que el grid
+    //    siempre tenga las mismas columnas)
+    const { rows: diasRows } = await pool.query<{ dia: string }>(
+      `SELECT to_char(d::date, 'YYYY-MM-DD') AS dia
+       FROM generate_series($1::date, $2::date, '1 day') d
+       ORDER BY d`,
+      [fechaDesde, fechaHasta]
+    )
+    const dias = diasRows.map((r) => r.dia)
+
+    // 2) Personal activo (incluso si no trabajó en el rango, para que aparezca
+    //    como fila vacía — útil para identificar quién no clockeó)
+    const { rows: personalRows } = await pool.query<{
+      personal_id: number; nombre_completo: string; iniciales: string
+    }>(
+      `SELECT id AS personal_id, nombre_completo, iniciales
+       FROM personal_taller
+       WHERE activo = true
+       ORDER BY nombre_completo`
+    )
+
+    // 3) Agregación por (personal_id, fecha, proyecto_id, estacion) — la unidad
+    //    atómica de la grilla. Usamos COALESCE(tp.hora_fin, NOW()) para incluir
+    //    segmentos abiertos al momento de la consulta.
+    const { rows: cells } = await pool.query<{
+      personal_id: number
+      fecha: string
+      proyecto_id: number | null
+      proyecto_codigo: string | null
+      proyecto_nombre: string | null
+      estacion: string
+      horas: string
+    }>(
+      `SELECT
+         tp.personal_id,
+         to_char(tp.hora_inicio::date, 'YYYY-MM-DD') AS fecha,
+         tp.proyecto_id,
+         p.codigo AS proyecto_codigo,
+         p.nombre AS proyecto_nombre,
+         tp.estacion,
+         SUM(EXTRACT(EPOCH FROM (
+           COALESCE(tp.hora_fin, NOW()) - tp.hora_inicio
+         )) / 3600) AS horas
+       FROM time_proyectos tp
+       LEFT JOIN proyectos p ON p.id = tp.proyecto_id
+       WHERE tp.hora_inicio::date BETWEEN $1 AND $2
+       GROUP BY tp.personal_id, fecha, tp.proyecto_id, p.codigo, p.nombre, tp.estacion`,
+      [fechaDesde, fechaHasta]
+    )
+
+    // 4) Horas brutas por (personal, día) — viene de time_registros directo
+    const { rows: brutasRows } = await pool.query<{
+      personal_id: number; fecha: string; horas_brutas: string
+    }>(
+      `SELECT
+         personal_id,
+         to_char(fecha, 'YYYY-MM-DD') AS fecha,
+         COALESCE(SUM(total_horas), 0) AS horas_brutas
+       FROM time_registros
+       WHERE fecha BETWEEN $1 AND $2
+       GROUP BY personal_id, fecha`,
+      [fechaDesde, fechaHasta]
+    )
+    const brutasByKey = new Map<string, number>()
+    for (const b of brutasRows) {
+      brutasByKey.set(`${b.personal_id}:${b.fecha}`, Number(b.horas_brutas))
+    }
+
+    // 5) Armar la estructura de respuesta. Iteramos cells y vamos llenando.
+    type CeldaProyecto = {
+      proyecto_id: number | null
+      proyecto_codigo: string | null
+      proyecto_nombre: string | null
+      total_horas: number
+      estaciones: { estacion: string; horas: number }[]
+    }
+    type CeldaDia = {
+      total_horas: number    // suma de items + otro trabajo
+      horas_brutas: number   // de time_registros (incluye pausas/sin asignar)
+      proyectos: CeldaProyecto[]
+    }
+    type PersonalRow = {
+      personal_id: number
+      nombre_completo: string
+      iniciales: string
+      total_horas_items: number
+      dias: Record<string, CeldaDia | null>
+    }
+
+    const personalById = new Map<number, PersonalRow>()
+    for (const p of personalRows) {
+      const dias_init: Record<string, CeldaDia | null> = {}
+      for (const d of dias) dias_init[d] = null
+      personalById.set(p.personal_id, {
+        personal_id:        p.personal_id,
+        nombre_completo:    p.nombre_completo,
+        iniciales:          p.iniciales,
+        total_horas_items:  0,
+        dias:               dias_init,
+      })
+    }
+
+    for (const c of cells) {
+      const pr = personalById.get(c.personal_id)
+      if (!pr) continue
+      const horas = Number(c.horas)
+      pr.total_horas_items += horas
+
+      let dia = pr.dias[c.fecha]
+      if (!dia) {
+        dia = {
+          total_horas:  0,
+          horas_brutas: brutasByKey.get(`${c.personal_id}:${c.fecha}`) ?? 0,
+          proyectos:    [],
+        }
+        pr.dias[c.fecha] = dia
+      }
+      dia.total_horas += horas
+
+      // Buscar o crear el proyecto dentro del día
+      let proy = dia.proyectos.find((p) => p.proyecto_id === c.proyecto_id)
+      if (!proy) {
+        proy = {
+          proyecto_id:     c.proyecto_id,
+          proyecto_codigo: c.proyecto_codigo,
+          proyecto_nombre: c.proyecto_nombre,
+          total_horas:     0,
+          estaciones:      [],
+        }
+        dia.proyectos.push(proy)
+      }
+      proy.total_horas += horas
+
+      let est = proy.estaciones.find((e) => e.estacion === c.estacion)
+      if (!est) {
+        est = { estacion: c.estacion, horas: 0 }
+        proy.estaciones.push(est)
+      }
+      est.horas += horas
+    }
+
+    // Para días sin proyectos pero con clock-in, asegurar que aparezcan con
+    // horas brutas (puede ser día de solo pausas u otro trabajo libre).
+    for (const pr of personalById.values()) {
+      for (const d of dias) {
+        if (pr.dias[d] === null) {
+          const brutas = brutasByKey.get(`${pr.personal_id}:${d}`)
+          if (brutas && brutas > 0) {
+            pr.dias[d] = { total_horas: 0, horas_brutas: brutas, proyectos: [] }
+          }
+        }
+      }
+      // Ordenar proyectos por horas DESC dentro de cada día
+      for (const d of dias) {
+        const dia = pr.dias[d]
+        if (dia) {
+          dia.proyectos.sort((a, b) => b.total_horas - a.total_horas)
+          for (const p of dia.proyectos) p.estaciones.sort((a, b) => b.horas - a.horas)
+        }
+      }
+    }
+
+    res.json({
+      periodo:  { desde: fechaDesde, hasta: fechaHasta },
+      dias,
+      personal: Array.from(personalById.values()),
+    })
+  } catch (err) { next(err) }
+}
+
+/**
  * GET /api/produccion/time-tracking/proyecto/:id?fecha_desde=...&fecha_hasta=...
  * Horas totales que cada operario trabajó en un proyecto.
  */
@@ -707,8 +909,127 @@ export async function exportarHoras(req: Request, res: Response, next: NextFunct
       const ws = XLSX.utils.json_to_sheet(data)
       XLSX.utils.book_append_sheet(wb, ws, 'Diario')
 
+    } else if (tipo === 'semanal') {
+      // Grid Operarios × Días — formato apto para impresión y filtros de Excel.
+      // Genera 3 hojas:
+      //   - "Resumen"  : grid con totales por celda (horas en items por día/operario)
+      //   - "Detalle"  : una fila por (operario, día, proyecto, estación) con horas
+      //   - "Totales"  : por operario en el período
+      //
+      // Reutilizamos las mismas queries que reporteSemanal para mantener consistencia.
+
+      const { rows: diasRows } = await pool.query<{ dia: string }>(
+        `SELECT to_char(d::date, 'YYYY-MM-DD') AS dia
+         FROM generate_series($1::date, $2::date, '1 day') d
+         ORDER BY d`,
+        [fechaDesde, fechaHasta]
+      )
+      const dias = diasRows.map((r) => r.dia)
+
+      const { rows: personalRows } = await pool.query<{
+        personal_id: number; nombre_completo: string; iniciales: string
+      }>(
+        `SELECT id AS personal_id, nombre_completo, iniciales
+         FROM personal_taller
+         WHERE activo = true
+         ORDER BY nombre_completo`
+      )
+
+      const { rows: cells } = await pool.query<{
+        personal_id: number
+        fecha: string
+        proyecto_codigo: string | null
+        proyecto_nombre: string | null
+        estacion: string
+        horas: string
+      }>(
+        `SELECT
+           tp.personal_id,
+           to_char(tp.hora_inicio::date, 'YYYY-MM-DD') AS fecha,
+           p.codigo AS proyecto_codigo,
+           p.nombre AS proyecto_nombre,
+           tp.estacion,
+           SUM(EXTRACT(EPOCH FROM (
+             COALESCE(tp.hora_fin, NOW()) - tp.hora_inicio
+           )) / 3600) AS horas
+         FROM time_proyectos tp
+         LEFT JOIN proyectos p ON p.id = tp.proyecto_id
+         WHERE tp.hora_inicio::date BETWEEN $1 AND $2
+         GROUP BY tp.personal_id, fecha, p.codigo, p.nombre, tp.estacion
+         ORDER BY tp.personal_id, fecha`,
+        [fechaDesde, fechaHasta]
+      )
+
+      // Hoja "Resumen" — grid Operario × Día
+      const totalByCell = new Map<string, number>()         // pid:fecha → horas
+      const projsByCell = new Map<string, string[]>()       // pid:fecha → proyectos (códigos resumidos)
+      for (const c of cells) {
+        const key = `${c.personal_id}:${c.fecha}`
+        const horas = Number(c.horas)
+        totalByCell.set(key, (totalByCell.get(key) ?? 0) + horas)
+        const list = projsByCell.get(key) ?? []
+        const ya = list.find((s) => s.startsWith(c.proyecto_codigo ?? 'LIBRE'))
+        if (!ya) list.push(c.proyecto_codigo ?? 'LIBRE')
+        projsByCell.set(key, list)
+      }
+
+      const resumen: Record<string, string | number>[] = []
+      const totalesPersona = new Map<number, number>()
+      for (const p of personalRows) {
+        const row: Record<string, string | number> = {
+          'Operario':  p.nombre_completo,
+          'Iniciales': p.iniciales,
+        }
+        let totPersona = 0
+        for (const d of dias) {
+          const dt = new Date(d + 'T00:00:00')
+          const colHoras = `${dt.toLocaleDateString('es-MX', { weekday: 'short' })} ${dt.getDate()}/${dt.getMonth() + 1}`
+          const colProy  = `${colHoras} (proyectos)`
+          const horas = totalByCell.get(`${p.personal_id}:${d}`) ?? 0
+          const proys = projsByCell.get(`${p.personal_id}:${d}`) ?? []
+          row[colHoras] = horas > 0 ? Number(horas.toFixed(2)) : ''
+          row[colProy]  = proys.join(', ')
+          totPersona += horas
+        }
+        row['Total semana (h)'] = Number(totPersona.toFixed(2))
+        totalesPersona.set(p.personal_id, totPersona)
+        resumen.push(row)
+      }
+      // Filtrar operarios sin actividad en el período (matchea la UI por default)
+      const resumenConDatos = resumen.filter((r) => Number(r['Total semana (h)']) > 0)
+      const ws1 = XLSX.utils.json_to_sheet(resumenConDatos.length > 0 ? resumenConDatos : resumen)
+      XLSX.utils.book_append_sheet(wb, ws1, 'Resumen')
+
+      // Hoja "Detalle" — una fila por (operario, día, proyecto, estación)
+      const personalById = new Map(personalRows.map((p) => [p.personal_id, p]))
+      const detalle = cells.map((c) => {
+        const p = personalById.get(c.personal_id)
+        return {
+          'Fecha':          c.fecha,
+          'Operario':       p?.nombre_completo ?? `id ${c.personal_id}`,
+          'Iniciales':      p?.iniciales ?? '',
+          'Proyecto':       c.proyecto_codigo ?? '(Otro trabajo)',
+          'Nombre proyecto': c.proyecto_nombre ?? '',
+          'Estación':       c.estacion,
+          'Horas':          Number(Number(c.horas).toFixed(2)),
+        }
+      })
+      const ws2 = XLSX.utils.json_to_sheet(detalle)
+      XLSX.utils.book_append_sheet(wb, ws2, 'Detalle')
+
+      // Hoja "Totales por operario"
+      const totales = personalRows.map((p) => ({
+        'Operario':         p.nombre_completo,
+        'Iniciales':        p.iniciales,
+        'Horas en items':   Number((totalesPersona.get(p.personal_id) ?? 0).toFixed(2)),
+      })).sort((a, b) => Number(b['Horas en items']) - Number(a['Horas en items']))
+      const ws3 = XLSX.utils.json_to_sheet(totales)
+      XLSX.utils.book_append_sheet(wb, ws3, 'Totales')
+
+      nombreArchivo = `horas-semanal-${fechaDesde}_${fechaHasta}.xlsx`
+
     } else {
-      return next(createError('tipo inválido. Usá personal | proyecto | diario', 400))
+      return next(createError('tipo inválido. Usá personal | proyecto | diario | semanal', 400))
     }
 
     const buffer = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' })

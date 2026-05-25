@@ -3,7 +3,7 @@ import type {
   OrdenProduccion, OrdenDetallada, OrdenesKpis,
   PersonalTaller, EstacionConStatus, EstacionDetalle, EstacionDistancia,
   RutaCalculada, Prioridad, OrdenDocumento, EventosRecientesResp,
-  PersonalActivoReporte, ReportePersonalResp, ReporteProyectoResp, ReporteDiarioResp,
+  PersonalActivoReporte, ReportePersonalResp, ReporteSemanalResp, ReporteProyectoResp, ReporteDiarioResp,
 } from '@/types/produccion'
 
 interface OrdenesFilters {
@@ -157,6 +157,12 @@ export const produccionService = {
       params: { fecha_desde: fechaDesde, fecha_hasta: fechaHasta },
     }).then((r) => r.data),
 
+  /** Grid Operarios × Días con proyectos por celda. Pensado para reporte semanal. */
+  reporteSemanal: (desde: string, hasta: string) =>
+    api.get<ReporteSemanalResp>(`/produccion/time-tracking/semanal`, {
+      params: { desde, hasta },
+    }).then((r) => r.data),
+
   reportePorProyecto: (proyectoId: number, fechaDesde: string, fechaHasta: string) =>
     api.get<ReporteProyectoResp>(`/produccion/time-tracking/proyecto/${proyectoId}`, {
       params: { fecha_desde: fechaDesde, fecha_hasta: fechaHasta },
@@ -169,7 +175,7 @@ export const produccionService = {
 
   /** Devuelve un Blob xlsx para descargar. */
   exportarHoras: (params: {
-    tipo: 'personal' | 'proyecto' | 'diario'
+    tipo: 'personal' | 'proyecto' | 'diario' | 'semanal'
     fecha_desde: string
     fecha_hasta: string
     personal_id?: number

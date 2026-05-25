@@ -115,6 +115,10 @@ export interface EstacionPersonalItemActivo {
   item_nombre: string
   hora_inicio: string       // ISO — para el timer en vivo
   proyecto_codigo: string | null
+  /** Si el operario tiene pausa abierta, info de la pausa. Si está null, está
+   *  trabajando activamente. Si tiene valor, el mapa muestra "⏸ En pausa"
+   *  en vez del cronómetro corriendo. */
+  pausa_activa: { motivo: string | null; hora_inicio: string } | null
 }
 
 export interface EstacionPersonalRef {
@@ -319,4 +323,41 @@ export interface ReporteDiarioPersona {
 export interface ReporteDiarioResp {
   fecha: string
   personal: ReporteDiarioPersona[]
+}
+
+// ─── Reporte semanal: grid Operarios × Días con proyectos por celda ─────────
+
+export interface ReporteSemanalEstacion {
+  estacion: string
+  horas: number
+}
+
+export interface ReporteSemanalProyecto {
+  proyecto_id: number | null
+  proyecto_codigo: string | null
+  proyecto_nombre: string | null
+  total_horas: number
+  estaciones: ReporteSemanalEstacion[]
+}
+
+export interface ReporteSemanalDia {
+  total_horas: number       // items + otro trabajo (suma de segmentos)
+  horas_brutas: number      // de time_registros (incluye pausas/sin asignar)
+  proyectos: ReporteSemanalProyecto[]
+}
+
+export interface ReporteSemanalPersonal {
+  personal_id: number
+  nombre_completo: string
+  iniciales: string
+  total_horas_items: number
+  /** Mapa fecha → celda. Si el operario no clockeó ese día, el valor es null. */
+  dias: Record<string, ReporteSemanalDia | null>
+}
+
+export interface ReporteSemanalResp {
+  periodo: { desde: string; hasta: string }
+  /** Días en orden cronológico (incluye días sin actividad para mantener columnas estables). */
+  dias: string[]
+  personal: ReporteSemanalPersonal[]
 }

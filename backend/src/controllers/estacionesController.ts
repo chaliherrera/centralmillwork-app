@@ -13,7 +13,18 @@ export async function getEstaciones(_req: Request, res: Response, next: NextFunc
       `-- ─── CTEs para evitar subconsultas correlacionadas dentro de json_agg(DISTINCT …)
        -- que pueden producir resultados incorrectos en PostgreSQL.
        WITH
+       -- Pausas activas (hora_fin IS NULL) por personal — para indicar "en pausa" en el mapa
+       pausas_activas AS (
+         SELECT DISTINCT ON (personal_id)
+           personal_id,
+           jsonb_build_object('motivo', motivo, 'hora_inicio', hora_inicio) AS data
+         FROM time_pausas
+         WHERE hora_fin IS NULL
+         ORDER BY personal_id, hora_inicio DESC
+       ),
        -- 1. Segmento activo (hora_fin IS NULL) por (personal_id, estacion) — para timer en vivo
+       --    Si el operario tiene pausa abierta, incluimos pausa_activa para que el mapa
+       --    muestre "⏸ En pausa" en vez del timer corriendo.
        item_activos AS (
          SELECT DISTINCT ON (tp.personal_id, tp.estacion)
            tp.personal_id,
@@ -23,11 +34,13 @@ export async function getEstaciones(_req: Request, res: Response, next: NextFunc
              'numero_orden',    op.numero_orden,
              'item_nombre',     op.item_nombre,
              'hora_inicio',     tp.hora_inicio,
-             'proyecto_codigo', pr.codigo
+             'proyecto_codigo', pr.codigo,
+             'pausa_activa',    pa.data
            ) AS data
          FROM time_proyectos tp
          JOIN  ordenes_produccion op ON op.id = tp.orden_produccion_id
          LEFT JOIN proyectos      pr ON pr.id = op.proyecto_id
+         LEFT JOIN pausas_activas pa ON pa.personal_id = tp.personal_id
          WHERE tp.hora_fin IS NULL
          ORDER BY tp.personal_id, tp.estacion, tp.hora_inicio DESC
        ),
@@ -81,10 +94,13 @@ export async function getEstaciones(_req: Request, res: Response, next: NextFunc
          ec.posicion_y,
          ec.capacidad_max,
          ec.activa,
-         COUNT(o.id) FILTER (WHERE o.status IN ('Pendiente','En Proceso'))                        AS ordenes_activas,
-         COUNT(o.id) FILTER (WHERE o.status = 'Pausada')                                          AS ordenes_pausadas,
-         COUNT(o.id) FILTER (WHERE o.prioridad = 'Alta'
-                               AND o.status NOT IN ('Completada','Cancelada'))                    AS ordenes_alta_prioridad,
+         -- DISTINCT necesario: el LEFT JOIN personal_estaciones duplica cada orden
+         -- por cada operario asignado a la estación. Sin DISTINCT, Final con 2 operarios
+         -- contaría cada orden el doble.
+         COUNT(DISTINCT o.id) FILTER (WHERE o.status IN ('Pendiente','En Proceso'))               AS ordenes_activas,
+         COUNT(DISTINCT o.id) FILTER (WHERE o.status = 'Pausada')                                 AS ordenes_pausadas,
+         COUNT(DISTINCT o.id) FILTER (WHERE o.prioridad = 'Alta'
+                                       AND o.status NOT IN ('Completada','Cancelada'))            AS ordenes_alta_prioridad,
          -- Orden "running" para el Blueprint Map (puede ser null si la estación está vacía)
          CASE WHEN orun.numero_orden IS NOT NULL THEN
            jsonb_build_object(

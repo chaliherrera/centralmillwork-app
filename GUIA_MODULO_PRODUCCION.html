@@ -1,0 +1,810 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<title>Módulo de Producción — Guía paso a paso</title>
+<style>
+  @page { size: A4; margin: 18mm 16mm; }
+  * { box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    color: #1F1B14;
+    line-height: 1.5;
+    font-size: 11pt;
+    margin: 0;
+    padding: 0;
+  }
+  h1 { font-size: 22pt; margin: 0 0 6pt 0; color: #1F1B14; letter-spacing: -0.5pt; }
+  h2 { font-size: 16pt; margin: 24pt 0 8pt 0; color: #1F1B14; padding-bottom: 5pt; border-bottom: 2px solid #A4842C; page-break-after: avoid; }
+  h3 { font-size: 13pt; margin: 14pt 0 6pt 0; color: #1F1B14; page-break-after: avoid; }
+  h4 { font-size: 11pt; margin: 10pt 0 4pt 0; color: #6B6356; text-transform: uppercase; letter-spacing: 0.5pt; page-break-after: avoid; }
+  p { margin: 4pt 0; }
+  .subtle { color: #6B6356; font-size: 10pt; }
+  .meta { color: #9C9384; font-size: 9pt; }
+  code, .mono { font-family: "Consolas", "Monaco", monospace; font-size: 10pt; background: #F2EEE4; padding: 1pt 4pt; border-radius: 2pt; }
+  .section-banner { background: linear-gradient(135deg, #2C3126 0%, #1C1A17 100%); color: #fff; padding: 12pt 16pt; margin: 30pt 0 12pt 0; border-radius: 4pt; page-break-after: avoid; }
+  .section-banner h2 { color: #fff; margin: 0; border: none; font-size: 17pt; }
+  .section-banner .badge { display: inline-block; background: #A4842C; color: #fff; font-size: 9pt; font-weight: bold; padding: 2pt 8pt; border-radius: 10pt; letter-spacing: 1pt; margin-right: 8pt; vertical-align: middle; }
+  .section-banner .sub { color: #C9C3B8; font-size: 10pt; margin-top: 4pt; margin-bottom: 0; }
+  .step { display: flex; gap: 12pt; margin: 10pt 0; page-break-inside: avoid; align-items: flex-start; }
+  .step-num { flex: 0 0 28pt; height: 28pt; background: #A4842C; color: #fff; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 13pt; }
+  .step-body { flex: 1; }
+  .step-body .what { font-weight: 600; font-size: 11.5pt; }
+  .step-body .who { display: inline-block; font-size: 8.5pt; font-weight: bold; padding: 1pt 6pt; border-radius: 8pt; margin-right: 6pt; letter-spacing: 0.5pt; text-transform: uppercase; vertical-align: middle; }
+  .who.operario { background: #1C1A17; color: #fff; }
+  .who.shop { background: #DBEAFE; color: #1d4ed8; }
+  .who.auto { background: #E8F5E9; color: #15803d; }
+  .row { display: flex; gap: 16pt; margin: 8pt 0; page-break-inside: avoid; }
+  .col { flex: 1; }
+  .card { border: 1px solid #C9C0AC; background: #F2EEE4; border-radius: 4pt; padding: 10pt 12pt; margin: 6pt 0; page-break-inside: avoid; }
+  .card.tip { background: #FFF3E0; border-color: #D89412; border-left-width: 3pt; }
+  .card.warn { background: #FFEBEE; border-color: #B53A3A; border-left-width: 3pt; }
+  .card.success { background: #E8F5E9; border-color: #16A34A; border-left-width: 3pt; }
+  .card.info { background: #F0F4FF; border-color: #1d4ed8; border-left-width: 3pt; }
+  .card h4 { margin-top: 0; }
+  table { width: 100%; border-collapse: collapse; margin: 8pt 0; font-size: 10pt; }
+  th { background: #1C1A17; color: #fff; text-align: left; padding: 6pt 8pt; font-weight: 600; font-size: 9pt; text-transform: uppercase; letter-spacing: 0.5pt; }
+  td { border-bottom: 1px solid #ECE7DC; padding: 6pt 8pt; vertical-align: top; }
+  tr:nth-child(even) td { background: #FAF7EF; }
+  .mock { border: 1px solid #C9C0AC; border-radius: 6pt; background: #fff; padding: 0; margin: 10pt 0; overflow: hidden; page-break-inside: avoid; }
+  .mock-caption { background: #1C1A17; color: #C9C3B8; padding: 5pt 10pt; font-size: 9pt; font-family: monospace; letter-spacing: 1pt; }
+  .mock-body { padding: 10pt 12pt; }
+  .kiosk-frame { background: #1C1A17; color: #fff; border-radius: 8pt; padding: 10pt; font-size: 10pt; }
+  .kiosk-header { background: #2C3126; border-radius: 4pt; padding: 6pt 10pt; margin-bottom: 8pt; display: flex; align-items: center; gap: 8pt; }
+  .avatar-circle { width: 22pt; height: 22pt; background: #dea832; color: #fff; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-weight: bold; font-size: 9pt; }
+  .kiosk-card { background: #fff; color: #1F1B14; border-radius: 4pt; padding: 8pt 10pt; margin: 4pt 0; }
+  .kiosk-card.green-border { border-left: 4pt solid #16A34A; }
+  .kiosk-card.gold-border { border-left: 4pt solid #A4842C; }
+  .kiosk-card.gray-border { border-left: 4pt solid #9C9384; }
+  .kiosk-card.amber-border { border-left: 4pt solid #D89412; }
+  .btn-mock { display: inline-block; padding: 4pt 12pt; border-radius: 4pt; font-size: 9.5pt; font-weight: 600; }
+  .btn-mock.gold { background: #A4842C; color: #fff; }
+  .btn-mock.emerald { background: #16A34A; color: #fff; }
+  .btn-mock.amber { background: #D89412; color: #fff; }
+  .btn-mock.gray { background: #E5E5E5; color: #6B6356; }
+  .bucket-bar { display: flex; height: 30pt; border: 1px solid #C9C0AC; border-radius: 3pt; overflow: hidden; margin: 8pt 0; }
+  .bucket-seg { display: flex; align-items: center; justify-content: center; font-size: 9pt; font-weight: 600; color: #fff; }
+  .bucket-seg.items { background: #16A34A; }
+  .bucket-seg.otro { background: #9B7200; }
+  .bucket-seg.pausa { background: #1d4ed8; }
+  .bucket-seg.sin { background: #6B6356; }
+  .page-break { page-break-before: always; }
+  .cover { text-align: center; padding: 60pt 0 40pt 0; border-bottom: 2pt solid #1F1B14; margin-bottom: 24pt; }
+  .cover .super { font-family: monospace; font-size: 10pt; color: #A4842C; letter-spacing: 3pt; font-weight: bold; }
+  .cover h1 { font-size: 28pt; margin: 12pt 0 4pt 0; }
+  .cover .tagline { color: #6B6356; font-size: 13pt; margin: 4pt 0 20pt 0; }
+  .cover .meta-row { display: flex; justify-content: center; gap: 30pt; font-size: 9pt; color: #6B6356; margin-top: 16pt; }
+  .cover .meta-row span strong { display: block; color: #1F1B14; font-size: 10pt; margin-bottom: 2pt; }
+  .toc { background: #FAF7EF; border: 1px solid #ECE7DC; border-radius: 4pt; padding: 14pt 18pt; margin: 20pt 0 30pt 0; }
+  .toc h3 { margin-top: 0; }
+  .toc ol { padding-left: 18pt; }
+  .toc li { margin: 4pt 0; font-size: 11pt; }
+  .toc li small { color: #6B6356; font-size: 9pt; display: block; margin-left: 4pt; }
+</style>
+</head>
+<body>
+
+<div class="cover">
+  <div class="super">GUÍA DE TESTING · 2026-05-21</div>
+  <h1>Módulo de Producción</h1>
+  <p class="tagline">Cómo funciona, cómo probarlo, qué validar con el encargado</p>
+  <div class="meta-row">
+    <span><strong>BRANCH</strong>claude/jovial-ride-64bfff</span>
+    <span><strong>COMMITS</strong>d27bd4b → f1d362a</span>
+    <span><strong>ESTADO</strong>Pre-merge</span>
+  </div>
+</div>
+
+<div class="toc">
+  <h3>Contenido</h3>
+  <ol>
+    <li>El sistema en una página <small>Lo que hace y para quién, en 30 segundos</small></li>
+    <li>Login del operario en el Kiosko <small>PIN + clock in</small></li>
+    <li>Trabajar un item asignado <small>Los 3 botones: Iniciar / Continuar / Completar</small></li>
+    <li>Tomar break <small>Pausas con motivo</small></li>
+    <li>Otro trabajo (no asignado) <small>Cuándo y cómo</small></li>
+    <li>Resumen del día <small>Los 4 buckets de tiempo</small></li>
+    <li>Mapa del Taller (Shop Manager) <small>Vista en tiempo real</small></li>
+    <li>Reportes y exportar Excel <small>Por persona, por proyecto</small></li>
+    <li>Escenarios completos para probar con el encargado <small>5 caminos críticos end-to-end</small></li>
+    <li>Lo que no funciona todavía <small>Para anticipar feedback fuera de scope</small></li>
+  </ol>
+</div>
+
+<div class="page-break"></div>
+
+<div class="section-banner">
+  <h2><span class="badge">01</span>El sistema en una página</h2>
+  <p class="sub">Lee esto primero para que el resto tenga contexto.</p>
+</div>
+
+<p>El módulo de Producción tiene <strong>dos interfaces independientes</strong> que se hablan entre sí:</p>
+
+<div class="row">
+  <div class="col">
+    <div class="card info">
+      <h4>SISTEMA (laptop / desktop)</h4>
+      <p><strong>Quién lo usa:</strong> Vos y el encargado de producción (rol <code>SHOP_MANAGER</code>).</p>
+      <p><strong>Cómo entra:</strong> Email + contraseña.</p>
+      <p><strong>Qué hace:</strong></p>
+      <ul style="margin: 4pt 0 0 0; padding-left: 18pt;">
+        <li>Crear órdenes y asignarlas a operario + estación</li>
+        <li>Ver el Mapa del Taller en tiempo real</li>
+        <li>Recibir notificaciones cuando algo pasa</li>
+        <li>Sacar reportes de horas y exportar a Excel</li>
+        <li>Subir planos PDF por estación</li>
+        <li>Crear personal y asignarles PINs</li>
+      </ul>
+    </div>
+  </div>
+  <div class="col">
+    <div class="card" style="background: #1C1A17; color: #fff; border-color: #1F1B14;">
+      <h4 style="color: #A4842C;">KIOSKO (iPad del taller)</h4>
+      <p><strong>Quién lo usa:</strong> Los 13 carpinteros (Victor, Juan, Rolando, etc.).</p>
+      <p><strong>Cómo entra:</strong> PIN de 4 dígitos.</p>
+      <p><strong>Qué hace:</strong></p>
+      <ul style="margin: 4pt 0 0 0; padding-left: 18pt;">
+        <li>Clock In / Clock Out de jornada</li>
+        <li>Ver y trabajar items asignados</li>
+        <li>Tomar break con motivo</li>
+        <li>Registrar "otro trabajo" no asignado</li>
+        <li>Ver planos PDF del item</li>
+        <li>Ver su resumen del día</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<h3>Conceptos clave que vas a leer en toda la guía</h3>
+
+<table>
+  <thead>
+    <tr><th width="22%">Concepto</th><th>Qué significa</th></tr>
+  </thead>
+  <tbody>
+    <tr><td><strong>Orden de producción</strong></td><td>Un item a fabricar (ej. "Puerta corrediza nogal" para PRY-2026-578). Pasa por varias estaciones en secuencia.</td></tr>
+    <tr><td><strong>Proceso / Estación</strong></td><td>Cada paso por el que pasa la orden: CNC → Edge Banding → Assembly → Pintura → Final → Shipping.</td></tr>
+    <tr><td><strong>Asignación</strong></td><td>Una orden con su responsable + estación actual definidos. El operario la ve en su Kiosko.</td></tr>
+    <tr><td><strong>Segmento de tiempo</strong></td><td>Un intervalo continuo en que el operario estuvo trabajando algo. Cada vez que aprieta Iniciar/Continuar abre uno; cada vez que aprieta Completar/Pausa lo cierra.</td></tr>
+    <tr><td><strong>Los 4 buckets</strong></td><td>En qué se divide la jornada del operario: <em>Items + Otro trabajo + Pausas + Sin asignar</em>. Sumados dan el total de la jornada.</td></tr>
+    <tr><td><strong>Cronómetro en vivo (●)</strong></td><td>Punto verde + cuenta de horas que ves en el Mapa cuando un operario tiene un item arrancado AHORA mismo.</td></tr>
+  </tbody>
+</table>
+
+<div class="page-break"></div>
+
+<div class="section-banner">
+  <h2><span class="badge">02</span>Login del operario en el Kiosko</h2>
+  <p class="sub">El primer paso del día. Tiene que ser tan rápido que el operario lo hace sin pensar.</p>
+</div>
+
+<h3>Paso a paso</h3>
+
+<div class="step">
+  <div class="step-num">1</div>
+  <div class="step-body">
+    <span class="who operario">Operario</span>
+    <span class="what">Abre el iPad y va a <code>http://192.168.1.243:3000/kiosk</code></span>
+    <p class="subtle">En producción será una URL fija. La primera vez le hace agregar a pantalla inicio para que abra como app.</p>
+  </div>
+</div>
+
+<div class="step">
+  <div class="step-num">2</div>
+  <div class="step-body">
+    <span class="who operario">Operario</span>
+    <span class="what">Tipea su PIN de 4 dígitos en el keypad numérico</span>
+    <p class="subtle">El PIN se valida contra todos los PINs activos (no necesita usuario). Si lo equivoca, mensaje "PIN incorrecto".</p>
+  </div>
+</div>
+
+<div class="step">
+  <div class="step-num">3</div>
+  <div class="step-body">
+    <span class="who operario">Operario</span>
+    <span class="what">Aprieta el botón verde "Iniciar jornada" (Clock In)</span>
+    <p class="subtle">El sistema graba el timestamp como inicio de la jornada. Desde acá empiezan a contar los 4 buckets.</p>
+  </div>
+</div>
+
+<h3>Cómo se ve la pantalla después del login</h3>
+
+<div class="mock">
+  <div class="mock-caption">KIOSKO — VISTA HOME · POST CLOCK IN</div>
+  <div class="mock-body">
+    <div class="kiosk-frame">
+      <div class="kiosk-header">
+        <div class="avatar-circle">VH</div>
+        <div>
+          <div style="font-weight: 600;">Victor Hernández</div>
+          <div style="font-size: 9pt; color: #A8AEA0;">Kiosko Taller · 8:42 AM</div>
+        </div>
+        <div style="margin-left: auto; font-size: 9pt; color: #A8AEA0;">Salir</div>
+      </div>
+      <div class="kiosk-card green-border">
+        <div style="display: flex; align-items: center;">
+          <div>
+            <div style="font-size: 8pt; color: #15803d; font-weight: bold; letter-spacing: 1pt;">TIEMPO ACTIVO</div>
+            <div style="font-size: 18pt; font-weight: bold; line-height: 1;">2m</div>
+          </div>
+          <span class="btn-mock gray" style="margin-left: auto;">Clock Out</span>
+        </div>
+      </div>
+      <div style="display: flex; gap: 6pt; margin-top: 6pt;">
+        <div class="kiosk-card gray-border" style="flex: 1;">
+          <div style="font-weight: 600;">☕ Tomar break</div>
+          <div style="font-size: 9pt; color: #6B6356;">comida, baño, espera</div>
+        </div>
+        <div class="kiosk-card gold-border" style="flex: 1;">
+          <div style="font-weight: 600;">📋 Asignaciones <span style="color: #A4842C;">3</span></div>
+          <div style="font-size: 9pt; color: #6B6356;">CNC · 1 alta prioridad</div>
+        </div>
+      </div>
+      <div style="margin-top: 6pt; text-align: center; font-size: 9pt; color: #A8AEA0; font-style: italic;">
+        ¿trabajando en algo no asignado? Registrar
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="card warn">
+  <h4>Qué validar</h4>
+  <p>1. ¿El PIN de Victor funciona? <em>(si no, asignárselo desde Sistema → Producción → Personal)</em></p>
+  <p>2. ¿La hora del header coincide con la real?</p>
+  <p>3. ¿El bloque verde "TIEMPO ACTIVO" aparece después del Clock In?</p>
+  <p>4. ¿El conteo de Asignaciones es correcto? <em>(comparar con lo que asignaste desde Sistema)</em></p>
+</div>
+
+<div class="page-break"></div>
+
+<div class="section-banner">
+  <h2><span class="badge">03</span>Trabajar un item asignado</h2>
+  <p class="sub">El corazón del nuevo diseño. UN botón cambia entre 3 estados según dónde está el item.</p>
+</div>
+
+<h3>Los 3 estados del botón</h3>
+
+<table>
+  <thead>
+    <tr><th>Estado del proceso</th><th>Qué ve el operario</th><th>Qué hace al apretar</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><span class="btn-mock gold">Iniciar item</span><br><span class="meta">color gold</span></td>
+      <td>El item nunca fue arrancado. Está fresco en la cola.</td>
+      <td>Abre un segmento de tiempo. La orden pasa a <strong>EN PROCESO</strong>. El cronómetro arranca en 0.</td>
+    </tr>
+    <tr>
+      <td><span class="btn-mock emerald">Item completado</span><br><span class="meta">color verde</span></td>
+      <td>El item está arrancado ahora mismo (con confirmación antes de cerrar).</td>
+      <td>Cierra el segmento. La orden avanza a la <strong>próxima estación</strong> automáticamente. Si era la última, se marca <strong>COMPLETADA</strong>.</td>
+    </tr>
+    <tr>
+      <td><span class="btn-mock amber">Continuar item</span><br><span class="meta">color ámbar</span></td>
+      <td>El item ya fue arrancado antes pero el segmento está cerrado (ej. el operario hizo Clock Out ayer).</td>
+      <td>Reabre el segmento. El cronómetro arranca en 0 (pero abajo dice "llevás 4h 23m" acumuladas).</td>
+    </tr>
+  </tbody>
+</table>
+
+<h3>Cómo se ve el panel de Asignaciones</h3>
+
+<div class="mock">
+  <div class="mock-caption">KIOSKO — DRAWER ASIGNACIONES</div>
+  <div class="mock-body">
+    <div style="background: #f5f5f5; padding: 10pt; border-radius: 4pt;">
+      <div style="font-weight: 600; margin-bottom: 8pt;">Asignaciones (3)</div>
+      <div class="kiosk-card green-border" style="margin-bottom: 6pt;">
+        <div style="display: flex; align-items: flex-start;">
+          <div style="flex: 1;">
+            <div style="font-size: 9pt; color: #15803d; font-weight: bold;">● EN CURSO</div>
+            <div style="font-weight: 600; margin-top: 2pt;">OP-2026-018 · Puerta corrediza</div>
+            <div style="font-size: 9pt; color: #6B6356;">CNC · PRY-2026-578 · due Hoy</div>
+          </div>
+          <span class="btn-mock emerald">Item completado</span>
+        </div>
+      </div>
+      <div class="kiosk-card amber-border" style="margin-bottom: 6pt;">
+        <div style="display: flex; align-items: flex-start;">
+          <div style="flex: 1;">
+            <div style="font-size: 9pt; color: #D89412; font-weight: bold;">⏸ PAUSADO · 4h 23m</div>
+            <div style="font-weight: 600; margin-top: 2pt;">OP-2026-015 · Cabecera nogal</div>
+            <div style="font-size: 9pt; color: #6B6356;">CNC · PRY-2026-571 · due Mañana</div>
+          </div>
+          <span class="btn-mock amber">Continuar item</span>
+        </div>
+      </div>
+      <div class="kiosk-card gold-border">
+        <div style="display: flex; align-items: flex-start;">
+          <div style="flex: 1;">
+            <div style="font-size: 9pt; color: #B53A3A; font-weight: bold;">! ALTA PRIORIDAD</div>
+            <div style="font-weight: 600; margin-top: 2pt;">OP-2026-021 · Mesa boardroom</div>
+            <div style="font-size: 9pt; color: #6B6356;">CNC · PRY-2026-580 · due Hoy</div>
+          </div>
+          <span class="btn-mock gold">Iniciar item</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="card info">
+  <h4>Orden de aparición</h4>
+  <p>La lista se ordena automáticamente para que el operario vea primero lo más urgente:</p>
+  <ol>
+    <li><strong>Items en curso</strong> (con cronómetro corriendo)</li>
+    <li><strong>Items pausados</strong> (continúalos antes de arrancar nuevos)</li>
+    <li><strong>Items de su estación activa</strong></li>
+    <li><strong>Por prioridad</strong> (Alta primero) y luego por fecha de entrega</li>
+  </ol>
+</div>
+
+<h3>Paso a paso completo: arrancar y completar un item</h3>
+
+<div class="step">
+  <div class="step-num">1</div>
+  <div class="step-body">
+    <span class="who shop">Shop Manager</span>
+    <span class="what">Crea la orden en Sistema → Producción → Órdenes → Nueva</span>
+    <p class="subtle">Define item, proyecto, cantidad, prioridad, fecha de entrega. Asigna a Victor en CNC.</p>
+  </div>
+</div>
+
+<div class="step">
+  <div class="step-num">2</div>
+  <div class="step-body">
+    <span class="who operario">Victor</span>
+    <span class="what">En el Kiosko, abre Asignaciones</span>
+    <p class="subtle">Ve la orden con botón gold "Iniciar item".</p>
+  </div>
+</div>
+
+<div class="step">
+  <div class="step-num">3</div>
+  <div class="step-body">
+    <span class="who operario">Victor</span>
+    <span class="what">Aprieta "Iniciar item"</span>
+    <p class="subtle">El botón cambia a verde "Item completado". El badge dice "● EN CURSO".</p>
+  </div>
+</div>
+
+<div class="step">
+  <div class="step-num">4</div>
+  <div class="step-body">
+    <span class="who auto">Automático</span>
+    <span class="what">El backend abre un segmento <code>time_proyectos</code> con timestamp inicio = ahora</span>
+    <p class="subtle">La orden cambia de estado <code>Pendiente</code> a <code>EN PROCESO</code>. Si era el primer arranque, también setea <code>fecha_inicio</code>.</p>
+  </div>
+</div>
+
+<div class="step">
+  <div class="step-num">5</div>
+  <div class="step-body">
+    <span class="who shop">Shop Manager</span>
+    <span class="what">En el Mapa del Taller, ve el cronómetro vivo en la celda CNC</span>
+    <p class="subtle">Aparece "● 0h 02m" debajo del código de orden. Va aumentando cada segundo.</p>
+  </div>
+</div>
+
+<div class="step">
+  <div class="step-num">6</div>
+  <div class="step-body">
+    <span class="who operario">Victor</span>
+    <span class="what">Termina el item. Aprieta "Item completado"</span>
+    <p class="subtle">Aparece confirmación: "¿Marcaste el item como terminado?". Confirma.</p>
+  </div>
+</div>
+
+<div class="step">
+  <div class="step-num">7</div>
+  <div class="step-body">
+    <span class="who auto">Automático</span>
+    <span class="what">Cierra el segmento. Recalcula <code>tiempo_real_minutos</code>. Avanza la orden a la próxima estación (Edge Banding)</span>
+    <p class="subtle">La orden desaparece del Asignaciones de Victor. Aparece en el de quien sea responsable de Edge Banding.</p>
+  </div>
+</div>
+
+<div class="card success">
+  <h4>Qué validar con el encargado</h4>
+  <p>1. <strong>Naturalidad</strong>: ¿Tuvo que explicarle a Victor qué hacer, o lo descubrió solo viendo los botones?</p>
+  <p>2. <strong>El badge "● EN CURSO"</strong>: ¿se entiende que el item está corriendo?</p>
+  <p>3. <strong>El cronómetro en el Mapa</strong>: ¿el encargado puede ver desde su laptop quién está trabajando qué en este momento?</p>
+  <p>4. <strong>Avance automático</strong>: ¿la orden pasó sola a la siguiente estación al completar?</p>
+</div>
+
+<div class="page-break"></div>
+
+<div class="section-banner">
+  <h2><span class="badge">04</span>Tomar break</h2>
+  <p class="sub">Comida, baño, espera de material — cualquier cosa que pausa la jornada productiva.</p>
+</div>
+
+<h3>Paso a paso</h3>
+
+<div class="step">
+  <div class="step-num">1</div>
+  <div class="step-body">
+    <span class="who operario">Victor</span>
+    <span class="what">Aprieta el card "☕ Tomar break"</span>
+    <p class="subtle">Si estaba trabajando un item, ese item queda con segmento abierto pero su tiempo se descuenta visualmente.</p>
+  </div>
+</div>
+
+<div class="step">
+  <div class="step-num">2</div>
+  <div class="step-body">
+    <span class="who operario">Victor</span>
+    <span class="what">Elige motivo del modal: Comida / Baño / Espera material / Otro</span>
+    <p class="subtle">Si elige "Otro" puede escribir texto libre.</p>
+  </div>
+</div>
+
+<div class="step">
+  <div class="step-num">3</div>
+  <div class="step-body">
+    <span class="who operario">Victor</span>
+    <span class="what">La card cambia a azul "En pausa · Comida · 0m"</span>
+    <p class="subtle">El timer cuenta cuánto lleva en pausa.</p>
+  </div>
+</div>
+
+<div class="step">
+  <div class="step-num">4</div>
+  <div class="step-body">
+    <span class="who operario">Victor</span>
+    <span class="what">Cuando vuelve, aprieta "Finalizar pausa"</span>
+    <p class="subtle">El segmento de pausa se cierra. Si tenía un item con segmento abierto, sigue corriendo desde donde quedó.</p>
+  </div>
+</div>
+
+<div class="card warn">
+  <h4>Reglas importantes</h4>
+  <ul>
+    <li><strong>Sólo una pausa abierta a la vez</strong>: no puede tener 2 pausas activas.</li>
+    <li><strong>No puede trabajar un item mientras está en pausa</strong>: el botón Iniciar/Continuar queda gris.</li>
+    <li><strong>El tiempo de pausa se descuenta de "items"</strong>: las horas del item NO incluyen las pausas.</li>
+  </ul>
+</div>
+
+<div class="page-break"></div>
+
+<div class="section-banner">
+  <h2><span class="badge">05</span>Otro trabajo (no asignado)</h2>
+  <p class="sub">Para capturar trabajo que el encargado no creó como orden formal: reparar un fixture, ayudar a otro, hacer un dummy de prueba.</p>
+</div>
+
+<div class="card info">
+  <h4>Cuándo aparece este flujo</h4>
+  <p>El link "¿trabajando en algo no asignado? Registrar" <strong>SOLO aparece cuando</strong>:</p>
+  <ul>
+    <li>El operario está clockeado IN, Y</li>
+    <li>NO tiene ningún item asignado en curso</li>
+  </ul>
+  <p>Si está trabajando un item, este flujo no se muestra (para no distraer).</p>
+</div>
+
+<h3>Paso a paso</h3>
+
+<div class="step">
+  <div class="step-num">1</div>
+  <div class="step-body">
+    <span class="who operario">Victor</span>
+    <span class="what">Terminó un item, no tiene nada nuevo asignado todavía</span>
+  </div>
+</div>
+
+<div class="step">
+  <div class="step-num">2</div>
+  <div class="step-body">
+    <span class="who shop">Shop Manager</span>
+    <span class="what">Le pide informalmente: "hacele unos huecos a estas tablas para PRY-2026-578"</span>
+  </div>
+</div>
+
+<div class="step">
+  <div class="step-num">3</div>
+  <div class="step-body">
+    <span class="who operario">Victor</span>
+    <span class="what">En el Kiosko aprieta "¿trabajando en algo no asignado? Registrar"</span>
+  </div>
+</div>
+
+<div class="step">
+  <div class="step-num">4</div>
+  <div class="step-body">
+    <span class="who operario">Victor</span>
+    <span class="what">Elige proyecto (PRY-2026-578) y estación (CNC)</span>
+    <p class="subtle">No tiene que elegir item — queda como segmento "libre" en ese proyecto/estación.</p>
+  </div>
+</div>
+
+<div class="step">
+  <div class="step-num">5</div>
+  <div class="step-body">
+    <span class="who operario">Victor</span>
+    <span class="what">Cuando termina, aprieta "Finalizar"</span>
+    <p class="subtle">El tiempo cuenta para el bucket "Otro trabajo" del día y se factura al proyecto.</p>
+  </div>
+</div>
+
+<div class="card warn">
+  <h4>Pregunta abierta para discutir con el encargado</h4>
+  <p>¿Vale la pena este flujo paralelo, o preferís que TODO trabajo se cree como mini-orden formal desde Sistema?</p>
+  <p class="meta">Hoy tenemos los dos caminos para flexibilidad, pero si el encargado siente que "Otro trabajo" se va a usar como atajo (y nos pierde trazabilidad), podemos quitarlo y forzar siempre la creación de orden.</p>
+</div>
+
+<div class="page-break"></div>
+
+<div class="section-banner">
+  <h2><span class="badge">06</span>Resumen del día (los 4 buckets)</h2>
+  <p class="sub">Cada jornada se divide en 4 categorías que suman 100%. Es lo que el operario ve al final del día.</p>
+</div>
+
+<h3>La fórmula</h3>
+
+<div class="card">
+  <p style="font-family: monospace; font-size: 13pt; text-align: center; margin: 8pt 0;">
+    <strong>Jornada total</strong> = <span style="color: #15803d;">Items</span> + <span style="color: #9B7200;">Otro trabajo</span> + <span style="color: #1d4ed8;">Pausas</span> + <span style="color: #6B6356;">Sin asignar</span>
+  </p>
+</div>
+
+<h3>Ejemplo: jornada típica de Victor</h3>
+
+<div class="bucket-bar">
+  <div class="bucket-seg items" style="flex: 60;">Items · 60%</div>
+  <div class="bucket-seg otro" style="flex: 14;">Otro · 14%</div>
+  <div class="bucket-seg pausa" style="flex: 11;">Pausa · 11%</div>
+  <div class="bucket-seg sin" style="flex: 15;">Sin asignar · 15%</div>
+</div>
+
+<table>
+  <thead>
+    <tr><th width="22%">Bucket</th><th width="33%">Qué cubre</th><th>Cómo se captura</th></tr>
+  </thead>
+  <tbody>
+    <tr style="background: #E8F5E9;"><td><strong style="color: #15803d;">En items</strong><br>3h 12m</td><td>Tiempo trabajando órdenes asignadas (Iniciar → Completar)</td><td>Suma de segmentos donde <code>orden_produccion_id IS NOT NULL</code></td></tr>
+    <tr style="background: #FFF3E0;"><td><strong style="color: #9B7200;">Otro trabajo</strong><br>45m</td><td>Trabajo libre no asignado (reparar fixture, ayudar a otro)</td><td>Suma de segmentos donde <code>orden_produccion_id IS NULL</code></td></tr>
+    <tr style="background: #DBEAFE;"><td><strong style="color: #1d4ed8;">En pausa</strong><br>35m</td><td>Breaks tomados con motivo</td><td>Suma de segmentos en <code>time_pausas</code></td></tr>
+    <tr style="background: #F3F4F6;"><td><strong style="color: #6B6356;">Sin asignar</strong><br>28m</td><td>Tiempo entre actividades: análisis, agua, baño rápido, transición entre items, conversaciones</td><td><strong>Calculado automático</strong>: jornada − items − otro − pausas</td></tr>
+  </tbody>
+</table>
+
+<div class="card success">
+  <h4>Por qué el "Sin asignar" es importante</h4>
+  <p>Históricamente este tiempo se perdía: el operario nunca reporta "estuve 5 min pensando cómo cortar la pieza". Pero existe, son típicamente ~15% de la jornada. Como el sistema sabe la jornada total y todas las actividades reportadas, lo deduce solo.</p>
+  <p><strong>Para nómina:</strong> es tiempo pagado al operario (está dentro de su jornada).</p>
+  <p><strong>Para facturación al cliente:</strong> NO se le cobra (no es trabajo directo en un proyecto).</p>
+</div>
+
+<div class="page-break"></div>
+
+<div class="section-banner">
+  <h2><span class="badge">07</span>Mapa del Taller (Shop Manager)</h2>
+  <p class="sub">La pantalla que el encargado deja abierta en su laptop. Refresca cada 30 segundos sola.</p>
+</div>
+
+<h3>Cómo está organizado</h3>
+
+<p>El taller se representa como una grilla de <strong>4 columnas × N filas</strong>:</p>
+
+<table>
+  <thead><tr><th>Columna</th><th>Zona</th><th>Estaciones que contiene</th></tr></thead>
+  <tbody>
+    <tr><td><strong>1 — MAQ</strong></td><td>Maquinado</td><td>CNC, Edge Banding</td></tr>
+    <tr><td><strong>2 — ENS</strong></td><td>Ensamble</td><td>5 carpinteros individuales (Juan, Rolando, Luis, Rubén, Dilan) — cada uno una celda</td></tr>
+    <tr><td><strong>3 — ACA</strong></td><td>Acabados</td><td>Pintura, Láminas</td></tr>
+    <tr><td><strong>4 — SAL</strong></td><td>Salida</td><td>Final, Registro, Shipping</td></tr>
+  </tbody>
+</table>
+
+<h3>Cómo se lee cada card</h3>
+
+<div class="mock">
+  <div class="mock-caption">CARD DE ESTACIÓN — EJEMPLO CNC ACTIVA</div>
+  <div class="mock-body">
+    <div style="background: #F2EEE4; border: 1px solid #C9C0AC; padding: 0; position: relative; max-width: 260pt;">
+      <div style="position: absolute; left: 0; top: 0; bottom: 0; width: 3pt; background: #16A34A;"></div>
+      <div style="padding: 8pt 10pt 8pt 14pt;">
+        <div style="display: flex; justify-content: space-between; font-family: monospace; font-size: 8pt; color: #7A6F58; font-weight: bold; letter-spacing: 1pt;">
+          <span>MAQ-1.01</span><span>M</span>
+        </div>
+        <div style="font-size: 14pt; font-weight: 600; margin: 2pt 0 4pt 0;">CNC</div>
+        <div style="font-family: monospace; font-size: 9pt; color: #7A6F58;">▸ OP-2026-018</div>
+        <div style="font-size: 9pt;">Lobby Hotel Indigo</div>
+        <div style="font-family: monospace; font-size: 9pt; color: #16A34A; font-weight: bold;">● 1h 23m</div>
+        <div style="margin: 8pt 0 4pt 0; font-family: monospace; font-size: 8pt; color: #7A6F58; display: flex; justify-content: space-between;">
+          <span>OCUPACIÓN</span><span style="color: #1F1B14; font-weight: bold;">1/2</span>
+        </div>
+        <div style="height: 5pt; background: #eee; position: relative;">
+          <div style="width: 50%; height: 100%; background: #16A34A;"></div>
+        </div>
+        <div style="margin-top: 6pt; display: flex; align-items: center; gap: 4pt;">
+          <div style="width: 18pt; height: 18pt; background: #1F1B14; color: #F2EAD8; border-radius: 50%; font-size: 8pt; font-weight: bold; display: flex; align-items: center; justify-content: center;">VI</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<table>
+  <thead><tr><th width="32%">Señal visual</th><th>Significa</th></tr></thead>
+  <tbody>
+    <tr><td><span style="background: #16A34A; color: #fff; padding: 2pt 6pt;">▌</span> <strong>Stripe verde izquierda</strong></td><td>Estación activa con carga normal (1-2 órdenes)</td></tr>
+    <tr><td><span style="background: #D89412; color: #fff; padding: 2pt 6pt;">▌</span> <strong>Stripe ámbar</strong></td><td>Estación sobrecargada (más órdenes que capacidad) o con vencidas</td></tr>
+    <tr><td><span style="background: #9C9384; color: #fff; padding: 2pt 6pt;">▌</span> <strong>Stripe gris</strong></td><td>Estación sin órdenes (vacante)</td></tr>
+    <tr><td><code>MAQ-1.01</code></td><td>Código técnico: ZONA-COLUMNA.FILA</td></tr>
+    <tr><td><code>▸ OP-2026-018</code></td><td>Código de la orden destacada (la que está en curso o la próxima)</td></tr>
+    <tr><td><strong>● 1h 23m</strong> (verde)</td><td>Cronómetro vivo del item que se trabaja AHORA mismo. Re-tickea cada segundo.</td></tr>
+    <tr><td><strong>due Hoy</strong> / <strong>due Vencida</strong></td><td>Cuándo es el deadline del item. Rojo si pasó.</td></tr>
+    <tr><td><strong>OCUPACIÓN 2/3</strong> + barra</td><td>2 órdenes activas de capacidad máxima 3 en esa estación</td></tr>
+    <tr><td>Círculos negros con iniciales</td><td>Operarios asignados a esa estación. Si tiene varios, hover para ver nombres.</td></tr>
+  </tbody>
+</table>
+
+<div class="card info">
+  <h4>Assembly desagregado</h4>
+  <p>La estación Assembly tiene 5 carpinteros. En lugar de mostrarla como UNA card con 5 personas, se muestra como <strong>5 cards individuales</strong> (una por carpintero). Así ves la carga real de cada uno.</p>
+</div>
+
+<h3>Notificaciones del SHOP_MANAGER</h3>
+
+<p>En el TopBar (esquina superior derecha) hay una <strong>campana 🔔</strong>. Aparece un badge rojo con número cuando hay eventos nuevos.</p>
+
+<table>
+  <tbody>
+    <tr><td width="32%"><strong>Eventos que disparan notificación</strong></td><td>Cuando un operario completa un item, mueve una orden a otra estación, o cancela un proceso desde el Kiosko</td></tr>
+    <tr><td><strong>Refresco</strong></td><td>Cada 25 segundos hace polling al backend</td></tr>
+    <tr><td><strong>Browser Notification API</strong></td><td>Si aceptaste permisos, te avisa con notificación del sistema aunque no estés en el tab</td></tr>
+  </tbody>
+</table>
+
+<div class="page-break"></div>
+
+<div class="section-banner">
+  <h2><span class="badge">08</span>Reportes y exportar Excel</h2>
+  <p class="sub">Sistema → Producción → Horas. Tres vistas con botón Exportar cada una.</p>
+</div>
+
+<h3>Vista "Activos"</h3>
+<p>Quién está clockeado IN ahora mismo, en qué proyecto/estación, y desde cuándo. Útil para snapshot del taller.</p>
+
+<h3>Vista "Por persona"</h3>
+<p>Para un operario y un rango de fechas, devuelve día por día:</p>
+
+<table>
+  <thead>
+    <tr><th>Fecha</th><th>In</th><th>Out</th><th>Total</th><th>Items</th><th>Otro</th><th>Pausa</th><th>Sin asignar</th></tr>
+  </thead>
+  <tbody>
+    <tr><td>20/05</td><td>07:42</td><td>16:10</td><td>8h 28m</td><td>5h 12m</td><td>1h 05m</td><td>50m</td><td>1h 21m</td></tr>
+    <tr><td>21/05</td><td>07:48</td><td>16:05</td><td>8h 17m</td><td>6h 30m</td><td>0</td><td>45m</td><td>1h 02m</td></tr>
+  </tbody>
+</table>
+
+<p>Cada fila se puede expandir para ver el detalle de proyectos trabajados.</p>
+
+<h3>Vista "Por proyecto"</h3>
+<p>Para un proyecto y un rango de fechas, devuelve cuántas horas se le imputaron, separadas por persona y estación.</p>
+
+<h3>Exportar a Excel</h3>
+<p>Botón "Exportar" arriba a la derecha. Genera <code>.xlsx</code> con:</p>
+<ul>
+  <li>Una hoja con la vista actual</li>
+  <li>Columnas separadas para los 4 buckets</li>
+  <li>Totales por persona/proyecto al final</li>
+</ul>
+
+<div class="card warn">
+  <h4>Validar con el encargado</h4>
+  <p>¿La planilla Excel sirve <strong>tal cual</strong> para pagar nómina y para facturar al cliente?</p>
+  <p>Si dice "tengo que reorganizar columnas", lo ajustamos antes de declarar listo.</p>
+</div>
+
+<div class="page-break"></div>
+
+<div class="section-banner">
+  <h2><span class="badge">09</span>Escenarios end-to-end</h2>
+  <p class="sub">5 caminos críticos para correr en vivo con el encargado. Cada uno termina con una pregunta de validación.</p>
+</div>
+
+<h3>Escenario A — Inicio de jornada típico</h3>
+<div class="card">
+  <ol>
+    <li>Vos: creás una orden nueva en Sistema y se la asignás a Victor en CNC</li>
+    <li>Victor: hace Clock In en el iPad con su PIN</li>
+    <li>Victor: abre Asignaciones → ve la orden con botón gold "Iniciar item"</li>
+    <li>Victor: aprieta — el badge cambia a "● EN CURSO"</li>
+    <li>Vos: en el Mapa del Taller, aparece el cronómetro vivo en CNC</li>
+  </ol>
+  <p style="margin-top: 8pt;"><strong>Pregunta:</strong> <em>¿Tenés que explicarle a Victor cómo arrancar, o lo descubre solo?</em></p>
+</div>
+
+<h3>Escenario B — Multi-día (un item lleva 2 jornadas)</h3>
+<div class="card">
+  <ol>
+    <li>Victor: trabaja un item, son las 5pm, hace Clock Out</li>
+    <li>El sistema: cierra el segmento sin marcar nada raro</li>
+    <li>Al día siguiente, Victor: hace Clock In</li>
+    <li>En Asignaciones: aparece arriba con badge "⏸ PAUSADO · 6h" y botón ámbar "Continuar item"</li>
+    <li>Victor: lo aprieta — sigue trabajando, cronómetro arranca desde 0 pero las horas acumuladas se muestran</li>
+  </ol>
+  <p style="margin-top: 8pt;"><strong>Pregunta:</strong> <em>¿Es claro cuál es el item que tiene que retomar? ¿Le suma ver cuántas horas lleva acumuladas?</em></p>
+</div>
+
+<h3>Escenario C — Otro trabajo (no-asignado)</h3>
+<div class="card">
+  <ol>
+    <li>Victor: terminó un item, no tiene nada nuevo asignado todavía</li>
+    <li>Vos: le pedís "hacele unos huecos a estas tablas para PRY-2026-578"</li>
+    <li>Victor: en el Kiosko aprieta "¿trabajando en algo no asignado? Registrar"</li>
+    <li>Victor: elige proyecto + estación, sin item específico</li>
+    <li>Cuando termina, Victor: aprieta Finalizar</li>
+  </ol>
+  <p style="margin-top: 8pt;"><strong>Pregunta:</strong> <em>¿Vale la pena este flujo o preferís que todo se cree como mini-orden formal?</em></p>
+</div>
+
+<h3>Escenario D — Lectura del Mapa</h3>
+<div class="card">
+  <ol>
+    <li>Encargado: abre el Mapa del Taller en su laptop</li>
+    <li>Mira:
+      <ul style="margin: 4pt 0;">
+        <li>¿Quiénes están trabajando AHORA? (celdas con ● cronómetro vivo)</li>
+        <li>¿Hay sobrecarga? (stripes ámbar)</li>
+        <li>¿Hay items vencidos? (texto "due Vencida" en rojo)</li>
+        <li>¿Hay vacancias? (stripes grises)</li>
+      </ul>
+    </li>
+    <li>Click en una celda con problema → va al detalle de la orden</li>
+  </ol>
+  <p style="margin-top: 8pt;"><strong>Pregunta:</strong> <em>¿Entendés el estado del taller con un vistazo de 5 segundos? Si no, ¿qué falta o sobra?</em></p>
+</div>
+
+<h3>Escenario E — Cierre del día y reporte</h3>
+<div class="card">
+  <ol>
+    <li>Final del día. Victor: ve su Resumen del día en el Kiosko con los 4 buckets</li>
+    <li>Encargado: va al Sistema → Producción → Horas → Por persona → Victor</li>
+    <li>Ve la lista de proyectos + horas por bucket</li>
+    <li>Click "Exportar Excel" → planilla con las 4 columnas separadas</li>
+  </ol>
+  <p style="margin-top: 8pt;"><strong>Pregunta:</strong> <em>¿Esta planilla sirve tal cual para nómina y facturación, o hay que transformarla?</em></p>
+</div>
+
+<div class="page-break"></div>
+
+<div class="section-banner">
+  <h2><span class="badge">10</span>Lo que NO funciona todavía</h2>
+  <p class="sub">Para que el encargado no te lo plantee como bug. Está diferido a iteraciones futuras.</p>
+</div>
+
+<table>
+  <thead><tr><th width="30%">Funcionalidad ausente</th><th>Por qué se difirió</th></tr></thead>
+  <tbody>
+    <tr><td><strong>Multi-operario en mismo item</strong></td><td>Si dos carpinteros tienen que trabajar la misma orden a la vez, hoy solo uno la tiene asignada. Diferido a Iteración 2 — requiere tabla many-to-many.</td></tr>
+    <tr><td><strong>App móvil nativa</strong></td><td>Hoy el kiosko es web responsive (iPad funciona perfecto). Mobile nativo para Android/iOS pendiente.</td></tr>
+    <tr><td><strong>Notificaciones SMS/WhatsApp</strong></td><td>Hoy son solo Browser Notifications + toast in-app del SHOP_MANAGER. Para SMS habría que integrar Twilio.</td></tr>
+    <tr><td><strong>Dashboards históricos</strong></td><td>Tenemos reportes por persona y por proyecto. KPIs históricos (productividad por mes) pendientes.</td></tr>
+    <tr><td><strong>Recálculo automático de rutas</strong></td><td>Si una estación cae (operario faltó), el sistema NO re-rutea automáticamente. El encargado reasigna a mano.</td></tr>
+    <tr><td><strong>Predicción de fechas de entrega</strong></td><td>El sistema NO avisa proactivamente "esta orden NO va a llegar a tiempo". Solo marca "vencida" cuando ya pasó.</td></tr>
+  </tbody>
+</table>
+
+<h3>Próximos pasos después del testing</h3>
+
+<ol>
+  <li>Testing OK con encargado → merge <code>claude/jovial-ride-64bfff</code> a <code>main</code></li>
+  <li>Aplicar migraciones faltantes a Railway prod (verificar 019)</li>
+  <li>Crear usuario SHOP_MANAGER en prod</li>
+  <li>Asignar PINs a los 12 carpinteros restantes</li>
+  <li>Rotar password de Postgres (urgente desde hace 11 días)</li>
+  <li>Anuncio interno al equipo del taller</li>
+</ol>
+
+<div style="margin-top: 30pt; padding-top: 12pt; border-top: 1px solid #ECE7DC; text-align: center; font-size: 9pt; color: #9C9384;">
+  Documento generado para sesión de testing 2026-05-21.<br>
+  Branch <code>claude/jovial-ride-64bfff</code> · Commit base <code>f1d362a</code>
+</div>
+
+</body>
+</html>
