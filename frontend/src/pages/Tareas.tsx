@@ -73,7 +73,10 @@ export default function Tareas() {
       const r = res.data
       qc.invalidateQueries({ queryKey: ['tareas'] })
       qc.invalidateQueries({ queryKey: ['tareas-stats'] })
-      toast.success(`Sync OK · ${r.created} nuevas · ${r.autoClosed} autocerradas`)
+      const parts = [`${r.created} nuevas`]
+      if (r.reactivated > 0) parts.push(`${r.reactivated} reactivadas`)
+      parts.push(`${r.autoClosed} autocerradas`)
+      toast.success(`Sync OK · ${parts.join(' · ')}`)
     },
     onError: () => toast.error('No se pudo sincronizar el sistema'),
   })

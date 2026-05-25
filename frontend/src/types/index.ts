@@ -293,9 +293,10 @@ export interface Tarea {
 
 export interface SyncSystemResult {
   created: number
+  reactivated: number
   autoClosed: number
   kept: number
-  byRule: Record<string, { created: number; autoClosed: number; kept: number }>
+  byRule: Record<string, { created: number; reactivated: number; autoClosed: number; kept: number }>
 }
 
 export interface TareasStats {

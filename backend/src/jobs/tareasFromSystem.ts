@@ -19,11 +19,19 @@
 import pool from '../db/pool'
 import { logger } from '../utils/logger'
 
-interface SyncResult {
+interface RuleStats {
   created: number
+  reactivated: number
   autoClosed: number
   kept: number
-  byRule: Record<string, { created: number; autoClosed: number; kept: number }>
+}
+
+interface SyncResult {
+  created: number
+  reactivated: number
+  autoClosed: number
+  kept: number
+  byRule: Record<string, RuleStats>
 }
 
 type Priority = 'low' | 'medium' | 'high'
@@ -166,13 +174,14 @@ const RULES: Rule[] = [
 export async function syncSystemTareas(): Promise<SyncResult> {
   const result: SyncResult = {
     created: 0,
+    reactivated: 0,
     autoClosed: 0,
     kept: 0,
     byRule: {},
   }
 
   for (const rule of RULES) {
-    const ruleStats = { created: 0, autoClosed: 0, kept: 0 }
+    const ruleStats: RuleStats = { created: 0, reactivated: 0, autoClosed: 0, kept: 0 }
     let activeConditions: Condition[] = []
     try {
       activeConditions = await rule.query()
@@ -194,26 +203,57 @@ export async function syncSystemTareas(): Promise<SyncResult> {
     )
     const existingRefs = new Set(existing.rows.map((r: any) => r.source_ref))
 
-    // Insertar nuevas (las que están activas pero no existen aún)
+    // UPSERT por cada condición activa:
+    // - si no existe ningún row con ese source_ref → INSERT nueva (estado=pendiente)
+    // - si existe y está en estado activo → no-op (mantener metadata original, no pisar)
+    // - si existe pero está en estado completada/descartada → REACTIVAR (volver a pendiente,
+    //   limpiar completed_at, refrescar título/desc/prio porque la condición cambió)
+    //
+    // El UNIQUE INDEX parcial sobre (source_ref WHERE origen='sistema') asegura idempotencia.
     for (const cond of activeConditions) {
       if (existingRefs.has(cond.sourceRef)) {
         ruleStats.kept++
         continue
       }
       try {
-        await pool.query(
+        const upsert = await pool.query(
           `INSERT INTO tareas (area, title, description, priority, from_email, subject, source_email_id, origen, source_ref)
            VALUES ($1, $2, $3, $4, $5, $6, NULL, 'sistema', $7)
-           ON CONFLICT DO NOTHING`,
+           ON CONFLICT (source_ref) WHERE origen = 'sistema' AND source_ref IS NOT NULL
+           DO UPDATE SET
+             estado = 'pendiente',
+             completed_at = NULL,
+             title = EXCLUDED.title,
+             description = EXCLUDED.description,
+             priority = EXCLUDED.priority,
+             subject = EXCLUDED.subject,
+             area = EXCLUDED.area
+           WHERE tareas.estado IN ('completada', 'descartada')
+           RETURNING (xmax = 0) AS inserted`,
           [cond.area, cond.title, cond.description, cond.priority, FROM_EMAIL_SYSTEM, cond.subject, cond.sourceRef],
         )
-        ruleStats.created++
+        // xmax = 0 cuando es INSERT genuino. Si fue UPDATE (reactivación), xmax != 0.
+        if (upsert.rows[0]?.inserted) ruleStats.created++
+        else if (upsert.rows.length > 0) ruleStats.reactivated++
+        // Si rows.length == 0: existía pero el WHERE no matcheó (estaba activa) — no-op silencioso
       } catch (err) {
-        logger.error('syncSystemTareas insert failed', { sourceRef: cond.sourceRef, err: String(err) })
+        logger.error('syncSystemTareas upsert failed', { sourceRef: cond.sourceRef, err: String(err) })
       }
     }
 
-    // Auto-cerrar: las que existen activas pero ya no están en condiciones
+    // Auto-cerrar: las que existen activas pero ya no están en condiciones.
+    // Safety: si pasamos de >5 activas a 0 condiciones, log warning. Sospechoso de
+    // un fallo transitorio (DB connection, query timeout, etc.) que devolvió 0
+    // cuando en realidad había condiciones. Igual procedemos — el UPSERT de arriba
+    // las reactivaría en la siguiente corrida si la condición sigue activa.
+    if (existing.rows.length > 5 && activeRefs.size === 0) {
+      logger.warn('syncSystemTareas: auto-close masivo sospechoso (todas las activas se cierran)', {
+        rule: rule.key,
+        existingActive: existing.rows.length,
+        activeConditions: activeRefs.size,
+      })
+    }
+
     for (const ex of existing.rows) {
       if (!activeRefs.has(ex.source_ref)) {
         await pool.query(
@@ -227,9 +267,10 @@ export async function syncSystemTareas(): Promise<SyncResult> {
     }
 
     result.byRule[rule.key] = ruleStats
-    result.created    += ruleStats.created
-    result.autoClosed += ruleStats.autoClosed
-    result.kept       += ruleStats.kept
+    result.created     += ruleStats.created
+    result.reactivated += ruleStats.reactivated
+    result.autoClosed  += ruleStats.autoClosed
+    result.kept        += ruleStats.kept
   }
 
   return result
