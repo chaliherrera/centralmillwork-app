@@ -2,13 +2,14 @@ import { useState, useMemo } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
-  ArrowLeft, ArrowRight, Pause, Play, Ban, Loader2, CheckCircle2, Clock, History,
+  ArrowLeft, ArrowRight, Pause, Play, Ban, Loader2, CheckCircle2, Clock,
   UserPlus, Paperclip,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import clsx from 'clsx'
 import Modal from '@/components/ui/Modal'
 import OrdenDocumentos from '@/components/modules/produccion/OrdenDocumentos'
+import OrdenEvolucion from '@/components/produccion/OrdenEvolucion'
 import { produccionService } from '@/services/produccion'
 import type { StatusOrden, Prioridad, OrdenProceso } from '@/types/produccion'
 
@@ -177,6 +178,9 @@ export default function DetalleOrden() {
         </div>
       )}
 
+      {/* Evolución (solo SHOP_MANAGER/ADMIN) — overview visual del ciclo de vida */}
+      <OrdenEvolucion ordenId={ordenId} />
+
       {/* Datos + procesos + historial */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         <div className="lg:col-span-2 space-y-4">
@@ -199,36 +203,10 @@ export default function DetalleOrden() {
           {/* Documentos adjuntos por estación */}
           <OrdenDocumentos ordenId={ordenId} procesos={orden.procesos} />
 
-          {/* Historial */}
-          <div className="card space-y-3">
-            <h3 className="flex items-center gap-2"><History size={16} /> Historial</h3>
-            <ol className="relative space-y-3 ml-2 border-l-2 border-gray-100">
-              {orden.historial.map((h) => (
-                <li key={h.id} className="ml-4 pl-3">
-                  <div className="absolute -left-[7px] mt-1.5 w-3 h-3 rounded-full bg-gold-500 border-2 border-white" />
-                  <div className="text-sm">
-                    <span className="font-semibold capitalize">{h.accion}</span>
-                    {h.estacion_origen && h.estacion_destino && (
-                      <> · {h.estacion_origen} → {h.estacion_destino}</>
-                    )}
-                    {!h.estacion_origen && h.estacion_destino && (
-                      <> · {h.estacion_destino}</>
-                    )}
-                  </div>
-                  <div className="text-xs text-gray-500 mt-0.5">
-                    {new Date(h.timestamp).toLocaleString('es-MX')}
-                    {h.usuario_nombre && <> · {h.usuario_nombre}</>}
-                    {h.kiosk_personal_nombre && <> · 📱 {h.kiosk_personal_nombre}</>}
-                    {h.dispositivo && <> ({h.dispositivo})</>}
-                  </div>
-                  {h.motivo && <div className="text-xs text-gray-600 mt-0.5">"{h.motivo}"</div>}
-                </li>
-              ))}
-              {orden.historial.length === 0 && (
-                <li className="text-sm text-gray-400 italic ml-4">Sin eventos todavía</li>
-              )}
-            </ol>
-          </div>
+          {/* Nota: el bloque "Historial" anterior fue removido.
+              La información cronológica vive ahora dentro del componente
+              <OrdenEvolucion /> (arriba) como una línea de tiempo desplegable
+              integrada con stepper + KPIs. Eso evita la duplicación visual. */}
         </div>
 
         {/* Lateral: datos + ruta */}

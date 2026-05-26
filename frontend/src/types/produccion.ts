@@ -361,3 +361,74 @@ export interface ReporteSemanalResp {
   dias: string[]
   personal: ReporteSemanalPersonal[]
 }
+
+// ─── Evolución de orden (solo SHOP_MANAGER/ADMIN) ───────────────────────────
+
+export type EvolucionProcesoEstado = 'pendiente' | 'en_curso' | 'pausado' | 'completado'
+
+export interface EvolucionProceso {
+  id: number
+  estacion: string
+  secuencia: number
+  requerido: boolean
+  completado: boolean
+  estado: EvolucionProcesoEstado
+  fecha_inicio: string | null
+  fecha_fin: string | null
+  tiempo_real_minutos: number
+  /** Estimado específico para esta estación. Si null, el frontend distribuye
+   *  `orden.tiempo_estimado_horas` equitativamente entre los procesos requeridos. */
+  tiempo_estimado_minutos: number | null
+  operador_actual_id: number | null
+  operador_actual_nombre: string | null
+  operador_actual_iniciales: string | null
+}
+
+export type EvolucionEventoTipo =
+  | 'creada' | 'asignada' | 'iniciado_item' | 'pausa' | 'movida' | 'completada'
+
+export interface EvolucionEvento {
+  tipo: EvolucionEventoTipo
+  timestamp: string
+  /** ID de personal_taller si el evento lo disparó un operario desde el kiosko */
+  actor_personal_id: number | null
+  /** Nombre de usuario del sistema si el evento lo disparó alguien con login */
+  actor_usuario: string | null
+  /** Iniciales del actor (para avatar visual) */
+  actor_iniciales: string | null
+  detalle: {
+    estacion_origen?: string | null
+    estacion_destino?: string | null
+    motivo?: string | null
+    duracion_min?: number | null
+    hora_fin?: string | null
+    prioridad?: Prioridad
+    personal_destino?: string | null
+  }
+}
+
+export interface OrdenEvolucionOrden {
+  id: number
+  numero_orden: string
+  item_nombre: string
+  cantidad: number
+  unidad: string
+  prioridad: Prioridad
+  status: StatusOrden
+  estacion_actual: string | null
+  tiempo_estimado_horas: number | null
+  fecha_entrega: string | null
+  fecha_inicio: string | null
+  fecha_completada: string | null
+  created_at: string
+  created_by: string | null
+  proyecto_codigo: string | null
+  proyecto_nombre: string | null
+  creado_por_nombre: string | null
+}
+
+export interface OrdenEvolucionResp {
+  orden: OrdenEvolucionOrden
+  procesos: EvolucionProceso[]
+  eventos: EvolucionEvento[]
+}

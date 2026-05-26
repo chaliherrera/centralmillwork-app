@@ -1,7 +1,7 @@
 import { Router, Request, Response, NextFunction } from 'express'
 import { requireRole } from '../middleware/auth'
 import {
-  getOrdenes, getOrden, getOrdenesKpis, getEventosRecientes,
+  getOrdenes, getOrden, getOrdenEvolucion, getOrdenesKpis, getEventosRecientes,
   createOrden, updateOrden,
   asignarOperador, avanzarOrden, pausarOrden, reanudarOrden, cancelarOrden,
 } from '../controllers/produccionController'
@@ -35,6 +35,7 @@ const PROD_WRITE = requireRole('ADMIN', 'SHOP_MANAGER')
 router.get('/ordenes',                   getOrdenes)
 router.get('/ordenes-kpis',              getOrdenesKpis)
 router.get('/eventos-recientes',         getEventosRecientes)
+router.get('/ordenes/:id/evolucion',     requireRole('ADMIN','SHOP_MANAGER'), getOrdenEvolucion)
 router.get('/ordenes/:id',               getOrden)
 router.post('/ordenes',                  PROD_WRITE, createOrden)
 router.put('/ordenes/:id',               PROD_WRITE, updateOrden)

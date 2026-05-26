@@ -762,3 +762,169 @@ export async function getOrdenesKpis(_req: Request, res: Response, next: NextFun
     res.json({ data: rows[0] })
   } catch (err) { next(err) }
 }
+
+/**
+ * GET /api/produccion/ordenes/:id/evolucion
+ *
+ * Vista de evolución de la orden — combina:
+ *   1. Estado de cada proceso (estación) con tiempo real vs estimado
+ *   2. Timeline cronológica de eventos (creación, asignaciones, inicios, pausas, completas)
+ *   3. Segmentos de trabajo con quién y cuándo
+ *
+ * Auth: solo SHOP_MANAGER y ADMIN (filtrado en la ruta).
+ */
+export async function getOrdenEvolucion(req: Request, res: Response, next: NextFunction) {
+  try {
+    const id = parseInt(String(req.params.id))
+    if (!Number.isFinite(id)) return next(createError('id inválido', 400))
+
+    // 1) Orden base
+    const { rows: [orden] } = await pool.query(
+      `SELECT
+         o.id, o.numero_orden, o.item_nombre, o.cantidad, o.unidad,
+         o.prioridad, o.status, o.estacion_actual,
+         o.tiempo_estimado_horas, o.fecha_entrega,
+         o.fecha_inicio, o.fecha_completada,
+         o.created_at, o.created_by,
+         p.codigo AS proyecto_codigo, p.nombre AS proyecto_nombre,
+         u.nombre AS creado_por_nombre
+       FROM ordenes_produccion o
+       LEFT JOIN proyectos  p ON p.id = o.proyecto_id
+       LEFT JOIN usuarios   u ON u.id = o.created_by
+       WHERE o.id = $1`,
+      [id]
+    )
+    if (!orden) return next(createError('Orden no encontrada', 404))
+
+    // 2) Procesos con tiempo real (sum de segmentos) + tiempo estimado por estación
+    //    Si tiempo_estimado_minutos NO está seteado por estación, se distribuye
+    //    tiempo_estimado_horas equitativamente en el frontend.
+    const { rows: procesos } = await pool.query(
+      `SELECT
+         op.id, op.estacion, op.secuencia, op.requerido, op.completado,
+         op.fecha_inicio, op.fecha_fin,
+         op.tiempo_estimado_minutos,
+         -- tiempo real: prioridad a SUM de time_proyectos (multi-día friendly).
+         -- Si no hay segmentos cerrados, usa el valor cacheado en orden_procesos.
+         COALESCE(
+           (SELECT SUM(EXTRACT(EPOCH FROM (COALESCE(tp.hora_fin, NOW()) - tp.hora_inicio)) / 60)
+            FROM time_proyectos tp
+            WHERE tp.orden_produccion_id = op.orden_id
+              AND tp.estacion = op.estacion),
+           op.tiempo_real_minutos,
+           0
+         )::int AS tiempo_real_minutos,
+         -- Operador actual del proceso (puede ser distinto al original si lo reasignaron)
+         pt.id           AS operador_actual_id,
+         pt.nombre_completo AS operador_actual_nombre,
+         pt.iniciales       AS operador_actual_iniciales,
+         -- Estado derivado para el frontend
+         CASE
+           WHEN op.completado                       THEN 'completado'
+           WHEN op.fecha_inicio IS NOT NULL
+             AND EXISTS (SELECT 1 FROM time_proyectos tp
+                         WHERE tp.orden_produccion_id = op.orden_id
+                           AND tp.estacion = op.estacion
+                           AND tp.hora_fin IS NULL)  THEN 'en_curso'
+           WHEN op.fecha_inicio IS NOT NULL         THEN 'pausado'
+           ELSE 'pendiente'
+         END AS estado
+       FROM orden_procesos op
+       LEFT JOIN personal_taller pt ON pt.id = op.operador_id
+       WHERE op.orden_id = $1
+       ORDER BY op.secuencia ASC`,
+      [id]
+    )
+
+    // 3) Eventos del timeline — unión de varias fuentes
+    //    a) Creación (de la orden)
+    //    b) Eventos de orden_historial (asignar, mover, completar, iniciar-item)
+    //    c) Pausas tomadas durante el trabajo de esta orden
+    //
+    //    Nota: una pausa la disparamos solo si AT-LEAST-ONE segmento de time_proyectos
+    //    de esta orden está abierto cuando arranca la pausa. Esto evita listar pausas
+    //    que no tienen que ver con esta orden puntual.
+
+    const { rows: eventos } = await pool.query(
+      `WITH eventos_union AS (
+         -- A) Creación
+         SELECT
+           'creada'::text AS tipo,
+           o.created_at   AS timestamp,
+           NULL::int      AS actor_personal_id,
+           u.nombre       AS actor_usuario,
+           NULL::text     AS actor_iniciales,
+           jsonb_build_object('prioridad', o.prioridad) AS detalle
+         FROM ordenes_produccion o
+         LEFT JOIN usuarios u ON u.id = o.created_by
+         WHERE o.id = $1
+
+         UNION ALL
+
+         -- B) Eventos de historial — quien hace la acción es kiosk_personal (operario)
+         --    o usuario_id (sistema), en ese orden de precedencia.
+         SELECT
+           CASE oh.accion
+             WHEN 'asignar'      THEN 'asignada'
+             WHEN 'iniciar-item' THEN 'iniciado_item'
+             WHEN 'mover'        THEN 'movida'
+             WHEN 'completar'    THEN
+               CASE WHEN oh.estacion_destino = 'completada' THEN 'completada' ELSE 'movida' END
+             ELSE oh.accion
+           END                                                       AS tipo,
+           oh.timestamp                                              AS timestamp,
+           COALESCE(oh.kiosk_personal_id, oh.personal_destino_id)    AS actor_personal_id,
+           u.nombre                                                  AS actor_usuario,
+           COALESCE(ptk.iniciales, ptd.iniciales)                    AS actor_iniciales,
+           jsonb_build_object(
+             'estacion_origen',  oh.estacion_origen,
+             'estacion_destino', NULLIF(oh.estacion_destino, 'completada'),
+             'motivo',           oh.motivo,
+             'personal_destino', ptd.nombre_completo
+           )                                                         AS detalle
+         FROM orden_historial oh
+         LEFT JOIN usuarios          u   ON u.id   = oh.usuario_id
+         LEFT JOIN personal_taller   ptk ON ptk.id = oh.kiosk_personal_id
+         LEFT JOIN personal_taller   ptd ON ptd.id = oh.personal_destino_id
+         WHERE oh.orden_id = $1
+
+         UNION ALL
+
+         -- C) Pausas — solo las que ocurrieron mientras AL MENOS UN segmento de
+         --    esta orden estaba abierto (la pausa es del operario, no de la orden,
+         --    pero la mostramos en el timeline para entender por qué hubo tiempo muerto).
+         SELECT
+           'pausa'::text AS tipo,
+           pa.hora_inicio AS timestamp,
+           pa.personal_id AS actor_personal_id,
+           NULL::text     AS actor_usuario,
+           pt.iniciales   AS actor_iniciales,
+           jsonb_build_object(
+             'motivo',         pa.motivo,
+             'duracion_min',   pa.duracion_minutos,
+             'hora_fin',       pa.hora_fin
+           )              AS detalle
+         FROM time_pausas pa
+         JOIN personal_taller pt ON pt.id = pa.personal_id
+         WHERE EXISTS (
+           SELECT 1 FROM time_proyectos tp
+           WHERE tp.orden_produccion_id = $1
+             AND tp.personal_id = pa.personal_id
+             AND tp.hora_inicio <= pa.hora_inicio
+             AND (tp.hora_fin IS NULL OR tp.hora_fin >= pa.hora_inicio)
+         )
+       )
+       SELECT * FROM eventos_union
+       ORDER BY timestamp ASC`,
+      [id]
+    )
+
+    res.json({
+      data: {
+        orden,
+        procesos,
+        eventos,
+      },
+    })
+  } catch (err) { next(err) }
+}

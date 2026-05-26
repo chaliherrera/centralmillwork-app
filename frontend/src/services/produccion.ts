@@ -1,6 +1,6 @@
 import api from './api'
 import type {
-  OrdenProduccion, OrdenDetallada, OrdenesKpis,
+  OrdenProduccion, OrdenDetallada, OrdenEvolucionResp, OrdenesKpis,
   PersonalTaller, EstacionConStatus, EstacionDetalle, EstacionDistancia,
   RutaCalculada, Prioridad, OrdenDocumento, EventosRecientesResp,
   PersonalActivoReporte, ReportePersonalResp, ReporteSemanalResp, ReporteProyectoResp, ReporteDiarioResp,
@@ -59,6 +59,10 @@ export const produccionService = {
 
   orden: (id: number) =>
     api.get<{ data: OrdenDetallada }>(`/produccion/ordenes/${id}`).then((r) => r.data.data),
+
+  /** Evolución completa de la orden — stepper + timeline. Solo ADMIN/SHOP_MANAGER. */
+  ordenEvolucion: (id: number) =>
+    api.get<{ data: OrdenEvolucionResp }>(`/produccion/ordenes/${id}/evolucion`).then((r) => r.data.data),
 
   crearOrden: (body: CrearOrdenInput) =>
     api.post<{ data: OrdenProduccion; message: string }>('/produccion/ordenes', body).then((r) => r.data),
