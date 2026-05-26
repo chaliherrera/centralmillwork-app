@@ -5,10 +5,17 @@ import {
   ArrowLeft, Package, ShoppingCart, Warehouse, Clock, AlertTriangle,
   Activity, BarChart3, Calendar, CalendarDays, User, DollarSign,
   CheckCircle2, AlertCircle, MessageSquare, Truck, Layers, FileText,
-  ChevronLeft, ChevronRight,
+  ChevronLeft, ChevronRight, ChevronDown, ChevronRight as ChevronRightSm,
+  Hammer,
 } from 'lucide-react'
 import clsx from 'clsx'
-import { proyectosService, type ActividadEvento } from '@/services/proyectos'
+import {
+  proyectosService,
+  type ActividadEvento,
+  type ItemReadiness,
+  type ItemReadinessMaterial,
+  type EstadoItemReadiness,
+} from '@/services/proyectos'
 import { materialesService } from '@/services/materiales'
 import { ordenesCompraService } from '@/services/ordenesCompra'
 import { recepcionesService } from '@/services/recepciones'
@@ -34,7 +41,7 @@ const fmtDateTime = (d: string | null | undefined) => {
   return dt.toLocaleString('es-MX', { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
 }
 
-type TabKey = 'materiales' | 'ocs' | 'recepciones' | 'actividad' | 'calendar' | 'graficas'
+type TabKey = 'materiales' | 'items' | 'ocs' | 'recepciones' | 'actividad' | 'calendar' | 'graficas'
 
 export default function ProyectoDetalle() {
   const { id } = useParams<{ id: string }>()
@@ -141,6 +148,7 @@ export default function ProyectoDetalle() {
       <div className="border-b border-gray-200 flex gap-1 overflow-x-auto">
         {([
           { key: 'materiales',  label: `Materiales (${mat.total})`,      icon: Package },
+          { key: 'items',       label: 'Items',                           icon: Hammer },
           { key: 'ocs',         label: `Órdenes (${oc.total})`,           icon: ShoppingCart },
           { key: 'recepciones', label: `Recepciones (${kpis.recepciones.total})`, icon: Warehouse },
           { key: 'actividad',   label: 'Actividad',                       icon: Activity },
@@ -164,6 +172,7 @@ export default function ProyectoDetalle() {
 
       {/* ── Tab content ── */}
       {tab === 'materiales'  && <MaterialesTab  proyectoId={proyectoId} />}
+      {tab === 'items'       && <ItemsTab       proyectoId={proyectoId} />}
       {tab === 'ocs'         && <OcsTab         proyectoId={proyectoId} />}
       {tab === 'recepciones' && <RecepcionesTab proyectoId={proyectoId} />}
       {tab === 'actividad'   && <ActividadTab   proyectoId={proyectoId} />}
@@ -1242,4 +1251,247 @@ function formatMes(yyyymm: string): string {
   const [y, m] = yyyymm.split('-')
   const meses = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic']
   return `${meses[parseInt(m) - 1] ?? m} ${y.slice(2)}`
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Tab: Items — readiness por item (¿están todos sus materiales en el taller?)
+// ──────────────────────────────────────────────────────────────────────────────
+function ItemsTab({ proyectoId }: { proyectoId: number }) {
+  const [expanded, setExpanded] = useState<Set<string>>(new Set())
+  const [filtroEstado, setFiltroEstado] = useState<'' | EstadoItemReadiness>('')
+
+  const { data, isLoading } = useQuery({
+    queryKey: ['proyecto-detalle', proyectoId, 'items-readiness'],
+    queryFn: () => proyectosService.getItemsReadiness(proyectoId),
+    staleTime: 15_000,
+  })
+
+  if (isLoading) return <div className="text-center text-gray-400 py-12">Cargando…</div>
+  if (!data?.data) return <div className="text-center text-gray-300 py-12">Sin datos</div>
+
+  const { items, resumen } = data.data
+
+  if (items.length === 0) {
+    return (
+      <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-12 text-center">
+        <Hammer size={32} className="mx-auto text-gray-300 mb-3" />
+        <p className="text-sm text-gray-500">Este proyecto no tiene items definidos en el MTO todavía.</p>
+        <p className="text-xs text-gray-400 mt-1">
+          Los items se leen de la columna <code className="bg-gray-100 px-1 py-0.5 rounded">ITEM#</code> del Excel MTO al importarlo.
+        </p>
+      </div>
+    )
+  }
+
+  const itemsFiltrados = filtroEstado
+    ? items.filter((i) => i.estado === filtroEstado)
+    : items
+
+  const toggle = (item: string) => {
+    setExpanded((prev) => {
+      const next = new Set(prev)
+      if (next.has(item)) next.delete(item)
+      else next.add(item)
+      return next
+    })
+  }
+
+  return (
+    <div className="space-y-4">
+      {/* Resumen + filtros */}
+      <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+        <div className="bg-gradient-to-r from-forest-700 to-forest-600 text-white px-6 py-4">
+          <div className="flex items-center justify-between flex-wrap gap-3">
+            <div>
+              <div className="flex items-center gap-2 mb-0.5">
+                <Hammer size={16} className="text-gold-300" />
+                <h3 className="text-base font-bold">Items del proyecto</h3>
+              </div>
+              <p className="text-xs text-white/70">
+                Estado de readiness de cada item — <span className="text-gold-300 font-semibold">{resumen.total_items} items</span> en total
+              </p>
+            </div>
+            <div className="text-right">
+              <p className="text-xs text-white/70 uppercase tracking-wide">Listos para fabricar</p>
+              <p className="text-2xl font-bold text-emerald-300 tabular-nums">
+                {resumen.listos} <span className="text-base text-white/50 font-normal">/ {resumen.total_items}</span>
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {/* Filtros por estado */}
+        <div className="px-6 py-3 border-t border-gray-100 flex flex-wrap gap-2 items-center text-xs">
+          <span className="text-gray-500 font-medium mr-1">Filtrar:</span>
+          <FiltroEstadoChip label="Todos"     count={resumen.total_items} active={filtroEstado === ''}          onClick={() => setFiltroEstado('')}          color="forest" />
+          <FiltroEstadoChip label="Listos"    count={resumen.listos}      active={filtroEstado === 'LISTO'}     onClick={() => setFiltroEstado('LISTO')}     color="emerald" />
+          <FiltroEstadoChip label="Parciales" count={resumen.parciales}   active={filtroEstado === 'PARCIAL'}   onClick={() => setFiltroEstado('PARCIAL')}   color="yellow" />
+          <FiltroEstadoChip label="Ordenados" count={resumen.ordenados}   active={filtroEstado === 'ORDENADO'}  onClick={() => setFiltroEstado('ORDENADO')}  color="purple" />
+          <FiltroEstadoChip label="Pendientes" count={resumen.pendientes}  active={filtroEstado === 'PENDIENTE'} onClick={() => setFiltroEstado('PENDIENTE')} color="red" />
+        </div>
+      </div>
+
+      {/* Grid de items */}
+      <div className="space-y-2">
+        {itemsFiltrados.map((item) => (
+          <ItemRow key={item.item} item={item} expanded={expanded.has(item.item)} onToggle={() => toggle(item.item)} />
+        ))}
+        {itemsFiltrados.length === 0 && (
+          <div className="bg-white rounded-xl border border-dashed border-gray-200 py-10 text-center">
+            <p className="text-xs text-gray-400">Sin items con ese filtro</p>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function FiltroEstadoChip({ label, count, active, onClick, color }: {
+  label: string; count: number; active: boolean; onClick: () => void
+  color: 'forest' | 'emerald' | 'yellow' | 'purple' | 'red'
+}) {
+  const colors = {
+    forest:  active ? 'bg-forest-100 text-forest-700 border-forest-300'   : 'bg-white text-gray-600 border-gray-200 hover:border-forest-200',
+    emerald: active ? 'bg-emerald-100 text-emerald-700 border-emerald-300' : 'bg-white text-gray-600 border-gray-200 hover:border-emerald-200',
+    yellow:  active ? 'bg-yellow-100 text-yellow-700 border-yellow-300'   : 'bg-white text-gray-600 border-gray-200 hover:border-yellow-200',
+    purple:  active ? 'bg-purple-100 text-purple-700 border-purple-300'   : 'bg-white text-gray-600 border-gray-200 hover:border-purple-200',
+    red:     active ? 'bg-red-100 text-red-700 border-red-300'             : 'bg-white text-gray-600 border-gray-200 hover:border-red-200',
+  }
+  return (
+    <button
+      onClick={onClick}
+      className={clsx('inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border font-medium transition-colors', colors[color])}
+    >
+      {label} <span className="text-[10px] opacity-60">({count})</span>
+    </button>
+  )
+}
+
+function ItemRow({ item, expanded, onToggle }: { item: ItemReadiness; expanded: boolean; onToggle: () => void }) {
+  const estadoMeta = getEstadoMeta(item.estado)
+  const pctDisponible = item.total > 0 ? Math.round((item.disponibles / item.total) * 100) : 0
+
+  return (
+    <div className={clsx(
+      'bg-white rounded-xl border overflow-hidden transition-shadow',
+      estadoMeta.borderColor,
+      expanded && 'shadow-md'
+    )}>
+      {/* Row clickeable */}
+      <button onClick={onToggle} className="w-full px-4 py-3 flex items-center gap-3 hover:bg-gray-50/50 transition-colors text-left">
+        <span className="flex-shrink-0 text-gray-400">
+          {expanded ? <ChevronDown size={16} /> : <ChevronRightSm size={16} />}
+        </span>
+
+        {/* Item # */}
+        <div className="flex-shrink-0 w-16">
+          <p className="text-[10px] text-gray-400 uppercase tracking-wide">Item</p>
+          <p className="text-lg font-bold text-forest-700 tabular-nums">{item.item}</p>
+        </div>
+
+        {/* Badge estado */}
+        <span className={clsx(
+          'inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold flex-shrink-0',
+          estadoMeta.badgeColor
+        )}>
+          <estadoMeta.icon size={12} />
+          {item.estado}
+        </span>
+
+        {/* Progress bar */}
+        <div className="flex-1 min-w-0 px-2">
+          <div className="flex items-center justify-between text-xs mb-1">
+            <span className="text-gray-500">
+              <strong className="text-gray-800">{item.disponibles}</strong>
+              {' / '}
+              <strong className="text-gray-800">{item.total}</strong>
+              {' materiales disponibles'}
+            </span>
+            <span className="text-gray-500 tabular-nums">{pctDisponible}%</span>
+          </div>
+          <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
+            <div
+              className={clsx('h-full transition-all', estadoMeta.progressColor)}
+              style={{ width: `${pctDisponible}%` }}
+            />
+          </div>
+        </div>
+
+        {/* Breakdown chips */}
+        <div className="flex items-center gap-1.5 flex-shrink-0 text-[10px]">
+          {item.recibidos > 0 && (
+            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 font-medium">
+              <CheckCircle2 size={9} /> {item.recibidos} rec
+            </span>
+          )}
+          {item.en_stock > 0 && (
+            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 font-medium">
+              <Warehouse size={9} /> {item.en_stock} stock
+            </span>
+          )}
+          {item.ordenados > 0 && (
+            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-purple-50 text-purple-700 font-medium">
+              <Truck size={9} /> {item.ordenados} ord
+            </span>
+          )}
+          {item.pendientes > 0 && (
+            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-red-50 text-red-700 font-medium">
+              <Clock size={9} /> {item.pendientes} pend
+            </span>
+          )}
+        </div>
+      </button>
+
+      {/* Detalle expandido — lista de materiales del item */}
+      {expanded && (
+        <div className="border-t border-gray-100 bg-gray-50/40 px-4 py-3">
+          <p className="text-[10px] text-gray-500 uppercase tracking-wider font-bold mb-2 pl-7">
+            Materiales necesarios ({item.materiales.length})
+          </p>
+          <div className="space-y-1.5">
+            {item.materiales.map((m) => <MaterialDetailRow key={m.id} m={m} />)}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function MaterialDetailRow({ m }: { m: ItemReadinessMaterial }) {
+  return (
+    <div className="bg-white rounded-lg border border-gray-100 px-3 py-2 flex items-center gap-3 text-xs">
+      <span className="font-mono text-[11px] bg-gray-100 px-1.5 py-0.5 rounded text-gray-700 flex-shrink-0">{m.codigo}</span>
+      <div className="flex-1 min-w-0">
+        <p className="text-gray-800 truncate">{m.descripcion}</p>
+        {m.vendor && <p className="text-[10px] text-gray-400 truncate">{m.vendor}</p>}
+      </div>
+      <span className="text-gray-500 tabular-nums flex-shrink-0">{Number(m.qty)} u.</span>
+      <span className={clsx(
+        'inline-block text-[10px] px-2 py-0.5 rounded-full font-bold flex-shrink-0',
+        m.estado_cotiz === 'RECIBIDO'  && 'bg-emerald-100 text-emerald-700',
+        m.estado_cotiz === 'EN_STOCK'  && 'bg-blue-100 text-blue-700',
+        m.estado_cotiz === 'ORDENADO'  && 'bg-purple-100 text-purple-700',
+        m.estado_cotiz === 'COTIZADO'  && 'bg-green-100 text-green-700',
+        m.estado_cotiz === 'PENDIENTE' && 'bg-yellow-100 text-yellow-700',
+      )}>
+        {m.estado_cotiz === 'EN_STOCK' ? 'EN STOCK' : m.estado_cotiz}
+      </span>
+      {m.oc_numero
+        ? <Link to={`/ordenes-compra?ocId=${m.oc_id}`} className="font-mono text-[10px] text-forest-700 hover:underline flex-shrink-0">{m.oc_numero}</Link>
+        : <span className="text-[10px] text-gray-300 flex-shrink-0 w-20">—</span>}
+    </div>
+  )
+}
+
+function getEstadoMeta(estado: EstadoItemReadiness) {
+  switch (estado) {
+    case 'LISTO':     return { icon: CheckCircle2, badgeColor: 'bg-emerald-100 text-emerald-700',
+                              borderColor: 'border-emerald-200', progressColor: 'bg-emerald-500' }
+    case 'PARCIAL':   return { icon: AlertCircle,  badgeColor: 'bg-yellow-100 text-yellow-700',
+                              borderColor: 'border-yellow-200', progressColor: 'bg-yellow-400' }
+    case 'ORDENADO':  return { icon: Truck,        badgeColor: 'bg-purple-100 text-purple-700',
+                              borderColor: 'border-purple-200', progressColor: 'bg-purple-400' }
+    case 'PENDIENTE': return { icon: Clock,        badgeColor: 'bg-red-100 text-red-700',
+                              borderColor: 'border-red-200',    progressColor: 'bg-red-400' }
+  }
 }
