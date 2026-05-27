@@ -24,6 +24,7 @@ interface RuleStats {
   reactivated: number
   autoClosed: number
   kept: number
+  userClosedSkipped: number   // cerradas por user — respetadas, no reactivadas
 }
 
 interface SyncResult {
@@ -31,6 +32,7 @@ interface SyncResult {
   reactivated: number
   autoClosed: number
   kept: number
+  userClosedSkipped: number
   byRule: Record<string, RuleStats>
 }
 
@@ -177,11 +179,12 @@ export async function syncSystemTareas(): Promise<SyncResult> {
     reactivated: 0,
     autoClosed: 0,
     kept: 0,
+    userClosedSkipped: 0,
     byRule: {},
   }
 
   for (const rule of RULES) {
-    const ruleStats: RuleStats = { created: 0, reactivated: 0, autoClosed: 0, kept: 0 }
+    const ruleStats: RuleStats = { created: 0, reactivated: 0, autoClosed: 0, kept: 0, userClosedSkipped: 0 }
     let activeConditions: Condition[] = []
     try {
       activeConditions = await rule.query()
@@ -206,8 +209,11 @@ export async function syncSystemTareas(): Promise<SyncResult> {
     // UPSERT por cada condición activa:
     // - si no existe ningún row con ese source_ref → INSERT nueva (estado=pendiente)
     // - si existe y está en estado activo → no-op (mantener metadata original, no pisar)
-    // - si existe pero está en estado completada/descartada → REACTIVAR (volver a pendiente,
-    //   limpiar completed_at, refrescar título/desc/prio porque la condición cambió)
+    // - si existe pero está en estado completada/descartada Y user NO la cerró →
+    //   REACTIVAR (volver a pendiente, limpiar completed_at, refrescar metadata).
+    //   Este es el caso "ghost task" que el bug original arreglaba.
+    // - si existe en completada/descartada Y closed_by_user_at IS NOT NULL →
+    //   no-op: el user la cerró a propósito, RESPETAR esa decisión.
     //
     // El UNIQUE INDEX parcial sobre (source_ref WHERE origen='sistema') asegura idempotencia.
     for (const cond of activeConditions) {
@@ -229,13 +235,14 @@ export async function syncSystemTareas(): Promise<SyncResult> {
              subject = EXCLUDED.subject,
              area = EXCLUDED.area
            WHERE tareas.estado IN ('completada', 'descartada')
+             AND tareas.closed_by_user_at IS NULL
            RETURNING (xmax = 0) AS inserted`,
           [cond.area, cond.title, cond.description, cond.priority, FROM_EMAIL_SYSTEM, cond.subject, cond.sourceRef],
         )
         // xmax = 0 cuando es INSERT genuino. Si fue UPDATE (reactivación), xmax != 0.
         if (upsert.rows[0]?.inserted) ruleStats.created++
         else if (upsert.rows.length > 0) ruleStats.reactivated++
-        // Si rows.length == 0: existía pero el WHERE no matcheó (estaba activa) — no-op silencioso
+        else ruleStats.userClosedSkipped++   // existía cerrada por user — respetada
       } catch (err) {
         logger.error('syncSystemTareas upsert failed', { sourceRef: cond.sourceRef, err: String(err) })
       }
@@ -267,10 +274,11 @@ export async function syncSystemTareas(): Promise<SyncResult> {
     }
 
     result.byRule[rule.key] = ruleStats
-    result.created     += ruleStats.created
-    result.reactivated += ruleStats.reactivated
-    result.autoClosed  += ruleStats.autoClosed
-    result.kept        += ruleStats.kept
+    result.created           += ruleStats.created
+    result.reactivated       += ruleStats.reactivated
+    result.autoClosed        += ruleStats.autoClosed
+    result.kept              += ruleStats.kept
+    result.userClosedSkipped += ruleStats.userClosedSkipped
   }
 
   return result

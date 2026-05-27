@@ -112,11 +112,19 @@ export async function updateTarea(req: Request, res: Response, next: NextFunctio
 
     if (body.estado !== undefined) {
       addField('estado', body.estado)
-      // Cuando pasa a completada, setear completed_at = NOW(). Cuando deja de estarlo, limpiar.
+      // Cierre por user (completada/descartada) → setear closed_by_user_at = NOW()
+      // para que el job de sistema NO reactive esta tarea aunque la condición siga activa.
+      // Reapertura (pendiente/en_progreso) → limpiar ambos timestamps, vuelve a comportamiento normal.
       if (body.estado === 'completada') {
         updates.push('completed_at = NOW()')
+        updates.push('closed_by_user_at = NOW()')
+      } else if (body.estado === 'descartada') {
+        // completed_at queda como estaba (descartada no implica completada)
+        updates.push('closed_by_user_at = NOW()')
       } else {
+        // pendiente / en_progreso → user la reabrió → limpiar ambos
         updates.push('completed_at = NULL')
+        updates.push('closed_by_user_at = NULL')
       }
     }
 
