@@ -143,6 +143,65 @@ function RecepcionHistorialSection({ ocId }: { ocId: number }) {
   )
 }
 
+// ─── Items + precios de la OC (fetch propio: getById trae items + freight) ──────
+function ItemsPreciosSection({ ocId }: { ocId: number }) {
+  const { data } = useQuery({
+    queryKey: ['oc-detalle-items', ocId],
+    queryFn: () => ordenesCompraService.getById(ocId),
+    staleTime: 10_000,
+  })
+  const oc = data?.data
+  const items = oc?.items ?? []
+  if (!items.length) return null
+
+  const lineTotal = (i: { cantidad: number; precio_unitario: number; subtotal?: number }) =>
+    Number(i.subtotal ?? Number(i.cantidad) * Number(i.precio_unitario))
+  const subtotal = items.reduce((s, i) => s + lineTotal(i), 0)
+  const freight = Number(oc?.freight) || 0
+  const total = subtotal + freight
+
+  return (
+    <div>
+      <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Items y precios</p>
+      <div className="rounded-lg border border-gray-200 overflow-hidden">
+        <table className="w-full text-xs">
+          <thead className="bg-gray-50 text-gray-500">
+            <tr>
+              <th className="text-left px-3 py-1.5 font-medium">Descripción</th>
+              <th className="text-right px-2 py-1.5 font-medium w-12">Cant.</th>
+              <th className="text-right px-2 py-1.5 font-medium w-20">P. Unit.</th>
+              <th className="text-right px-3 py-1.5 font-medium w-24">Importe</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-gray-100">
+            {items.map((it) => (
+              <tr key={it.id}>
+                <td className="px-3 py-1.5 text-gray-700 truncate max-w-[150px]" title={it.descripcion}>{it.descripcion}</td>
+                <td className="px-2 py-1.5 text-right tabular-nums text-gray-600">{Number(it.cantidad)}</td>
+                <td className="px-2 py-1.5 text-right tabular-nums text-gray-600">{fmt(Number(it.precio_unitario))}</td>
+                <td className="px-3 py-1.5 text-right tabular-nums font-medium text-gray-800">{fmt(lineTotal(it))}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        <div className="bg-gray-50 px-3 py-2 space-y-1 border-t border-gray-200">
+          <div className="flex justify-between text-xs text-gray-600">
+            <span>Subtotal</span><span className="tabular-nums">{fmt(subtotal)}</span>
+          </div>
+          {freight > 0 && (
+            <div className="flex justify-between text-xs text-gray-600">
+              <span>Freight</span><span className="tabular-nums">{fmt(freight)}</span>
+            </div>
+          )}
+          <div className="flex justify-between text-sm font-bold text-forest-700 border-t border-gray-200 pt-1">
+            <span>Total</span><span className="tabular-nums">{fmt(total)}</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ─── Detail Panel ─────────────────────────────────────────────────────────────
 function OcDetailPanel({
   oc,
@@ -229,6 +288,9 @@ function OcDetailPanel({
             </div>
           ))}
         </div>
+
+        {/* Items y precios */}
+        <ItemsPreciosSection ocId={oc.id} />
 
         {/* Flags */}
         {(oc.flag_vencida || oc.flag_2dias || oc.flag_retraso) && (

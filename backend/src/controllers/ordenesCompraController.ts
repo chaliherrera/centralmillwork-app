@@ -278,15 +278,15 @@ export async function createOrdenCompra(req: Request, res: Response, next: NextF
       subtotal += Number(item.cantidad) * Number(item.precio_unitario)
     }
 
-    const iva   = subtotal * 0.16
-    const total = subtotal + iva
+    // Total = subtotal, SIN IVA (la empresa opera en USD).
+    const total = subtotal
     await client.query(
-      `UPDATE ordenes_compra SET subtotal=$1, iva=$2, total=$3 WHERE id=$4`,
-      [subtotal, iva, total, orden.id]
+      `UPDATE ordenes_compra SET subtotal=$1, iva=0, total=$2 WHERE id=$3`,
+      [subtotal, total, orden.id]
     )
 
     await client.query('COMMIT')
-    res.status(201).json({ data: { ...orden, numero, subtotal, iva, total }, message: `Orden ${numero} creada` })
+    res.status(201).json({ data: { ...orden, numero, subtotal, iva: 0, total }, message: `Orden ${numero} creada` })
   } catch (err) {
     await client.query('ROLLBACK')
     next(err)
@@ -503,11 +503,17 @@ export async function generarOCs(req: Request, res: Response, next: NextFunction
         subtotal += Number(m.qty) * Number(m.unit_price)
       }
 
-      const iva   = parseFloat((subtotal * 0.16).toFixed(2))
-      const total = parseFloat((subtotal + iva).toFixed(2))
+      // Freight por vendor (lo guarda el panel de captura de precios en mto_freight).
+      // Total = subtotal + freight, SIN IVA (la empresa opera en USD).
+      const { rows: [freightRow] } = await client.query(
+        `SELECT freight FROM mto_freight WHERE proyecto_id = $1 AND vendor = $2`,
+        [proyecto_id, vendor]
+      )
+      const freight = parseFloat((Number(freightRow?.freight) || 0).toFixed(2))
+      const total = parseFloat((subtotal + freight).toFixed(2))
       await client.query(
-        `UPDATE ordenes_compra SET subtotal=$1, iva=$2, total=$3 WHERE id=$4`,
-        [subtotal, iva, total, orden.id]
+        `UPDATE ordenes_compra SET subtotal=$1, iva=0, total=$2, freight=$3 WHERE id=$4`,
+        [subtotal, total, freight, orden.id]
       )
 
       // Materials that now belong to this OC pass from COTIZADO → ORDENADO
