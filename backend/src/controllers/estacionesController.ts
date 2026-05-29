@@ -32,7 +32,7 @@ export async function getEstaciones(_req: Request, res: Response, next: NextFunc
            jsonb_build_object(
              'orden_id',        op.id,
              'numero_orden',    op.numero_orden,
-             'item_nombre',     op.item_nombre,
+             'numero_item',     op.numero_item,
              'hora_inicio',     tp.hora_inicio,
              'proyecto_codigo', pr.codigo,
              'pausa_activa',    pa.data

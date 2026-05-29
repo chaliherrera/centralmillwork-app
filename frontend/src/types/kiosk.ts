@@ -60,7 +60,7 @@ export type ProcesoEstado = 'no_iniciado' | 'en_curso' | 'pausado'
 export interface KioskOrdenEnCola {
   id: number
   numero_orden: string
-  item_nombre: string
+  numero_item: string
   cantidad: number
   unidad: string
   prioridad: 'Alta' | 'Media' | 'Baja'

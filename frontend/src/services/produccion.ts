@@ -20,7 +20,7 @@ interface OrdenesFilters {
 interface CrearOrdenInput {
   numero_orden: string
   proyecto_id: number | null
-  item_nombre: string
+  numero_item: string
   cantidad: number
   unidad?: string
   especificaciones?: string

@@ -12,7 +12,7 @@ export interface OrdenProduccion {
   proyecto_id: number | null
   proyecto_codigo?: string | null
   proyecto_nombre?: string | null
-  item_nombre: string
+  numero_item: string
   cantidad: number
   unidad: string
   especificaciones: string | null
@@ -112,7 +112,7 @@ export interface PersonalTaller {
 export interface EstacionPersonalItemActivo {
   orden_id: number
   numero_orden: string
-  item_nombre: string
+  numero_item: string
   hora_inicio: string       // ISO — para el timer en vivo
   proyecto_codigo: string | null
   /** Si el operario tiene pausa abierta, info de la pausa. Si está null, está
@@ -204,7 +204,7 @@ export interface EventoProduccion {
   motivo: string | null
   orden_id: number
   numero_orden: string
-  item_nombre: string
+  numero_item: string
   prioridad: Prioridad
   orden_status: StatusOrden
   proyecto_codigo: string | null
@@ -410,7 +410,7 @@ export interface EvolucionEvento {
 export interface OrdenEvolucionOrden {
   id: number
   numero_orden: string
-  item_nombre: string
+  numero_item: string
   cantidad: number
   unidad: string
   prioridad: Prioridad

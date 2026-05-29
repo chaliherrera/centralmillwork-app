@@ -89,7 +89,7 @@ router.get('/mi-cola', async (req, res, next) => {
     const personalId = req.kioskUser!.personal_id
     const { rows } = await pool.query(
       `SELECT
-         o.id, o.numero_orden, o.item_nombre, o.cantidad, o.unidad,
+         o.id, o.numero_orden, o.numero_item, o.cantidad, o.unidad,
          o.prioridad, o.fecha_entrega, o.estacion_actual, o.status,
          p.codigo AS proyecto_codigo, p.nombre AS proyecto_nombre,
          op.estacion       AS mi_estacion,

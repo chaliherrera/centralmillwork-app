@@ -27,7 +27,7 @@ export default function CrearOrden() {
   // Datos básicos
   const [numeroOrden, setNumeroOrden] = useState('')
   const [proyectoId, setProyectoId]   = useState<number | null>(null)
-  const [itemNombre, setItemNombre]   = useState('')
+  const [numeroItem, setNumeroItem]   = useState('')
   const [cantidad, setCantidad]       = useState<number>(1)
   const [unidad, setUnidad]           = useState('Piezas')
   const [especificaciones, setEspecificaciones] = useState('')
@@ -90,7 +90,7 @@ export default function CrearOrden() {
     mutationFn: () => produccionService.crearOrden({
       numero_orden: numeroOrden.trim(),
       proyecto_id: proyectoId,
-      item_nombre: itemNombre.trim(),
+      numero_item: numeroItem.trim(),
       cantidad,
       unidad,
       especificaciones: especificaciones.trim() || undefined,
@@ -109,8 +109,12 @@ export default function CrearOrden() {
 
   function submit(e: FormEvent) {
     e.preventDefault()
-    if (!numeroOrden.trim() || !itemNombre.trim() || procesos.length === 0) {
-      toast.error('Completá número, item y al menos un proceso')
+    if (!numeroOrden.trim() || !numeroItem.trim() || procesos.length === 0) {
+      toast.error('Completá número de orden, número de item y al menos un proceso')
+      return
+    }
+    if (!/^\d+$/.test(numeroItem.trim())) {
+      toast.error('El número de item debe ser solo dígitos (ej. 1, 12)')
       return
     }
     crear.mutate()
@@ -158,11 +162,15 @@ export default function CrearOrden() {
             </div>
 
             <div>
-              <label className="label">Nombre del item *</label>
+              <label className="label">Número de item *</label>
               <input
-                type="text" value={itemNombre} onChange={(e) => setItemNombre(e.target.value)}
-                required placeholder="Ej: Puerta 36×80 doble panel" className="input w-full"
+                type="text" inputMode="numeric" value={numeroItem}
+                onChange={(e) => setNumeroItem(e.target.value.replace(/[^\d]/g, ''))}
+                required placeholder="Ej: 12" className="input w-full"
               />
+              <p className="text-xs text-gray-500 mt-1">
+                Número de item del MTO. Para referencias adicionales usá Especificaciones.
+              </p>
             </div>
 
             <div className="grid grid-cols-3 gap-3">

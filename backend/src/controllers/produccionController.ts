@@ -37,7 +37,7 @@ export async function getOrdenes(req: Request, res: Response, next: NextFunction
     if (req.query.prioridad)   { conds.push(`o.prioridad = $${vals.length + 1}`);       vals.push(String(req.query.prioridad)) }
     if (req.query.personal_id) { conds.push(`o.personal_asignado_id = $${vals.length + 1}`); vals.push(parseInt(String(req.query.personal_id))) }
     if (opts.search) {
-      conds.push(`(o.numero_orden ILIKE $${vals.length + 1} OR o.item_nombre ILIKE $${vals.length + 1})`)
+      conds.push(`(o.numero_orden ILIKE $${vals.length + 1} OR o.numero_item ILIKE $${vals.length + 1})`)
       vals.push(`%${opts.search}%`)
     }
 
@@ -128,7 +128,7 @@ export async function getOrden(req: Request, res: Response, next: NextFunction) 
  * POST /api/produccion/ordenes
  * Crea una orden + sus procesos en transacción.
  * Body: {
- *   numero_orden, proyecto_id, item_nombre, cantidad, unidad?, especificaciones?,
+ *   numero_orden, proyecto_id, numero_item, cantidad, unidad?, especificaciones?,
  *   material_requerido?, prioridad?, fecha_entrega?, tiempo_estimado_horas?, notas?,
  *   procesos: [string],     // estaciones requeridas, ej: ['cnc','edge_banding','assembly','pintura','final']
  *   asignaciones?: { [estacion]: personal_id }   // operador asignado por estación
@@ -138,13 +138,13 @@ export async function createOrden(req: Request, res: Response, next: NextFunctio
   const client = await pool.connect()
   try {
     const {
-      numero_orden, proyecto_id, item_nombre, cantidad, unidad,
+      numero_orden, proyecto_id, numero_item, cantidad, unidad,
       especificaciones, material_requerido, prioridad, fecha_entrega,
       tiempo_estimado_horas, notas, procesos = [], asignaciones = {},
     } = req.body
 
-    if (!numero_orden || !item_nombre || !cantidad) {
-      return next(createError('numero_orden, item_nombre y cantidad son requeridos', 400))
+    if (!numero_orden || !numero_item || !cantidad) {
+      return next(createError('numero_orden, numero_item y cantidad son requeridos', 400))
     }
     if (!Array.isArray(procesos) || procesos.length === 0) {
       return next(createError('Debe especificar al menos un proceso/estación', 400))
@@ -157,12 +157,12 @@ export async function createOrden(req: Request, res: Response, next: NextFunctio
 
     const { rows: [orden] } = await client.query(
       `INSERT INTO ordenes_produccion
-         (numero_orden, proyecto_id, item_nombre, cantidad, unidad,
+         (numero_orden, proyecto_id, numero_item, cantidad, unidad,
           especificaciones, material_requerido, prioridad, fecha_entrega,
           tiempo_estimado_horas, notas, status, estacion_actual, created_by)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,'Pendiente',$12,$13)
        RETURNING *`,
-      [numero_orden, proyecto_id || null, item_nombre, cantidad, unidad || 'Piezas',
+      [numero_orden, proyecto_id || null, numero_item, cantidad, unidad || 'Piezas',
        especificaciones || null, material_requerido || null, prioridad || 'Media', fecha_entrega || null,
        tiempo_estimado_horas || null, notas || null, primeraEstacion, req.user?.id || null]
     )
@@ -225,7 +225,7 @@ export async function createOrden(req: Request, res: Response, next: NextFunctio
  */
 export async function updateOrden(req: Request, res: Response, next: NextFunction) {
   try {
-    const allowed = ['item_nombre', 'cantidad', 'unidad', 'especificaciones', 'material_requerido',
+    const allowed = ['numero_item', 'cantidad', 'unidad', 'especificaciones', 'material_requerido',
                      'prioridad', 'fecha_entrega', 'tiempo_estimado_horas', 'notas']
     const fields: string[] = []
     const vals: unknown[] = [req.params.id]
@@ -717,7 +717,7 @@ export async function getEventosRecientes(req: Request, res: Response, next: Nex
          h.motivo,
          o.id            AS orden_id,
          o.numero_orden,
-         o.item_nombre,
+         o.numero_item,
          o.prioridad,
          o.status        AS orden_status,
          p.codigo        AS proyecto_codigo,
@@ -781,7 +781,7 @@ export async function getOrdenEvolucion(req: Request, res: Response, next: NextF
     // 1) Orden base
     const { rows: [orden] } = await pool.query(
       `SELECT
-         o.id, o.numero_orden, o.item_nombre, o.cantidad, o.unidad,
+         o.id, o.numero_orden, o.numero_item, o.cantidad, o.unidad,
          o.prioridad, o.status, o.estacion_actual,
          o.tiempo_estimado_horas, o.fecha_entrega,
          o.fecha_inicio, o.fecha_completada,

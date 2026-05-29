@@ -232,7 +232,7 @@ function OrdenItem({
           </div>
 
           {/* Línea 2: item */}
-          <div className="text-sm text-gray-800 font-medium truncate">{orden.item_nombre}</div>
+          <div className="text-sm text-gray-800 font-medium truncate">{orden.numero_item}</div>
 
           {/* Línea 3: metadata */}
           <div className="text-xs text-gray-500 mt-1 flex items-center gap-1.5 flex-wrap">

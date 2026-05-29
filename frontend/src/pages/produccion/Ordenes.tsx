@@ -64,11 +64,11 @@ export default function Ordenes() {
       ),
     },
     {
-      key: 'item_nombre',
+      key: 'numero_item',
       header: 'Item',
       render: (r) => (
         <div>
-          <div className="font-medium text-gray-900">{r.item_nombre}</div>
+          <div className="font-medium text-gray-900">{r.numero_item}</div>
           <div className="text-xs text-gray-500">
             {r.cantidad} {r.unidad}
             {r.proyecto_codigo && <> · {r.proyecto_codigo}</>}

@@ -104,7 +104,7 @@ export default function DetalleOrden() {
             <div className="text-sm text-gray-600">
               {orden.proyecto_codigo && <Link to={`/proyectos`} className="hover:text-gold-600">{orden.proyecto_codigo}</Link>}
               {orden.proyecto_codigo && <> · </>}
-              {orden.item_nombre}
+              {orden.numero_item}
             </div>
           </div>
         </div>
