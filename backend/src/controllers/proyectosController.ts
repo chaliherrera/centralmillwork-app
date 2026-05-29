@@ -85,3 +85,96 @@ export async function deleteProyecto(req: Request, res: Response, next: NextFunc
     res.json({ message: 'Proyecto eliminado' })
   } catch (err) { next(err) }
 }
+
+// GET /api/proyectos/:id/items-readiness
+// Portado desde main (feat items-readiness, commit e0a29fe). Devuelve, por cada
+// item del MTO del proyecto, el estado de readiness de sus materiales.
+//
+// Estado calculado así:
+//   - LISTO     → todos recibidos o en stock (recibidos + en_stock == total)
+//   - PARCIAL   → al menos uno recibido pero faltan otros
+//   - ORDENADO  → ninguno recibido, todos están en una OC activa
+//   - PENDIENTE → hay materiales sin ordenar
+//
+// Los materiales sin item (vacío o NULL) se excluyen del cálculo.
+export async function getProyectoItemsReadiness(req: Request, res: Response, next: NextFunction) {
+  try {
+    const proyecto_id = parseInt(String(req.params.id))
+    if (!proyecto_id) return next(createError('id inválido', 400))
+
+    const { rows } = await pool.query(
+      `WITH items_expanded AS (
+         SELECT
+           TRIM(item_num) AS item,
+           m.id, m.codigo, m.descripcion, m.vendor, m.qty, m.unit_price,
+           m.estado_cotiz, m.cotizar,
+           oc_link.oc_id, oc_link.oc_numero
+         FROM materiales_mto m
+         CROSS JOIN UNNEST(STRING_TO_ARRAY(m.item, ',')) AS item_num
+         LEFT JOIN LATERAL (
+           SELECT oc.id AS oc_id, oc.numero AS oc_numero
+           FROM items_orden_compra ioc
+           JOIN ordenes_compra oc ON oc.id = ioc.orden_compra_id
+           WHERE ioc.material_id = m.id
+             AND oc.estado != 'cancelada'
+           ORDER BY oc.fecha_emision DESC
+           LIMIT 1
+         ) oc_link ON true
+         WHERE m.proyecto_id = $1
+           AND m.item IS NOT NULL
+           AND TRIM(m.item) != ''
+       )
+       SELECT
+         item,
+         COUNT(*)::int                                                       AS total,
+         COUNT(*) FILTER (WHERE estado_cotiz = 'RECIBIDO')::int              AS recibidos,
+         COUNT(*) FILTER (WHERE estado_cotiz = 'ORDENADO')::int              AS ordenados,
+         COUNT(*) FILTER (WHERE estado_cotiz IN ('PENDIENTE','COTIZADO'))::int AS pendientes,
+         COUNT(*) FILTER (WHERE estado_cotiz = 'EN_STOCK')::int              AS en_stock,
+         json_agg(
+           json_build_object(
+             'id',          id,
+             'codigo',      codigo,
+             'descripcion', descripcion,
+             'vendor',      vendor,
+             'qty',         qty,
+             'unit_price',  unit_price,
+             'estado_cotiz', estado_cotiz,
+             'oc_id',       oc_id,
+             'oc_numero',   oc_numero
+           ) ORDER BY codigo
+         ) AS materiales
+       FROM items_expanded
+       GROUP BY item
+       ORDER BY
+         CASE WHEN item ~ '^\\d+$' THEN LPAD(item, 10, '0') ELSE item END`,
+      [proyecto_id]
+    )
+
+    const items = rows.map((r: any) => {
+      const total = r.total
+      const recibidos = r.recibidos
+      const en_stock = r.en_stock
+      const pendientes = r.pendientes
+      const disponibles = recibidos + en_stock
+
+      let estado: 'LISTO' | 'PARCIAL' | 'ORDENADO' | 'PENDIENTE'
+      if (disponibles === total)      estado = 'LISTO'
+      else if (disponibles > 0)       estado = 'PARCIAL'
+      else if (pendientes === 0)      estado = 'ORDENADO'
+      else                            estado = 'PENDIENTE'
+
+      return { ...r, disponibles, estado }
+    })
+
+    const resumen = {
+      total_items:  items.length,
+      listos:       items.filter((i: any) => i.estado === 'LISTO').length,
+      parciales:    items.filter((i: any) => i.estado === 'PARCIAL').length,
+      ordenados:    items.filter((i: any) => i.estado === 'ORDENADO').length,
+      pendientes:   items.filter((i: any) => i.estado === 'PENDIENTE').length,
+    }
+
+    res.json({ data: { items, resumen } })
+  } catch (err) { next(err) }
+}

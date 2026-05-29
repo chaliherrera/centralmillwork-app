@@ -8,6 +8,7 @@ import {
 } from '../controllers/dashboardController'
 import {
   getProyectos, getProyecto, createProyecto, updateProyecto, deleteProyecto,
+  getProyectoItemsReadiness,
 } from '../controllers/proyectosController'
 import {
   getProveedores, getProveedor, createProveedor, updateProveedor, deleteProveedor,
@@ -64,6 +65,7 @@ router.get('/dashboard/proyectos-recientes', getDashboardProyectosRecientes)
 
 // ─── Proyectos ────────────────────────────────────────────────────────────────
 router.get('/proyectos',         getProyectos)
+router.get('/proyectos/:id/items-readiness', getProyectoItemsReadiness)
 router.get('/proyectos/:id',     getProyecto)
 router.post('/proyectos',        WRITE, createProyecto)
 router.put('/proyectos/:id',     WRITE, updateProyecto)
