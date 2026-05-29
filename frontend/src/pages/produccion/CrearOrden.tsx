@@ -1,11 +1,12 @@
 import { useState, FormEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation } from '@tanstack/react-query'
-import { ArrowLeft, Loader2, MapPin, Plus } from 'lucide-react'
+import { ArrowLeft, Loader2, MapPin, Plus, Package } from 'lucide-react'
 import toast from 'react-hot-toast'
 import clsx from 'clsx'
 import { produccionService } from '@/services/produccion'
 import { proyectosService } from '@/services/proyectos'
+import MaterialesItem from '@/components/produccion/MaterialesItem'
 import type { Prioridad, RutaCalculada } from '@/types/produccion'
 
 const ESTACIONES_DISPONIBLES = [
@@ -327,8 +328,21 @@ export default function CrearOrden() {
           </div>
         </div>
 
-        {/* Columna lateral — preview de ruta */}
-        <RutaPreview ruta={ruta} procesos={procesos} />
+        {/* Columna lateral — materiales del item + preview de ruta */}
+        <div className="space-y-4">
+          {proyectoId && /^\d+$/.test(numeroItem.trim()) ? (
+            <MaterialesItem proyectoId={proyectoId} numeroItem={numeroItem} />
+          ) : (
+            <div className="card">
+              <h3 className="flex items-center gap-2"><Package size={16} /> Materiales del item</h3>
+              <p className="text-sm text-gray-400 italic mt-2">
+                Elegí un proyecto e ingresá el número de item para ver si sus materiales
+                están listos antes de crear la orden.
+              </p>
+            </div>
+          )}
+          <RutaPreview ruta={ruta} procesos={procesos} />
+        </div>
       </form>
     </div>
   )
