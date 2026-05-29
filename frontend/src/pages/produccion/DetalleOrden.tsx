@@ -10,6 +10,7 @@ import clsx from 'clsx'
 import Modal from '@/components/ui/Modal'
 import OrdenDocumentos from '@/components/modules/produccion/OrdenDocumentos'
 import OrdenEvolucion from '@/components/produccion/OrdenEvolucion'
+import MaterialesItem from '@/components/produccion/MaterialesItem'
 import { produccionService } from '@/services/produccion'
 import type { StatusOrden, Prioridad, OrdenProceso } from '@/types/produccion'
 
@@ -180,6 +181,9 @@ export default function DetalleOrden() {
 
       {/* Evolución (solo SHOP_MANAGER/ADMIN) — overview visual del ciclo de vida */}
       <OrdenEvolucion ordenId={ordenId} />
+
+      {/* Materiales del item (solo SHOP_MANAGER/ADMIN) — ¿están listos para fabricar? */}
+      <MaterialesItem proyectoId={orden.proyecto_id} numeroItem={orden.numero_item} />
 
       {/* Datos + procesos + historial */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
