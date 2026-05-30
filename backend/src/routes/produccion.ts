@@ -4,6 +4,7 @@ import {
   getOrdenes, getOrden, getOrdenEvolucion, getOrdenesKpis, getEventosRecientes,
   createOrden, updateOrden,
   asignarOperador, avanzarOrden, pausarOrden, reanudarOrden, cancelarOrden,
+  getItemsDisponibles,
 } from '../controllers/produccionController'
 import {
   getPersonalTaller, getPersonalTallerById, createPersonalTaller, updatePersonalTaller,
@@ -44,6 +45,9 @@ router.patch('/ordenes/:id/avanzar',     PROD_WRITE, avanzarOrden)
 router.patch('/ordenes/:id/pausar',      PROD_WRITE, pausarOrden)
 router.patch('/ordenes/:id/reanudar',    PROD_WRITE, reanudarOrden)
 router.delete('/ordenes/:id',            PROD_WRITE, cancelarOrden)
+
+// ─── Vista cross-project: items disponibles para producir ────────────────────
+router.get('/items-disponibles', requireRole('ADMIN','SHOP_MANAGER'), getItemsDisponibles)
 
 // ─── Personal del taller (gestión + PINs) ─────────────────────────────────────
 router.get('/personal',                  getPersonalTaller)

@@ -4,6 +4,7 @@ import type {
   PersonalTaller, EstacionConStatus, EstacionDetalle, EstacionDistancia,
   RutaCalculada, Prioridad, OrdenDocumento, EventosRecientesResp,
   PersonalActivoReporte, ReportePersonalResp, ReporteSemanalResp, ReporteProyectoResp, ReporteDiarioResp,
+  ItemsDisponiblesResp, EstadoItemDisponible,
 } from '@/types/produccion'
 
 interface OrdenesFilters {
@@ -56,6 +57,19 @@ export const produccionService = {
     api.get<EventosRecientesResp>('/produccion/eventos-recientes', {
       params: desde ? { desde } : undefined,
     }).then((r) => r.data),
+
+  /**
+   * Vista cross-project de items disponibles para producir.
+   * Devuelve TODOS los (proyecto, item) de proyectos activos con estado de
+   * readiness y flag op_existente. Solo ADMIN / SHOP_MANAGER.
+   */
+  itemsDisponibles: (filters?: { proyecto_ids?: number[]; estados?: EstadoItemDisponible[] }) =>
+    api.get<{ data: ItemsDisponiblesResp }>('/produccion/items-disponibles', {
+      params: {
+        proyecto_ids: filters?.proyecto_ids?.length ? filters.proyecto_ids.join(',') : undefined,
+        estados:      filters?.estados?.length      ? filters.estados.join(',')      : undefined,
+      },
+    }).then((r) => r.data.data),
 
   orden: (id: number) =>
     api.get<{ data: OrdenDetallada }>(`/produccion/ordenes/${id}`).then((r) => r.data.data),

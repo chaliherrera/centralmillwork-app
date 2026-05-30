@@ -764,6 +764,135 @@ export async function getOrdenesKpis(_req: Request, res: Response, next: NextFun
 }
 
 /**
+ * GET /api/produccion/items-disponibles
+ *
+ * Vista cross-project para el SHOP_MANAGER: lista TODOS los items de TODOS
+ * los proyectos en estado 'activo', con su estado de readiness y si ya tienen
+ * una OP activa abierta. Permite decidir de un vistazo "qué puedo empezar a
+ * producir hoy" sin tener que abrir proyecto por proyecto.
+ *
+ * Reusa la misma lógica que /api/proyectos/:id/items-readiness pero la
+ * agrega cross-proyectos y le suma el flag `op_existente`.
+ *
+ * Filtra items NO numéricos (no pueden matchear con ordenes_produccion.numero_item
+ * que es siempre número desde la migración 029).
+ *
+ * Query params opcionales:
+ *   - proyecto_ids=1,2,3   filtra solo esos proyectos
+ *   - estados=LISTO,PARCIAL  filtra por estado computado (post-query, en JS)
+ */
+export async function getItemsDisponibles(req: Request, res: Response, next: NextFunction) {
+  try {
+    // Filtros opcionales
+    const proyectoIds = req.query.proyecto_ids
+      ? String(req.query.proyecto_ids).split(',').map((s) => parseInt(s.trim())).filter(Number.isFinite)
+      : null
+    const estados = req.query.estados
+      ? String(req.query.estados).split(',').map((s) => s.trim().toUpperCase())
+      : null
+
+    const vals: any[] = []
+    let proyectoFilter = ''
+    if (proyectoIds && proyectoIds.length > 0) {
+      vals.push(proyectoIds)
+      proyectoFilter = `AND p.id = ANY($${vals.length})`
+    }
+
+    const { rows } = await pool.query(
+      `WITH items_expanded AS (
+         SELECT
+           p.id        AS proyecto_id,
+           p.codigo    AS proyecto_codigo,
+           p.nombre    AS proyecto_nombre,
+           TRIM(item_num) AS item,
+           m.estado_cotiz
+         FROM proyectos p
+         JOIN materiales_mto m ON m.proyecto_id = p.id
+         CROSS JOIN UNNEST(REGEXP_SPLIT_TO_ARRAY(m.item, '[-,]')) AS item_num
+         WHERE p.estado = 'activo'
+           ${proyectoFilter}
+           AND m.item IS NOT NULL
+           AND TRIM(m.item) != ''
+           AND TRIM(item_num) ~ '^\\d+$'
+       ),
+       items_agregados AS (
+         SELECT
+           proyecto_id, proyecto_codigo, proyecto_nombre, item,
+           COUNT(*)::int                                                       AS total,
+           COUNT(*) FILTER (WHERE estado_cotiz = 'RECIBIDO')::int              AS recibidos,
+           COUNT(*) FILTER (WHERE estado_cotiz = 'ORDENADO')::int              AS ordenados,
+           COUNT(*) FILTER (WHERE estado_cotiz IN ('PENDIENTE','COTIZADO'))::int AS pendientes,
+           COUNT(*) FILTER (WHERE estado_cotiz = 'EN_STOCK')::int              AS en_stock
+         FROM items_expanded
+         GROUP BY proyecto_id, proyecto_codigo, proyecto_nombre, item
+       )
+       SELECT
+         ia.*,
+         op.id            AS op_id,
+         op.numero_orden  AS op_numero,
+         op.status        AS op_status
+       FROM items_agregados ia
+       LEFT JOIN LATERAL (
+         SELECT id, numero_orden, status
+         FROM ordenes_produccion
+         WHERE proyecto_id = ia.proyecto_id
+           AND numero_item = ia.item
+           AND status NOT IN ('Completada', 'Cancelada')
+         ORDER BY created_at DESC
+         LIMIT 1
+       ) op ON true
+       ORDER BY ia.proyecto_codigo, CAST(ia.item AS INTEGER)`,
+      vals
+    )
+
+    // Calcular el estado de cada item (misma lógica que items-readiness)
+    const items = rows.map((r: any) => {
+      const disponibles = r.recibidos + r.en_stock
+      let estado: 'LISTO' | 'PARCIAL' | 'ORDENADO' | 'PENDIENTE'
+      if (disponibles === r.total)    estado = 'LISTO'
+      else if (disponibles > 0)        estado = 'PARCIAL'
+      else if (r.pendientes === 0)     estado = 'ORDENADO'
+      else                             estado = 'PENDIENTE'
+
+      return {
+        proyecto_id:     r.proyecto_id,
+        proyecto_codigo: r.proyecto_codigo,
+        proyecto_nombre: r.proyecto_nombre,
+        item:            r.item,
+        total:           r.total,
+        recibidos:       r.recibidos,
+        ordenados:       r.ordenados,
+        pendientes:      r.pendientes,
+        en_stock:        r.en_stock,
+        disponibles,
+        estado,
+        op_existente:    r.op_id ? { id: r.op_id, numero: r.op_numero, status: r.op_status } : null,
+      }
+    })
+
+    // Filtro por estado en JS (más simple que duplicar la lógica de CASE en SQL)
+    const filtered = estados ? items.filter((i) => estados.includes(i.estado)) : items
+
+    // Sort por bucket (LISTO primero, luego PARCIAL, ORDENADO, PENDIENTE),
+    // dentro de cada bucket mantiene el orden de la query (proyecto + item)
+    const ESTADO_RANK: Record<string, number> = { LISTO: 0, PARCIAL: 1, ORDENADO: 2, PENDIENTE: 3 }
+    filtered.sort((a, b) => ESTADO_RANK[a.estado] - ESTADO_RANK[b.estado])
+
+    // Resumen agregado
+    const resumen = {
+      total:      filtered.length,
+      listos:     filtered.filter((i) => i.estado === 'LISTO').length,
+      parciales:  filtered.filter((i) => i.estado === 'PARCIAL').length,
+      ordenados:  filtered.filter((i) => i.estado === 'ORDENADO').length,
+      pendientes: filtered.filter((i) => i.estado === 'PENDIENTE').length,
+      con_op_activa: filtered.filter((i) => i.op_existente).length,
+    }
+
+    res.json({ data: { items: filtered, resumen } })
+  } catch (err) { next(err) }
+}
+
+/**
  * GET /api/produccion/ordenes/:id/evolucion
  *
  * Vista de evolución de la orden — combina:

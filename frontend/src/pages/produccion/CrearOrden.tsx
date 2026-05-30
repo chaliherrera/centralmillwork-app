@@ -1,5 +1,5 @@
 import { useState, FormEvent } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useQuery, useMutation } from '@tanstack/react-query'
 import { ArrowLeft, Loader2, MapPin, Plus, Package } from 'lucide-react'
 import toast from 'react-hot-toast'
@@ -24,11 +24,20 @@ const PRIORIDADES: Prioridad[] = ['Alta', 'Media', 'Baja']
 
 export default function CrearOrden() {
   const nav = useNavigate()
+  // Soporte pre-fill desde /produccion/disponibles (botón "Crear OP"):
+  //   ?proyecto_id=8&numero_item=4
+  const [searchParams] = useSearchParams()
+  const prefillProyectoId = searchParams.get('proyecto_id')
+  const prefillNumeroItem = searchParams.get('numero_item')
 
   // Datos básicos
   const [numeroOrden, setNumeroOrden] = useState('')
-  const [proyectoId, setProyectoId]   = useState<number | null>(null)
-  const [numeroItem, setNumeroItem]   = useState('')
+  const [proyectoId, setProyectoId]   = useState<number | null>(
+    prefillProyectoId && /^\d+$/.test(prefillProyectoId) ? parseInt(prefillProyectoId) : null
+  )
+  const [numeroItem, setNumeroItem]   = useState(
+    prefillNumeroItem && /^\d+$/.test(prefillNumeroItem) ? prefillNumeroItem : ''
+  )
   const [cantidad, setCantidad]       = useState<number>(1)
   const [unidad, setUnidad]           = useState('Piezas')
   const [especificaciones, setEspecificaciones] = useState('')

@@ -1,5 +1,5 @@
 import { Routes, Route, Navigate, NavLink } from 'react-router-dom'
-import { LayoutDashboard, ClipboardList, UsersRound, Clock4 } from 'lucide-react'
+import { LayoutDashboard, ClipboardList, UsersRound, Clock4, Package } from 'lucide-react'
 import clsx from 'clsx'
 import MapaTaller     from './MapaTaller'
 import Ordenes        from './Ordenes'
@@ -7,9 +7,11 @@ import CrearOrden     from './CrearOrden'
 import DetalleOrden   from './DetalleOrden'
 import PersonalTaller from './PersonalTaller'
 import ReportesHoras  from './ReportesHoras'
+import Disponibles    from './Disponibles'
 
 const TABS = [
   { to: '',           label: 'Mapa',           icon: LayoutDashboard, end: true  },
+  { to: 'disponibles',label: 'Disponibles',    icon: Package,         end: true  },
   { to: 'ordenes',    label: 'Órdenes',        icon: ClipboardList,   end: false },
   { to: 'personal',   label: 'Personal',       icon: UsersRound,      end: true  },
   { to: 'horas',      label: 'Horas',          icon: Clock4,          end: true  },
@@ -46,6 +48,7 @@ export default function Produccion() {
       <div className="px-8 py-5">
         <Routes>
           <Route index                    element={<MapaTaller />} />
+          <Route path="disponibles"       element={<Disponibles />} />
           <Route path="ordenes"           element={<Ordenes />} />
           <Route path="ordenes/nueva"     element={<CrearOrden />} />
           <Route path="ordenes/:id"       element={<DetalleOrden />} />

@@ -432,3 +432,33 @@ export interface OrdenEvolucionResp {
   procesos: EvolucionProceso[]
   eventos: EvolucionEvento[]
 }
+
+// ─── Items disponibles cross-project (vista del SHOP_MANAGER) ───────────────
+export type EstadoItemDisponible = 'LISTO' | 'PARCIAL' | 'ORDENADO' | 'PENDIENTE'
+
+export interface ItemDisponible {
+  proyecto_id:     number
+  proyecto_codigo: string
+  proyecto_nombre: string
+  item:            string
+  total:           number
+  recibidos:       number
+  ordenados:       number
+  pendientes:      number
+  en_stock:        number
+  disponibles:     number   // recibidos + en_stock
+  estado:          EstadoItemDisponible
+  op_existente:    { id: number; numero: string; status: StatusOrden } | null
+}
+
+export interface ItemsDisponiblesResp {
+  items: ItemDisponible[]
+  resumen: {
+    total:         number
+    listos:        number
+    parciales:     number
+    ordenados:     number
+    pendientes:    number
+    con_op_activa: number
+  }
+}
