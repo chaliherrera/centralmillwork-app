@@ -121,7 +121,13 @@ export default function CrearOrden() {
     crear.mutate()
   }
 
-  const proyectos = proyectosData?.data ?? []
+  // Solo proyectos en estado 'activo' — los demás no se fabrican:
+  //   - cotizacion: aún no confirmado por el cliente
+  //   - en_pausa:   pausado, no se está produciendo
+  //   - completado/cancelado: cerrados
+  // Si en algún momento se necesita crear OP para un proyecto en otro estado
+  // (ej. muestra durante cotización, fix post-entrega), abrir un toggle aparte.
+  const proyectos = (proyectosData?.data ?? []).filter((p) => p.estado === 'activo')
 
   return (
     <div className="max-w-4xl mx-auto space-y-4">
@@ -159,6 +165,10 @@ export default function CrearOrden() {
                     <option key={p.id} value={p.id}>{p.codigo} — {p.nombre}</option>
                   ))}
                 </select>
+                <p className="text-xs text-gray-500 mt-1">
+                  Solo proyectos en estado <span className="font-medium">Activo</span>.
+                  Si no aparece, revisá su estado en Compras.
+                </p>
               </div>
             </div>
 
