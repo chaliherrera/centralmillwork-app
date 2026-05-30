@@ -1,3 +1,11 @@
+// Carga .env ANTES de importar pool.ts u otros módulos que lean process.env.
+// Sin esto, pool.ts (importado más abajo) leía process.env vacío y caía a
+// defaults hardcoded ('centralmillwork', 'postgres'), funcionando solo por
+// coincidencia en setups locales. En ambientes con DB_NAME distinto al default
+// (staging, dev fresh, prodtest), el server se conectaba a la DB equivocada.
+// Mismo patrón ya aplicado en migrate.ts, seed.ts, seedAdmin.ts (commit 77c299d).
+import 'dotenv/config'
+
 import express from 'express'
 import cors from 'cors'
 import dotenv from 'dotenv'
