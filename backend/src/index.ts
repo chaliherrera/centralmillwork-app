@@ -19,7 +19,7 @@ import webhooksRouter from './routes/webhooks'
 import { syncSystemTareas } from './jobs/tareasFromSystem'
 import { authenticate } from './middleware/auth'
 import { errorHandler, notFound } from './middleware/errorHandler'
-import { globalLimiter, loginLimiter, resetRateLimitSchemaIfNeeded } from './middleware/rateLimit'
+import { globalLimiter, loginLimiter, initRateLimitStore } from './middleware/rateLimit'
 import { requestId } from './middleware/requestId'
 import { logger } from './utils/logger'
 
@@ -103,12 +103,13 @@ if (process.env.NODE_ENV === 'production') {
 
 app.use(errorHandler)
 
-// Startup async: reset del schema rate_limit ANTES de aceptar tráfico, para
-// evitar el crash documentado del library @acpr/rate-limit-postgresql cuando
-// el schema viene en estado inconsistente (ej. desde pg_dump). Si el reset
-// falla por DB inaccesible, igual arrancamos — el error queda en logs.
+// Startup async: setup completo del store de rate_limit ANTES de aceptar
+// tráfico. Ver el comentario gigante en middleware/rateLimit.ts — el library
+// tiene un fire-and-forget en su constructor que causa crashes silenciosos.
+// initRateLimitStore() corre las migraciones del library con AWAIT, así
+// garantizamos que el schema está listo antes de app.listen.
 ;(async () => {
-  await resetRateLimitSchemaIfNeeded()
+  await initRateLimitStore()
 
   app.listen(PORT, () => {
     logger.info('server listening', { port: PORT, url: `http://localhost:${PORT}` })

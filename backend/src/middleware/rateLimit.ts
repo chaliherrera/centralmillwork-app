@@ -1,6 +1,8 @@
 import rateLimit from 'express-rate-limit'
 import { PostgresStore } from '@acpr/rate-limit-postgresql'
-import { Pool } from 'pg'
+import { Client } from 'pg'
+import { migrate } from 'postgres-migrations'
+import path from 'path'
 import { logger } from '../utils/logger'
 
 // Config de conexión para la store: misma lógica que el pool principal,
@@ -57,39 +59,52 @@ export const loginLimiter = rateLimit({
   skipSuccessfulRequests: true,
 })
 
-// ─── Reset del schema rate_limit al boot ─────────────────────────────────────
+// ─── Setup del store de rate_limit al boot ──────────────────────────────────
 //
-// El library @acpr/rate-limit-postgresql crea su propio schema "rate_limit"
-// con sus tablas en la primera request, pero NO es idempotente ante estados
-// parcialmente inicializados. Ejemplos donde rompe:
-//   - DB restaurada desde pg_dump de otra DB con versión distinta del library
-//   - Crash en medio de un setup anterior que dejó tablas a medio crear
-//   - Schema modificado a mano
-// El error típico es: "relation 'unique_session_key' already exists" o similar
-// al boot, y deja al server en estado inconsistente.
+// El library @acpr/rate-limit-postgresql tiene un bug de raíz: en el
+// constructor de PostgresStore llama `applyMigrations(config)` SIN await
+// (fire-and-forget). El constructor retorna inmediatamente, el server arranca,
+// y las requests pueden llegar ANTES de que las migraciones terminen → 500
+// con "relation does not exist". Además, si el schema viene en estado
+// inconsistente (ej. pg_dump clone de otra DB), las migraciones fallan
+// silenciosamente y el server queda crasheando en cada request al limiter.
 //
-// Fix pragmático: al boot, droppear el schema rate_limit si existe. El library
-// lo recrea limpio en la primera request. Trade-off: se pierden los contadores
-// de rate limit en cada restart. Aceptable porque:
-//   - Los restarts son poco frecuentes (deploys, reboots manuales)
-//   - Las ventanas son cortas (1 min global, 15 min login/kiosk)
+// Fix: hacemos el setup nosotros antes de aceptar tráfico:
+//   1. DROP schema rate_limit + DROP public.migrations (la tabla de tracking
+//      que usa postgres-migrations) — garantiza estado limpio
+//   2. await migrate() con el folder de migraciones del library — espera a que
+//      todas las migraciones se apliquen
+//   3. Recién después de esto el server hace app.listen()
+//
+// Trade-off: contadores de rate limit se pierden en cada restart. Aceptable:
+//   - Restarts son poco frecuentes (deploys, reboots manuales)
+//   - Ventanas cortas (1 min global, 15 min login/kiosk)
 //   - Un atacante que aproveche un restart para resetear su ventana es un
-//     riesgo chico vs el costo de un server caído al boot.
+//     riesgo chico vs el costo del server caído al boot.
 //
-// Si el reset falla (DB inaccesible, permisos), se loguea como ERROR pero NO
-// se corta el boot — el library va a fallar más tarde y eso queda visible en
-// los logs, en vez de un crash silencioso al startup.
-export async function resetRateLimitSchemaIfNeeded(): Promise<void> {
-  const pool = new Pool(rlDbConfig as any)
+// Si el setup falla (DB inaccesible, etc.) se loguea como ERROR pero el boot
+// sigue — el library va a fallar más tarde y queda visible en logs en vez de
+// un crash silencioso al startup.
+export async function initRateLimitStore(): Promise<void> {
+  const client = new Client(rlDbConfig as any)
   try {
-    await pool.query('DROP SCHEMA IF EXISTS rate_limit CASCADE')
-    logger.info('rate-limit schema reset OK (se recreará en la primera request)')
+    await client.connect()
+    await client.query('DROP SCHEMA IF EXISTS rate_limit CASCADE')
+    await client.query('DROP TABLE IF EXISTS public.migrations')
+
+    // Resolvemos el folder en runtime (require.resolve sigue node_modules
+    // hoist correctamente — funciona tanto en dev como compilado).
+    const pkgPath = require.resolve('@acpr/rate-limit-postgresql/package.json')
+    const migrationsDir = path.join(path.dirname(pkgPath), 'dist', 'migrations')
+    await migrate({ client }, migrationsDir)
+
+    logger.info('rate-limit store init OK')
   } catch (err) {
-    logger.error('rate-limit schema reset FAILED — el limiter podría crashear en la primera request', {
+    logger.error('rate-limit store init FAILED — el limiter va a crashear', {
       err: String(err),
     })
   } finally {
-    await pool.end()
+    try { await client.end() } catch { /* ignore */ }
   }
 }
 // Kiosk login limiter: PIN de 4 dígitos = 10K combinaciones, fácil de
