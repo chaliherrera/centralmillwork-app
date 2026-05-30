@@ -6,7 +6,12 @@ import OtroTrabajo        from '@/components/kiosk/OtroTrabajo'
 import PausaCard          from '@/components/kiosk/PausaCard'
 import AsignacionesCard   from '@/components/kiosk/AsignacionesCard'
 import AsignacionesPanel  from '@/components/kiosk/AsignacionesPanel'
-import ResumenDia         from '@/components/kiosk/ResumenDia'
+// Nota: ResumenDia existe pero NO se renderiza en el kiosko — decisión de
+// diseño: el resumen del día (4 buckets de tiempo + segmentos + pausas) es
+// info útil para el SHOP_MANAGER, no para el operario. Mostrar al operario
+// "llevás N horas hoy / tu tiempo está dividido así" agrega estrés sin
+// aportar valor a su trabajo. El componente queda disponible por si se
+// reutiliza en una vista del admin más adelante.
 
 export default function KioskHome() {
   const { personal, dispositivo, logout, status } = useKioskAuth()
@@ -49,21 +54,22 @@ export default function KioskHome() {
       </header>
 
       {/* Contenido */}
-      <main className="max-w-3xl mx-auto px-4 py-6 space-y-4">
+      <main className="max-w-3xl mx-auto px-4 py-6 space-y-5">
         <ClockCard />
 
-        {/* Paired cards: Tomar break + Asignaciones (centro de gravedad del kiosko) */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <PausaCard />
-          <AsignacionesCard onOpen={() => setAsignacionesOpen(true)} />
-        </div>
+        {/* Asignaciones — pieza central del kiosko después de clockin.
+            Full-width, con preview de la próxima tarea para que el operario
+            sepa qué hacer sin tener que abrir el panel. */}
+        <AsignacionesCard onOpen={() => setAsignacionesOpen(true)} />
 
         {/* "Otro trabajo" — secundario, sólo aparece cuando hay sesión activa
             o cuando el operario está en un trabajo no-asignado. Si está
             haciendo un item, este componente no muestra nada. */}
         <OtroTrabajo />
 
-        <ResumenDia />
+        {/* Tomar break — full-width, debajo de las asignaciones.
+            Antes estaba paired con Asignaciones; ahora abajo y con más espacio. */}
+        <PausaCard />
       </main>
 
       {/* Slide-in panel de Asignaciones (renderizado fuera del flujo) */}

@@ -1,4 +1,5 @@
 import { createContext, useContext, useState, useEffect, ReactNode, useCallback } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
 import { kioskService } from '@/services/kiosk'
 import { KIOSK_TOKEN, KIOSK_DISPOSITIVO } from '@/services/kioskApi'
 import type { KioskMe, KioskPersonal } from '@/types/kiosk'
@@ -21,6 +22,7 @@ export function KioskAuthProvider({ children }: { children: ReactNode }) {
   const [status, setStatus] = useState<KioskMe | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [dispositivo, setDispositivoState] = useState<string>(KIOSK_DISPOSITIVO.get())
+  const qc = useQueryClient()
 
   const refresh = useCallback(async () => {
     if (!KIOSK_TOKEN.get()) { setStatus(null); return }
@@ -42,6 +44,11 @@ export function KioskAuthProvider({ children }: { children: ReactNode }) {
   const login = useCallback(async (pin: string) => {
     const res = await kioskService.login(pin, dispositivo || undefined)
     KIOSK_TOKEN.set(res.token)
+    // BUG fix: limpiar cache de queries del kiosko de la sesión anterior antes
+    // de poblar. Sin esto, si otro operario usó este browser antes, las
+    // asignaciones viejas aparecen en pantalla hasta que el refetchInterval
+    // dispare. El operario tenía que F5 manual para ver lo suyo.
+    qc.removeQueries({ queryKey: ['kiosk'] })
     // Pre-popular status con la respuesta del login (sin clockin/proyecto/pausa todavía)
     setStatus({
       personal: res.personal,
@@ -53,12 +60,14 @@ export function KioskAuthProvider({ children }: { children: ReactNode }) {
     // Y al toque traer el status real (por si el operario tenía algo abierto)
     refresh()
     return res.personal
-  }, [dispositivo, refresh])
+  }, [dispositivo, refresh, qc])
 
   const logout = useCallback(() => {
     KIOSK_TOKEN.clear()
     setStatus(null)
-  }, [])
+    // Mismo razonamiento que en login: no dejar cache del operario saliente
+    qc.removeQueries({ queryKey: ['kiosk'] })
+  }, [qc])
 
   const setDispositivo = useCallback((name: string) => {
     KIOSK_DISPOSITIVO.set(name)
