@@ -15,8 +15,20 @@
 -- NOTA: este módulo (Producción) todavía no está en main ni en Railway prod,
 -- así que el rename no afecta ningún ambiente productivo.
 
-ALTER TABLE ordenes_produccion
-  RENAME COLUMN item_nombre TO numero_item;
+-- Idempotente: solo renombra si item_nombre todavía existe (no fue migrada).
+-- Si ya fue renombrada (numero_item existe, item_nombre no), salta sin error.
+-- Necesario porque el migrate runner no trackea qué migraciones corrió, y
+-- esta migración no se puede re-ejecutar tal cual (RENAME falla si la columna
+-- vieja no existe).
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_name = 'ordenes_produccion' AND column_name = 'item_nombre'
+  ) THEN
+    ALTER TABLE ordenes_produccion RENAME COLUMN item_nombre TO numero_item;
+  END IF;
+END $$;
 
 COMMENT ON COLUMN ordenes_produccion.numero_item IS
   'Número de item del MTO al que corresponde esta orden (ej. "1", "2"). '

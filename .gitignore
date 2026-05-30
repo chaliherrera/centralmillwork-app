@@ -21,3 +21,4 @@ uploads_payload.json
 presentations/
 TESTING_CHECKLIST.pdf
 GUIA_MODULO_PRODUCCION.pdf
+database/seed_prodtest.sql
