@@ -92,10 +92,15 @@ export async function initRateLimitStore(): Promise<void> {
     await client.query('DROP SCHEMA IF EXISTS rate_limit CASCADE')
     await client.query('DROP TABLE IF EXISTS public.migrations')
 
-    // Resolvemos el folder en runtime (require.resolve sigue node_modules
-    // hoist correctamente — funciona tanto en dev como compilado).
-    const pkgPath = require.resolve('@acpr/rate-limit-postgresql/package.json')
-    const migrationsDir = path.join(path.dirname(pkgPath), 'dist', 'migrations')
+    // Resolvemos el folder de migraciones en runtime. NO podemos hacer
+    // require.resolve(.../package.json) porque el package tiene un "exports"
+    // field que solo expone el entry point (subpath imports bloqueados con
+    // ERR_PACKAGE_PATH_NOT_EXPORTED). Por eso resolvemos el main entry y de
+    // ahí derivamos el folder hermano de migrations.
+    const mainEntry = require.resolve('@acpr/rate-limit-postgresql')
+    // mainEntry → .../node_modules/@acpr/rate-limit-postgresql/dist/index.cjs
+    // migrationsDir → .../node_modules/@acpr/rate-limit-postgresql/dist/migrations
+    const migrationsDir = path.join(path.dirname(mainEntry), 'migrations')
     await migrate({ client }, migrationsDir)
 
     logger.info('rate-limit store init OK')

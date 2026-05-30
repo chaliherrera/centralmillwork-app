@@ -326,9 +326,16 @@ export async function getProyectoActividad(req: Request, res: Response, next: Ne
 
 // ─── Items readiness: ¿cada item del proyecto tiene todos sus materiales? ───
 //
-// Lee materiales_mto.item (TEXT que puede ser '3', '3,4,7', '12', etc — viene
-// así del MTO Excel "Material List" column ITEM#) y expande con STRING_TO_ARRAY
-// para que un material que va a 3 items cuente en los 3.
+// Lee materiales_mto.item (TEXT) y expande para que un material que va a N
+// items cuente en los N. Formato real de los datos:
+//   - "3"              → un solo item
+//   - "1-15-18-19-20"  → multi-item con guión (~55 casos en prod)
+//   - "1,2"            → multi-item con coma (~14 casos en prod)
+//   - NULL o ""        → sin item, se excluye
+// Por eso usamos REGEXP_SPLIT_TO_ARRAY con la clase de caracteres '[-,]'
+// que acepta ambos separadores. La fuente de los datos es el Excel "Material
+// List" columna ITEM#, y la planilla histórica no es 100% consistente con
+// el separador.
 //
 // Devuelve, para cada item del proyecto:
 //   - total: cantidad de materiales que necesita ese item
@@ -362,7 +369,7 @@ export async function getProyectoItemsReadiness(req: Request, res: Response, nex
            m.estado_cotiz, m.cotizar,
            oc_link.oc_id, oc_link.oc_numero, oc_link.oc_fecha_entrega
          FROM materiales_mto m
-         CROSS JOIN UNNEST(STRING_TO_ARRAY(m.item, ',')) AS item_num
+         CROSS JOIN UNNEST(REGEXP_SPLIT_TO_ARRAY(m.item, '[-,]')) AS item_num
          LEFT JOIN LATERAL (
            SELECT oc.id AS oc_id, oc.numero AS oc_numero,
                   oc.fecha_entrega_estimada AS oc_fecha_entrega
