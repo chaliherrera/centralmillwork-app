@@ -39,12 +39,18 @@ import {
   marcarCotizacionesEnviadas,
 } from '../controllers/cotizacionesController'
 import { getReporteCompras, getReporteProduccion, compartirReporte } from '../controllers/reportesController'
+import produccionRouter from './produccion'
 import {
   getTareas, getTarea, updateTarea, getTareasStats, syncSystemHandler,
   updateTareaSchema,
 } from '../controllers/tareasController'
 
 const router = Router()
+
+// ─── Módulo de Producción ────────────────────────────────────────────────────
+// Sub-router con sus propias rutas/permisos (ver routes/produccion.ts).
+router.use('/produccion', produccionRouter)
+
 
 // Role shorthand helpers
 const ADMIN      = requireRole('ADMIN')
@@ -65,14 +71,14 @@ router.get('/dashboard/resumen-estados',     getDashboardResumenEstados)
 router.get('/dashboard/proyectos-recientes', getDashboardProyectosRecientes)
 
 // ─── Proyectos ────────────────────────────────────────────────────────────────
-router.get('/proyectos',                  getProyectos)
+router.get('/proyectos',                      getProyectos)
 router.get('/proyectos/:id/resumen',          getProyectoResumen)
 router.get('/proyectos/:id/actividad',        getProyectoActividad)
 router.get('/proyectos/:id/items-readiness',  getProyectoItemsReadiness)
-router.get('/proyectos/:id',              getProyecto)
-router.post('/proyectos',                 WRITE, validateBody(createProyectoSchema), createProyecto)
-router.put('/proyectos/:id',              WRITE, validateBody(updateProyectoSchema), updateProyecto)
-router.delete('/proyectos/:id',           WRITE, deleteProyecto)
+router.get('/proyectos/:id',                  getProyecto)
+router.post('/proyectos',                     WRITE, validateBody(createProyectoSchema), createProyecto)
+router.put('/proyectos/:id',                  WRITE, validateBody(updateProyectoSchema), updateProyecto)
+router.delete('/proyectos/:id',               WRITE, deleteProyecto)
 
 // ─── Proveedores ──────────────────────────────────────────────────────────────
 router.get('/proveedores',        getProveedores)

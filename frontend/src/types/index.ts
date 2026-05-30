@@ -1,6 +1,6 @@
 // ─── Auth ─────────────────────────────────────────────────────────────────────
 
-export type UserRole = 'ADMIN' | 'PROCUREMENT' | 'PRODUCTION' | 'PROJECT_MANAGEMENT' | 'CONTABILIDAD'
+export type UserRole = 'ADMIN' | 'PROCUREMENT' | 'PRODUCTION' | 'PROJECT_MANAGEMENT' | 'CONTABILIDAD' | 'SHOP_MANAGER'
 
 export interface User {
   id: string

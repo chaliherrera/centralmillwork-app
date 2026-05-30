@@ -2,6 +2,12 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Drawer slide-in desde la derecha (usado por MaterialesItem y similares) */
+@keyframes slideIn {
+  from { transform: translateX(100%); }
+  to   { transform: translateX(0); }
+}
+
 @layer base {
   * {
     box-sizing: border-box;

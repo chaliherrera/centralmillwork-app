@@ -2,7 +2,7 @@ import { NavLink } from 'react-router-dom'
 import {
   LayoutDashboard, FolderOpen, ShoppingCart,
   Package, Truck, Users, ChevronLeft, ChevronRight, ShieldCheck,
-  Inbox,
+  Factory, Inbox,
 } from 'lucide-react'
 import { useState } from 'react'
 import clsx from 'clsx'
@@ -24,6 +24,7 @@ const NAV_ITEMS: NavItem[] = [
   { to: '/materiales',     label: 'Materiales MTO',     icon: Package,         roles: ['ADMIN','PROCUREMENT','PROJECT_MANAGEMENT','PRODUCTION'] },
   { to: '/recepciones',    label: 'Recepciones',        icon: Truck,           roles: ['ADMIN','PROCUREMENT','PRODUCTION'] },
   { to: '/proveedores',    label: 'Proveedores',        icon: Users,           roles: ['ADMIN','PROCUREMENT'] },
+  { to: '/produccion',     label: 'Producción',         icon: Factory,         roles: ['ADMIN','SHOP_MANAGER'] },
   { to: '/tareas',         label: 'Tareas',             icon: Inbox,           roles: ['ADMIN'] },
   { to: '/usuarios',       label: 'Usuarios',           icon: ShieldCheck,     roles: ['ADMIN'] },
 ]
@@ -58,12 +59,16 @@ export default function Sidebar() {
         isGlass ? 'border-b border-[rgba(255,255,250,0.08)]' : 'border-b border-forest-600',
       )}>
         {!collapsed && (
-          <div className="flex items-center overflow-hidden">
-            <img
-              src="/logo_cm_sidebar.png"
-              alt="Central Millwork"
-              className="h-9 w-auto object-contain"
+          <div className="flex items-center gap-2 overflow-hidden">
+            <div
+              className="w-[22px] h-[22px] rounded-full shrink-0"
+              style={{
+                background: 'conic-gradient(from 220deg, #E5732E 0 75%, transparent 75% 100%)',
+                WebkitMask: 'radial-gradient(circle, transparent 38%, #000 39%)',
+                mask:        'radial-gradient(circle, transparent 38%, #000 39%)',
+              }}
             />
+            <span className="text-[13px] font-medium tracking-[0.3px] whitespace-nowrap">central millwork</span>
           </div>
         )}
         <button
@@ -79,7 +84,7 @@ export default function Sidebar() {
       </div>
 
       {/* Navigation */}
-      <nav className="flex-1 py-4 space-y-0.5 px-2 overflow-y-auto">
+      <nav className="flex-1 py-5 space-y-0.5 px-3 overflow-y-auto">
         {visibleItems.map(({ to, label, icon: Icon }) => (
           <NavLink
             key={to}

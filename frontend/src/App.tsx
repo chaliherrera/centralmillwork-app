@@ -11,6 +11,8 @@ import Recepciones from '@/pages/Recepciones'
 import Proveedores from '@/pages/Proveedores'
 import Tareas from '@/pages/Tareas'
 import Usuarios from '@/pages/Usuarios'
+import Produccion from '@/pages/produccion/Produccion'
+import KioskApp from '@/pages/kiosk/KioskApp'
 import { Loader2 } from 'lucide-react'
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
@@ -32,10 +34,20 @@ function AdminRoute({ children }: { children: React.ReactNode }) {
   return <>{children}</>
 }
 
+function ProduccionRoute({ children }: { children: React.ReactNode }) {
+  const { user } = useAuth()
+  if (user?.rol !== 'ADMIN' && user?.rol !== 'SHOP_MANAGER') return <Navigate to="/" replace />
+  return <>{children}</>
+}
+
 export default function App() {
   return (
     <Routes>
       <Route path="/login" element={<Login />} />
+
+      {/* Kiosko de producción — sub-app autónoma con su propio AuthContext.
+          NO pasa por ProtectedRoute (auth del sistema) ni renderiza el sidebar. */}
+      <Route path="/kiosk/*" element={<KioskApp />} />
 
       <Route element={<ProtectedRoute><MainLayout /></ProtectedRoute>}>
         <Route index element={<Dashboard />} />
@@ -45,6 +57,7 @@ export default function App() {
         <Route path="materiales/*"     element={<Materiales />} />
         <Route path="recepciones/*"    element={<Recepciones />} />
         <Route path="proveedores/*"    element={<Proveedores />} />
+        <Route path="produccion/*"     element={<ProduccionRoute><Produccion /></ProduccionRoute>} />
         <Route path="tareas"           element={<AdminRoute><Tareas /></AdminRoute>} />
         <Route path="usuarios"         element={<AdminRoute><Usuarios /></AdminRoute>} />
       </Route>

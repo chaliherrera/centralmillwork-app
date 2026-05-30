@@ -2,7 +2,7 @@ import { Request, Response, NextFunction } from 'express'
 import jwt from 'jsonwebtoken'
 import { createError } from './errorHandler'
 
-export type Role = 'ADMIN' | 'PROCUREMENT' | 'PRODUCTION' | 'PROJECT_MANAGEMENT' | 'CONTABILIDAD'
+export type Role = 'ADMIN' | 'PROCUREMENT' | 'PRODUCTION' | 'PROJECT_MANAGEMENT' | 'CONTABILIDAD' | 'SHOP_MANAGER'
 
 declare global {
   namespace Express {
@@ -16,7 +16,10 @@ export function authenticate(req: Request, res: Response, next: NextFunction) {
   const auth = req.headers.authorization
   if (!auth?.startsWith('Bearer ')) return next(createError('No autorizado', 401))
   try {
-    const payload = jwt.verify(auth.slice(7), process.env.JWT_SECRET!) as { id: string; email: string; rol: Role }
+    const payload = jwt.verify(auth.slice(7), process.env.JWT_SECRET!) as { id: string; email: string; rol: Role; kind?: string }
+    // Rechazar tokens emitidos para el kiosko de producción (ver kioskAuth.ts).
+    // Mismo JWT_SECRET, distinto shape — prevenimos cross-use entre sistemas.
+    if (payload.kind === 'kiosk') return next(createError('Token de kiosko no válido para el sistema', 401))
     req.user = payload
     next()
   } catch {

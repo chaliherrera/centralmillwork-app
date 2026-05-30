@@ -345,6 +345,10 @@ export async function getProyectoActividad(req: Request, res: Response, next: Ne
 //   - PENDIENTE → hay materiales sin ordenar
 //
 // Los materiales sin item (vacío o NULL) se excluyen del cálculo.
+//
+// Cada material incluye `oc_fecha_entrega` (ETA estimada de la OC activa) — lo
+// usa el módulo de Producción para mostrar cuándo llegan los materiales faltantes
+// y resaltar ETAs vencidas.
 export async function getProyectoItemsReadiness(req: Request, res: Response, next: NextFunction) {
   try {
     const proyecto_id = parseInt(String(req.params.id))
@@ -356,11 +360,12 @@ export async function getProyectoItemsReadiness(req: Request, res: Response, nex
            TRIM(item_num) AS item,
            m.id, m.codigo, m.descripcion, m.vendor, m.qty, m.unit_price,
            m.estado_cotiz, m.cotizar,
-           oc_link.oc_id, oc_link.oc_numero
+           oc_link.oc_id, oc_link.oc_numero, oc_link.oc_fecha_entrega
          FROM materiales_mto m
          CROSS JOIN UNNEST(STRING_TO_ARRAY(m.item, ',')) AS item_num
          LEFT JOIN LATERAL (
-           SELECT oc.id AS oc_id, oc.numero AS oc_numero
+           SELECT oc.id AS oc_id, oc.numero AS oc_numero,
+                  oc.fecha_entrega_estimada AS oc_fecha_entrega
            FROM items_orden_compra ioc
            JOIN ordenes_compra oc ON oc.id = ioc.orden_compra_id
            WHERE ioc.material_id = m.id
@@ -389,7 +394,8 @@ export async function getProyectoItemsReadiness(req: Request, res: Response, nex
              'unit_price',  unit_price,
              'estado_cotiz', estado_cotiz,
              'oc_id',       oc_id,
-             'oc_numero',   oc_numero
+             'oc_numero',   oc_numero,
+             'oc_fecha_entrega', oc_fecha_entrega
            ) ORDER BY codigo
          ) AS materiales
        FROM items_expanded
@@ -405,7 +411,6 @@ export async function getProyectoItemsReadiness(req: Request, res: Response, nex
       const total = r.total
       const recibidos = r.recibidos
       const en_stock = r.en_stock
-      const ordenados = r.ordenados
       const pendientes = r.pendientes
 
       // "Disponibles" = recibidos + en_stock (ambos están físicamente en el taller)

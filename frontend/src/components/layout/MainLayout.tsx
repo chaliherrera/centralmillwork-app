@@ -12,6 +12,8 @@ const pageTitles: Record<string, string> = {
   '/proveedores':     'Proveedores',
   '/tareas':          'Tareas',
   '/cotizaciones':    'Solicitudes de Cotización',
+  '/produccion':      'Producción',
+  '/usuarios':        'Usuarios',
 }
 
 export default function MainLayout() {

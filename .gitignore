@@ -19,3 +19,6 @@ uploads_payload.json
 # Presentation artifacts (PPTX, Reveal HTML, generated PDFs)
 # Source markdown lives in docs/, presentations are derived/generated.
 presentations/
+TESTING_CHECKLIST.pdf
+GUIA_MODULO_PRODUCCION.pdf
+database/seed_prodtest.sql

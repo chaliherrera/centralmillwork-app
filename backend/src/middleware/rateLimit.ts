@@ -55,3 +55,21 @@ export const loginLimiter = rateLimit({
   // quedás bloqueado. Solo contamos los fallidos (4xx/5xx).
   skipSuccessfulRequests: true,
 })
+
+// Kiosk login limiter: PIN de 4 dígitos = 10K combinaciones, fácil de
+// brute-forcear sin rate limit. Más permisivo que login (operarios reales se
+// equivocan tipeando) pero igual corta abusos. 10 intentos por 15 min por IP.
+export const kioskLoginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 10,
+  standardHeaders: 'draft-7',
+  legacyHeaders: false,
+  validate: { trustProxy: false, xForwardedForHeader: false },
+  store: new PostgresStore(rlDbConfig, 'rl_kiosk_login'),
+  message: { message: 'Demasiados intentos. Esperá 15 minutos antes de volver a intentar.' },
+  handler: (req, res, _next, options) => {
+    logger.warn('ratelimit hit (kiosk login)', { requestId: req.id, ip: req.ip, dispositivo: req.body?.dispositivo ?? '?' })
+    res.status(options.statusCode).json(options.message)
+  },
+  skipSuccessfulRequests: true,
+})

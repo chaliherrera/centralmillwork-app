@@ -1,3 +1,11 @@
+// Carga .env ANTES de importar pool.ts u otros módulos que lean process.env.
+// Sin esto, pool.ts (importado más abajo) leía process.env vacío y caía a
+// defaults hardcoded ('centralmillwork', 'postgres'), funcionando solo por
+// coincidencia en setups locales. En ambientes con DB_NAME distinto al default
+// (staging, dev fresh, prodtest), el server se conectaba a la DB equivocada.
+// Mismo patrón ya aplicado en migrate.ts, seed.ts, seedAdmin.ts (commit 77c299d).
+import 'dotenv/config'
+
 import express from 'express'
 import helmet from 'helmet'
 import cors from 'cors'
@@ -6,6 +14,7 @@ import path from 'path'
 import fs from 'fs'
 import router from './routes'
 import authRouter from './routes/auth'
+import kioskRouter from './routes/kiosk'
 import webhooksRouter from './routes/webhooks'
 import { syncSystemTareas } from './jobs/tareasFromSystem'
 import { authenticate } from './middleware/auth'
@@ -70,6 +79,11 @@ app.use('/api/auth/login', loginLimiter)
 
 // Public auth routes — must come before authenticate middleware
 app.use('/api/auth', authRouter)
+
+// Kiosk routes — sistema de auth separado (PIN → JWT con shape distinto).
+// El router maneja sus propias rutas públicas (login) y protegidas
+// (todo lo demás vía authenticateKiosk).
+app.use('/api/kiosk', kioskRouter)
 
 // Webhooks (machine-to-machine, autenticados con WEBHOOK_API_TOKEN, no JWT).
 // Deben ir ANTES del authenticate global para que no exija JWT de usuario.
