@@ -14,6 +14,7 @@ export interface ItemReadinessMaterial {
   estado_cotiz: 'PENDIENTE' | 'COTIZADO' | 'ORDENADO' | 'RECIBIDO' | 'EN_STOCK'
   oc_id: number | null
   oc_numero: string | null
+  oc_fecha_entrega: string | null  // ETA: fecha_entrega_estimada de la OC
 }
 
 export interface ItemReadiness {
