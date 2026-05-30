@@ -75,25 +75,33 @@ export interface OrdenDetallada extends OrdenProduccion {
   historial: OrdenHistorial[]
 }
 
+// Snapshot de una OP que cambió de estación (para el KPI "OP en movimiento")
+export interface OpEnMovimiento {
+  orden_id: number
+  numero_orden: string
+  numero_item: string
+  status: StatusOrden
+  proyecto_codigo: string | null
+  proyecto_nombre: string | null
+  estacion_origen: string | null
+  estacion_destino: string | null
+  movido_en: string  // ISO timestamp
+}
+
 export interface OrdenesKpis {
   activas: number
   completadas_hoy: number
   pausadas: number
   alta_prioridad: number
   vencidas: number
-  // Última OP no terminada que cambió de estación. null si no hay ninguna.
-  // Lo usa el KPI "OP en movimiento" del Mapa.
-  op_en_movimiento: {
-    orden_id: number
-    numero_orden: string
-    numero_item: string
-    status: StatusOrden
-    proyecto_codigo: string | null
-    proyecto_nombre: string | null
-    estacion_origen: string | null
-    estacion_destino: string | null
-    movido_en: string  // ISO timestamp
-  } | null
+  // La OP más reciente que cambió de estación (cualquier momento). null si
+  // ninguna OP no-terminada se ha movido nunca. Lo usa el KPI "OP en
+  // movimiento" del Mapa.
+  op_en_movimiento: OpEnMovimiento | null
+  // OTRAS OPs distintas que también cambiaron de estación recientemente
+  // (últimos 30 min, máx 4). Se muestran como badge "+N otras" en la card,
+  // click → mini-drawer con la lista.
+  otras_en_movimiento: OpEnMovimiento[]
 }
 
 // ─── Personal del Taller ─────────────────────────────────────────────────────

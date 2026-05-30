@@ -1,10 +1,10 @@
-import { useMemo } from 'react'
+import { useMemo, useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
-import { Loader2 } from 'lucide-react'
+import { Loader2, X } from 'lucide-react'
 import { produccionService } from '@/services/produccion'
 import Timer from '@/components/kiosk/Timer'
-import type { EstacionOrdenRunning, OrdenesKpis } from '@/types/produccion'
+import type { EstacionOrdenRunning, OpEnMovimiento } from '@/types/produccion'
 
 // ─── Tokens blueprint (también definidos en tailwind, acá inline para SVGs y style) ────
 const BP = {
@@ -176,7 +176,10 @@ export default function MapaTaller() {
           está moviendo en el taller ahora mismo. */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
         <KpiCard label="Órdenes activas"  value={kpis?.activas         ?? '—'} />
-        <KpiCardOpEnMovimiento op={kpis?.op_en_movimiento ?? null} />
+        <KpiCardOpEnMovimiento
+          op={kpis?.op_en_movimiento ?? null}
+          otras={kpis?.otras_en_movimiento ?? []}
+        />
         <KpiCard label="Completadas hoy"  value={kpis?.completadas_hoy ?? '—'} />
         <KpiCard label="Pausadas"         value={kpis?.pausadas        ?? '—'} muted />
         <KpiCard label="Vencidas"         value={kpis?.vencidas        ?? '—'} alert={(kpis?.vencidas ?? 0) > 0} />
@@ -279,9 +282,14 @@ function KpiCard({ label, value, alert, muted }: { label: string; value: number 
 // ─── KpiCardOpEnMovimiento ───────────────────────────────────────────────────
 //
 // KPI especial: en vez de un contador muestra el identificador concreto de la
-// OP que cambió de estación más recientemente. Clickeable → /produccion/ordenes/:id.
-// Si no hay ninguna OP en proceso con movimientos, muestra un empty state discreto.
-function KpiCardOpEnMovimiento({ op }: { op: OrdenesKpis['op_en_movimiento'] }) {
+// OP que cambió de estación más recientemente. La card es clickeable →
+// /produccion/ordenes/:id de la primaria.
+//
+// Si hay OTRAS OPs distintas con movimientos en los últimos 30 min, agrega
+// un badge "+N otras" en la esquina superior derecha. Click en el badge →
+// drawer lateral con las últimas movidas (no navega a la primaria).
+function KpiCardOpEnMovimiento({ op, otras }: { op: OpEnMovimiento | null; otras: OpEnMovimiento[] }) {
+  const [drawerOpen, setDrawerOpen] = useState(false)
   const baseStyle = {
     border: '1px solid #ECE7DC',
     borderRadius: 10,
@@ -289,6 +297,7 @@ function KpiCardOpEnMovimiento({ op }: { op: OrdenesKpis['op_en_movimiento'] }) 
   }
   const labelStyle = { color: '#6B6356', letterSpacing: 0.6 }
 
+  // Empty state — no OP no-terminada ha cambiado de estación nunca
   if (!op) {
     return (
       <div className="bg-white" style={baseStyle}>
@@ -302,41 +311,133 @@ function KpiCardOpEnMovimiento({ op }: { op: OrdenesKpis['op_en_movimiento'] }) 
     )
   }
 
-  // Tiempo desde el último movimiento — formato corto (m / h / d)
-  const haceMin = Math.max(0, Math.floor((Date.now() - new Date(op.movido_en).getTime()) / 60000))
-  const haceLabel = haceMin < 60
-    ? `hace ${haceMin}m`
-    : haceMin < 60 * 24
-    ? `hace ${Math.floor(haceMin / 60)}h`
-    : `hace ${Math.floor(haceMin / 1440)}d`
+  const hayOtras = otras.length > 0
 
   return (
-    <Link
-      to={`/produccion/ordenes/${op.orden_id}`}
-      className="bg-white block hover:shadow-sm transition-shadow"
-      style={baseStyle}
-      title={`Abrir ${op.numero_orden}`}
-    >
-      <div className="text-[11px] font-semibold uppercase" style={labelStyle}>
-        OP en movimiento
-      </div>
-      <div
-        className="text-[17px] font-semibold mt-1.5 font-mono truncate"
-        style={{ color: '#1F1B14', letterSpacing: -0.3 }}
-      >
-        {op.proyecto_codigo ?? op.numero_orden}
-      </div>
-      <div className="text-[11.5px] mt-1 truncate" style={{ color: '#6B6356' }}>
-        <span className="font-medium">#{op.numero_item}</span>
-        {op.estacion_destino && (
-          <span> · {op.estacion_origen ?? '—'} → <span className="font-medium" style={{ color: '#1F1B14' }}>{op.estacion_destino}</span></span>
+    <>
+      <div className="bg-white relative" style={baseStyle}>
+        {/* Badge "+N otras" — solo si hay otras OPs en movimiento reciente.
+            Sale del flujo del Link principal para no robar el click. */}
+        {hayOtras && (
+          <button
+            onClick={(e) => { e.preventDefault(); e.stopPropagation(); setDrawerOpen(true) }}
+            className="absolute top-2 right-2 text-[10.5px] font-semibold px-2 py-0.5 rounded-full transition-colors"
+            style={{
+              backgroundColor: '#FEF3C7',
+              color: '#92400E',
+              border: '1px solid #FCD34D',
+            }}
+            title={`Ver ${otras.length} más en movimiento`}
+          >
+            +{otras.length} otra{otras.length > 1 ? 's' : ''}
+          </button>
         )}
+
+        {/* Card body — Link a la primaria */}
+        <Link to={`/produccion/ordenes/${op.orden_id}`} className="block" title={`Abrir ${op.numero_orden}`}>
+          <div className="text-[11px] font-semibold uppercase" style={labelStyle}>
+            OP en movimiento
+          </div>
+          <div
+            className="text-[17px] font-semibold mt-1.5 font-mono truncate"
+            style={{ color: '#1F1B14', letterSpacing: -0.3 }}
+          >
+            {op.proyecto_codigo ?? op.numero_orden}
+          </div>
+          <div className="text-[11.5px] mt-1 truncate" style={{ color: '#6B6356' }}>
+            <span className="font-medium">#{op.numero_item}</span>
+            {op.estacion_destino && (
+              <span> · {op.estacion_origen ?? '—'} → <span className="font-medium" style={{ color: '#1F1B14' }}>{op.estacion_destino}</span></span>
+            )}
+          </div>
+          <div className="text-[10.5px] mt-0.5" style={{ color: '#9C9384' }}>
+            {op.numero_orden} · {formatHace(op.movido_en)}
+          </div>
+        </Link>
       </div>
-      <div className="text-[10.5px] mt-0.5" style={{ color: '#9C9384' }}>
-        {op.numero_orden} · {haceLabel}
-      </div>
-    </Link>
+
+      {/* Drawer con la lista de otras OPs en movimiento reciente */}
+      {drawerOpen && (
+        <OtrasEnMovimientoDrawer
+          primaria={op}
+          otras={otras}
+          onClose={() => setDrawerOpen(false)}
+        />
+      )}
+    </>
   )
+}
+
+// Drawer lateral con la lista de OPs en movimiento reciente.
+// Patrón consistente con MaterialesItem (fixed inset + backdrop + panel right).
+function OtrasEnMovimientoDrawer({
+  primaria, otras, onClose,
+}: { primaria: OpEnMovimiento; otras: OpEnMovimiento[]; onClose: () => void }) {
+  // Esc cierra
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [onClose])
+
+  return (
+    <div className="fixed inset-0 z-50 flex">
+      <div className="flex-1 bg-black/40" onClick={onClose} />
+      <div
+        className="w-full max-w-md bg-white shadow-2xl flex flex-col animate-[slideIn_0.2s_ease-out]"
+      >
+        <div className="flex items-center justify-between p-4 border-b border-gray-100">
+          <div>
+            <h2 className="text-base font-semibold text-gray-900">OPs en movimiento reciente</h2>
+            <p className="text-xs text-gray-500 mt-0.5">
+              {1 + otras.length} OPs cambiaron de estación en los últimos 30 min
+            </p>
+          </div>
+          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-500" title="Cerrar (Esc)">
+            <X size={18} />
+          </button>
+        </div>
+        <div className="flex-1 overflow-y-auto p-4 space-y-3">
+          {[primaria, ...otras].map((m, i) => (
+            <Link
+              key={m.orden_id}
+              to={`/produccion/ordenes/${m.orden_id}`}
+              onClick={onClose}
+              className="block bg-gray-50 hover:bg-gold-50 rounded-lg p-3 transition-colors border border-gray-100"
+            >
+              <div className="flex items-center justify-between gap-2 mb-1">
+                <div className="font-mono text-sm font-semibold text-gray-900 truncate">
+                  {m.proyecto_codigo ?? m.numero_orden}
+                </div>
+                {i === 0 && (
+                  <span className="text-[10px] font-semibold uppercase px-1.5 py-0.5 rounded bg-gold-100 text-gold-700 shrink-0">
+                    Más reciente
+                  </span>
+                )}
+              </div>
+              <div className="text-xs text-gray-600">
+                <span className="font-medium">#{m.numero_item}</span>
+                {m.estacion_destino && (
+                  <span> · {m.estacion_origen ?? '—'} → <span className="font-medium text-gray-900">{m.estacion_destino}</span></span>
+                )}
+              </div>
+              <div className="text-[11px] text-gray-400 mt-0.5">
+                {m.numero_orden} · {formatHace(m.movido_en)}
+              </div>
+            </Link>
+          ))}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// Helper: "hace 12m" / "hace 3h" / "hace 2d"
+function formatHace(iso: string): string {
+  const haceMin = Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / 60000))
+  if (haceMin < 60) return `hace ${haceMin}m`
+  if (haceMin < 60 * 24) return `hace ${Math.floor(haceMin / 60)}h`
+  return `hace ${Math.floor(haceMin / 1440)}d`
 }
 
 // ─── Zone Header ──────────────────────────────────────────────────────────────

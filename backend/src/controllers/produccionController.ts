@@ -760,35 +760,58 @@ export async function getOrdenesKpis(_req: Request, res: Response, next: NextFun
            COUNT(*) FILTER (WHERE fecha_entrega < CURRENT_DATE AND status NOT IN ('Completada','Cancelada')) AS vencidas
          FROM ordenes_produccion`
       ),
-      // Último evento de tipo 'mover' (cambio de estación) de una OP que
-      // aún NO esté Completada/Cancelada. Esto responde "¿qué orden se
-      // está moviendo entre estaciones ahora mismo?" para el card del mapa.
-      // Si no hay ninguna OP en proceso con movimientos → devuelve null.
+      // Top 5 OPs (no-terminales) por última vez que cambiaron de estación.
+      // DISTINCT ON (o.id) → una fila por OP, su último 'mover'. Si una OP
+      // se movió 3 veces, solo cuenta su movida más reciente. Ordenadas por
+      // recencia para que el [0] sea la "actual" del taller.
+      //
+      // El frontend:
+      //   - [0] siempre se muestra como "OP en movimiento" (sin filtro de tiempo)
+      //   - [1..4] que hayan movido en los últimos OTROS_RECIENTES_MIN minutos
+      //     se muestran como badge "+N otras" con drawer al hacer click
       pool.query(
-        `SELECT
-           o.id                AS orden_id,
-           o.numero_orden,
-           o.numero_item,
-           o.status,
-           p.codigo            AS proyecto_codigo,
-           p.nombre            AS proyecto_nombre,
-           h.estacion_origen,
-           h.estacion_destino,
-           h.timestamp         AS movido_en
-         FROM orden_historial h
-         JOIN ordenes_produccion o ON o.id = h.orden_id
-         LEFT JOIN proyectos p     ON p.id = o.proyecto_id
-         WHERE h.accion = 'mover'
-           AND o.status NOT IN ('Completada', 'Cancelada')
-         ORDER BY h.timestamp DESC
-         LIMIT 1`
+        `WITH per_orden AS (
+           SELECT DISTINCT ON (o.id)
+             o.id                AS orden_id,
+             o.numero_orden,
+             o.numero_item,
+             o.status,
+             p.codigo            AS proyecto_codigo,
+             p.nombre            AS proyecto_nombre,
+             h.estacion_origen,
+             h.estacion_destino,
+             h.timestamp         AS movido_en
+           FROM orden_historial h
+           JOIN ordenes_produccion o ON o.id = h.orden_id
+           LEFT JOIN proyectos p     ON p.id = o.proyecto_id
+           WHERE h.accion = 'mover'
+             AND o.status NOT IN ('Completada', 'Cancelada')
+           ORDER BY o.id, h.timestamp DESC
+         )
+         SELECT * FROM per_orden
+         ORDER BY movido_en DESC
+         LIMIT 5`
       ),
     ])
+
+    // Umbral para considerar "actualmente en movimiento" otras OPs distintas
+    // de la primaria. 30 min cubre el ritmo típico de un taller activo (una
+    // OP cambia de estación cada ~5-15 min en hora pico).
+    const OTROS_RECIENTES_MIN = 30
+    const ahora = Date.now()
+    const umbral = ahora - OTROS_RECIENTES_MIN * 60_000
+
+    const movimientos = opMovRow.rows
+    const primaria = movimientos[0] ?? null
+    const otras_recientes = movimientos.slice(1).filter(
+      (m: any) => new Date(m.movido_en).getTime() >= umbral
+    )
 
     res.json({
       data: {
         ...kpisRow.rows[0],
-        op_en_movimiento: opMovRow.rows[0] ?? null,
+        op_en_movimiento: primaria,
+        otras_en_movimiento: otras_recientes,
       },
     })
   } catch (err) { next(err) }
