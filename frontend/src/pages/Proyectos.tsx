@@ -11,6 +11,7 @@ import StatusBadge from '@/components/ui/StatusBadge'
 import ProyectoForm from '@/components/modules/proyectos/ProyectoForm'
 import DataTable, { Column } from '@/components/ui/DataTable'
 import { proyectosService } from '@/services/proyectos'
+import { useAuth } from '@/context/AuthContext'
 import type { Proyecto } from '@/types'
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
@@ -32,9 +33,12 @@ interface CardProps {
   onSelect: () => void
   onEdit: () => void
   onDelete: () => void
+  // Si false (ej. SHOP_MANAGER), oculta los botones de editar/eliminar.
+  // Igual el backend rechaza las acciones, pero esconderlas evita un 403 feo.
+  canWrite?: boolean
 }
 
-function ProyectoCard({ p, selected, onSelect, onEdit, onDelete }: CardProps) {
+function ProyectoCard({ p, selected, onSelect, onEdit, onDelete, canWrite = true }: CardProps) {
   const budget   = Number(p.presupuesto)
   const totalOC  = Number(p.total_ocs ?? 0)
   const realPct  = budget > 0 ? (totalOC / budget) * 100 : 0
@@ -63,22 +67,24 @@ function ProyectoCard({ p, selected, onSelect, onEdit, onDelete }: CardProps) {
         {/* Header row */}
         <div className="flex items-start justify-between gap-2">
           <StatusBadge status={p.estado} />
-          <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-            <button
-              onClick={(e) => { e.stopPropagation(); onEdit() }}
-              className="p-1.5 text-gray-400 hover:text-forest-600 hover:bg-gray-100 rounded-lg transition-colors"
-              title="Editar"
-            >
-              <Pencil size={14} />
-            </button>
-            <button
-              onClick={(e) => { e.stopPropagation(); onDelete() }}
-              className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
-              title="Eliminar"
-            >
-              <Trash2 size={14} />
-            </button>
-          </div>
+          {canWrite && (
+            <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+              <button
+                onClick={(e) => { e.stopPropagation(); onEdit() }}
+                className="p-1.5 text-gray-400 hover:text-forest-600 hover:bg-gray-100 rounded-lg transition-colors"
+                title="Editar"
+              >
+                <Pencil size={14} />
+              </button>
+              <button
+                onClick={(e) => { e.stopPropagation(); onDelete() }}
+                className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                title="Eliminar"
+              >
+                <Trash2 size={14} />
+              </button>
+            </div>
+          )}
         </div>
 
         {/* Project name */}
@@ -140,6 +146,11 @@ function ProyectoCard({ p, selected, onSelect, onEdit, onDelete }: CardProps) {
 }
 
 export default function Proyectos() {
+  const { user }                    = useAuth()
+  // SHOP_MANAGER tiene acceso de lectura para ver qué hay que producir;
+  // crear/editar/borrar sigue siendo solo de ADMIN/PROCUREMENT (el backend
+  // los rechaza con 403 igual, pero esconder los botones evita confusión).
+  const canWrite                    = user?.rol === 'ADMIN' || user?.rol === 'PROCUREMENT'
   const [page, setPage]             = useState(1)
   const [search, setSearch]         = useState('')
   const [formOpen, setFormOpen]     = useState(false)
@@ -216,15 +227,16 @@ export default function Proyectos() {
       key: 'id', header: 'OCs', className: 'text-right',
       render: (r) => <span className="text-sm text-gray-600">{fmt(ocByProject[r.id] ?? 0)}</span>,
     },
-    {
-      key: 'id', header: '', className: 'w-20',
-      render: (r) => (
+    // Columna de acciones — solo visible para roles con permisos de escritura.
+    ...(canWrite ? [{
+      key: 'id' as const, header: '', className: 'w-20',
+      render: (r: Proyecto) => (
         <div className="flex items-center gap-1">
           <button onClick={() => openEdit(r)} className="p-1.5 text-gray-400 hover:text-forest-600 hover:bg-gray-100 rounded transition-colors"><Pencil size={14} /></button>
           <button onClick={() => confirmDelete(r)} className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded transition-colors"><Trash2 size={14} /></button>
         </div>
       ),
-    },
+    }] : []),
   ]
 
   return (
@@ -345,9 +357,11 @@ export default function Proyectos() {
               <List size={16} />
             </button>
           </div>
-          <button onClick={openNew} className="btn-primary">
-            <Plus size={16} /> Nuevo Proyecto
-          </button>
+          {canWrite && (
+            <button onClick={openNew} className="btn-primary">
+              <Plus size={16} /> Nuevo Proyecto
+            </button>
+          )}
         </div>
       </div>
 
@@ -382,6 +396,7 @@ export default function Proyectos() {
               onSelect={() => handleSelect(p.id)}
               onEdit={() => openEdit(p)}
               onDelete={() => confirmDelete(p)}
+              canWrite={canWrite}
             />
           ))}
         </div>

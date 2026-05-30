@@ -1,5 +1,6 @@
 import rateLimit from 'express-rate-limit'
 import { PostgresStore } from '@acpr/rate-limit-postgresql'
+import { Pool } from 'pg'
 import { logger } from '../utils/logger'
 
 // Config de conexión para la store: misma lógica que el pool principal,
@@ -56,6 +57,41 @@ export const loginLimiter = rateLimit({
   skipSuccessfulRequests: true,
 })
 
+// ─── Reset del schema rate_limit al boot ─────────────────────────────────────
+//
+// El library @acpr/rate-limit-postgresql crea su propio schema "rate_limit"
+// con sus tablas en la primera request, pero NO es idempotente ante estados
+// parcialmente inicializados. Ejemplos donde rompe:
+//   - DB restaurada desde pg_dump de otra DB con versión distinta del library
+//   - Crash en medio de un setup anterior que dejó tablas a medio crear
+//   - Schema modificado a mano
+// El error típico es: "relation 'unique_session_key' already exists" o similar
+// al boot, y deja al server en estado inconsistente.
+//
+// Fix pragmático: al boot, droppear el schema rate_limit si existe. El library
+// lo recrea limpio en la primera request. Trade-off: se pierden los contadores
+// de rate limit en cada restart. Aceptable porque:
+//   - Los restarts son poco frecuentes (deploys, reboots manuales)
+//   - Las ventanas son cortas (1 min global, 15 min login/kiosk)
+//   - Un atacante que aproveche un restart para resetear su ventana es un
+//     riesgo chico vs el costo de un server caído al boot.
+//
+// Si el reset falla (DB inaccesible, permisos), se loguea como ERROR pero NO
+// se corta el boot — el library va a fallar más tarde y eso queda visible en
+// los logs, en vez de un crash silencioso al startup.
+export async function resetRateLimitSchemaIfNeeded(): Promise<void> {
+  const pool = new Pool(rlDbConfig as any)
+  try {
+    await pool.query('DROP SCHEMA IF EXISTS rate_limit CASCADE')
+    logger.info('rate-limit schema reset OK (se recreará en la primera request)')
+  } catch (err) {
+    logger.error('rate-limit schema reset FAILED — el limiter podría crashear en la primera request', {
+      err: String(err),
+    })
+  } finally {
+    await pool.end()
+  }
+}
 // Kiosk login limiter: PIN de 4 dígitos = 10K combinaciones, fácil de
 // brute-forcear sin rate limit. Más permisivo que login (operarios reales se
 // equivocan tipeando) pero igual corta abusos. 10 intentos por 15 min por IP.
