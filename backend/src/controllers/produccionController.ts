@@ -750,16 +750,47 @@ export async function getEventosRecientes(req: Request, res: Response, next: Nex
  */
 export async function getOrdenesKpis(_req: Request, res: Response, next: NextFunction) {
   try {
-    const { rows } = await pool.query(
-      `SELECT
-         COUNT(*) FILTER (WHERE status IN ('Pendiente','En Proceso','Pausada'))            AS activas,
-         COUNT(*) FILTER (WHERE status = 'Completada' AND fecha_completada::date = CURRENT_DATE) AS completadas_hoy,
-         COUNT(*) FILTER (WHERE status = 'Pausada')                                        AS pausadas,
-         COUNT(*) FILTER (WHERE prioridad = 'Alta' AND status NOT IN ('Completada','Cancelada')) AS alta_prioridad,
-         COUNT(*) FILTER (WHERE fecha_entrega < CURRENT_DATE AND status NOT IN ('Completada','Cancelada')) AS vencidas
-       FROM ordenes_produccion`
-    )
-    res.json({ data: rows[0] })
+    const [kpisRow, opMovRow] = await Promise.all([
+      pool.query(
+        `SELECT
+           COUNT(*) FILTER (WHERE status IN ('Pendiente','En Proceso','Pausada'))            AS activas,
+           COUNT(*) FILTER (WHERE status = 'Completada' AND fecha_completada::date = CURRENT_DATE) AS completadas_hoy,
+           COUNT(*) FILTER (WHERE status = 'Pausada')                                        AS pausadas,
+           COUNT(*) FILTER (WHERE prioridad = 'Alta' AND status NOT IN ('Completada','Cancelada')) AS alta_prioridad,
+           COUNT(*) FILTER (WHERE fecha_entrega < CURRENT_DATE AND status NOT IN ('Completada','Cancelada')) AS vencidas
+         FROM ordenes_produccion`
+      ),
+      // Último evento de tipo 'mover' (cambio de estación) de una OP que
+      // aún NO esté Completada/Cancelada. Esto responde "¿qué orden se
+      // está moviendo entre estaciones ahora mismo?" para el card del mapa.
+      // Si no hay ninguna OP en proceso con movimientos → devuelve null.
+      pool.query(
+        `SELECT
+           o.id                AS orden_id,
+           o.numero_orden,
+           o.numero_item,
+           o.status,
+           p.codigo            AS proyecto_codigo,
+           p.nombre            AS proyecto_nombre,
+           h.estacion_origen,
+           h.estacion_destino,
+           h.timestamp         AS movido_en
+         FROM orden_historial h
+         JOIN ordenes_produccion o ON o.id = h.orden_id
+         LEFT JOIN proyectos p     ON p.id = o.proyecto_id
+         WHERE h.accion = 'mover'
+           AND o.status NOT IN ('Completada', 'Cancelada')
+         ORDER BY h.timestamp DESC
+         LIMIT 1`
+      ),
+    ])
+
+    res.json({
+      data: {
+        ...kpisRow.rows[0],
+        op_en_movimiento: opMovRow.rows[0] ?? null,
+      },
+    })
   } catch (err) { next(err) }
 }
 

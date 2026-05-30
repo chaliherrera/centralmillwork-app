@@ -4,7 +4,7 @@ import { useQuery } from '@tanstack/react-query'
 import { Loader2 } from 'lucide-react'
 import { produccionService } from '@/services/produccion'
 import Timer from '@/components/kiosk/Timer'
-import type { EstacionOrdenRunning } from '@/types/produccion'
+import type { EstacionOrdenRunning, OrdenesKpis } from '@/types/produccion'
 
 // ─── Tokens blueprint (también definidos en tailwind, acá inline para SVGs y style) ────
 const BP = {
@@ -170,9 +170,13 @@ export default function MapaTaller() {
 
   return (
     <div className="space-y-5" style={{ fontFamily: 'Inter, system-ui, sans-serif' }}>
-      {/* KPI Row — estilo handoff */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      {/* KPI Row — estilo handoff. 5 cards: la del medio es la OP que se está
+          moviendo entre estaciones (no un contador, sino el identificador de
+          la OP concreta). Para que el SHOP_MANAGER vea de un vistazo qué se
+          está moviendo en el taller ahora mismo. */}
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
         <KpiCard label="Órdenes activas"  value={kpis?.activas         ?? '—'} />
+        <KpiCardOpEnMovimiento op={kpis?.op_en_movimiento ?? null} />
         <KpiCard label="Completadas hoy"  value={kpis?.completadas_hoy ?? '—'} />
         <KpiCard label="Pausadas"         value={kpis?.pausadas        ?? '—'} muted />
         <KpiCard label="Vencidas"         value={kpis?.vencidas        ?? '—'} alert={(kpis?.vencidas ?? 0) > 0} />
@@ -269,6 +273,69 @@ function KpiCard({ label, value, alert, muted }: { label: string; value: number 
         {value}
       </div>
     </div>
+  )
+}
+
+// ─── KpiCardOpEnMovimiento ───────────────────────────────────────────────────
+//
+// KPI especial: en vez de un contador muestra el identificador concreto de la
+// OP que cambió de estación más recientemente. Clickeable → /produccion/ordenes/:id.
+// Si no hay ninguna OP en proceso con movimientos, muestra un empty state discreto.
+function KpiCardOpEnMovimiento({ op }: { op: OrdenesKpis['op_en_movimiento'] }) {
+  const baseStyle = {
+    border: '1px solid #ECE7DC',
+    borderRadius: 10,
+    padding: '18px 20px',
+  }
+  const labelStyle = { color: '#6B6356', letterSpacing: 0.6 }
+
+  if (!op) {
+    return (
+      <div className="bg-white" style={baseStyle}>
+        <div className="text-[11px] font-semibold uppercase" style={labelStyle}>
+          OP en movimiento
+        </div>
+        <div className="text-[13.5px] mt-2.5" style={{ color: '#9C9384', fontStyle: 'italic' }}>
+          Sin movimientos recientes
+        </div>
+      </div>
+    )
+  }
+
+  // Tiempo desde el último movimiento — formato corto (m / h / d)
+  const haceMin = Math.max(0, Math.floor((Date.now() - new Date(op.movido_en).getTime()) / 60000))
+  const haceLabel = haceMin < 60
+    ? `hace ${haceMin}m`
+    : haceMin < 60 * 24
+    ? `hace ${Math.floor(haceMin / 60)}h`
+    : `hace ${Math.floor(haceMin / 1440)}d`
+
+  return (
+    <Link
+      to={`/produccion/ordenes/${op.orden_id}`}
+      className="bg-white block hover:shadow-sm transition-shadow"
+      style={baseStyle}
+      title={`Abrir ${op.numero_orden}`}
+    >
+      <div className="text-[11px] font-semibold uppercase" style={labelStyle}>
+        OP en movimiento
+      </div>
+      <div
+        className="text-[17px] font-semibold mt-1.5 font-mono truncate"
+        style={{ color: '#1F1B14', letterSpacing: -0.3 }}
+      >
+        {op.proyecto_codigo ?? op.numero_orden}
+      </div>
+      <div className="text-[11.5px] mt-1 truncate" style={{ color: '#6B6356' }}>
+        <span className="font-medium">#{op.numero_item}</span>
+        {op.estacion_destino && (
+          <span> · {op.estacion_origen ?? '—'} → <span className="font-medium" style={{ color: '#1F1B14' }}>{op.estacion_destino}</span></span>
+        )}
+      </div>
+      <div className="text-[10.5px] mt-0.5" style={{ color: '#9C9384' }}>
+        {op.numero_orden} · {haceLabel}
+      </div>
+    </Link>
   )
 }
 

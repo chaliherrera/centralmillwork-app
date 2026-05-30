@@ -81,6 +81,19 @@ export interface OrdenesKpis {
   pausadas: number
   alta_prioridad: number
   vencidas: number
+  // Última OP no terminada que cambió de estación. null si no hay ninguna.
+  // Lo usa el KPI "OP en movimiento" del Mapa.
+  op_en_movimiento: {
+    orden_id: number
+    numero_orden: string
+    numero_item: string
+    status: StatusOrden
+    proyecto_codigo: string | null
+    proyecto_nombre: string | null
+    estacion_origen: string | null
+    estacion_destino: string | null
+    movido_en: string  // ISO timestamp
+  } | null
 }
 
 // ─── Personal del Taller ─────────────────────────────────────────────────────
