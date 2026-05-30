@@ -7,6 +7,7 @@
 import 'dotenv/config'
 
 import express from 'express'
+import helmet from 'helmet'
 import cors from 'cors'
 import dotenv from 'dotenv'
 import path from 'path'
@@ -14,6 +15,8 @@ import fs from 'fs'
 import router from './routes'
 import authRouter from './routes/auth'
 import kioskRouter from './routes/kiosk'
+import webhooksRouter from './routes/webhooks'
+import { syncSystemTareas } from './jobs/tareasFromSystem'
 import { authenticate } from './middleware/auth'
 import { errorHandler, notFound } from './middleware/errorHandler'
 import { globalLimiter, loginLimiter } from './middleware/rateLimit'
@@ -40,6 +43,19 @@ app.set('trust proxy', true)
 
 // Asignar request ID muy temprano para que esté disponible en todos los logs.
 app.use(requestId)
+
+// Headers de seguridad HTTP estándar (defense-in-depth):
+//   - X-Content-Type-Options: nosniff (anti MIME sniffing)
+//   - X-Frame-Options: DENY (anti clickjacking)
+//   - Strict-Transport-Security (forzar HTTPS — ya lo hace Railway pero es bueno tenerlo)
+//   - Referrer-Policy, X-DNS-Prefetch-Control, etc.
+// contentSecurityPolicy desactivado porque interfiere con el SPA de Vite/React en dev
+// y los reportes HTML dinámicos. Si queremos CSP estricto, hay que configurarlo
+// con allowlist específico para el dominio.
+app.use(helmet({
+  contentSecurityPolicy: false,
+  crossOriginEmbedderPolicy: false,
+}))
 
 app.use(cors({
   origin: process.env.CORS_ORIGIN ?? 'http://localhost:3000',
@@ -69,6 +85,10 @@ app.use('/api/auth', authRouter)
 // (todo lo demás vía authenticateKiosk).
 app.use('/api/kiosk', kioskRouter)
 
+// Webhooks (machine-to-machine, autenticados con WEBHOOK_API_TOKEN, no JWT).
+// Deben ir ANTES del authenticate global para que no exija JWT de usuario.
+app.use('/api/webhooks', webhooksRouter)
+
 // All other API routes require a valid JWT
 app.use('/api', authenticate, router)
 
@@ -85,6 +105,20 @@ app.use(errorHandler)
 
 app.listen(PORT, () => {
   logger.info('server listening', { port: PORT, url: `http://localhost:${PORT}` })
+
+  // Sistema de tareas auto-generadas desde la DB (cotizaciones estancadas, ETAs, etc.)
+  // Corre 60s despues del boot y cada 30 minutos en adelante.
+  const SYNC_INTERVAL_MS = 30 * 60 * 1000
+  const runSystemSync = async () => {
+    try {
+      const result = await syncSystemTareas()
+      logger.info('system tareas sync', result)
+    } catch (err) {
+      logger.error('system tareas sync failed', { err: String(err) })
+    }
+  }
+  setTimeout(runSystemSync, 60_000)
+  setInterval(runSystemSync, SYNC_INTERVAL_MS)
 })
 
 export default app

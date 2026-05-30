@@ -1,5 +1,6 @@
 import { Router } from 'express'
 import { requireRole } from '../middleware/auth'
+import { validateBody } from '../middleware/validate'
 import { getUsuarios, createUsuario, updateUsuario } from '../controllers/usuariosController'
 import {
   getStats, getGastoPorMes,
@@ -8,10 +9,12 @@ import {
 } from '../controllers/dashboardController'
 import {
   getProyectos, getProyecto, createProyecto, updateProyecto, deleteProyecto,
-  getProyectoItemsReadiness,
+  getProyectoResumen, getProyectoActividad, getProyectoItemsReadiness,
+  createProyectoSchema, updateProyectoSchema,
 } from '../controllers/proyectosController'
 import {
   getProveedores, getProveedor, createProveedor, updateProveedor, deleteProveedor,
+  createProveedorSchema, updateProveedorSchema,
 } from '../controllers/proveedoresController'
 import {
   getMateriales, getMaterialesKpis, getMaterialesImportDates, getMaterial, getMaterialOcInfo,
@@ -23,7 +26,7 @@ import {
   getOrdenesCompra, getOrdenesCompraKpis, getOrdenesCompraImportDates,
   getOrdenCompra, getOrdenCompraMaterialesLote,
   createOrdenCompra, updateOrdenCompra, updateEstadoOrden, deleteOrdenCompra,
-  getVendorsCotizados, generarOCs,
+  getVendorsCotizados, generarOCs, crearOCNoMTO,
 } from '../controllers/ordenesCompraController'
 import {
   getRecepciones, getRecepcion, createRecepcion, createRecepcionCompleta,
@@ -37,6 +40,10 @@ import {
 } from '../controllers/cotizacionesController'
 import { getReporteCompras, getReporteProduccion, compartirReporte } from '../controllers/reportesController'
 import produccionRouter from './produccion'
+import {
+  getTareas, getTarea, updateTarea, getTareasStats, syncSystemHandler,
+  updateTareaSchema,
+} from '../controllers/tareasController'
 
 const router = Router()
 
@@ -64,18 +71,20 @@ router.get('/dashboard/resumen-estados',     getDashboardResumenEstados)
 router.get('/dashboard/proyectos-recientes', getDashboardProyectosRecientes)
 
 // ─── Proyectos ────────────────────────────────────────────────────────────────
-router.get('/proyectos',         getProyectos)
-router.get('/proyectos/:id/items-readiness', getProyectoItemsReadiness)
-router.get('/proyectos/:id',     getProyecto)
-router.post('/proyectos',        WRITE, createProyecto)
-router.put('/proyectos/:id',     WRITE, updateProyecto)
-router.delete('/proyectos/:id',  WRITE, deleteProyecto)
+router.get('/proyectos',                      getProyectos)
+router.get('/proyectos/:id/resumen',          getProyectoResumen)
+router.get('/proyectos/:id/actividad',        getProyectoActividad)
+router.get('/proyectos/:id/items-readiness',  getProyectoItemsReadiness)
+router.get('/proyectos/:id',                  getProyecto)
+router.post('/proyectos',                     WRITE, validateBody(createProyectoSchema), createProyecto)
+router.put('/proyectos/:id',                  WRITE, validateBody(updateProyectoSchema), updateProyecto)
+router.delete('/proyectos/:id',               WRITE, deleteProyecto)
 
 // ─── Proveedores ──────────────────────────────────────────────────────────────
 router.get('/proveedores',        getProveedores)
 router.get('/proveedores/:id',    getProveedor)
-router.post('/proveedores',       WRITE, createProveedor)
-router.put('/proveedores/:id',    WRITE, updateProveedor)
+router.post('/proveedores',       WRITE, validateBody(createProveedorSchema), createProveedor)
+router.put('/proveedores/:id',    WRITE, validateBody(updateProveedorSchema), updateProveedor)
 router.delete('/proveedores/:id', WRITE, deleteProveedor)
 
 // ─── Materiales MTO ──────────────────────────────────────────────────────────
@@ -97,6 +106,7 @@ router.get('/ordenes-compra/kpis',             getOrdenesCompraKpis)
 router.get('/ordenes-compra/import-dates',     getOrdenesCompraImportDates)
 router.get('/ordenes-compra/vendors-cotizados', getVendorsCotizados)
 router.post('/ordenes-compra/generar',          WRITE, generarOCs)
+router.post('/ordenes-compra/no-mto',           WRITE, crearOCNoMTO)
 router.get('/ordenes-compra/:id',                   getOrdenCompra)
 router.get('/ordenes-compra/:id/materiales-lote',   getOrdenCompraMaterialesLote)
 router.get('/ordenes-compra/:id/imagenes',          getImagenes)
@@ -120,6 +130,13 @@ router.put('/recepciones/:id',               REC_WRITE, updateRecepcion)
 router.get('/reportes/compras',      getReporteCompras)
 router.get('/reportes/produccion',   getReporteProduccion)
 router.post('/reportes/compartir',   WRITE, compartirReporte)
+
+// ─── Tareas (solo ADMIN) ─────────────────────────────────────────────────────
+router.get('/tareas',                ADMIN, getTareas)
+router.get('/tareas/stats',          ADMIN, getTareasStats)
+router.post('/tareas/sync-system',   ADMIN, syncSystemHandler)
+router.get('/tareas/:id',            ADMIN, getTarea)
+router.patch('/tareas/:id',          ADMIN, validateBody(updateTareaSchema), updateTarea)
 
 // ─── Cotizaciones ────────────────────────────────────────────────────────────
 router.get('/cotizaciones',                   WRITE, getCotizaciones)

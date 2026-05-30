@@ -101,8 +101,7 @@ export default function OrdenCompraForm({ open, onClose, orden }: Props) {
   const watchItems = watch('items')
 
   const subtotal = watchItems?.reduce((s, i) => s + (Number(i.cantidad) * Number(i.precio_unitario)), 0) ?? 0
-  const iva = subtotal * 0.16
-  const total = subtotal + iva
+  const total = subtotal
 
   const mutation = useMutation({
     mutationFn: (data: FormValues) => {
@@ -305,10 +304,6 @@ export default function OrdenCompraForm({ open, onClose, orden }: Props) {
               <div className="flex justify-between gap-8 text-gray-600">
                 <span>Subtotal</span>
                 <span className="tabular-nums">{fmtCurrency(subtotal)}</span>
-              </div>
-              <div className="flex justify-between gap-8 text-gray-600">
-                <span>IVA 16%</span>
-                <span className="tabular-nums">{fmtCurrency(iva)}</span>
               </div>
               <div className="flex justify-between gap-8 font-semibold text-forest-700 border-t border-gray-200 pt-1">
                 <span>Total</span>

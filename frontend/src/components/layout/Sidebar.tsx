@@ -2,11 +2,12 @@ import { NavLink } from 'react-router-dom'
 import {
   LayoutDashboard, FolderOpen, ShoppingCart,
   Package, Truck, Users, ChevronLeft, ChevronRight, ShieldCheck,
-  Factory,
+  Factory, Inbox,
 } from 'lucide-react'
 import { useState } from 'react'
 import clsx from 'clsx'
 import { useAuth } from '@/context/AuthContext'
+import { useTheme } from '@/context/ThemeContext'
 import type { UserRole } from '@/types'
 
 interface NavItem {
@@ -24,12 +25,15 @@ const NAV_ITEMS: NavItem[] = [
   { to: '/recepciones',    label: 'Recepciones',        icon: Truck,           roles: ['ADMIN','PROCUREMENT','PRODUCTION'] },
   { to: '/proveedores',    label: 'Proveedores',        icon: Users,           roles: ['ADMIN','PROCUREMENT'] },
   { to: '/produccion',     label: 'Producción',         icon: Factory,         roles: ['ADMIN','SHOP_MANAGER'] },
+  { to: '/tareas',         label: 'Tareas',             icon: Inbox,           roles: ['ADMIN'] },
   { to: '/usuarios',       label: 'Usuarios',           icon: ShieldCheck,     roles: ['ADMIN'] },
 ]
 
 export default function Sidebar() {
   const { user } = useAuth()
+  const { theme, setTheme } = useTheme()
   const [collapsed, setCollapsed] = useState(false)
+  const isGlass = theme === 'glass'
 
   const visibleItems = NAV_ITEMS.filter(
     (item) => !user || item.roles.includes(user.rol)
@@ -38,13 +42,22 @@ export default function Sidebar() {
   return (
     <aside
       className={clsx(
-        'flex flex-col h-full transition-all duration-200',
-        collapsed ? 'w-16' : 'w-[232px]'
+        'flex flex-col h-full text-white transition-all duration-200',
+        collapsed ? 'w-16' : 'w-60',
+        isGlass ? '' : 'bg-forest-700',
       )}
-      style={{ backgroundColor: '#1C1A17', color: '#C9C3B8' }}
+      style={isGlass ? {
+        background: 'rgba(20,18,14,0.55)',
+        backdropFilter: 'blur(32px) saturate(200%)',
+        WebkitBackdropFilter: 'blur(32px) saturate(200%)',
+        borderRight: '0.5px solid rgba(255,255,250,0.10)',
+      } : undefined}
     >
       {/* Logo */}
-      <div className="flex items-center justify-between h-16 px-5 border-b" style={{ borderColor: 'rgba(201,195,184,0.08)' }}>
+      <div className={clsx(
+        'flex items-center justify-between h-16 px-4',
+        isGlass ? 'border-b border-[rgba(255,255,250,0.08)]' : 'border-b border-forest-600',
+      )}>
         {!collapsed && (
           <div className="flex items-center gap-2 overflow-hidden">
             <div
@@ -60,10 +73,10 @@ export default function Sidebar() {
         )}
         <button
           onClick={() => setCollapsed(!collapsed)}
-          className="p-1.5 rounded-md transition-colors ml-auto"
-          style={{ color: '#7A736A' }}
-          onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#2A2520')}
-          onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
+          className={clsx(
+            'p-1.5 rounded-md transition-colors ml-auto',
+            isGlass ? 'hover:bg-[rgba(255,255,250,0.08)]' : 'hover:bg-forest-600',
+          )}
           title={collapsed ? 'Expandir' : 'Colapsar'}
         >
           {collapsed ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}
@@ -80,27 +93,25 @@ export default function Sidebar() {
             title={collapsed ? label : undefined}
             className={({ isActive }) =>
               clsx(
-                'flex items-center gap-3 px-3 py-2.5 rounded-md transition-colors duration-100',
-                'text-[13.5px]',
-                isActive ? 'font-semibold' : 'font-medium'
+                'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors duration-100',
+                isActive
+                  ? (isGlass
+                      ? 'text-white'
+                      : 'bg-gold-500 text-white shadow-sm')
+                  : (isGlass
+                      ? 'text-[rgba(255,255,250,0.78)] hover:bg-[rgba(255,255,250,0.06)] hover:text-white'
+                      : 'text-forest-100 hover:bg-forest-600 hover:text-white'),
               )
             }
-            style={({ isActive }) => ({
-              backgroundColor: isActive ? '#A4842C' : 'transparent',
-              color: isActive ? '#FFFFFF' : '#C9C3B8',
-            })}
-            onMouseEnter={(e) => {
-              if (!e.currentTarget.classList.contains('font-semibold')) {
-                e.currentTarget.style.backgroundColor = '#2A2520'
-                e.currentTarget.style.color = '#FFFFFF'
-              }
-            }}
-            onMouseLeave={(e) => {
-              if (!e.currentTarget.classList.contains('font-semibold')) {
-                e.currentTarget.style.backgroundColor = 'transparent'
-                e.currentTarget.style.color = '#C9C3B8'
-              }
-            }}
+            style={({ isActive }: { isActive: boolean }) =>
+              isActive && isGlass
+                ? {
+                    background: 'rgba(255,255,250,0.10)',
+                    border: '0.5px solid rgba(255,255,250,0.18)',
+                    boxShadow: 'inset 1px 1.5px 1px rgba(255,255,255,0.18)',
+                  }
+                : undefined
+            }
           >
             <Icon size={18} className="shrink-0" />
             {!collapsed && <span className="truncate">{label}</span>}
@@ -109,9 +120,50 @@ export default function Sidebar() {
       </nav>
 
       {/* Footer */}
-      <div className="p-4 border-t" style={{ borderColor: 'rgba(201,195,184,0.08)' }}>
+      <div className={clsx(
+        'p-4 space-y-3',
+        isGlass ? 'border-t border-[rgba(255,255,250,0.08)]' : 'border-t border-forest-600',
+      )}>
+        {/* Theme toggle */}
         {!collapsed && (
-          <p className="text-[11px] text-center" style={{ color: '#7A736A' }}>v1.0.0 · 2026</p>
+          <div
+            role="group"
+            aria-label="Tema visual"
+            className={clsx(
+              'flex items-center gap-0 rounded-full p-0.5 text-[11px] font-medium',
+              isGlass ? 'bg-[rgba(255,255,250,0.06)]' : 'bg-forest-600',
+            )}
+          >
+            <button
+              onClick={() => setTheme('paper')}
+              className={clsx(
+                'flex-1 py-1 rounded-full transition-colors',
+                theme === 'paper'
+                  ? 'bg-gold-500 text-white shadow-sm'
+                  : (isGlass ? 'text-[rgba(255,255,250,0.55)] hover:text-white' : 'text-forest-200 hover:text-white'),
+              )}
+            >
+              Paper
+            </button>
+            <button
+              onClick={() => setTheme('glass')}
+              className={clsx(
+                'flex-1 py-1 rounded-full transition-colors',
+                theme === 'glass'
+                  ? 'bg-gold-500 text-white shadow-sm'
+                  : (isGlass ? 'text-[rgba(255,255,250,0.55)] hover:text-white' : 'text-forest-200 hover:text-white'),
+              )}
+            >
+              Glass
+            </button>
+          </div>
+        )}
+
+        {!collapsed && (
+          <p className={clsx(
+            'text-xs text-center',
+            isGlass ? 'text-[rgba(255,255,250,0.35)]' : 'text-forest-300',
+          )}>v1.0.0 · 2026</p>
         )}
       </div>
     </aside>

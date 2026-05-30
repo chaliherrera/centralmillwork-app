@@ -9,21 +9,40 @@ interface ProyectoRow { codigo: string; nombre: string; cliente: string }
 export async function getCotizaciones(req: Request, res: Response, next: NextFunction) {
   try {
     const opts = parsePagination(req, 'sc.fecha_solicitud')
+
+    // Filtros parameterizados (defensa contra SQL injection)
     const conds: string[] = []
-    if (req.query.estado)     conds.push(`sc.estado = '${req.query.estado}'`)
-    if (req.query.proyecto_id) conds.push(`sc.proyecto_id = ${parseInt(String(req.query.proyecto_id))}`)
+    const filterVals: any[] = []
+    if (req.query.estado) {
+      conds.push(`sc.estado = $${filterVals.length + 1}`)
+      filterVals.push(String(req.query.estado))
+    }
+    if (req.query.proyecto_id) {
+      conds.push(`sc.proyecto_id = $${filterVals.length + 1}`)
+      filterVals.push(parseInt(String(req.query.proyecto_id)))
+    }
 
-    const whereMain  = opts.search
-      ? [...conds, `(sc.folio ILIKE $3 OR p.nombre ILIKE $3 OR v.nombre ILIKE $3)`].join(' AND ')
-      : conds.join(' AND ')
-    const whereCount = opts.search
-      ? [...conds, `(sc.folio ILIKE $1 OR p.nombre ILIKE $1 OR v.nombre ILIKE $1)`].join(' AND ')
-      : conds.join(' AND ')
-
-    const wm = whereMain  ? `WHERE ${whereMain}`  : ''
-    const wc = whereCount ? `WHERE ${whereCount}` : ''
     const joins = `LEFT JOIN proyectos  p ON p.id = sc.proyecto_id
                    LEFT JOIN proveedores v ON v.id = sc.proveedor_id`
+
+    // Main query: filter values primero, después limit, offset y search (si hay)
+    const mainVals: any[] = [...filterVals, opts.limit, opts.offset]
+    if (opts.search) {
+      conds.push(`(sc.folio ILIKE $${mainVals.length + 1} OR p.nombre ILIKE $${mainVals.length + 1} OR v.nombre ILIKE $${mainVals.length + 1})`)
+      mainVals.push(`%${opts.search}%`)
+    }
+    const limitPh  = filterVals.length + 1
+    const offsetPh = filterVals.length + 2
+    const wm = conds.length ? `WHERE ${conds.join(' AND ')}` : ''
+
+    // Count query usa los mismos filtros + search pero sin limit/offset
+    const countConds: string[] = conds.filter((_, i) => i < filterVals.length)
+    const countVals: any[] = [...filterVals]
+    if (opts.search) {
+      countConds.push(`(sc.folio ILIKE $${countVals.length + 1} OR p.nombre ILIKE $${countVals.length + 1} OR v.nombre ILIKE $${countVals.length + 1})`)
+      countVals.push(`%${opts.search}%`)
+    }
+    const wc = countConds.length ? `WHERE ${countConds.join(' AND ')}` : ''
 
     const [rows, countRow] = await Promise.all([
       pool.query(
@@ -31,12 +50,12 @@ export async function getCotizaciones(req: Request, res: Response, next: NextFun
            json_build_object('id', p.id, 'nombre', p.nombre) AS proyecto,
            json_build_object('id', v.id, 'nombre', v.nombre) AS proveedor
          FROM solicitudes_cotizacion sc ${joins} ${wm}
-         ORDER BY ${opts.sort} ${opts.order} LIMIT $1 OFFSET $2`,
-        opts.search ? [opts.limit, opts.offset, `%${opts.search}%`] : [opts.limit, opts.offset]
+         ORDER BY ${opts.sort} ${opts.order} LIMIT $${limitPh} OFFSET $${offsetPh}`,
+        mainVals
       ),
       pool.query(
         `SELECT COUNT(*) FROM solicitudes_cotizacion sc ${joins} ${wc}`,
-        opts.search ? [`%${opts.search}%`] : []
+        countVals
       ),
     ])
 

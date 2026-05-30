@@ -28,7 +28,7 @@ const schema = z.object({
   qty:          z.coerce.number().min(0),
   unit_price:   z.coerce.number().min(0),
   total_price:  z.coerce.number().min(0),
-  estado_cotiz: z.enum(['COTIZADO', 'PENDIENTE', 'EN_STOCK']),
+  estado_cotiz: z.enum(['COTIZADO', 'PENDIENTE', 'EN_STOCK', 'ORDENADO', 'RECIBIDO']),
   cotizar:      z.enum(['SI', 'NO', 'EN_STOCK']),
   // Empty string must become null so PostgreSQL DATE / TEXT columns don't get ''
   notas:             z.string().optional().nullable().transform((v) => v || null),

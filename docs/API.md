@@ -203,14 +203,44 @@ Proyectos paginados con stats de OCs y monto. **Nota**: no acepta los filtros de
 |---|---|---|
 | `GET /api/proyectos` | cualquiera | Lista paginada. Query: `search`, `estado`, paginación |
 | `GET /api/proyectos/:id` | cualquiera | Detalle |
-| `POST /api/proyectos` | WRITE | Crear |
-| `PUT /api/proyectos/:id` | WRITE | Actualizar (parcial) |
+| `GET /api/proyectos/:id/resumen` | cualquiera | KPIs agregados + info del proyecto. Usado por la vista de detalle (`/proyectos/:id`) |
+| `GET /api/proyectos/:id/actividad` | cualquiera | Feed cronológico de eventos del proyecto (mto_import, oc, recepcion) |
+| `POST /api/proyectos` | WRITE | Crear. Body validado con zod (codigo/nombre/cliente requeridos) |
+| `PUT /api/proyectos/:id` | WRITE | Actualizar (parcial). Validado con zod |
 | `DELETE /api/proyectos/:id` | WRITE | Borrar (CASCADE limpia materiales y mto_freight; RESTRICT por OCs/cotizaciones) |
 
 **Body para create / update** (campos requeridos para create: `codigo`, `nombre`, `cliente`):
 ```json
 { "codigo": "PRY-2026-001", "nombre": "...", "cliente": "...", "descripcion": "...", "estado": "activo", "fecha_inicio": "2026-01-01", "fecha_fin_estimada": "2026-12-31", "presupuesto": 100000, "responsable": "..." }
 ```
+
+### `GET /api/proyectos/:id/resumen`
+
+Devuelve toda la data agregada para la vista de detalle del proyecto en una sola llamada:
+
+```json
+{
+  "data": {
+    "proyecto": { "id": 1, "codigo": "...", "nombre": "...", ... },
+    "kpis": {
+      "materiales": { "total": 42, "pendientes": 8, "cotizados": 12, "ordenados": 15, "recibidos": 7, "en_stock": 0, "origen_mto": 40, "origen_directa": 1, "origen_urgente": 1, "monto_total": "12500.50", "monto_comprado": "11000.00", "monto_recibido": "8200.00" },
+      "ocs": { "total": 5, "recibidas": 3, "activas": 2, "canceladas": 0, "directas": 1, "urgentes": 1, "monto_total": "12500.50", "freight_total": "750.00", "vencidas": 0 },
+      "recepciones": { "total": 4, "completas": 3, "con_diferencias": 1 },
+      "top_vendors": [{ "vendor": "ACME", "ocs_count": 2, "monto": "5400.00" }],
+      "gasto_mensual": [{ "mes": "2026-03", "monto": "4200.00" }]
+    }
+  }
+}
+```
+
+### `GET /api/proyectos/:id/actividad`
+
+Feed cronológico desc por timestamp con eventos mezclados:
+- `tipo: 'mto_import'` — agrupación por (fecha_importacion, origen) — items count, vendor principal, % cotizar/stock
+- `tipo: 'oc'` — 1 evento por cada OC (incluida cancelada) — numero, estado, origen, vendor, total, freight, notas
+- `tipo: 'recepcion'` — 1 evento por cada recepción — folio, OC asociada, tipo, diferencias_count, notas
+
+Cada evento incluye campo `notas` si existe.
 
 ---
 
@@ -220,8 +250,8 @@ Proyectos paginados con stats de OCs y monto. **Nota**: no acepta los filtros de
 |---|---|---|
 | `GET /api/proveedores` | cualquiera | Lista paginada. Query: `search`, paginación |
 | `GET /api/proveedores/:id` | cualquiera | Detalle |
-| `POST /api/proveedores` | WRITE | Crear |
-| `PUT /api/proveedores/:id` | WRITE | Actualizar |
+| `POST /api/proveedores` | WRITE | Crear. Body validado con zod (nombre requerido; email se valida si está) |
+| `PUT /api/proveedores/:id` | WRITE | Actualizar. Validado con zod |
 | `DELETE /api/proveedores/:id` | WRITE | Borrar (RESTRICT por OCs/cotizaciones) |
 
 **Body**:
@@ -243,9 +273,15 @@ Lista paginada de materiales con filtros.
 | `proyecto_id` | int | Filtrar por proyecto |
 | `vendor` | string | Filtrar por nombre de vendor (texto exacto) |
 | `cotizar` | `SI \| NO \| EN_STOCK` | Filtrar por flag |
-| `estado_cotiz` | `COTIZADO \| PENDIENTE \| EN_STOCK` | Filtrar por estado |
+| `estado_cotiz` | `COTIZADO \| PENDIENTE \| EN_STOCK \| ORDENADO \| RECIBIDO` | Filtrar por estado |
+| `origen` | `MTO \| DIRECTA \| URGENTE \| OPERATIVA \| NO_MTO` | Filtrar por origen. `NO_MTO` combina DIRECTA+URGENTE+OPERATIVA |
+| `categoria` | string | Filtrar por categoría |
 | `search` | string | Busca en descripción/codigo/vendor |
 | `fecha_importacion` | date | Filtrar por batch de import |
+
+Todos los filtros usan **placeholders parameterizados** (defensa SQL injection desde 2026-05-16).
+
+La respuesta incluye `oc_id` y `oc_numero` con la OC activa más reciente del material (vía LEFT LATERAL JOIN), útil para mostrar la columna OC# linkeable en la tabla.
 
 ### `GET /api/materiales/kpis`
 
@@ -364,6 +400,44 @@ Genera OCs en batch para los vendors cotizados de un proyecto. Atómico — todo
 ```
 
 Auto-crea proveedores si el vendor no matchea con ninguno existente. Numera OCs secuencialmente (`OC-YYYY-NNNN`).
+
+### `POST /api/ordenes-compra/no-mto` — WRITE
+
+Crear una OC para compras que **no vienen del MTO planificado**. En una sola transacción crea los materiales + 1 OC dedicada + items + recompute de estados.
+
+Maneja 3 tipos via el campo `origen`:
+
+| Origen | Quién puede | Reglas |
+|---|---|---|
+| `DIRECTA` | WRITE (ADMIN+PROCUREMENT) | Compra puntual fuera del MTO. OC con `estado='enviada'`, materiales `COTIZADO`→`ORDENADO` |
+| `URGENTE` | WRITE (ADMIN+PROCUREMENT) | Crítica (rotura en obra). Mismo flujo que DIRECTA pero badge rojo |
+| `OPERATIVA` | **Solo ADMIN** (403 si no) | Gasto del taller sin proyecto. Forza `proyecto_id=NULL` (400 si se pasa). OC arranca `estado='recibida'` + `fecha_entrega_real=hoy`. Materiales directo a `RECIBIDO` |
+
+**Body**:
+```json
+{
+  "proyecto_id": 1,                       // NULL obligatorio si origen=OPERATIVA
+  "vendor": "FERRETERIA EXPRESS",         // requerido
+  "origen": "URGENTE",                    // "DIRECTA" | "URGENTE" | "OPERATIVA"
+  "fecha_entrega_estimada": "2026-05-22", // ignorado si origen=OPERATIVA
+  "categoria": "HARDWARE",                // categorías propias por origen (ver abajo)
+  "notas": "Cliente solicitó cambio",
+  "freight": 150.00,                      // opcional, ≥ 0
+  "items": [
+    { "descripcion": "Bisagra dorada 4\"", "unidad": "EACH", "qty": 4, "unit_price": 28.00 }
+  ]
+}
+```
+
+**Total OC** = subtotal + freight (sin IVA — opera en USD). Materiales auto-codificados como `NOMTO-{OC#}-{idx}`.
+
+**Categorías por origen**:
+- DIRECTA / URGENTE: `MILLWORK`, `HARDWARE`, `PAINT`, `SOLID WOOD`, `EDGE BANDING`, `METAL`, `LAMINATE`, `GLASS`, `OTHER`
+- OPERATIVA: `INSUMOS_TALLER`, `LIMPIEZA`, `OFICINA`, `ALIMENTACION`, `COMBUSTIBLE`, `MANTENIMIENTO`, `HERRAMIENTAS`, `OTROS`
+
+**Errors**:
+- `400` — vendor faltante, origen inválido, items vacíos, qty/price ≤ 0, OPERATIVA con proyecto_id
+- `403` — origen=OPERATIVA y user no es ADMIN
 
 ### `GET /api/ordenes-compra/:id`
 

@@ -36,7 +36,7 @@ export interface MaterialPayload {
   qty: number
   unit_price: number
   total_price: number
-  estado_cotiz: 'COTIZADO' | 'PENDIENTE' | 'EN_STOCK'
+  estado_cotiz: 'COTIZADO' | 'PENDIENTE' | 'EN_STOCK' | 'ORDENADO' | 'RECIBIDO'
   mill_made?: 'SI' | 'NO'
   cotizar?: 'SI' | 'NO' | 'EN_STOCK'
   manufacturer?: string
@@ -45,7 +45,7 @@ export interface MaterialPayload {
 }
 
 export const materialesService = {
-  getAll: (params?: PaginationParams & { proyecto_id?: number; vendor?: string; estado_cotiz?: string; cotizar?: 'SI' | 'NO' | 'EN_STOCK'; categoria?: string; fecha_importacion?: string }) =>
+  getAll: (params?: PaginationParams & { proyecto_id?: number; vendor?: string; estado_cotiz?: string; cotizar?: 'SI' | 'NO' | 'EN_STOCK'; categoria?: string; fecha_importacion?: string; origen?: 'MTO' | 'DIRECTA' | 'URGENTE' | 'OPERATIVA' | 'NO_MTO' }) =>
     api.get<ApiResponse<Material[]>>('/materiales', { params }).then((r) => r.data),
 
   getImportDates: (proyecto_id: number) =>

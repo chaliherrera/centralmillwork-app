@@ -13,15 +13,60 @@ const ROL_LABEL: Record<UserRole, string> = {
   SHOP_MANAGER:       'Shop Manager',
 }
 
-interface HeaderProps { title: string }
+interface HeaderProps { title: string; glass?: boolean }
 
-export default function Header({ title }: HeaderProps) {
+export default function Header({ title, glass = false }: HeaderProps) {
   const { user, logout } = useAuth()
   const navigate = useNavigate()
 
   function handleLogout() {
     logout()
     navigate('/login', { replace: true })
+  }
+
+  if (glass) {
+    return (
+      <header
+        className="h-16 flex items-center justify-between px-6"
+        style={{
+          background: 'rgba(20,18,14,0.42)',
+          backdropFilter: 'blur(24px) saturate(180%)',
+          WebkitBackdropFilter: 'blur(24px) saturate(180%)',
+          borderBottom: '0.5px solid rgba(255,255,250,0.10)',
+          color: '#FFFFFA',
+        }}
+      >
+        <h1 className="text-lg font-semibold" style={{ color: '#FFFFFA' }}>{title}</h1>
+
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 pl-3" style={{ borderLeft: '0.5px solid rgba(255,255,250,0.18)' }}>
+            <div
+              className="w-8 h-8 rounded-full flex items-center justify-center"
+              style={{
+                background: 'rgba(74,82,64,0.6)',
+                border: '0.5px solid rgba(255,255,250,0.18)',
+              }}
+            >
+              <User size={16} style={{ color: '#DEA832' }} />
+            </div>
+            {user && (
+              <div className="hidden md:block">
+                <p className="text-xs font-medium leading-none" style={{ color: '#FFFFFA' }}>{user.nombre}</p>
+                <p className="text-xs mt-0.5" style={{ color: 'rgba(255,255,250,0.55)' }}>{ROL_LABEL[user.rol]}</p>
+              </div>
+            )}
+            <button
+              className="p-1.5 transition-colors ml-1"
+              style={{ color: 'rgba(255,255,250,0.55)' }}
+              title="Cerrar sesión"
+              onClick={handleLogout}
+            >
+              <LogOut size={16} />
+            </button>
+          </div>
+        </div>
+      </header>
+    )
   }
 
   return (

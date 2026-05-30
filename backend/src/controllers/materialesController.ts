@@ -52,37 +52,90 @@ export async function getMaterialesImportDates(req: Request, res: Response, next
 export async function getMateriales(req: Request, res: Response, next: NextFunction) {
   try {
     const opts = parsePagination(req, 'm.descripcion')
+
+    // Filtros parameterizados (defensa contra SQL injection)
     const conds: string[] = []
+    const filterVals: any[] = []
+    if (req.query.proyecto_id) {
+      conds.push(`m.proyecto_id = $${filterVals.length + 1}`)
+      filterVals.push(parseInt(String(req.query.proyecto_id)))
+    }
+    if (req.query.vendor) {
+      conds.push(`m.vendor = $${filterVals.length + 1}`)
+      filterVals.push(String(req.query.vendor))
+    }
+    if (req.query.estado_cotiz) {
+      conds.push(`m.estado_cotiz = $${filterVals.length + 1}`)
+      filterVals.push(String(req.query.estado_cotiz))
+    }
+    if (req.query.cotizar) {
+      conds.push(`m.cotizar = $${filterVals.length + 1}`)
+      filterVals.push(String(req.query.cotizar))
+    }
+    if (req.query.categoria) {
+      conds.push(`m.categoria = $${filterVals.length + 1}`)
+      filterVals.push(String(req.query.categoria))
+    }
+    if (req.query.fecha_importacion) {
+      conds.push(`m.fecha_importacion = $${filterVals.length + 1}`)
+      filterVals.push(String(req.query.fecha_importacion))
+    }
 
-    if (req.query.proyecto_id)       conds.push(`m.proyecto_id = ${parseInt(String(req.query.proyecto_id))}`)
-    if (req.query.vendor)            conds.push(`m.vendor = '${String(req.query.vendor).replace(/'/g, "''")}'`)
-    if (req.query.estado_cotiz)      conds.push(`m.estado_cotiz = '${String(req.query.estado_cotiz).replace(/'/g, "''")}'`)
-    if (req.query.cotizar)           conds.push(`m.cotizar = '${String(req.query.cotizar).replace(/'/g, "''")}'`)
-    if (req.query.categoria)         conds.push(`m.categoria = '${String(req.query.categoria).replace(/'/g, "''")}'`)
-    if (req.query.fecha_importacion) conds.push(`m.fecha_importacion = '${String(req.query.fecha_importacion).replace(/'/g, "''")}'`)
+    // Filtro origen: 'MTO' | 'DIRECTA' | 'URGENTE' | 'OPERATIVA' | 'NO_MTO' (combina DIRECTA+URGENTE+OPERATIVA)
+    // Aquí los valores son una whitelist hardcoded, no input directo del usuario.
+    if (req.query.origen) {
+      const o = String(req.query.origen).toUpperCase()
+      if (o === 'NO_MTO') {
+        conds.push(`m.origen IN ('DIRECTA','URGENTE','OPERATIVA')`)
+      } else if (['MTO','DIRECTA','URGENTE','OPERATIVA'].includes(o)) {
+        conds.push(`m.origen = $${filterVals.length + 1}`)
+        filterVals.push(o)
+      }
+    }
 
-    const whereMain  = opts.search
-      ? [...conds, `(m.descripcion ILIKE $3 OR m.codigo ILIKE $3 OR m.vendor ILIKE $3)`].join(' AND ')
-      : conds.join(' AND ')
-    const whereCount = opts.search
-      ? [...conds, `(m.descripcion ILIKE $1 OR m.codigo ILIKE $1 OR m.vendor ILIKE $1)`].join(' AND ')
-      : conds.join(' AND ')
+    const joinProy = `LEFT JOIN proyectos p ON p.id = m.proyecto_id`
+    const joinOc = `LEFT JOIN LATERAL (
+      SELECT oc.id AS oc_id, oc.numero AS oc_numero
+      FROM items_orden_compra ioc
+      JOIN ordenes_compra oc ON oc.id = ioc.orden_compra_id
+      WHERE ioc.material_id = m.id
+        AND oc.estado != 'cancelada'
+      ORDER BY oc.fecha_emision DESC
+      LIMIT 1
+    ) oc_link ON true`
 
-    const wm = whereMain  ? `WHERE ${whereMain}`  : ''
-    const wc = whereCount ? `WHERE ${whereCount}` : ''
-    const join = `LEFT JOIN proyectos p ON p.id = m.proyecto_id`
+    // Main query: filters → limit, offset → search (si hay)
+    const mainConds = [...conds]
+    const mainVals: any[] = [...filterVals, opts.limit, opts.offset]
+    const limitPh  = filterVals.length + 1
+    const offsetPh = filterVals.length + 2
+    if (opts.search) {
+      mainConds.push(`(m.descripcion ILIKE $${mainVals.length + 1} OR m.codigo ILIKE $${mainVals.length + 1} OR m.vendor ILIKE $${mainVals.length + 1})`)
+      mainVals.push(`%${opts.search}%`)
+    }
+    const wm = mainConds.length ? `WHERE ${mainConds.join(' AND ')}` : ''
+
+    // Count query: solo filtros + search (sin limit/offset)
+    const countConds = [...conds]
+    const countVals: any[] = [...filterVals]
+    if (opts.search) {
+      countConds.push(`(m.descripcion ILIKE $${countVals.length + 1} OR m.codigo ILIKE $${countVals.length + 1} OR m.vendor ILIKE $${countVals.length + 1})`)
+      countVals.push(`%${opts.search}%`)
+    }
+    const wc = countConds.length ? `WHERE ${countConds.join(' AND ')}` : ''
 
     const [rows, countRow] = await Promise.all([
       pool.query(
         `SELECT m.*,
-           json_build_object('id', p.id, 'nombre', p.nombre, 'codigo', p.codigo) AS proyecto
-         FROM materiales_mto m ${join} ${wm}
-         ORDER BY ${opts.sort} ${opts.order} LIMIT $1 OFFSET $2`,
-        opts.search ? [opts.limit, opts.offset, `%${opts.search}%`] : [opts.limit, opts.offset]
+           json_build_object('id', p.id, 'nombre', p.nombre, 'codigo', p.codigo) AS proyecto,
+           oc_link.oc_id, oc_link.oc_numero
+         FROM materiales_mto m ${joinProy} ${joinOc} ${wm}
+         ORDER BY ${opts.sort} ${opts.order} LIMIT $${limitPh} OFFSET $${offsetPh}`,
+        mainVals
       ),
       pool.query(
-        `SELECT COUNT(*) FROM materiales_mto m ${join} ${wc}`,
-        opts.search ? [`%${opts.search}%`] : []
+        `SELECT COUNT(*) FROM materiales_mto m ${joinProy} ${wc}`,
+        countVals
       ),
     ])
 

@@ -3,6 +3,7 @@ import pool from '../db/pool'
 import { parsePagination, paginatedResponse } from '../utils/pagination'
 import { createError } from '../middleware/errorHandler'
 import { logger } from '../utils/logger'
+import { recomputeMaterialesEstadoForOC } from '../utils/materialesEstado'
 
 const REC_SORT_WHITELIST = [
   'r.fecha_recepcion', 'r.folio', 'r.estado', 'r.created_at',
@@ -125,6 +126,9 @@ export async function createRecepcion(req: Request, res: Response, next: NextFun
       )
     }
 
+    // Sync materiales_mto.estado_cotiz with the OC's new state (ORDENADO → RECIBIDO when recibida)
+    await recomputeMaterialesEstadoForOC(client, orden_compra_id)
+
     await client.query('COMMIT')
     res.status(201).json({ data: { ...recepcion, folio }, message: `Recepción ${folio} registrada` })
   } catch (err) {
@@ -190,6 +194,9 @@ export async function createRecepcionCompleta(req: Request, res: Response, next:
         [orden_compra_id]
       )
     }
+
+    // Sync materiales_mto.estado_cotiz with the OC's new state (ORDENADO → RECIBIDO when recibida)
+    await recomputeMaterialesEstadoForOC(client, orden_compra_id)
 
     await client.query('COMMIT')
     res.status(201).json({ data: { ...recepcion, folio }, message: `Recepción ${folio} registrada` })

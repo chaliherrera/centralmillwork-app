@@ -21,24 +21,31 @@ Las migraciones del rate-limiter (`@acpr/rate-limit-postgresql`) usan la misma c
 
 Las migraciones SQL viven en `database/migrations/` y se aplican manualmente con `psql` o `node` (no hay framework de migrations automático). Hay un script en [`backend/src/db/migrate.ts`](../backend/src/db/migrate.ts) que las corre en orden.
 
-Estado al 2026-05-03 — 14 migraciones aplicadas:
+Estado al 2026-05-17 — 18 migraciones aplicadas en prod (main branch). Existen 014-018 + un 019 en branch `claude/jovial-ride-64bfff` (módulo Producción) que NO está mergeada todavía y reusa números — al mergear hay que renumerar:
 
 ```
-001_initial_schema.sql            — schema base (8 tablas + 4 enums)
-002_add_notas_to_materiales.sql   — materiales_mto.notas
-003_add_fecha_importacion.sql     — materiales_mto.fecha_importacion
-004_add_manufacturer_cotizar.sql  — materiales_mto.manufacturer + cotizar
-005_add_oc_fields.sql             — ordenes_compra.fecha_mto + categoria
-006_oc_imagenes.sql               — tabla oc_imagenes (CASCADE de OCs)
-007_mto_freight.sql               — tabla mto_freight (CASCADE de proyectos)
-008_cotizar_en_stock.sql          — default de cotizar a 'SI'
-009_backfill_cotizar_estado.sql   — backfill estado_cotiz según unit_price
-010_recepcion_materiales.sql      — tabla recepcion_materiales (CASCADE de recepciones)
-010_usuarios.sql                  — tabla usuarios + enum user_rol
-011_envio_cotizaciones.sql        — solicitudes_cotizacion: vendor + materiales_incluidos + email_destinatario + fecha_envio
-012_oc_en_transito.sql            — agrega 'en_transito' al enum estado_orden
-013_usuarios.sql                  — modificaciones a usuarios
+001_initial_schema.sql                    — schema base (8 tablas + 4 enums)
+002_add_notas_to_materiales.sql           — materiales_mto.notas
+003_add_fecha_importacion.sql             — materiales_mto.fecha_importacion
+004_add_manufacturer_cotizar.sql          — materiales_mto.manufacturer + cotizar
+005_add_oc_fields.sql                     — ordenes_compra.fecha_mto + categoria
+006_oc_imagenes.sql                       — tabla oc_imagenes (CASCADE de OCs)
+007_mto_freight.sql                       — tabla mto_freight (CASCADE de proyectos)
+008_cotizar_en_stock.sql                  — default de cotizar a 'SI'
+009_backfill_cotizar_estado.sql           — backfill estado_cotiz según unit_price
+010_recepcion_materiales.sql              — tabla recepcion_materiales (CASCADE de recepciones)
+010_usuarios.sql                          — tabla usuarios + enum user_rol
+011_envio_cotizaciones.sql                — solicitudes_cotizacion: vendor + materiales_incluidos + email_destinatario + fecha_envio
+012_oc_en_transito.sql                    — agrega 'en_transito' al enum estado_orden
+013_usuarios.sql                          — modificaciones a usuarios
+019_backup_pre_ordenado_recibido.sql      — backup tables antes de introducir nuevos estados (2026-05-11)
+020_add_ordenado_recibido_states.sql      — backfill estados ORDENADO y RECIBIDO (2026-05-11)
+021_materiales_origen.sql                 — agrega materiales_mto.origen (MTO/DIRECTA/URGENTE) (2026-05-16)
+022_oc_origen_freight.sql                 — agrega ordenes_compra.origen + freight (2026-05-16)
+023_compras_operativas.sql                — extiende CHECK de origen con OPERATIVA en ambas tablas (2026-05-17)
 ```
+
+> **Migrations rotas en fresh install**: 004, 008, 009 fallan en una DB nueva porque referencian columnas (`mill_made`, `unit_price`, `estado_cotiz`) que se agregan en migrations posteriores o que originalmente estaban en una versión vieja de 001. En prod no son problema porque la DB evolucionó incrementalmente. Para setup local hay un workaround en `database/seed_local_test.sql` que parcha las columnas faltantes. **Cleanup pendiente**: regenerar 001 con el schema actual completo y archivar las intermedias.
 
 Hay también una tabla interna `migrations` que el script de migraciones usa para tracking: `id`, `name` (UNIQUE), `hash`, `executed_at`.
 
@@ -145,12 +152,13 @@ Materiales del MTO (Material Take-Off). Tabla central — todo el flujo de cotiz
 | `qty` | `numeric` | default 0 |
 | `unit_price` | `numeric` | default 0 — viene del Excel; 0 si pendiente de cotizar |
 | `total_price` | `numeric` | default 0 — calculado = qty × unit_price |
-| `estado_cotiz` | `text` | default `'PENDIENTE'` — valores: `PENDIENTE`, `COTIZADO`, `EN_STOCK` |
+| `estado_cotiz` | `text` | default `'PENDIENTE'` — valores: `PENDIENTE`, `COTIZADO`, `ORDENADO`, `RECIBIDO`, `EN_STOCK` |
 | `mill_made` | `text` | default `'NO'` — valores: `SI`, `NO` |
 | `notas` | `text` | NULL |
 | `fecha_importacion` | `date` | NULL — fecha en que se importó del Excel (sirve para batches) |
 | `manufacturer` | `text` | default `''` |
 | `cotizar` | `text` | default `'SI'` — valores: `SI`, `NO`, `EN_STOCK` |
+| `origen` | `varchar(20)` | NOT NULL, default `'MTO'` — CHECK IN (`MTO`, `DIRECTA`, `URGENTE`, `OPERATIVA`). Diferencia compras del MTO vs compras puntuales/urgentes vs gastos del taller. Agregado por migration 021, extendido por 023 |
 | `created_at`, `updated_at` | `timestamptz` | default `now()` |
 
 **Reglas de negocio sobre `cotizar` y `estado_cotiz`** (ver [`CLAUDE.md`](../CLAUDE.md) para más detalle):
@@ -158,9 +166,20 @@ Materiales del MTO (Material Take-Off). Tabla central — todo el flujo de cotiz
 - `cotizar = 'NO'` → excluido de cotización
 - `cotizar = 'EN_STOCK'` → stock propio, no se cotiza, fuerza `estado_cotiz = 'EN_STOCK'`
 - Códigos que empiezan con `NC` son automáticamente `cotizar = 'EN_STOCK'`
-- `estado_cotiz` pasa a `COTIZADO` cuando se capturan precios en el panel "Capturar Precios"
+- `estado_cotiz` transitions:
+  - `PENDIENTE` → `COTIZADO` al capturar precio
+  - `COTIZADO` → `ORDENADO` al generar OC (vía helper `recomputeMaterialesEstadoByIds`)
+  - `ORDENADO` → `RECIBIDO` cuando la OC pasa a `'recibida'` (vía recepción)
+  - `ORDENADO` → `COTIZADO` si la OC se cancela o elimina (rollback)
+  - OPERATIVA arranca directo en `RECIBIDO` (no pasa por el flujo de cotización)
 
-> **Sin índices custom en `materiales_mto`** — para tablas grandes podría convenir `(proyecto_id)`, `(vendor)`, `(estado_cotiz)`. Acción futura si la consulta se vuelve lenta.
+**Reglas de `origen`** (migration 021 + 023):
+- `MTO` → default, materiales importados del Excel MTO de un proyecto
+- `DIRECTA` → compra puntual fuera del MTO (cliente cambió algo, vendor llegó con tema)
+- `URGENTE` → crítica (rotura en obra, cliente parado)
+- `OPERATIVA` → gasto del taller sin proyecto (`proyecto_id` siempre NULL). Solo ADMIN puede crearlas
+
+**Índice**: `idx_materiales_origen ON (proyecto_id, origen)` — agregado por migration 021 para queries de filtro por origen.
 
 #### `mto_freight`
 
@@ -220,9 +239,11 @@ Registro de cotizaciones solicitadas a vendors. Antes se enviaban por SMTP; ahor
 | `fecha_mto` | `date` | NULL — fecha del batch del MTO de origen (relevante para slicing) |
 | `categoria` | `varchar(100)` | default `''` (HARDWARE, MILLWORK, etc.) |
 | `subtotal` | `numeric` | default 0 |
-| `iva` | `numeric` | default 0 |
-| `total` | `numeric` | default 0 |
+| `iva` | `numeric` | default 0 — OCs MTO usan 16%; OCs SIN-MTO (DIRECTA/URGENTE/OPERATIVA) llevan IVA=0 (operan en USD) |
+| `freight` | `numeric(14,2)` | NOT NULL, default 0 — costo de flete asociado. Agregado por migration 022 |
+| `total` | `numeric` | default 0 — para SIN-MTO: subtotal + freight (sin IVA) |
 | `notas` | `text` | NULL |
+| `origen` | `varchar(20)` | NOT NULL, default `'MTO'` — espejo del de materiales. CHECK IN (`MTO`, `DIRECTA`, `URGENTE`, `OPERATIVA`). Agregado por migration 022, extendido por 023 |
 | `created_at`, `updated_at` | `timestamptz` | default `now()` |
 
 **Display en UI**: el backend mapea `estado` → `estado_display`:
@@ -231,7 +252,12 @@ Registro de cotizaciones solicitadas a vendors. Antes se enviaban por SMTP; ahor
 - `recibida` → `EN_EL_TALLER`
 - `cancelada` → `CANCELADA`
 
-**Índices**: `idx_ordenes_estado`, `idx_ordenes_proyecto`, `idx_ordenes_proveedor`.
+**Reglas de `origen` en OCs**:
+- `MTO` → generada vía `POST /api/ordenes-compra/generar` desde el flujo de captura precios. Hereda IVA del cálculo histórico (16%)
+- `DIRECTA` / `URGENTE` / `OPERATIVA` → generadas vía `POST /api/ordenes-compra/no-mto`. Sin IVA, con freight, una OC por compra
+- `OPERATIVA` específicamente: nace con `estado='recibida'` + `fecha_entrega_real=CURRENT_DATE` (no pasa por flujo de recepción)
+
+**Índices**: `idx_ordenes_estado`, `idx_ordenes_proyecto`, `idx_ordenes_proveedor`, `idx_oc_origen` (agregado por migration 022).
 
 #### `items_orden_compra`
 

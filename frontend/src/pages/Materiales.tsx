@@ -1,4 +1,5 @@
 import { useState, useMemo } from 'react'
+import { Link } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Plus, Search, Pencil, Trash2, Package,
@@ -29,6 +30,7 @@ export default function Materiales() {
   const [selectedProyectoId, setSelectedProyectoId] = useState<number | ''>('')
   const [importDateFilter, setImportDateFilter]     = useState('')
   const [vendorFilter, setVendorFilter]             = useState('')
+  const [origenFilter, setOrigenFilter]             = useState<'' | 'MTO' | 'DIRECTA' | 'URGENTE' | 'OPERATIVA' | 'NO_MTO'>('')
   const [search, setSearch]                         = useState('')
   const [page, setPage]                             = useState(1)
   const [formOpen, setFormOpen]                     = useState(false)
@@ -84,13 +86,14 @@ export default function Materiales() {
   }, [allItems, vendorFilter])
 
   const { data, isLoading } = useQuery({
-    queryKey: ['materiales', page, search, selectedProyectoId, vendorFilter, importDateFilter],
+    queryKey: ['materiales', page, search, selectedProyectoId, vendorFilter, importDateFilter, origenFilter],
     queryFn: () =>
       materialesService.getAll({
         page, limit: 50, search,
         proyecto_id: selectedProyectoId || undefined,
         vendor: vendorFilter || undefined,
         fecha_importacion: importDateFilter || undefined,
+        origen: origenFilter || undefined,
       }),
     enabled: !!selectedProyectoId,
   })
@@ -130,8 +133,8 @@ export default function Materiales() {
     if (window.confirm(`¿Eliminar "${m.descripcion}"?`)) deleteMutation.mutate(m.id)
   }
 
-  const clearFilters = () => { setVendorFilter(''); setImportDateFilter(''); setSearch(''); setPage(1) }
-  const hasFilters   = !!(vendorFilter || importDateFilter || search)
+  const clearFilters = () => { setVendorFilter(''); setImportDateFilter(''); setOrigenFilter(''); setSearch(''); setPage(1) }
+  const hasFilters   = !!(vendorFilter || importDateFilter || origenFilter || search)
 
   const materials = data?.data ?? []
 
@@ -298,6 +301,28 @@ export default function Materiales() {
                 ))}
               </select>
 
+              {/* Origen filter */}
+              <select
+                value={origenFilter}
+                onChange={(e) => { setOrigenFilter(e.target.value as typeof origenFilter); setPage(1) }}
+                className={clsx(
+                  'input text-sm w-40',
+                  origenFilter && (
+                    origenFilter === 'URGENTE'   ? 'border-red-400 text-red-700 bg-red-50' :
+                    origenFilter === 'DIRECTA'   ? 'border-cyan-400 text-cyan-700 bg-cyan-50' :
+                    origenFilter === 'OPERATIVA' ? 'border-orange-400 text-orange-700 bg-orange-50' :
+                    'border-forest-400 text-forest-700 bg-forest-50'
+                  )
+                )}
+              >
+                <option value="">Todos los orígenes</option>
+                <option value="MTO">MTO</option>
+                <option value="DIRECTA">Directa</option>
+                <option value="URGENTE">Urgente</option>
+                <option value="OPERATIVA">Operativa (taller)</option>
+                <option value="NO_MTO">No-MTO (todas)</option>
+              </select>
+
               {/* Capturar Precios — visible only when vendor is selected and has pending items */}
               {vendorFilter && vendorPendienteCount > 0 && (
                 <button
@@ -376,6 +401,7 @@ export default function Materiales() {
                     <th className="px-3 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wide hidden md:table-cell w-28">Unit Price</th>
                     <th className="px-3 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wide hidden md:table-cell w-28">Total</th>
                     <th className="px-3 py-3 text-center text-xs font-semibold text-gray-500 uppercase tracking-wide hidden md:table-cell w-24">F.Import</th>
+                    <th className="px-3 py-3 text-center text-xs font-semibold text-gray-500 uppercase tracking-wide w-32">OC #</th>
                     <th className="px-3 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide hidden xl:table-cell w-36">Notas</th>
                     <th className="px-3 py-3 w-16"></th>
                   </tr>
@@ -394,7 +420,7 @@ export default function Materiales() {
                   )}
                   {!isLoading && materials.length === 0 && (
                     <tr>
-                      <td colSpan={18} className="px-4 py-16 text-center text-gray-300 text-sm">
+                      <td colSpan={19} className="px-4 py-16 text-center text-gray-300 text-sm">
                         No se encontraron materiales para este proyecto
                       </td>
                     </tr>
@@ -402,14 +428,28 @@ export default function Materiales() {
                   {!isLoading && materials.map((m) => (
                     <tr key={m.id} className="border-b border-gray-50 hover:bg-gray-50 transition-colors group">
                       <td className="px-3 py-3 text-center">
-                        <span className={clsx(
-                          'inline-block text-xs px-2 py-0.5 rounded-full font-medium',
-                          m.estado_cotiz === 'COTIZADO'  && 'bg-green-100 text-green-700',
-                          m.estado_cotiz === 'PENDIENTE' && 'bg-yellow-100 text-yellow-700',
-                          m.estado_cotiz === 'EN_STOCK'  && 'bg-blue-100 text-blue-700',
-                        )}>
-                          {m.estado_cotiz === 'EN_STOCK' ? 'EN STOCK' : m.estado_cotiz}
-                        </span>
+                        <div className="flex flex-col items-center gap-0.5">
+                          <span className={clsx(
+                            'inline-block text-xs px-2 py-0.5 rounded-full font-medium',
+                            m.estado_cotiz === 'COTIZADO'  && 'bg-green-100 text-green-700',
+                            m.estado_cotiz === 'PENDIENTE' && 'bg-yellow-100 text-yellow-700',
+                            m.estado_cotiz === 'EN_STOCK'  && 'bg-blue-100 text-blue-700',
+                            m.estado_cotiz === 'ORDENADO'  && 'bg-purple-100 text-purple-700',
+                            m.estado_cotiz === 'RECIBIDO'  && 'bg-emerald-200 text-emerald-800',
+                          )}>
+                            {m.estado_cotiz === 'EN_STOCK' ? 'EN STOCK' : m.estado_cotiz}
+                          </span>
+                          {m.origen && m.origen !== 'MTO' && (
+                            <span className={clsx(
+                              'inline-block text-[10px] px-1.5 py-0 rounded font-bold tracking-wide',
+                              m.origen === 'DIRECTA'   && 'bg-cyan-100 text-cyan-700',
+                              m.origen === 'URGENTE'   && 'bg-red-100 text-red-700',
+                              m.origen === 'OPERATIVA' && 'bg-orange-100 text-orange-700',
+                            )}>
+                              {m.origen}
+                            </span>
+                          )}
+                        </div>
                       </td>
                       <td className="px-3 py-3 text-center">
                         <button
@@ -444,6 +484,17 @@ export default function Materiales() {
                       <td className="px-3 py-3 text-xs text-gray-700 text-right hidden md:table-cell">{fmt(Number(m.unit_price))}</td>
                       <td className="px-3 py-3 text-xs font-semibold text-gray-800 text-right hidden md:table-cell">{fmt(Number(m.total_price))}</td>
                       <td className="px-3 py-3 text-xs text-gray-500 text-center hidden md:table-cell">{fmtDate(m.fecha_importacion)}</td>
+                      <td className="px-3 py-3 text-xs text-center">
+                        {m.oc_numero
+                          ? <Link
+                              to={`/ordenes-compra?ocId=${m.oc_id}`}
+                              className="font-mono text-xs text-forest-700 hover:text-gold-500 hover:underline"
+                              title={`Ver ${m.oc_numero}`}
+                            >
+                              {m.oc_numero}
+                            </Link>
+                          : <span className="text-gray-300">—</span>}
+                      </td>
                       <td className="px-3 py-3 text-xs text-gray-400 hidden xl:table-cell" title={m.notas ?? undefined}>{m.notas || '—'}</td>
                       <td className="px-3 py-3">
                         <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">

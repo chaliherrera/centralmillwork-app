@@ -182,7 +182,13 @@ async function buildData() {
 }
 
 function injectData(template: string, data: object): string {
+  // JSON.stringify() no escapa "</script>" por default, lo que permitiría
+  // a un payload como descripcion: "</script><script>alert(1)</script>"
+  // romper el <script> contenedor del template y ejecutar JS arbitrario.
+  // Escapamos esa secuencia (caso clásico de JSON-in-HTML XSS).
   const json = JSON.stringify(data)
+    .replace(/<\/script/gi, '<\\/script')
+    .replace(/<!--/g, '<\\!--')
   return template.replace('/*DATA_PLACEHOLDER*/', `var DATA = ${json};`)
 }
 

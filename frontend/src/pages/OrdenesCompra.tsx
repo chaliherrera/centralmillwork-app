@@ -1,13 +1,15 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Search, ShoppingCart, Warehouse, DollarSign, Clock,
-  AlertTriangle, FileText, X, Plus, Pencil, Trash2,
+  AlertTriangle, FileText, X, Pencil, Trash2,
   CheckCircle2, Calendar, Package, Timer, AlertCircle, ImageIcon,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import clsx from 'clsx'
 import OrdenCompraForm from '@/components/modules/ordenes_compra/OrdenCompraForm'
+import NuevaCompraNoMTOModal from '@/components/modules/ordenes_compra/NuevaCompraNoMTOModal'
 import Modal from '@/components/ui/Modal'
 import ReporteModal from '@/components/ui/ReporteModal'
 import { ordenesCompraService } from '@/services/ordenesCompra'
@@ -141,6 +143,65 @@ function RecepcionHistorialSection({ ocId }: { ocId: number }) {
   )
 }
 
+// ─── Items + precios de la OC (fetch propio: getById trae items + freight) ──────
+function ItemsPreciosSection({ ocId }: { ocId: number }) {
+  const { data } = useQuery({
+    queryKey: ['oc-detalle-items', ocId],
+    queryFn: () => ordenesCompraService.getById(ocId),
+    staleTime: 10_000,
+  })
+  const oc = data?.data
+  const items = oc?.items ?? []
+  if (!items.length) return null
+
+  const lineTotal = (i: { cantidad: number; precio_unitario: number; subtotal?: number }) =>
+    Number(i.subtotal ?? Number(i.cantidad) * Number(i.precio_unitario))
+  const subtotal = items.reduce((s, i) => s + lineTotal(i), 0)
+  const freight = Number(oc?.freight) || 0
+  const total = subtotal + freight
+
+  return (
+    <div>
+      <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Items y precios</p>
+      <div className="rounded-lg border border-gray-200 overflow-hidden">
+        <table className="w-full text-xs">
+          <thead className="bg-gray-50 text-gray-500">
+            <tr>
+              <th className="text-left px-3 py-1.5 font-medium">Descripción</th>
+              <th className="text-right px-2 py-1.5 font-medium w-12">Cant.</th>
+              <th className="text-right px-2 py-1.5 font-medium w-20">P. Unit.</th>
+              <th className="text-right px-3 py-1.5 font-medium w-24">Importe</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-gray-100">
+            {items.map((it) => (
+              <tr key={it.id}>
+                <td className="px-3 py-1.5 text-gray-700 truncate max-w-[150px]" title={it.descripcion}>{it.descripcion}</td>
+                <td className="px-2 py-1.5 text-right tabular-nums text-gray-600">{Number(it.cantidad)}</td>
+                <td className="px-2 py-1.5 text-right tabular-nums text-gray-600">{fmt(Number(it.precio_unitario))}</td>
+                <td className="px-3 py-1.5 text-right tabular-nums font-medium text-gray-800">{fmt(lineTotal(it))}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        <div className="bg-gray-50 px-3 py-2 space-y-1 border-t border-gray-200">
+          <div className="flex justify-between text-xs text-gray-600">
+            <span>Subtotal</span><span className="tabular-nums">{fmt(subtotal)}</span>
+          </div>
+          {freight > 0 && (
+            <div className="flex justify-between text-xs text-gray-600">
+              <span>Freight</span><span className="tabular-nums">{fmt(freight)}</span>
+            </div>
+          )}
+          <div className="flex justify-between text-sm font-bold text-forest-700 border-t border-gray-200 pt-1">
+            <span>Total</span><span className="tabular-nums">{fmt(total)}</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ─── Detail Panel ─────────────────────────────────────────────────────────────
 function OcDetailPanel({
   oc,
@@ -161,7 +222,7 @@ function OcDetailPanel({
       <div className="bg-forest-700 text-white px-4 py-3 flex-shrink-0">
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0">
-            <div className="flex items-center gap-2 mb-0.5">
+            <div className="flex items-center gap-2 mb-0.5 flex-wrap">
               <span className="font-mono text-sm font-bold">{oc.numero}</span>
               {oc.estado_display === 'EN_EL_TALLER' ? (
                 <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-bold bg-green-400/20 text-green-200 border border-green-400/30">
@@ -170,6 +231,21 @@ function OcDetailPanel({
               ) : (
                 <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-bold bg-orange-400/20 text-orange-200 border border-orange-400/30">
                   <ShoppingCart size={10} /> ORDENADO
+                </span>
+              )}
+              {oc.origen === 'DIRECTA' && (
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-bold bg-cyan-400/20 text-cyan-100 border border-cyan-400/40">
+                  DIRECTA
+                </span>
+              )}
+              {oc.origen === 'URGENTE' && (
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-bold bg-red-400/30 text-red-100 border border-red-400/60 animate-pulse">
+                  <AlertTriangle size={10} /> URGENTE
+                </span>
+              )}
+              {oc.origen === 'OPERATIVA' && (
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-bold bg-orange-400/25 text-orange-100 border border-orange-400/50">
+                  OPERATIVA
                 </span>
               )}
             </div>
@@ -202,6 +278,7 @@ function OcDetailPanel({
             { label: 'Fecha OC',     value: fmtDate(oc.fecha_emision) },
             { label: 'ETA',          value: fmtDate(oc.fecha_entrega_estimada), warn: oc.flag_vencida },
             { label: 'F. Recepción', value: fmtDate(oc.fecha_entrega_real) },
+            ...(Number(oc.freight) > 0 ? [{ label: 'Freight', value: fmt(Number(oc.freight)) }] : []),
           ].map(({ label, value, warn }) => (
             <div key={label} className="bg-gray-50 rounded-lg px-3 py-2">
               <p className="text-xs text-gray-400 mb-0.5">{label}</p>
@@ -211,6 +288,9 @@ function OcDetailPanel({
             </div>
           ))}
         </div>
+
+        {/* Items y precios */}
+        <ItemsPreciosSection ocId={oc.id} />
 
         {/* Flags */}
         {(oc.flag_vencida || oc.flag_2dias || oc.flag_retraso) && (
@@ -310,9 +390,22 @@ function OcCard({ oc, selected, onClick }: { oc: OrdenCompra; selected: boolean;
               : 'border-orange-200 hover:border-orange-300 bg-orange-50/20'
       )}
     >
-      {/* OC # + flags */}
+      {/* OC # + origen + flags */}
       <div className="flex items-center justify-between gap-2">
-        <span className="font-mono text-xs font-bold text-forest-700">{oc.numero}</span>
+        <div className="flex items-center gap-1.5 min-w-0">
+          <span className="font-mono text-xs font-bold text-forest-700">{oc.numero}</span>
+          {oc.origen === 'DIRECTA' && (
+            <span className="text-[10px] px-1.5 py-0 rounded font-bold tracking-wide bg-cyan-100 text-cyan-700">DIRECTA</span>
+          )}
+          {oc.origen === 'URGENTE' && (
+            <span className="text-[10px] px-1.5 py-0 rounded font-bold tracking-wide bg-red-100 text-red-700 inline-flex items-center gap-0.5">
+              <AlertTriangle size={9} /> URGENTE
+            </span>
+          )}
+          {oc.origen === 'OPERATIVA' && (
+            <span className="text-[10px] px-1.5 py-0 rounded font-bold tracking-wide bg-orange-100 text-orange-700">OPERATIVA</span>
+          )}
+        </div>
         <div className="flex items-center gap-1">
           {oc.flag_vencida && <span className="w-2 h-2 rounded-full bg-red-500 flex-shrink-0" title="ETA vencida" />}
           {oc.flag_2dias && !oc.flag_vencida && <span className="w-2 h-2 rounded-full bg-orange-400 flex-shrink-0" title="Vence en 2 días" />}
@@ -355,6 +448,7 @@ export default function OrdenesCompra() {
   const [fechaHasta, setFechaHasta]     = useState('')
   const [selectedOc, setSelectedOc]     = useState<OrdenCompra | undefined>()
   const [formOpen, setFormOpen]         = useState(false)
+  const [noMtoOpen, setNoMtoOpen]       = useState(false)
   const [editing, setEditing]           = useState<OrdenCompra | undefined>()
   const [editingNotas, setEditingNotas] = useState<OrdenCompra | undefined>()
   const [reporteOpen, setReporteOpen]   = useState(false)
@@ -382,6 +476,22 @@ export default function OrdenesCompra() {
     staleTime: 15_000,
   })
 
+  // Auto-select OC from URL param ?ocId=42 (e.g. when clicking from Materiales table)
+  const [searchParams, setSearchParams] = useSearchParams()
+  useEffect(() => {
+    const ocIdParam = searchParams.get('ocId')
+    if (!ocIdParam || !allData?.data) return
+    const wantedId = parseInt(ocIdParam)
+    const found = allData.data.find((o) => o.id === wantedId)
+    if (found && selectedOc?.id !== found.id) {
+      setSelectedOc(found)
+      // Limpiar el param para no re-disparar
+      const next = new URLSearchParams(searchParams)
+      next.delete('ocId')
+      setSearchParams(next, { replace: true })
+    }
+  }, [searchParams, allData?.data, selectedOc?.id, setSearchParams])
+
   const allOcs = allData?.data ?? []
 
   const vendors = useMemo(
@@ -400,8 +510,11 @@ export default function OrdenesCompra() {
   const deleteMutation = useMutation({
     mutationFn: (id: number) => ordenesCompraService.delete(id),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['ordenes-compra-kanban'] })
-      qc.invalidateQueries({ queryKey: ['oc-kpis'] })
+      qc.invalidateQueries({ queryKey: ['ordenes-compra-kanban'], refetchType: 'all' })
+      qc.invalidateQueries({ queryKey: ['oc-kpis'],               refetchType: 'all' })
+      qc.invalidateQueries({ queryKey: ['materiales'],            refetchType: 'all' })
+      qc.invalidateQueries({ queryKey: ['materiales-all'],        refetchType: 'all' })
+      qc.invalidateQueries({ queryKey: ['materiales-kpis'],       refetchType: 'all' })
       setSelectedOc(undefined)
       toast.success('Orden eliminada')
     },
@@ -415,7 +528,6 @@ export default function OrdenesCompra() {
       setFormOpen(true)
     }
   }
-  const openNew   = () => { setEditing(undefined); setFormOpen(true) }
   const handleClose = () => { setFormOpen(false); setEditing(undefined) }
 
   const confirmDelete = (o: OrdenCompra) => {
@@ -558,9 +670,13 @@ export default function OrdenesCompra() {
             )}
           </div>
 
-          {/* Nueva Orden */}
-          <button onClick={openNew} className="btn-primary">
-            <Plus size={15} /> Nueva Orden
+          {/* Compra SIN-MTO (DIRECTA / URGENTE) */}
+          <button
+            onClick={() => setNoMtoOpen(true)}
+            className="px-3 py-2 rounded-lg text-white font-medium text-sm flex items-center gap-1.5 bg-cyan-600 hover:bg-cyan-700 transition-colors"
+            title="Compra fuera del MTO (DIRECTA o URGENTE)"
+          >
+            <AlertTriangle size={15} /> Compra SIN-MTO
           </button>
         </div>
       </div>
@@ -672,6 +788,7 @@ export default function OrdenesCompra() {
       )}
 
       <OrdenCompraForm open={formOpen} onClose={handleClose} orden={editing} />
+      <NuevaCompraNoMTOModal open={noMtoOpen} onClose={() => setNoMtoOpen(false)} />
       {editingNotas && (
         <NotasModal
           oc={editingNotas}

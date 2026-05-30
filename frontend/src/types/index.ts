@@ -51,7 +51,8 @@ export interface Proyecto {
   updated_at: string
 }
 
-export type EstadoCotizMto = 'COTIZADO' | 'PENDIENTE' | 'EN_STOCK'
+export type EstadoCotizMto = 'COTIZADO' | 'PENDIENTE' | 'EN_STOCK' | 'ORDENADO' | 'RECIBIDO'
+export type OrigenMaterial = 'MTO' | 'DIRECTA' | 'URGENTE' | 'OPERATIVA'
 
 export interface Material {
   id: number
@@ -75,6 +76,11 @@ export interface Material {
   manufacturer?: string
   notas?: string | null
   fecha_importacion?: string | null
+  // OC más reciente (no cancelada) donde participa este material — null si aún no fue ordenado
+  oc_id?: number | null
+  oc_numero?: string | null
+  // Origen de la compra: MTO (default, importado del Excel), DIRECTA (compra puntual fuera del MTO), URGENTE (crítica)
+  origen?: OrigenMaterial
   created_at: string
   updated_at: string
 }
@@ -96,8 +102,10 @@ export interface OrdenCompra {
   categoria?: string
   subtotal: number
   iva: number
+  freight?: number
   total: number
   notas: string
+  origen?: OrigenMaterial  // 'MTO' (default) | 'DIRECTA' | 'URGENTE'
   created_at: string
   updated_at: string
   items?: ItemOrdenCompra[]
@@ -257,4 +265,56 @@ export interface DashboardProyecto {
   pendientes: number
   cotizados: number
   en_stock: number
+}
+
+// ─── Tareas (generadas por Task Agent) ────────────────────────────────────────
+
+export type TareaArea     = 'procurement' | 'despachos' | 'recepcion' | 'administracion'
+export type TareaPriority = 'low' | 'medium' | 'high'
+export type TareaEstado   = 'pendiente' | 'en_progreso' | 'completada' | 'descartada'
+export type TareaOrigen   = 'email' | 'sistema'
+
+export interface Tarea {
+  id: number
+  area: TareaArea
+  title: string
+  description: string | null
+  priority: TareaPriority
+  from_email: string | null
+  subject: string | null
+  source_email_id: string | null
+  estado: TareaEstado
+  asignado_a: string | null
+  created_at: string
+  completed_at: string | null
+  origen: TareaOrigen
+  source_ref: string | null
+}
+
+export interface SyncSystemResult {
+  created: number
+  reactivated: number
+  autoClosed: number
+  kept: number
+  byRule: Record<string, { created: number; reactivated: number; autoClosed: number; kept: number }>
+}
+
+export interface TareasStats {
+  totals: {
+    total: number
+    activas: number
+    hoy: number
+    completadas_hoy: number
+  }
+  by_area: Partial<Record<TareaArea, number>>
+  by_estado: Partial<Record<TareaEstado, number>>
+  by_priority: Partial<Record<TareaPriority, number>>
+}
+
+export interface TareasFilters {
+  area?: TareaArea
+  priority?: TareaPriority
+  estado?: TareaEstado[]
+  search?: string
+  project_code?: string
 }

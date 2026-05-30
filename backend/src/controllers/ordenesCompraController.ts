@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from 'express'
 import pool from '../db/pool'
 import { parsePagination, paginatedResponse } from '../utils/pagination'
 import { createError } from '../middleware/errorHandler'
+import { recomputeMaterialesEstadoByIds } from '../utils/materialesEstado'
 
 // ─── Shared FROM/JOIN block (table + lateral recepcion) ──────────────────────
 const OC_JOINS = `
@@ -215,7 +216,9 @@ export async function getOrdenCompraMaterialesLote(req: Request, res: Response, 
          AND m.vendor ILIKE oc_info.vendor_nombre
        JOIN fi_this ON m.fecha_importacion = fi_this.fi
        LEFT JOIN fi_prev ON true
-       WHERE fi_prev.fi IS NULL OR fi_this.fi IS DISTINCT FROM fi_prev.fi
+       WHERE (fi_prev.fi IS NULL OR fi_this.fi IS DISTINCT FROM fi_prev.fi)
+         AND m.cotizar = 'SI'
+         AND m.estado_cotiz IN ('COTIZADO', 'ORDENADO', 'RECIBIDO')
        ORDER BY m.item NULLS LAST, m.descripcion`,
       [ocId]
     )
@@ -275,15 +278,15 @@ export async function createOrdenCompra(req: Request, res: Response, next: NextF
       subtotal += Number(item.cantidad) * Number(item.precio_unitario)
     }
 
-    const iva   = subtotal * 0.16
-    const total = subtotal + iva
+    // Total = subtotal, SIN IVA (la empresa opera en USD).
+    const total = subtotal
     await client.query(
-      `UPDATE ordenes_compra SET subtotal=$1, iva=$2, total=$3 WHERE id=$4`,
-      [subtotal, iva, total, orden.id]
+      `UPDATE ordenes_compra SET subtotal=$1, iva=0, total=$2 WHERE id=$3`,
+      [subtotal, total, orden.id]
     )
 
     await client.query('COMMIT')
-    res.status(201).json({ data: { ...orden, numero, subtotal, iva, total }, message: `Orden ${numero} creada` })
+    res.status(201).json({ data: { ...orden, numero, subtotal, iva: 0, total }, message: `Orden ${numero} creada` })
   } catch (err) {
     await client.query('ROLLBACK')
     next(err)
@@ -291,6 +294,7 @@ export async function createOrdenCompra(req: Request, res: Response, next: NextF
 }
 
 export async function updateOrdenCompra(req: Request, res: Response, next: NextFunction) {
+  const client = await pool.connect()
   try {
     const fields = [
       'proyecto_id', 'proveedor_id', 'estado', 'fecha_emision',
@@ -299,26 +303,74 @@ export async function updateOrdenCompra(req: Request, res: Response, next: NextF
     const updates = fields.filter((f) => req.body[f] !== undefined).map((f, i) => `${f} = $${i + 2}`)
     if (!updates.length) return next(createError('Sin campos para actualizar', 400))
     const values = fields.filter((f) => req.body[f] !== undefined).map((f) => req.body[f])
-    const { rows } = await pool.query(
+
+    await client.query('BEGIN')
+    const { rows } = await client.query(
       `UPDATE ordenes_compra SET ${updates.join(', ')}, updated_at = NOW() WHERE id = $1 RETURNING *`,
       [req.params.id, ...values]
     )
-    if (!rows[0]) return next(createError('Orden no encontrada', 404))
+    if (!rows[0]) {
+      await client.query('ROLLBACK')
+      return next(createError('Orden no encontrada', 404))
+    }
+
+    // If estado changed, sync materiales_mto.estado_cotiz
+    if (req.body.estado !== undefined) {
+      const { rows: items } = await client.query(
+        `SELECT DISTINCT material_id FROM items_orden_compra
+         WHERE orden_compra_id = $1 AND material_id IS NOT NULL`,
+        [req.params.id]
+      )
+      await recomputeMaterialesEstadoByIds(
+        client,
+        items.map((it: { material_id: number }) => it.material_id)
+      )
+    }
+
+    await client.query('COMMIT')
     res.json({ data: rows[0], message: 'Orden actualizada' })
-  } catch (err) { next(err) }
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => {})
+    next(err)
+  } finally { client.release() }
 }
 
 export async function updateEstadoOrden(req: Request, res: Response, next: NextFunction) {
+  const client = await pool.connect()
   try {
     const { estado } = req.body
     if (!estado) return next(createError('El estado es requerido', 400))
-    const { rows } = await pool.query(
+
+    await client.query('BEGIN')
+
+    const { rows } = await client.query(
       `UPDATE ordenes_compra SET estado = $2, updated_at = NOW() WHERE id = $1 RETURNING *`,
       [req.params.id, estado]
     )
-    if (!rows[0]) return next(createError('Orden no encontrada', 404))
+    if (!rows[0]) {
+      await client.query('ROLLBACK')
+      return next(createError('Orden no encontrada', 404))
+    }
+
+    // Recompute estado_cotiz for affected materials based on the OC's new state.
+    // (recibida → RECIBIDO, cancelada → COTIZADO or stay ORDENADO if material is
+    // in another active OC, etc.)
+    const { rows: items } = await client.query(
+      `SELECT DISTINCT material_id FROM items_orden_compra
+       WHERE orden_compra_id = $1 AND material_id IS NOT NULL`,
+      [req.params.id]
+    )
+    await recomputeMaterialesEstadoByIds(
+      client,
+      items.map((it: { material_id: number }) => it.material_id)
+    )
+
+    await client.query('COMMIT')
     res.json({ data: rows[0], message: `Estado actualizado a "${estado}"` })
-  } catch (err) { next(err) }
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => {})
+    next(err)
+  } finally { client.release() }
 }
 
 export async function getVendorsCotizados(req: Request, res: Response, next: NextFunction) {
@@ -451,11 +503,23 @@ export async function generarOCs(req: Request, res: Response, next: NextFunction
         subtotal += Number(m.qty) * Number(m.unit_price)
       }
 
-      const iva   = parseFloat((subtotal * 0.16).toFixed(2))
-      const total = parseFloat((subtotal + iva).toFixed(2))
+      // Freight por vendor (lo guarda el panel de captura de precios en mto_freight).
+      // Total = subtotal + freight, SIN IVA (la empresa opera en USD).
+      const { rows: [freightRow] } = await client.query(
+        `SELECT freight FROM mto_freight WHERE proyecto_id = $1 AND vendor = $2`,
+        [proyecto_id, vendor]
+      )
+      const freight = parseFloat((Number(freightRow?.freight) || 0).toFixed(2))
+      const total = parseFloat((subtotal + freight).toFixed(2))
       await client.query(
-        `UPDATE ordenes_compra SET subtotal=$1, iva=$2, total=$3 WHERE id=$4`,
-        [subtotal, iva, total, orden.id]
+        `UPDATE ordenes_compra SET subtotal=$1, iva=0, total=$2, freight=$3 WHERE id=$4`,
+        [subtotal, total, freight, orden.id]
+      )
+
+      // Materials that now belong to this OC pass from COTIZADO → ORDENADO
+      await recomputeMaterialesEstadoByIds(
+        client,
+        materiales.map((m: { id: number }) => m.id)
       )
 
       results.push({ numero, vendor, total, materiales_count: materiales.length })
@@ -470,14 +534,196 @@ export async function generarOCs(req: Request, res: Response, next: NextFunction
 }
 
 export async function deleteOrdenCompra(req: Request, res: Response, next: NextFunction) {
+  const client = await pool.connect()
   try {
-    const { rows: [orden] } = await pool.query(
+    await client.query('BEGIN')
+
+    const { rows: [orden] } = await client.query(
       `SELECT estado FROM ordenes_compra WHERE id = $1`, [req.params.id]
     )
-    if (!orden) return next(createError('Orden no encontrada', 404))
-    if (['recibida', 'confirmada'].includes(orden.estado))
+    if (!orden) {
+      await client.query('ROLLBACK')
+      return next(createError('Orden no encontrada', 404))
+    }
+    if (['recibida', 'confirmada'].includes(orden.estado)) {
+      await client.query('ROLLBACK')
       return next(createError('No se puede eliminar una orden confirmada o recibida', 409))
-    await pool.query('DELETE FROM ordenes_compra WHERE id = $1', [req.params.id])
+    }
+
+    // Capture material IDs BEFORE delete (items_orden_compra is CASCADE-deleted).
+    const { rows: items } = await client.query(
+      `SELECT DISTINCT material_id FROM items_orden_compra
+       WHERE orden_compra_id = $1 AND material_id IS NOT NULL`,
+      [req.params.id]
+    )
+    const materialIds = items.map((it: { material_id: number }) => it.material_id)
+
+    await client.query('DELETE FROM ordenes_compra WHERE id = $1', [req.params.id])
+
+    // Recompute: each material falls back to COTIZADO unless it's in another active OC.
+    await recomputeMaterialesEstadoByIds(client, materialIds)
+
+    await client.query('COMMIT')
     res.json({ message: 'Orden eliminada' })
-  } catch (err) { next(err) }
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => {})
+    next(err)
+  } finally { client.release() }
+}
+
+// ─── Compras NO-MTO (DIRECTA / URGENTE) ──────────────────────────────────────
+//
+// Una compra que NO viene del MTO planificado. El usuario carga vendor + ETA +
+// items con precio y la transacción:
+//   1) crea N rows en materiales_mto con origen='DIRECTA'|'URGENTE',
+//      cotizar='SI', estado_cotiz='COTIZADO' (ya entran con precio)
+//   2) crea 1 ordenes_compra dedicada con estado='enviada'
+//   3) crea N items_orden_compra linkeando los nuevos materiales a la OC
+//   4) el helper recomputeMaterialesEstadoByIds los pasa a ORDENADO
+//
+// Diferencia con createOrdenCompra (manual): este endpoint POBLA materiales_mto
+// además de crear la OC, manteniendo el catálogo de materiales del proyecto
+// unificado. createOrdenCompra acepta items con material_id nullable pero NO
+// crea materiales nuevos.
+export async function crearOCNoMTO(req: Request, res: Response, next: NextFunction) {
+  const client = await pool.connect()
+  try {
+    const {
+      proyecto_id, vendor, origen, fecha_entrega_estimada,
+      categoria, notas, items = [], freight = 0,
+    } = req.body as {
+      proyecto_id: number | null
+      vendor: string
+      origen: 'DIRECTA' | 'URGENTE' | 'OPERATIVA'
+      fecha_entrega_estimada: string | null
+      categoria: string | null
+      notas: string | null
+      items: Array<{ descripcion: string; unidad: string; qty: number; unit_price: number }>
+      freight?: number
+    }
+
+    // Validations
+    if (!vendor || !String(vendor).trim()) return next(createError('vendor es requerido', 400))
+    if (!origen || !['DIRECTA', 'URGENTE', 'OPERATIVA'].includes(origen))
+      return next(createError("origen debe ser 'DIRECTA', 'URGENTE' u 'OPERATIVA'", 400))
+
+    // OPERATIVA es ADMIN-only (gastos del taller, controlados por el dueño)
+    if (origen === 'OPERATIVA' && req.user?.rol !== 'ADMIN') {
+      return next(createError('Solo ADMIN puede registrar compras OPERATIVAS', 403))
+    }
+    // OPERATIVA no tiene proyecto asociado (es un gasto del taller, no de obra)
+    if (origen === 'OPERATIVA' && proyecto_id != null) {
+      return next(createError('Compras OPERATIVAS no pueden tener proyecto asociado', 400))
+    }
+
+    if (!Array.isArray(items) || items.length === 0)
+      return next(createError('items: al menos 1 línea requerida', 400))
+    if (Number(freight) < 0)
+      return next(createError('freight no puede ser negativo', 400))
+    for (const [i, it] of items.entries()) {
+      if (!it.descripcion || !String(it.descripcion).trim())
+        return next(createError(`item ${i + 1}: descripcion es requerida`, 400))
+      if (!it.unidad) return next(createError(`item ${i + 1}: unidad es requerida`, 400))
+      if (!(Number(it.qty) > 0))
+        return next(createError(`item ${i + 1}: qty debe ser > 0`, 400))
+      if (!(Number(it.unit_price) > 0))
+        return next(createError(`item ${i + 1}: unit_price debe ser > 0`, 400))
+    }
+
+    // OPERATIVAS saltan directo a recibida (ya están compradas al momento de registrar)
+    const ocEstado    = origen === 'OPERATIVA' ? 'recibida' : 'enviada'
+    const matEstado   = origen === 'OPERATIVA' ? 'RECIBIDO' : 'COTIZADO'
+    // Para OPERATIVA, fecha_entrega_real = hoy (porque ya se recibió)
+    const fechaRealOp = origen === 'OPERATIVA' ? new Date().toISOString().slice(0, 10) : null
+
+    await client.query('BEGIN')
+
+    // Lookup / auto-create proveedor
+    let { rows: [prov] } = await client.query(
+      `SELECT id FROM proveedores WHERE LOWER(TRIM(nombre)) = LOWER(TRIM($1)) LIMIT 1`,
+      [vendor]
+    )
+    if (!prov) {
+      const inserted = await client.query(
+        `INSERT INTO proveedores (nombre) VALUES ($1) RETURNING id`,
+        [String(vendor).trim()]
+      )
+      prov = inserted.rows[0]
+    }
+
+    // Generate OC number
+    const { rows: [last] } = await client.query(
+      `SELECT numero FROM ordenes_compra ORDER BY id DESC LIMIT 1`
+    )
+    const seq = last ? parseInt(last.numero.split('-')[2] ?? '0') + 1 : 1
+    const numero = `OC-${new Date().getFullYear()}-${String(seq).padStart(4, '0')}`
+
+    // Create OC (incluye origen + freight; sin IVA — opera en USD)
+    // OPERATIVA arranca como 'recibida' + fecha_entrega_real=hoy
+    const { rows: [orden] } = await client.query(
+      `INSERT INTO ordenes_compra
+         (numero, proyecto_id, proveedor_id, categoria, estado, fecha_emision,
+          fecha_entrega_estimada, fecha_entrega_real, notas, origen, freight)
+       VALUES ($1,$2,$3,$4,$5::estado_orden,NOW(),$6,$7,$8,$9,$10)
+       RETURNING id`,
+      [
+        numero, proyecto_id ?? null, prov?.id ?? null, categoria ?? '',
+        ocEstado, fecha_entrega_estimada || null, fechaRealOp,
+        notas ?? null, origen, Number(freight) || 0,
+      ]
+    )
+
+    // Create materiales_mto rows + items_orden_compra
+    const materialIds: number[] = []
+    let subtotal = 0
+    for (const [i, it] of items.entries()) {
+      const qty   = Number(it.qty)
+      const price = Number(it.unit_price)
+      const lineTotal = qty * price
+      subtotal   += lineTotal
+
+      // Codigo auto-generado: NOMTO-{numero}-{idx} para uniqueness
+      const codigo = `NOMTO-${numero}-${String(i + 1).padStart(2, '0')}`
+
+      const { rows: [mat] } = await client.query(
+        `INSERT INTO materiales_mto
+           (codigo, descripcion, unidad, proyecto_id, vendor, qty, unit_price,
+            total_price, cotizar, estado_cotiz, origen, fecha_importacion)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'SI',$9,$10,CURRENT_DATE)
+         RETURNING id`,
+        [codigo, it.descripcion, it.unidad, proyecto_id ?? null,
+         String(vendor).trim(), qty, price, lineTotal, matEstado, origen]
+      )
+      materialIds.push(mat.id)
+
+      await client.query(
+        `INSERT INTO items_orden_compra
+           (orden_compra_id, material_id, descripcion, unidad, cantidad, precio_unitario)
+         VALUES ($1,$2,$3,$4,$5,$6)`,
+        [orden.id, mat.id, it.descripcion, it.unidad, qty, price]
+      )
+    }
+
+    // Total = subtotal + freight (sin IVA porque opera en USD)
+    const freightNum = Number(freight) || 0
+    const total = parseFloat((subtotal + freightNum).toFixed(2))
+    await client.query(
+      `UPDATE ordenes_compra SET subtotal=$1, iva=0, total=$2 WHERE id=$3`,
+      [subtotal, total, orden.id]
+    )
+
+    // Para DIRECTA/URGENTE el helper transiciona COTIZADO → ORDENADO.
+    // Para OPERATIVA los materiales ya nacen como RECIBIDO; el helper igual los
+    // chequea pero al recomputar verá la OC en estado 'recibida' y los dejará en RECIBIDO.
+    await recomputeMaterialesEstadoByIds(client, materialIds)
+
+    await client.query('COMMIT')
+    res.status(201).json({
+      data: { id: orden.id, numero, total, freight: freightNum, materiales_count: materialIds.length, origen },
+      message: `Compra ${origen.toLowerCase()} ${numero} creada con ${materialIds.length} ítem(s)`,
+    })
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => {})
+    next(err)
+  } finally { client.release() }
 }

@@ -77,8 +77,13 @@ export default function GenerarOCsModal({ open, onClose, proyectoId, proyectoCod
     onSuccess: (res) => {
       setResults(res.data)
       toast.success(res.message)
-      qc.invalidateQueries({ queryKey: ['ordenes-compra'] })
-      qc.invalidateQueries({ queryKey: ['ordenes-compra-kpis'] })
+      qc.invalidateQueries({ queryKey: ['ordenes-compra'],         refetchType: 'all' })
+      qc.invalidateQueries({ queryKey: ['ordenes-compra-kpis'],    refetchType: 'all' })
+      qc.invalidateQueries({ queryKey: ['ordenes-compra-kanban'],  refetchType: 'all' })
+      qc.invalidateQueries({ queryKey: ['materiales'],             refetchType: 'all' })
+      qc.invalidateQueries({ queryKey: ['materiales-all'],         refetchType: 'all' })
+      qc.invalidateQueries({ queryKey: ['materiales-kpis'],        refetchType: 'all' })
+      qc.invalidateQueries({ queryKey: ['oc-vendors-cotizados'],   refetchType: 'all' })
     },
     onError: () => toast.error('Error al generar OCs'),
   })

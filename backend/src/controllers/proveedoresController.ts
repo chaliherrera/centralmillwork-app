@@ -1,7 +1,25 @@
 import { Request, Response, NextFunction } from 'express'
+import { z } from 'zod'
 import pool from '../db/pool'
 import { parsePagination, paginatedResponse } from '../utils/pagination'
 import { createError } from '../middleware/errorHandler'
+
+// ─── Schemas de validación ──────────────────────────────────────────────────
+export const createProveedorSchema = z.object({
+  nombre:    z.string().trim().min(1, 'requerido').max(200),
+  contacto:  z.string().max(150).nullable().optional(),
+  // Email opcional pero si está presente debe ser válido. String vacío → null.
+  email:     z.preprocess(
+    (v) => (v === '' ? null : v),
+    z.string().email('email inválido').max(150).nullable().optional()
+  ),
+  telefono:  z.string().max(30).nullable().optional(),
+  rfc:       z.string().max(20).nullable().optional(),
+  direccion: z.string().max(2000).nullable().optional(),
+  activo:    z.boolean().optional(),
+})
+
+export const updateProveedorSchema = createProveedorSchema.partial()
 
 export async function getProveedores(req: Request, res: Response, next: NextFunction) {
   try {
