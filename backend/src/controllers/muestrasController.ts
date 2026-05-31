@@ -320,6 +320,46 @@ export async function createMuestra(req: Request, res: Response, next: NextFunct
       [muestra.id, `Muestra creada: ${body.codigo}`, req.user?.id ?? null]
     )
 
+    // ── Notificar a PROCUREMENT: tarea en el módulo /tareas ────────────────
+    // Reusa el sistema de tareas con origen='sistema'. Idempotente vía
+    // UNIQUE INDEX parcial sobre source_ref. El area='procurement' hace que
+    // aparezca en la bandeja de Procurement.
+    //
+    // Flujo esperado del PROCUREMENT al ver esta tarea:
+    //   1. Abrir la muestra (link en description)
+    //   2. Verificar qué materiales necesita
+    //   3. Si están en stock → marcar "sin compras necesarias" (próxima fase UI)
+    //   4. Si faltan → crear OCs directas con muestra_id (próxima fase UI)
+    //   5. Cuando todas las OCs estén recibidas, marcar la tarea como completa
+    const prioMap: Record<string, string> = { ALTA: 'high', MEDIA: 'medium', BAJA: 'low' }
+    const prioTarea = prioMap[body.prioridad ?? 'MEDIA'] ?? 'medium'
+    const deadlineMsg = body.fecha_compromiso
+      ? ` · Deadline: ${body.fecha_compromiso}`
+      : ''
+    const tareaDesc = [
+      `Muestra: ${body.codigo}`,
+      `Proyecto: ${proy.id}`,
+      `Descripción: ${body.descripcion}`,
+      deadlineMsg.trim(),
+      ``,
+      `Acción: verificar si hay materiales en stock o crear OCs directas con esta muestra asociada.`,
+      `Link: /muestras (abrir SMP-${body.codigo})`,
+    ].filter(Boolean).join('\n')
+
+    await client.query(
+      `INSERT INTO tareas (area, title, description, priority, from_email, subject, source_email_id, origen, source_ref)
+       VALUES ('procurement', $1, $2, $3, 'sistema@centralmillwork.com', $4, NULL, 'sistema', $5)
+       ON CONFLICT (source_ref) WHERE origen = 'sistema' AND source_ref IS NOT NULL
+       DO NOTHING`,
+      [
+        `Nueva muestra: ${body.codigo} requiere verificación de materiales`,
+        tareaDesc,
+        prioTarea,
+        `Sample Request — ${body.codigo}`,
+        `muestra:${muestra.id}:request`,
+      ]
+    )
+
     await client.query('COMMIT')
     logger.info('muestra creada', {
       requestId: req.id, muestraId: muestra.id, codigo: muestra.codigo,
@@ -433,12 +473,35 @@ export async function transicionarMuestra(req: Request, res: Response, next: Nex
     }
 
     // ── Caso especial: RECHAZADA crea V+1 con la razón del cliente ─────────
+    // Y genera una tarea nueva para PROCUREMENT (puede que la V2 necesite
+    // materiales adicionales o diferentes).
     if (nuevo_estado === 'RECHAZADA') {
       nuevaVersion = muestra.version_actual + 1
       await client.query(
         `INSERT INTO muestras_versiones (muestra_id, version_numero, razon_de_revision, comentarios_cliente)
          VALUES ($1, $2, $3, $4)`,
         [id, nuevaVersion, razon_revision ?? null, comentario ?? null]
+      )
+
+      // Tarea PROCUREMENT para V+1 (idempotente por source_ref con la version)
+      const tareaDesc = [
+        `Muestra: ${muestra.codigo} (V${nuevaVersion} — V${muestra.version_actual} rechazada)`,
+        `Razón del rechazo: ${razon_revision ?? '(sin razón especificada)'}`,
+        `Descripción: ${muestra.descripcion}`,
+        ``,
+        `Acción: verificar si los materiales para V${nuevaVersion} necesitan compras nuevas o diferencias respecto a V${muestra.version_actual}.`,
+      ].join('\n')
+      await client.query(
+        `INSERT INTO tareas (area, title, description, priority, from_email, subject, source_email_id, origen, source_ref)
+         VALUES ('procurement', $1, $2, 'high', 'sistema@centralmillwork.com', $3, NULL, 'sistema', $4)
+         ON CONFLICT (source_ref) WHERE origen = 'sistema' AND source_ref IS NOT NULL
+         DO NOTHING`,
+        [
+          `Muestra V${nuevaVersion}: ${muestra.codigo} re-fabricación tras rechazo`,
+          tareaDesc,
+          `Sample Request V${nuevaVersion} — ${muestra.codigo}`,
+          `muestra:${id}:request:v${nuevaVersion}`,
+        ]
       )
     }
 
