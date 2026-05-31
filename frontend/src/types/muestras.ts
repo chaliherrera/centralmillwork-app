@@ -16,7 +16,7 @@ export type MuestraPrioridad = 'ALTA' | 'MEDIA' | 'BAJA'
 export interface Muestra {
   id: number
   codigo: string
-  proyecto_id: number
+  proyecto_id: number | null   // NULL = muestra huérfana sin linkear
   descripcion: string
   tipo: MuestraTipo
   prioridad: MuestraPrioridad
@@ -140,7 +140,9 @@ export interface MuestraDetalle {
 // Inputs para crear/editar
 export interface CreateMuestraInput {
   codigo: string
-  proyecto_id: number
+  // proyecto_id es OPCIONAL: muestras pueden crearse huérfanas y linkearse
+  // después (cambio Chali 2026-05-31)
+  proyecto_id: number | null
   descripcion: string
   tipo?: MuestraTipo
   prioridad?: MuestraPrioridad

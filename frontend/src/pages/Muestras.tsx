@@ -294,11 +294,16 @@ function CrearMuestraModal({ onClose, onSuccess }: { onClose: () => void; onSucc
   const submit = (e: React.FormEvent) => {
     e.preventDefault()
     if (!codigo.trim()) return toast.error('Falta el código')
-    if (!proyectoId) return toast.error('Elegí un proyecto')
     if (!descripcion.trim()) return toast.error('Falta la descripción')
+    // PDF Sample Request es OBLIGATORIO (decision Chali 2026-05-31)
+    if (!pdfFile) {
+      return toast.error('El PDF de Sample Request es obligatorio. Adjuntá el documento del cliente con los requerimientos.')
+    }
+    // proyecto_id es OPCIONAL ahora — INGENIERIA puede crear muestra huérfana
+    // y linkearla a un proyecto después
     mut.mutate({
       codigo: codigo.trim().toUpperCase(),
-      proyecto_id: proyectoId,
+      proyecto_id: proyectoId,  // puede ser null
       descripcion: descripcion.trim(),
       tipo,
       prioridad,
@@ -331,15 +336,18 @@ function CrearMuestraModal({ onClose, onSuccess }: { onClose: () => void; onSucc
               </div>
             </div>
             <div>
-              <label className="label">Proyecto * <span className="text-xs text-gray-500 font-normal">(solo activos)</span></label>
+              <label className="label">Proyecto <span className="text-xs text-gray-500 font-normal">(opcional — se puede linkear después)</span></label>
               <select
                 value={proyectoId ?? ''}
                 onChange={(e) => setProyectoId(e.target.value ? parseInt(e.target.value) : null)}
-                required className="input"
+                className="input"
               >
-                <option value="">— elegí —</option>
+                <option value="">— sin proyecto (linkear después) —</option>
                 {proyectos.map((p) => <option key={p.id} value={p.id}>{p.codigo} — {p.nombre}</option>)}
               </select>
+              <p className="text-[11px] text-gray-500 mt-1">
+                Si la muestra es para un proyecto nuevo todavía sin crear, dejá en blanco y la linkeás después desde el detalle.
+              </p>
             </div>
           </div>
 
@@ -394,12 +402,13 @@ function CrearMuestraModal({ onClose, onSuccess }: { onClose: () => void; onSucc
             />
           </div>
 
-          {/* PDF Sample Request — el documento que viene del cliente con los requerimientos */}
+          {/* PDF Sample Request — el documento que viene del cliente con los
+              requerimientos. OBLIGATORIO (decision Chali 2026-05-31). */}
           <div>
             <label className="label flex items-center gap-1.5">
               <FileText size={14} />
-              Sample Request (PDF del cliente)
-              <span className="text-xs text-gray-500 font-normal">— recomendado</span>
+              Sample Request (PDF del cliente) <span className="text-red-600">*</span>
+              <span className="text-xs text-gray-500 font-normal">— obligatorio</span>
             </label>
             {pdfFile ? (
               <div className="flex items-center gap-2 px-3 py-2 bg-gold-50 rounded-lg border border-gold-200">
@@ -596,6 +605,11 @@ function DetalleMuestraDrawer({ id, onClose, onChange }: { id: number; onClose: 
             <div className="flex-1 overflow-y-auto p-5">
               {tab === 'overview' && (
                 <div className="space-y-4">
+                  {/* Banner si la muestra no tiene proyecto asignado */}
+                  {!m.proyecto_id && (
+                    <LinkearProyectoBanner muestraId={id} onLinked={() => qc.invalidateQueries({ queryKey: ['muestra', id] })} />
+                  )}
+
                   {/* PDF actual destacado arriba si existe */}
                   {(() => {
                     const pdfActual = (data.archivos ?? [])
@@ -889,6 +903,77 @@ function KV({ label, value }: { label: string; value: string | React.ReactNode }
     <div>
       <div className="text-xs font-semibold text-gray-500 uppercase mb-0.5">{label}</div>
       <div className="text-sm text-gray-900">{value}</div>
+    </div>
+  )
+}
+
+// ─── Banner para linkear muestra huérfana a un proyecto ──────────────────────
+// Aparece en Overview cuando muestra.proyecto_id es NULL. Permite seleccionar
+// un proyecto activo y vincularlo (PATCH). Necesario antes de poder pasar a
+// EN_FABRICACION (la OP auto-creada requiere proyecto).
+function LinkearProyectoBanner({ muestraId, onLinked }: { muestraId: number; onLinked: () => void }) {
+  const [editing, setEditing] = useState(false)
+  const [proyectoId, setProyectoId] = useState<number | null>(null)
+
+  const { data: proyectosData } = useQuery({
+    queryKey: ['proyectos-list-link-muestra'],
+    queryFn: () => proyectosService.getAll({ limit: 200 }),
+    enabled: editing,
+  })
+  const proyectos = (proyectosData?.data ?? []).filter((p) => p.estado === 'activo')
+
+  const mut = useMutation({
+    mutationFn: (pid: number) => muestrasService.update(muestraId, { proyecto_id: pid } as any),
+    onSuccess: () => { toast.success('Proyecto vinculado'); onLinked(); setEditing(false) },
+    onError: (err: any) => toast.error(err?.response?.data?.message ?? 'Error vinculando'),
+  })
+
+  if (!editing) {
+    return (
+      <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
+        <div className="flex items-start gap-2">
+          <AlertTriangle size={16} className="text-amber-700 shrink-0 mt-0.5" />
+          <div className="flex-1">
+            <div className="text-sm font-medium text-amber-900">Sin proyecto asignado</div>
+            <div className="text-xs text-amber-700 mt-0.5">
+              Esta muestra no tiene proyecto. Para pasar a fabricación necesitás linkearla a un proyecto activo.
+            </div>
+          </div>
+          <button
+            onClick={() => setEditing(true)}
+            className="px-2.5 py-1 text-xs font-semibold rounded bg-amber-600 hover:bg-amber-700 text-white"
+          >
+            Linkear ahora
+          </button>
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 space-y-2">
+      <div className="flex items-center gap-2">
+        <AlertTriangle size={16} className="text-amber-700" />
+        <span className="text-sm font-medium text-amber-900">Linkear a proyecto activo</span>
+      </div>
+      <select
+        value={proyectoId ?? ''}
+        onChange={(e) => setProyectoId(e.target.value ? parseInt(e.target.value) : null)}
+        className="input text-sm"
+      >
+        <option value="">— elegí proyecto —</option>
+        {proyectos.map((p) => <option key={p.id} value={p.id}>{p.codigo} — {p.nombre}</option>)}
+      </select>
+      <div className="flex gap-2">
+        <button onClick={() => setEditing(false)} className="btn-ghost text-xs flex-1 justify-center">Cancelar</button>
+        <button
+          onClick={() => proyectoId && mut.mutate(proyectoId)}
+          disabled={!proyectoId || mut.isPending}
+          className="btn-primary text-xs flex-1 justify-center"
+        >
+          {mut.isPending ? 'Vinculando…' : 'Vincular'}
+        </button>
+      </div>
     </div>
   )
 }

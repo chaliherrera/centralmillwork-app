@@ -29,7 +29,9 @@ const TRANSICIONES: Record<typeof ESTADOS[number], typeof ESTADOS[number][]> = {
 
 export const createMuestraSchema = z.object({
   codigo:           z.string().trim().min(1).max(30),
-  proyecto_id:      z.number().int().positive(),
+  // proyecto_id NULL permitido — INGENIERIA puede crear muestra huérfana y
+  // linkearla a un proyecto después. Pero EN_FABRICACION requiere proyecto.
+  proyecto_id:      z.number().int().positive().nullable().optional(),
   descripcion:      z.string().trim().min(1).max(2000),
   tipo:             z.enum(TIPOS).optional(),
   prioridad:        z.enum(PRIORIDADES).optional(),
@@ -47,6 +49,8 @@ export const updateMuestraSchema = z.object({
   owner_id:         z.string().uuid().nullable().optional(),
   fecha_compromiso: z.string().regex(/^\d{4}-\d{2}-\d{2}/).nullable().optional(),
   notas:            z.string().max(5000).nullable().optional(),
+  // Permitir linkear/cambiar proyecto después (huérfanas → asignadas)
+  proyecto_id:      z.number().int().positive().nullable().optional(),
 })
 
 export const transicionEstadoSchema = z.object({
@@ -271,14 +275,19 @@ export async function createMuestra(req: Request, res: Response, next: NextFunct
     await client.query('BEGIN')
     const body = req.body as z.infer<typeof createMuestraSchema>
 
-    // Verificar que el proyecto existe y está activo (queremos solo activos)
-    const { rows: [proy] } = await client.query(
-      'SELECT id, estado FROM proyectos WHERE id = $1',
-      [body.proyecto_id]
-    )
-    if (!proy) {
-      await client.query('ROLLBACK')
-      return next(createError('Proyecto no encontrado', 404))
+    // Verificar el proyecto si se especificó. Si proyecto_id es NULL, se permite
+    // (muestra huérfana, ENGINEERING la linkea después).
+    let proy: { id: number; estado: string } | null = null
+    if (body.proyecto_id != null) {
+      const { rows: [p] } = await client.query(
+        'SELECT id, estado FROM proyectos WHERE id = $1',
+        [body.proyecto_id]
+      )
+      if (!p) {
+        await client.query('ROLLBACK')
+        return next(createError('Proyecto no encontrado', 404))
+      }
+      proy = p
     }
 
     // Verificar código único
@@ -336,14 +345,15 @@ export async function createMuestra(req: Request, res: Response, next: NextFunct
     const deadlineMsg = body.fecha_compromiso
       ? ` · Deadline: ${body.fecha_compromiso}`
       : ''
+    const proyectoLabel = proy ? `Proyecto: id=${proy.id}` : `Proyecto: (sin proyecto asignado — INGENIERIA debe linkear después)`
     const tareaDesc = [
       `Muestra: ${body.codigo}`,
-      `Proyecto: ${proy.id}`,
+      proyectoLabel,
       `Descripción: ${body.descripcion}`,
       deadlineMsg.trim(),
       ``,
       `Acción: verificar si hay materiales en stock o crear OCs directas con esta muestra asociada.`,
-      `Link: /muestras (abrir SMP-${body.codigo})`,
+      `Link: /muestras (abrir ${body.codigo})`,
     ].filter(Boolean).join('\n')
 
     await client.query(
@@ -388,7 +398,7 @@ export async function updateMuestra(req: Request, res: Response, next: NextFunct
     if (!muestra) return
 
     const body = req.body as z.infer<typeof updateMuestraSchema>
-    const fields = ['descripcion', 'tipo', 'prioridad', 'owner_id', 'fecha_compromiso', 'notas'] as const
+    const fields = ['descripcion', 'tipo', 'prioridad', 'owner_id', 'fecha_compromiso', 'notas', 'proyecto_id'] as const
     const updates = fields.filter((f) => body[f] !== undefined).map((f, i) => `${f} = $${i + 2}`)
     if (updates.length === 0) return next(createError('Sin campos para actualizar', 400))
 
@@ -438,6 +448,50 @@ export async function transicionarMuestra(req: Request, res: Response, next: Nex
       await client.query('ROLLBACK')
       return next(createError(
         `Transición inválida: ${muestra.estado} → ${nuevo_estado}. Permitidas: ${permitidas.join(', ') || '(ninguna)'}`,
+        400
+      ))
+    }
+
+    // ── Constraint especial RECHAZADA → SOLICITADA (Chali 2026-05-31) ──────
+    // "Una vez rechazada, es INGENIERIA quien debe llevarla nuevamente a
+    // SOLICITADAS, con un nuevo PDF Sample Request".
+    //
+    // Reglas:
+    //  1. Solo ADMIN o ENGINEERING puede hacer esta transición (no SHOP_MANAGER)
+    //  2. La versión actual (recién creada al rechazar) debe tener un PDF
+    //     de tipo='sample_request' subido. Sino, bloquear con mensaje claro.
+    if (muestra.estado === 'RECHAZADA' && nuevo_estado === 'SOLICITADA') {
+      const rol = req.user?.rol
+      if (rol !== 'ADMIN' && rol !== 'ENGINEERING') {
+        await client.query('ROLLBACK')
+        return next(createError(
+          'Solo INGENIERIA (o ADMIN) puede reabrir una muestra rechazada. ' +
+          'El flujo esperado: ingeniería genera un nuevo Sample Request basado en la razón del rechazo del cliente.',
+          403
+        ))
+      }
+      const { rows: pdfs } = await client.query(
+        `SELECT id FROM muestras_archivos
+         WHERE muestra_id = $1 AND version_numero = $2 AND tipo = 'sample_request'
+         LIMIT 1`,
+        [id, muestra.version_actual]
+      )
+      if (pdfs.length === 0) {
+        await client.query('ROLLBACK')
+        return next(createError(
+          `Para reabrir esta muestra necesitás subir un nuevo PDF de Sample Request para V${muestra.version_actual} primero. ` +
+          `Andá a la tab "Archivos" del detalle, elegí tipo "Sample Request" y versión V${muestra.version_actual}, y subí el documento revisado.`,
+          400
+        ))
+      }
+    }
+
+    // ── Pre-condición EN_FABRICACION: proyecto requerido (OP necesita proyecto) ─
+    if (nuevo_estado === 'EN_FABRICACION' && muestra.proyecto_id == null) {
+      await client.query('ROLLBACK')
+      return next(createError(
+        `Esta muestra no tiene proyecto asignado. ` +
+        `Editá la muestra y linkeala a un proyecto antes de pasar a fabricación (la OP de producción necesita un proyecto).`,
         400
       ))
     }
@@ -501,6 +555,25 @@ export async function transicionarMuestra(req: Request, res: Response, next: Nex
           tareaDesc,
           `Sample Request V${nuevaVersion} — ${muestra.codigo}`,
           `muestra:${id}:request:v${nuevaVersion}`,
+        ]
+      )
+    }
+
+    // ── RECHAZADA → SOLICITADA: notificar PROCUREMENT para que reverifique
+    // materiales (la nueva versión puede requerir otros materiales que V anterior).
+    if (muestra.estado === 'RECHAZADA' && nuevo_estado === 'SOLICITADA') {
+      await client.query(
+        `INSERT INTO tareas (area, title, description, priority, from_email, subject, source_email_id, origen, source_ref)
+         VALUES ('procurement', $1, $2, 'high', 'sistema@centralmillwork.com', $3, NULL, 'sistema', $4)
+         ON CONFLICT (source_ref) WHERE origen = 'sistema' AND source_ref IS NOT NULL
+         DO NOTHING`,
+        [
+          `Muestra reabierta: ${muestra.codigo} V${muestra.version_actual} requiere verificación de materiales`,
+          `Muestra: ${muestra.codigo} (V${muestra.version_actual}, reabierta por INGENIERIA con nuevo Sample Request).\n` +
+          `Descripción: ${muestra.descripcion}\n\n` +
+          `Acción: verificar si materiales para esta versión cambian respecto a versiones previas. Crear OCs nuevas si hace falta.`,
+          `Sample Request V${muestra.version_actual} reabierto — ${muestra.codigo}`,
+          `muestra:${id}:reopened:v${muestra.version_actual}`,
         ]
       )
     }
