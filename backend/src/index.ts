@@ -20,6 +20,8 @@ import { syncSystemTareas } from './jobs/tareasFromSystem'
 import { authenticate } from './middleware/auth'
 import { errorHandler, notFound } from './middleware/errorHandler'
 import { globalLimiter, loginLimiter, initRateLimitStore } from './middleware/rateLimit'
+import cron from 'node-cron'
+import pool from './db/pool'
 import { requestId } from './middleware/requestId'
 import { logger } from './utils/logger'
 
@@ -114,19 +116,49 @@ app.use(errorHandler)
   app.listen(PORT, () => {
     logger.info('server listening', { port: PORT, url: `http://localhost:${PORT}` })
 
-    // Sistema de tareas auto-generadas desde la DB (cotizaciones estancadas, ETAs, etc.)
-    // Corre 60s despues del boot y cada 30 minutos en adelante.
-    const SYNC_INTERVAL_MS = 30 * 60 * 1000
+    // Sistema de tareas auto-generadas desde la DB (cotizaciones estancadas,
+    // ETAs, etc.). Corre dos veces al día: 07:00 y 14:00 hora local.
+    //
+    // Antes corría cada 30 min (excesivo para el ritmo del taller). Cambio
+    // motivado por el bump a 2 réplicas del backend — con setInterval
+    // ambas réplicas dispararían el job en paralelo. Ahora:
+    //   1. Cron expresado en cron-syntax con timezone explícito
+    //   2. Advisory lock vía pg_try_advisory_lock antes de correr — solo
+    //      UNA réplica gana el lock por fire; las otras skippean limpio
+    //   3. Lock liberado en finally para evitar deadlocks si el job tira
+    //
+    // Si querés cambiar la zona horaria, settealo en la env var TZ del
+    // servicio en Railway. Por defecto usa America/Mexico_City.
+    const SYNC_TIMEZONE = process.env.SYSTEM_SYNC_TZ || 'America/Mexico_City'
+    const SYNC_CRON     = '0 7,14 * * *'   // minuto 0 de las horas 7 y 14
+    const LEADER_LOCK_KEY = 4751923         // arbitrario, cualquier int único
     const runSystemSync = async () => {
+      const client = await pool.connect()
+      let gotLock = false
       try {
+        const { rows } = await client.query(
+          'SELECT pg_try_advisory_lock($1) AS got', [LEADER_LOCK_KEY]
+        )
+        gotLock = rows[0].got
+        if (!gotLock) {
+          logger.info('system tareas sync skipped (otra replica tiene el lock)')
+          return
+        }
         const result = await syncSystemTareas()
         logger.info('system tareas sync', result)
       } catch (err) {
         logger.error('system tareas sync failed', { err: String(err) })
+      } finally {
+        if (gotLock) {
+          try {
+            await client.query('SELECT pg_advisory_unlock($1)', [LEADER_LOCK_KEY])
+          } catch { /* ignore */ }
+        }
+        client.release()
       }
     }
-    setTimeout(runSystemSync, 60_000)
-    setInterval(runSystemSync, SYNC_INTERVAL_MS)
+    cron.schedule(SYNC_CRON, runSystemSync, { timezone: SYNC_TIMEZONE })
+    logger.info('system tareas sync scheduled', { cron: SYNC_CRON, timezone: SYNC_TIMEZONE })
   })
 })()
 
