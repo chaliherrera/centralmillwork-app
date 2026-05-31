@@ -86,6 +86,7 @@ export type ActividadEvento =
       ts: string
       fecha: string | null
       origen: 'MTO' | 'DIRECTA' | 'URGENTE' | 'OPERATIVA'
+      batch_id: string | null   // UUID del lote (post-migración 032), NULL para legacy
       items_count: number
       cotizar_si: number
       en_stock: number

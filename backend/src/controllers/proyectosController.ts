@@ -243,24 +243,33 @@ export async function getProyectoActividad(req: Request, res: Response, next: Ne
     const proyecto_id = parseInt(String(req.params.id))
     if (!proyecto_id) return next(createError('id inválido', 400))
 
-    // 1) Imports de MTO: agrupados por (fecha_importacion, origen)
+    // 1) Imports de MTO: agrupados por import_batch_id si existe (migración 032+),
+    //    fallback a (fecha_importacion, origen) para materiales legacy con
+    //    batch_id NULL.
+    //
+    // El COALESCE con un "synthetic batch key" garantiza que filas legacy del
+    //    mismo día/origen siguen agrupándose como antes; las nuevas (post-032)
+    //    se agrupan por batch_id real, así 2 subidas el mismo día = 2 eventos.
     const { rows: imports } = await pool.query(
       `SELECT
          'mto_import'                                AS tipo,
          MIN(created_at)                             AS ts,
          fecha_importacion                           AS fecha,
          origen,
+         import_batch_id                             AS batch_id,
          COUNT(*)::int                               AS items_count,
          COUNT(*) FILTER (WHERE cotizar = 'SI')::int      AS cotizar_si,
          COUNT(*) FILTER (WHERE cotizar = 'EN_STOCK')::int AS en_stock,
          (SELECT MIN(vendor) FROM materiales_mto m2
           WHERE m2.proyecto_id = materiales_mto.proyecto_id
-            AND m2.fecha_importacion = materiales_mto.fecha_importacion
-            AND m2.origen = materiales_mto.origen
+            AND COALESCE(m2.import_batch_id::text, m2.fecha_importacion::text || ':' || m2.origen)
+              = COALESCE(materiales_mto.import_batch_id::text, materiales_mto.fecha_importacion::text || ':' || materiales_mto.origen)
             AND m2.vendor IS NOT NULL AND m2.vendor != '')   AS vendor_principal
        FROM materiales_mto
        WHERE proyecto_id = $1
-       GROUP BY fecha_importacion, origen, proyecto_id
+       GROUP BY
+         COALESCE(import_batch_id::text, fecha_importacion::text || ':' || origen),
+         import_batch_id, fecha_importacion, origen, proyecto_id
        ORDER BY ts DESC`,
       [proyecto_id]
     )

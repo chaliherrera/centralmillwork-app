@@ -463,6 +463,11 @@ export async function importarMateriales(req: Request, res: Response, next: Next
     const fechaHoy = new Date().toISOString().slice(0, 10)
     const dataRows = allRows.slice(headerRowIdx + 1)
 
+    // Generar batch_id único para esta subida. Todos los materiales del mismo
+    // upload comparten este UUID. Permite distinguir múltiples MTOs el mismo
+    // día al mismo proyecto (ver migración 032).
+    const { rows: [{ batch_id }] } = await pool.query('SELECT gen_random_uuid() AS batch_id')
+
     const client = await pool.connect()
     try {
       await client.query('BEGIN')
@@ -496,8 +501,8 @@ export async function importarMateriales(req: Request, res: Response, next: Next
           `INSERT INTO materiales_mto
              (proyecto_id, item, codigo, vendor_code, vendor, descripcion, color,
               manufacturer, categoria, unidad, size, qty, unit_price, total_price,
-              cotizar, estado_cotiz, fecha_importacion)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)`,
+              cotizar, estado_cotiz, fecha_importacion, import_batch_id)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)`,
           [
             proyId,
             getText(row, 'item'),
@@ -516,14 +521,22 @@ export async function importarMateriales(req: Request, res: Response, next: Next
             cotizar,
             estado_cotiz,
             fechaHoy,
+            batch_id,
           ]
         )
         importados++
       }
 
       await client.query('COMMIT')
+      logger.info('mto import batch', {
+        requestId: req.id,
+        proyecto_id: proyId,
+        batch_id,
+        importados,
+        omitidos,
+      })
       res.status(201).json({
-        data: { importados, omitidos, fecha_importacion: fechaHoy },
+        data: { importados, omitidos, fecha_importacion: fechaHoy, import_batch_id: batch_id },
         message: `${importados} materiales importados correctamente`,
       })
     } catch (err) {
