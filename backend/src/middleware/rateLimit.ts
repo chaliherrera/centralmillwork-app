@@ -85,10 +85,43 @@ export const loginLimiter = rateLimit({
 // Si el setup falla (DB inaccesible, etc.) se loguea como ERROR pero el boot
 // sigue — el library va a fallar más tarde y queda visible en logs en vez de
 // un crash silencioso al startup.
+// Lock key arbitrario pero unico para este job. Distinto del LEADER_LOCK_KEY
+// del cron de tareas en index.ts (cada job distribuido necesita su propio key).
+const INIT_LOCK_KEY = 4751924
+
 export async function initRateLimitStore(): Promise<void> {
   const client = new Client(rlDbConfig as any)
+  let gotLock = false
   try {
     await client.connect()
+
+    // Advisory lock: solo UNA réplica corre el setup. Las demás esperan
+    // (bloquante) a que la primera termine, así no aceptan trafico hasta que
+    // el schema esté listo.
+    //
+    // Antes (sin lock): con 2+ réplicas, todas hacían DROP SCHEMA + migrate()
+    // en paralelo → una ganaba, las otras crasheaban por conflicto creando
+    // public.migrations → Railway las restartaba → ruido en logs en cada
+    // deploy. Funcionalmente OK (eventual consistency) pero feo.
+    //
+    // Ahora: pg_try_advisory_lock no bloquea. La réplica que gana hace el work.
+    // Las que pierden ESPERAN con pg_advisory_lock (bloquante), y cuando lo
+    // adquieren después de que la ganadora liberó, lo sueltan inmediato (su
+    // trabajo es solo esperar) y retornan. Para entonces el schema está listo.
+    const tryRes = await client.query(
+      'SELECT pg_try_advisory_lock($1) AS got', [INIT_LOCK_KEY]
+    )
+    gotLock = tryRes.rows[0].got
+
+    if (!gotLock) {
+      logger.info('rate-limit store init: esperando otra replica')
+      await client.query('SELECT pg_advisory_lock($1)', [INIT_LOCK_KEY])
+      await client.query('SELECT pg_advisory_unlock($1)', [INIT_LOCK_KEY])
+      logger.info('rate-limit store init: ready (otra replica completo el setup)')
+      return
+    }
+
+    // Somos la réplica leader. Hacer el setup.
     await client.query('DROP SCHEMA IF EXISTS rate_limit CASCADE')
     await client.query('DROP TABLE IF EXISTS public.migrations')
 
@@ -109,6 +142,9 @@ export async function initRateLimitStore(): Promise<void> {
       err: String(err),
     })
   } finally {
+    if (gotLock) {
+      try { await client.query('SELECT pg_advisory_unlock($1)', [INIT_LOCK_KEY]) } catch { /* ignore */ }
+    }
     try { await client.end() } catch { /* ignore */ }
   }
 }
