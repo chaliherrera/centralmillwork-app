@@ -58,9 +58,19 @@ export default function Ordenes() {
       key: 'numero_orden',
       header: 'N° Orden',
       render: (r) => (
-        <Link to={`/produccion/ordenes/${r.id}`} className="font-bold text-forest-700 hover:text-gold-600">
-          {r.numero_orden}
-        </Link>
+        <div className="flex items-center gap-2">
+          <Link to={`/produccion/ordenes/${r.id}`} className="font-bold text-forest-700 hover:text-gold-600">
+            {r.numero_orden}
+          </Link>
+          {r.tipo === 'MUESTRA' && (
+            <span
+              className="text-[9px] font-bold uppercase tracking-wider bg-gold-100 text-gold-700 px-1.5 py-0.5 rounded-full border border-gold-300"
+              title="Esta OP fue auto-creada desde el módulo de Muestras"
+            >
+              Muestra
+            </span>
+          )}
+        </div>
       ),
     },
     {

@@ -404,7 +404,35 @@ export async function transicionarMuestra(req: Request, res: Response, next: Nex
 
     let nuevaVersion = muestra.version_actual
 
-    // Caso especial: RECHAZADA crea V+1 con la razón del cliente
+    // ── Caso especial: EN_FABRICACION ──────────────────────────────────────
+    // 1. Verificar que todas las OCs directas asociadas a la muestra estén
+    //    en estado 'recibida' (materiales físicamente en el taller). Si hay
+    //    OCs pendientes, bloquear con detalle de cuáles faltan.
+    //    Excepción: si NO hay ninguna OC asociada, se permite (caso de
+    //    muestras hechas con stock propio o materiales del proyecto).
+    //
+    // 2. Auto-crear una orden de producción (ordenes_produccion) con
+    //    tipo='MUESTRA' y vincularla a la versión actual de la muestra
+    //    (muestras_versiones.op_id). El operario en el kiosko verá esta OP
+    //    igual que cualquier otra, distinguida por el badge MUESTRA.
+    if (nuevo_estado === 'EN_FABRICACION') {
+      const { rows: ocs } = await client.query(
+        `SELECT id, numero, estado FROM ordenes_compra WHERE muestra_id = $1`,
+        [id]
+      )
+      const pendientes = ocs.filter((oc: any) => oc.estado !== 'recibida' && oc.estado !== 'cancelada')
+      if (pendientes.length > 0) {
+        await client.query('ROLLBACK')
+        const detalleFalt = pendientes.map((oc: any) => `${oc.numero} (${oc.estado})`).join(', ')
+        return next(createError(
+          `No se puede iniciar fabricación: ${pendientes.length} OC(s) asociada(s) aún no están recibidas: ${detalleFalt}. ` +
+          `Esperá a que llegue todo el material o cancelá las OCs pendientes.`,
+          400
+        ))
+      }
+    }
+
+    // ── Caso especial: RECHAZADA crea V+1 con la razón del cliente ─────────
     if (nuevo_estado === 'RECHAZADA') {
       nuevaVersion = muestra.version_actual + 1
       await client.query(
@@ -447,12 +475,88 @@ export async function transicionarMuestra(req: Request, res: Response, next: Nex
       [id, nuevaVersion, tipoEvento[nuevo_estado] ?? 'comentario', detalle, req.user?.id ?? null]
     )
 
+    // ── Auto-crear OP cuando vamos a EN_FABRICACION ──────────────────────
+    // El check de materiales recibidos ya pasó arriba. Acá creamos la OP
+    // con tipo='MUESTRA' y la vinculamos a la versión actual.
+    // El operario va a verla en el kiosko como cualquier OP, distinguida
+    // por badge "MUESTRA" + un link a la muestra padre.
+    //
+    // Si ya existe una OP para esta versión (caso: el usuario revierte
+    // EN_QC → EN_FABRICACION y vuelve a avanzar), reusamos esa en vez de
+    // crear duplicada.
+    let opCreada: any = null
+    if (nuevo_estado === 'EN_FABRICACION') {
+      const { rows: [versionRow] } = await client.query(
+        `SELECT id, op_id FROM muestras_versiones WHERE muestra_id = $1 AND version_numero = $2`,
+        [id, nuevaVersion]
+      )
+      if (versionRow && !versionRow.op_id) {
+        // Generar número de OP único: OP-MS-{año}-{seq}
+        const { rows: [seqRow] } = await client.query(
+          `SELECT COUNT(*) + 1 AS seq FROM ordenes_produccion WHERE tipo = 'MUESTRA'`
+        )
+        const opNumero = `OP-MS-${new Date().getFullYear()}-${String(seqRow.seq).padStart(3, '0')}`
+
+        // Crear la OP. Campos:
+        // - numero_orden, proyecto_id (de la muestra)
+        // - numero_item: usamos el codigo de la muestra (no es número del MTO,
+        //   así que ponemos el SMP-XXX como referencia visible al operario)
+        // - cantidad: 1 (una muestra)
+        // - prioridad: heredada de la muestra
+        // - status: 'Pendiente' (operario decide cuando arrancar)
+        // - tipo: 'MUESTRA' (nuevo campo del enum op_tipo)
+        const opPrioridad = updated.prioridad === 'ALTA' ? 'Alta'
+                          : updated.prioridad === 'BAJA' ? 'Baja' : 'Media'
+        const opEspecs = `Muestra ${updated.codigo} V${nuevaVersion}\n\n${updated.descripcion}`
+
+        const { rows: [op] } = await client.query(
+          `INSERT INTO ordenes_produccion
+             (numero_orden, proyecto_id, numero_item, cantidad, unidad,
+              especificaciones, prioridad, status, tipo,
+              fecha_entrega, created_by)
+           VALUES ($1, $2, $3, 1, 'pieza', $4, $5, 'Pendiente', 'MUESTRA',
+                   $6, $7)
+           RETURNING *`,
+          [
+            opNumero, updated.proyecto_id, updated.codigo,
+            opEspecs, opPrioridad,
+            updated.fecha_compromiso ?? null,
+            req.user?.id ?? null,
+          ]
+        )
+        opCreada = op
+
+        // Vincular la OP a la versión de la muestra
+        await client.query(
+          `UPDATE muestras_versiones SET op_id = $1 WHERE id = $2`,
+          [op.id, versionRow.id]
+        )
+
+        // Evento adicional para el timeline
+        await client.query(
+          `INSERT INTO muestras_eventos (muestra_id, version_numero, tipo, detalle, usuario_id)
+           VALUES ($1, $2, 'comentario', $3, $4)`,
+          [id, nuevaVersion, `OP creada automáticamente: ${opNumero}`, req.user?.id ?? null]
+        )
+        logger.info('op auto-creada para muestra', {
+          requestId: req.id, muestraId: id, opId: op.id, opNumero,
+        })
+      }
+    }
+
     await client.query('COMMIT')
     logger.info('muestra transicion', {
       requestId: req.id, muestraId: id,
       de: muestra.estado, a: nuevo_estado, version: nuevaVersion,
+      opCreada: opCreada?.numero_orden ?? null,
     })
-    res.json({ data: updated, message: `Estado actualizado a ${nuevo_estado}` })
+    res.json({
+      data: updated,
+      op_creada: opCreada,
+      message: opCreada
+        ? `Estado actualizado a ${nuevo_estado}. OP ${opCreada.numero_orden} creada.`
+        : `Estado actualizado a ${nuevo_estado}`,
+    })
   } catch (err) {
     await client.query('ROLLBACK')
     next(err)

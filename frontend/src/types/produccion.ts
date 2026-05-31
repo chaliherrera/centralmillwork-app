@@ -5,6 +5,10 @@ import type { TipoPersonal } from './kiosk'
 
 export type StatusOrden = 'Pendiente' | 'En Proceso' | 'Pausada' | 'Completada' | 'Cancelada'
 export type Prioridad   = 'Alta' | 'Media' | 'Baja'
+// Distingue OPs normales de producción vs OPs auto-creadas por el módulo de muestras.
+// Cuando tipo='MUESTRA', el operario en el kiosko ve un badge "MUESTRA" en la card
+// y puede clickear para ir al detalle de la muestra padre.
+export type OpTipo = 'PRODUCCION' | 'MUESTRA'
 
 export interface OrdenProduccion {
   id: number
@@ -21,6 +25,7 @@ export interface OrdenProduccion {
   fecha_entrega: string | null
   tiempo_estimado_horas: number | null
   status: StatusOrden
+  tipo: OpTipo                            // default 'PRODUCCION'
   estacion_actual: string | null
   personal_asignado_id: number | null
   personal_asignado_nombre?: string | null
