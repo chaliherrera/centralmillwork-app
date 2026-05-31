@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Plus, Beaker, Calendar, User as UserIcon, AlertTriangle, RefreshCw,
   Truck, X, ArrowRight, FileText, Upload, Trash2, Download, Paperclip,
-  RotateCcw,
+  RotateCcw, CalendarDays, ChevronLeft, ChevronRight,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import clsx from 'clsx'
@@ -13,7 +13,7 @@ import { useAuth } from '@/context/AuthContext'
 import type {
   MuestraConDetalle, MuestraEstado, MuestraTipo, MuestraPrioridad,
   CreateMuestraInput, TransicionInput, RegistrarEnvioInput,
-  MuestraArchivo,
+  MuestraArchivo, MuestraDetalle,
 } from '@/types/muestras'
 
 // ─── Configuración de estados ────────────────────────────────────────────────
@@ -458,7 +458,7 @@ function DetalleMuestraDrawer({ id, onClose, onChange }: { id: number; onClose: 
   const { user } = useAuth()
   const qc = useQueryClient()
   const [showEnvio, setShowEnvio] = useState(false)
-  const [tab, setTab] = useState<'overview' | 'archivos' | 'ocs' | 'envios' | 'timeline'>('overview')
+  const [tab, setTab] = useState<'overview' | 'archivos' | 'ocs' | 'envios' | 'timeline' | 'calendar'>('overview')
 
   const { data, isLoading } = useQuery({
     queryKey: ['muestra', id],
@@ -577,6 +577,7 @@ function DetalleMuestraDrawer({ id, onClose, onChange }: { id: number; onClose: 
                 ['ocs',      `OCs (${data.ocs.length})`],
                 ['envios',   `Envíos (${data.envios.length})`],
                 ['timeline', 'Timeline'],
+                ['calendar', 'Calendar'],
               ].map(([key, label]) => (
                 <button
                   key={key}
@@ -793,6 +794,8 @@ function DetalleMuestraDrawer({ id, onClose, onChange }: { id: number; onClose: 
                   ))}
                 </div>
               )}
+
+              {tab === 'calendar' && <CalendarMuestraTab data={data} />}
             </div>
           </>
         )}
@@ -888,6 +891,287 @@ function KV({ label, value }: { label: string; value: string | React.ReactNode }
       <div className="text-sm text-gray-900">{value}</div>
     </div>
   )
+}
+
+// ─── Tab Calendario de la muestra ────────────────────────────────────────────
+// Mismo concepto que el calendar de ProyectoDetalle pero adaptado a un drawer
+// más angosto, con eventos del ciclo de vida de UNA muestra: creación, cada
+// transición de estado, envíos, recepción del cliente, aprobación, deadline.
+
+type EventoCalendarMuestra = {
+  fecha: string          // YYYY-MM-DD
+  tipo: string           // 'creada' | 'qc_pass' | 'enviada' | 'aprobada' | 'rechazada' | 'deadline' | 'recepcion' | etc.
+  label: string          // qué mostrar en el chip
+  detalle: string        // tooltip
+  version?: number
+  color: string          // tailwind classes
+}
+
+function CalendarMuestraTab({ data }: { data: MuestraDetalle }) {
+  const today = new Date()
+  const [cursor, setCursor] = useState<{ year: number; month: number }>({
+    year: today.getFullYear(),
+    month: today.getMonth(),
+  })
+
+  // Consolidar eventos de distintas fuentes a una lista de calendario
+  const eventos = useMemo<EventoCalendarMuestra[]>(() => {
+    const out: EventoCalendarMuestra[] = []
+    const m = data.muestra
+
+    // 1. Eventos del timeline (transiciones, comentarios, etc.)
+    for (const e of data.eventos) {
+      const fecha = e.timestamp.slice(0, 10)
+      const meta = getEventoCalMeta(e.tipo)
+      out.push({
+        fecha,
+        tipo: e.tipo,
+        label: meta.label,
+        detalle: e.detalle ?? meta.label,
+        version: e.version_numero,
+        color: meta.color,
+      })
+    }
+
+    // 2. Envíos físicos al cliente
+    for (const env of data.envios) {
+      out.push({
+        fecha: env.fecha_envio,
+        tipo: 'envio',
+        label: `Envío V${env.version_numero}`,
+        detalle: `Envío a ${env.destinatario}${env.tracking_carrier ? ` · ${env.tracking_carrier}` : ''}`,
+        version: env.version_numero,
+        color: 'bg-blue-100 text-blue-700',
+      })
+      // 3. Recepción confirmada por cliente
+      if (env.fecha_recepcion_confirmada) {
+        out.push({
+          fecha: env.fecha_recepcion_confirmada,
+          tipo: 'recepcion_cliente',
+          label: `Recibido V${env.version_numero}`,
+          detalle: `Cliente confirmó recepción del envío del ${env.fecha_envio}`,
+          version: env.version_numero,
+          color: 'bg-cyan-100 text-cyan-700',
+        })
+      }
+    }
+
+    // 4. Deadline (fecha_compromiso) — siempre visible
+    if (m.fecha_compromiso) {
+      out.push({
+        fecha: m.fecha_compromiso,
+        tipo: 'deadline',
+        label: 'Deadline',
+        detalle: `Fecha compromiso con el cliente`,
+        color: 'bg-amber-100 text-amber-800 border border-amber-300',
+      })
+    }
+
+    // 5. Aprobación del cliente (si existe)
+    if (m.fecha_aprobacion_cliente) {
+      out.push({
+        fecha: m.fecha_aprobacion_cliente,
+        tipo: 'aprobacion_cliente',
+        label: 'Aprobada',
+        detalle: 'Cliente aprobó oficialmente la muestra',
+        color: 'bg-emerald-100 text-emerald-800',
+      })
+    }
+
+    return out
+  }, [data])
+
+  // Agrupar por fecha YYYY-MM-DD
+  const eventosPorDia = useMemo(() => {
+    const map = new Map<string, EventoCalendarMuestra[]>()
+    for (const ev of eventos) {
+      if (!map.has(ev.fecha)) map.set(ev.fecha, [])
+      map.get(ev.fecha)!.push(ev)
+    }
+    return map
+  }, [eventos])
+
+  // Detectar si hay actividad en otros meses (para guiar la navegación)
+  const { eventosMesActual, eventosOtrosMeses, primerMes, ultimoMes } = useMemo(() => {
+    const ymCursor = `${cursor.year}-${String(cursor.month + 1).padStart(2, '0')}`
+    let enMes = 0
+    let fueraMes = 0
+    const yms = new Set<string>()
+    for (const ev of eventos) {
+      const ym = ev.fecha.slice(0, 7)
+      yms.add(ym)
+      if (ym === ymCursor) enMes++; else fueraMes++
+    }
+    const sorted = [...yms].sort()
+    return {
+      eventosMesActual:  enMes,
+      eventosOtrosMeses: fueraMes,
+      primerMes: sorted[0] ?? null,
+      ultimoMes: sorted[sorted.length - 1] ?? null,
+    }
+  }, [eventos, cursor])
+
+  // Build grid de 42 celdas
+  const grid = useMemo(() => buildMonthGridMuestra(cursor.year, cursor.month), [cursor])
+  const monthName = new Date(cursor.year, cursor.month, 1).toLocaleString('es-MX', { month: 'long', year: 'numeric' })
+  const todayISO  = today.toISOString().slice(0, 10)
+
+  const prevMonth = () => setCursor((c) => c.month === 0 ? { year: c.year - 1, month: 11 } : { ...c, month: c.month - 1 })
+  const nextMonth = () => setCursor((c) => c.month === 11 ? { year: c.year + 1, month: 0 } : { ...c, month: c.month + 1 })
+  const goToday   = () => setCursor({ year: today.getFullYear(), month: today.getMonth() })
+  const goToYm    = (ym: string) => {
+    const [y, m] = ym.split('-')
+    setCursor({ year: parseInt(y), month: parseInt(m) - 1 })
+  }
+
+  const DIAS = ['L', 'M', 'X', 'J', 'V', 'S', 'D']
+
+  return (
+    <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+      {/* Header con nav */}
+      <div className="bg-gradient-to-r from-forest-700 to-forest-600 text-white px-4 py-3">
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2 min-w-0">
+            <CalendarDays size={15} className="text-gold-300 shrink-0" />
+            <h3 className="text-sm font-bold capitalize truncate">{monthName}</h3>
+          </div>
+          <div className="flex items-center gap-1 shrink-0">
+            <button onClick={prevMonth} className="p-1.5 text-white/80 hover:text-white hover:bg-white/10 rounded transition-colors" title="Anterior">
+              <ChevronLeft size={14} />
+            </button>
+            <button onClick={goToday} className="px-2.5 py-1 text-[11px] font-bold bg-gold-500 hover:bg-gold-600 text-white rounded transition-colors">
+              Hoy
+            </button>
+            <button onClick={nextMonth} className="p-1.5 text-white/80 hover:text-white hover:bg-white/10 rounded transition-colors" title="Siguiente">
+              <ChevronRight size={14} />
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Hint si hay eventos fuera del mes */}
+      {(eventosOtrosMeses > 0) && (
+        <div className="bg-forest-50/40 border-b border-gray-100 px-3 py-2 text-[11px] text-gray-600 flex items-center justify-between gap-2 flex-wrap">
+          <div>
+            <strong className="text-forest-700">{eventosMesActual}</strong> este mes
+            · <strong className="text-gray-700">{eventosOtrosMeses}</strong> en otros
+          </div>
+          <div className="flex items-center gap-1">
+            {primerMes && primerMes !== `${cursor.year}-${String(cursor.month + 1).padStart(2, '0')}` && (
+              <button onClick={() => goToYm(primerMes)} className="px-1.5 py-0.5 rounded text-forest-700 hover:bg-forest-100 font-medium">
+                ← {primerMes.slice(5, 7)}/{primerMes.slice(2, 4)}
+              </button>
+            )}
+            {ultimoMes && ultimoMes !== primerMes && ultimoMes !== `${cursor.year}-${String(cursor.month + 1).padStart(2, '0')}` && (
+              <button onClick={() => goToYm(ultimoMes)} className="px-1.5 py-0.5 rounded text-forest-700 hover:bg-forest-100 font-medium">
+                {ultimoMes.slice(5, 7)}/{ultimoMes.slice(2, 4)} →
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Grid */}
+      <div className="p-3">
+        <div className="grid grid-cols-7 gap-1 mb-1.5">
+          {DIAS.map((d) => (
+            <div key={d} className="text-[9px] font-bold text-gray-400 uppercase tracking-wider text-center pb-0.5">{d}</div>
+          ))}
+        </div>
+        <div className="grid grid-cols-7 gap-1">
+          {grid.map((cell, idx) => {
+            const isCurrentMonth = cell.month === cursor.month
+            const isToday        = cell.dateISO === todayISO
+            const dayEvents      = eventosPorDia.get(cell.dateISO) ?? []
+            return (
+              <div
+                key={idx}
+                className={clsx(
+                  'min-h-[72px] rounded p-1 flex flex-col gap-0.5 border',
+                  isCurrentMonth ? 'bg-white border-gray-200' : 'bg-gray-50/60 border-gray-100',
+                  isToday && '!bg-gold-50 !border-gold-400 ring-1 ring-gold-300',
+                )}
+              >
+                <div className="flex items-center justify-between">
+                  <span className={clsx(
+                    'text-[10px] font-bold tabular-nums',
+                    isToday ? 'text-gold-700' : isCurrentMonth ? 'text-gray-700' : 'text-gray-300'
+                  )}>{cell.day}</span>
+                  {isToday && <span className="text-[8px] font-bold bg-gold-500 text-white px-1 rounded">HOY</span>}
+                </div>
+                <div className="flex flex-col gap-0.5 overflow-hidden">
+                  {dayEvents.slice(0, 3).map((ev, i) => (
+                    <span
+                      key={i}
+                      className={clsx('text-[8.5px] px-1 py-0.5 rounded font-medium truncate', ev.color)}
+                      title={ev.detalle}
+                    >
+                      {ev.label}
+                    </span>
+                  ))}
+                  {dayEvents.length > 3 && (
+                    <span className="text-[8px] text-gray-400 italic pl-1">+{dayEvents.length - 3}</span>
+                  )}
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      </div>
+
+      {/* Leyenda */}
+      <div className="bg-gray-50/60 border-t border-gray-100 px-3 py-2">
+        <p className="text-[9px] font-bold text-gray-500 uppercase tracking-wider mb-1.5">Leyenda</p>
+        <div className="flex flex-wrap gap-1 text-[9px]">
+          <CalLegendChip color="bg-gray-100 text-gray-700" label="Creada" />
+          <CalLegendChip color="bg-yellow-100 text-yellow-700" label="A fabricación" />
+          <CalLegendChip color="bg-purple-100 text-purple-700" label="QC" />
+          <CalLegendChip color="bg-blue-100 text-blue-700" label="Envío" />
+          <CalLegendChip color="bg-cyan-100 text-cyan-700" label="Cliente recibió" />
+          <CalLegendChip color="bg-emerald-100 text-emerald-700" label="Aprobada" />
+          <CalLegendChip color="bg-red-100 text-red-700" label="Rechazada" />
+          <CalLegendChip color="bg-amber-100 text-amber-800 border border-amber-300" label="Deadline" />
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function CalLegendChip({ color, label }: { color: string; label: string }) {
+  return <span className={clsx('inline-flex items-center px-1 py-0.5 rounded font-medium', color)}>{label}</span>
+}
+
+function getEventoCalMeta(tipo: string): { label: string; color: string } {
+  switch (tipo) {
+    case 'creada':         return { label: 'Creada',         color: 'bg-gray-100 text-gray-700' }
+    case 'en_fabricacion': return { label: 'A fabricación',  color: 'bg-yellow-100 text-yellow-700' }
+    case 'qc_pass':        return { label: 'QC',             color: 'bg-purple-100 text-purple-700' }
+    case 'qc_fail':        return { label: 'QC fail',        color: 'bg-orange-100 text-orange-700' }
+    case 'enviada':        return { label: 'Enviada',        color: 'bg-blue-100 text-blue-700' }
+    case 'aprobada':       return { label: 'Aprobada',       color: 'bg-emerald-100 text-emerald-700' }
+    case 'rechazada':      return { label: 'Rechazada',      color: 'bg-red-100 text-red-700' }
+    case 'archivada':      return { label: 'Archivada',      color: 'bg-gray-200 text-gray-600' }
+    case 'comentario':     return { label: 'Nota',           color: 'bg-gray-100 text-gray-600' }
+    default:               return { label: tipo,             color: 'bg-gray-100 text-gray-600' }
+  }
+}
+
+function buildMonthGridMuestra(year: number, month: number) {
+  const firstOfMonth = new Date(year, month, 1)
+  const firstDayWeekday = (firstOfMonth.getDay() + 6) % 7
+  const gridStart = new Date(year, month, 1 - firstDayWeekday)
+  return Array.from({ length: 42 }, (_, i) => {
+    const d = new Date(gridStart)
+    d.setDate(gridStart.getDate() + i)
+    const y  = d.getFullYear()
+    const m  = String(d.getMonth() + 1).padStart(2, '0')
+    const dd = String(d.getDate()).padStart(2, '0')
+    return {
+      day:     d.getDate(),
+      month:   d.getMonth(),
+      dateISO: `${y}-${m}-${dd}`,
+    }
+  })
 }
 
 // ─── Panel de archivos en el drawer ──────────────────────────────────────────
