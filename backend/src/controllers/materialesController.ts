@@ -34,18 +34,69 @@ export const uploadExcel = multer({
   limits: { fileSize: 20 * 1024 * 1024 },
 })
 
+/**
+ * GET /api/materiales/import-dates?proyecto_id=N
+ *
+ * Devuelve los LOTES de importación del proyecto. Después de la migración 032
+ * (import_batch_id), un lote = un batch_id único. Para materiales legacy con
+ * batch_id NULL, fallback a agrupar por (fecha_importacion + origen).
+ *
+ * Cada lote incluye:
+ *   - batch_id (UUID o NULL para legacy)
+ *   - fecha_importacion (YYYY-MM-DD)
+ *   - origen (MTO / DIRECTA / etc)
+ *   - count (items en el lote)
+ *   - vendor_principal (uno representativo)
+ *   - created_at_min (timestamp del primer INSERT — sirve para mostrar hora)
+ *   - is_latest (bool, true para el lote más reciente del proyecto)
+ *
+ * El frontend usa esto para poblar el dropdown "Todos los lotes" y permite
+ * filtrar por batch_id (o por fecha+origen si es legacy).
+ *
+ * Compatibilidad: campo `fecha` legacy se mantiene para que el dropdown
+ * viejo siga funcionando hasta que se actualice. Pero ahora también incluye
+ * `batches` con el detalle granular.
+ */
 export async function getMaterialesImportDates(req: Request, res: Response, next: NextFunction) {
   try {
     const { proyecto_id } = req.query
     if (!proyecto_id) return next(createError('proyecto_id es requerido', 400))
-    const { rows } = await pool.query(
-      `SELECT DISTINCT fecha_importacion, fecha_importacion::text AS fecha
-       FROM materiales_mto
-       WHERE proyecto_id = $1 AND fecha_importacion IS NOT NULL
-       ORDER BY fecha_importacion DESC`,
-      [parseInt(String(proyecto_id))]
+    const pid = parseInt(String(proyecto_id))
+
+    const { rows: batches } = await pool.query(
+      `WITH lotes AS (
+         SELECT
+           import_batch_id                  AS batch_id,
+           fecha_importacion                AS fecha,
+           origen,
+           COUNT(*)::int                    AS count,
+           MIN(created_at)                  AS created_at_min,
+           MAX(created_at)                  AS created_at_max,
+           (SELECT MIN(vendor) FROM materiales_mto m2
+            WHERE m2.proyecto_id = materiales_mto.proyecto_id
+              AND COALESCE(m2.import_batch_id::text, m2.fecha_importacion::text || ':' || m2.origen)
+                = COALESCE(materiales_mto.import_batch_id::text, materiales_mto.fecha_importacion::text || ':' || materiales_mto.origen)
+              AND m2.vendor IS NOT NULL AND m2.vendor != '')   AS vendor_principal
+         FROM materiales_mto
+         WHERE proyecto_id = $1 AND fecha_importacion IS NOT NULL
+         GROUP BY
+           COALESCE(import_batch_id::text, fecha_importacion::text || ':' || origen),
+           import_batch_id, fecha_importacion, origen, proyecto_id
+       )
+       SELECT *,
+         (created_at_min = MAX(created_at_min) OVER ()) AS is_latest
+       FROM lotes
+       ORDER BY created_at_min DESC`,
+      [pid]
     )
-    res.json({ data: rows.map((r) => r.fecha) })
+
+    // Backward-compat: lista plana de fechas únicas (legacy)
+    const fechasUnicas = Array.from(new Set(batches.map((b: any) => b.fecha))).sort().reverse()
+
+    res.json({
+      data: fechasUnicas,   // legacy: array de fechas
+      batches,              // nuevo: lista granular de lotes
+    })
   } catch (err) { next(err) }
 }
 
@@ -79,6 +130,33 @@ export async function getMateriales(req: Request, res: Response, next: NextFunct
     if (req.query.fecha_importacion) {
       conds.push(`m.fecha_importacion = $${filterVals.length + 1}`)
       filterVals.push(String(req.query.fecha_importacion))
+    }
+    // Filtro por batch_id (post-migración 032). Permite distinguir múltiples
+    // subidas el mismo día. Si el cliente manda 'latest', resolvemos al batch
+    // más reciente del proyecto (o del global si no hay proyecto filter).
+    if (req.query.import_batch_id) {
+      const bid = String(req.query.import_batch_id)
+      if (bid === 'latest') {
+        // El último batch_id del proyecto (si proyecto_id está filtrado) o global
+        const proyectoFilter = req.query.proyecto_id
+          ? ` AND proyecto_id = ${parseInt(String(req.query.proyecto_id))}`
+          : ''
+        const { rows: [latest] } = await pool.query(
+          `SELECT import_batch_id FROM materiales_mto
+           WHERE import_batch_id IS NOT NULL ${proyectoFilter}
+           ORDER BY created_at DESC LIMIT 1`
+        )
+        if (latest?.import_batch_id) {
+          conds.push(`m.import_batch_id = $${filterVals.length + 1}`)
+          filterVals.push(latest.import_batch_id)
+        } else {
+          // No hay batches con UUID — devolver 0 resultados
+          conds.push('FALSE')
+        }
+      } else {
+        conds.push(`m.import_batch_id = $${filterVals.length + 1}`)
+        filterVals.push(bid)
+      }
     }
 
     // Filtro origen: 'MTO' | 'DIRECTA' | 'URGENTE' | 'OPERATIVA' | 'NO_MTO' (combina DIRECTA+URGENTE+OPERATIVA)

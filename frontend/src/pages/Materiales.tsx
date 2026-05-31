@@ -28,7 +28,10 @@ const fmtDate = (d: string | null | undefined) => {
 
 export default function Materiales() {
   const [selectedProyectoId, setSelectedProyectoId] = useState<number | ''>('')
-  const [importDateFilter, setImportDateFilter]     = useState('')
+  // Filtro de lote: puede ser '' (todos), 'latest' (más reciente), o
+  // 'batch:UUID' (lote específico post-migración 032), o
+  // 'date:YYYY-MM-DD' (legacy, materiales pre-032 sin batch_id)
+  const [loteFilter, setLoteFilter]                  = useState('')
   const [vendorFilter, setVendorFilter]             = useState('')
   const [origenFilter, setOrigenFilter]             = useState<'' | 'MTO' | 'DIRECTA' | 'URGENTE' | 'OPERATIVA' | 'NO_MTO'>('')
   const [search, setSearch]                         = useState('')
@@ -64,7 +67,9 @@ export default function Materiales() {
     enabled: !!selectedProyectoId,
     staleTime: 30_000,
   })
-  const importDates = importDatesData?.data ?? []
+  // Nuevo: lista granular de lotes (post-migración 032). Cada batch_id distinto
+  // es un "lote" separado, aunque varios sean del mismo día.
+  const batches = importDatesData?.batches ?? []
 
   const { data: allItems } = useQuery({
     queryKey: ['materiales-all', selectedProyectoId],
@@ -85,14 +90,23 @@ export default function Materiales() {
     ).length
   }, [allItems, vendorFilter])
 
+  // Parsear loteFilter para mandar el query param correcto al backend
+  const loteParams = useMemo(() => {
+    if (!loteFilter) return {}
+    if (loteFilter === 'latest') return { import_batch_id: 'latest' as const }
+    if (loteFilter.startsWith('batch:')) return { import_batch_id: loteFilter.slice(6) }
+    if (loteFilter.startsWith('date:')) return { fecha_importacion: loteFilter.slice(5) }
+    return {}
+  }, [loteFilter])
+
   const { data, isLoading } = useQuery({
-    queryKey: ['materiales', page, search, selectedProyectoId, vendorFilter, importDateFilter, origenFilter],
+    queryKey: ['materiales', page, search, selectedProyectoId, vendorFilter, loteFilter, origenFilter],
     queryFn: () =>
       materialesService.getAll({
         page, limit: 50, search,
         proyecto_id: selectedProyectoId || undefined,
         vendor: vendorFilter || undefined,
-        fecha_importacion: importDateFilter || undefined,
+        ...loteParams,
         origen: origenFilter || undefined,
       }),
     enabled: !!selectedProyectoId,
@@ -133,8 +147,8 @@ export default function Materiales() {
     if (window.confirm(`¿Eliminar "${m.descripcion}"?`)) deleteMutation.mutate(m.id)
   }
 
-  const clearFilters = () => { setVendorFilter(''); setImportDateFilter(''); setOrigenFilter(''); setSearch(''); setPage(1) }
-  const hasFilters   = !!(vendorFilter || importDateFilter || origenFilter || search)
+  const clearFilters = () => { setVendorFilter(''); setLoteFilter(''); setOrigenFilter(''); setSearch(''); setPage(1) }
+  const hasFilters   = !!(vendorFilter || loteFilter || origenFilter || search)
 
   const materials = data?.data ?? []
 
@@ -167,7 +181,7 @@ export default function Materiales() {
             value={selectedProyectoId}
             onChange={(e) => {
               setSelectedProyectoId(e.target.value === '' ? '' : parseInt(e.target.value))
-              setVendorFilter(''); setImportDateFilter(''); setSearch(''); setPage(1)
+              setVendorFilter(''); setLoteFilter(''); setSearch(''); setPage(1)
             }}
             className="input text-sm w-44 flex-shrink-0"
           >
@@ -271,19 +285,40 @@ export default function Materiales() {
                 />
               </div>
 
-              {/* Import date filter */}
+              {/* Import lote filter — agrupa por batch_id post-032, con
+                  fallback a fecha+origen para legacy. Muestra cada subida
+                  como opción distinta, incluyendo hora cuando hay varias el
+                  mismo día. "Último lote subido" siempre disponible arriba. */}
               <select
-                value={importDateFilter}
-                onChange={(e) => { setImportDateFilter(e.target.value); setPage(1) }}
+                value={loteFilter}
+                onChange={(e) => { setLoteFilter(e.target.value); setPage(1) }}
                 className={clsx(
-                  'input text-sm w-44',
-                  importDateFilter && 'border-gold-400 text-gold-700 bg-gold-50'
+                  'input text-sm w-56',
+                  loteFilter && 'border-gold-400 text-gold-700 bg-gold-50'
                 )}
               >
                 <option value="">Todos los lotes</option>
-                {importDates.map((d) => (
-                  <option key={d} value={d}>{fmtDate(d)}</option>
-                ))}
+                {batches.length > 0 && (
+                  <option value="latest">⚡ Último lote subido</option>
+                )}
+                {batches.length > 0 && <option disabled>──────────────</option>}
+                {batches.map((b) => {
+                  // Key estable: batch_id si existe (post-032), sino date:fecha
+                  const optValue = b.batch_id ? `batch:${b.batch_id}` : `date:${b.fecha}`
+                  // Cuando hay varios lotes el mismo día, mostrar la hora HH:MM
+                  // para distinguirlos. Si solo hay uno, mostrar solo la fecha.
+                  const sameDay = batches.filter((x) => x.fecha === b.fecha).length > 1
+                  const hora = sameDay
+                    ? ' ' + new Date(b.created_at_min).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })
+                    : ''
+                  const vendor = b.vendor_principal ? ` · ${b.vendor_principal}` : ''
+                  const legacy = !b.batch_id ? ' (legacy)' : ''
+                  return (
+                    <option key={optValue} value={optValue}>
+                      {fmtDate(b.fecha)}{hora} · {b.count} items{vendor}{legacy}{b.is_latest ? ' ⚡' : ''}
+                    </option>
+                  )
+                })}
               </select>
 
               {/* Vendor filter */}
@@ -374,7 +409,15 @@ export default function Materiales() {
           {!isLoading && (
             <p className="text-xs text-gray-400">
               {total} materiales
-              {importDateFilter && <> · lote: <strong>{fmtDate(importDateFilter)}</strong></>}
+              {loteFilter && <> · lote: <strong>{
+                loteFilter === 'latest' ? 'último subido'
+                : loteFilter.startsWith('batch:') ? (() => {
+                    const b = batches.find((x) => x.batch_id === loteFilter.slice(6))
+                    return b ? `${fmtDate(b.fecha)} · ${b.count} items` : 'filtrado'
+                  })()
+                : loteFilter.startsWith('date:') ? fmtDate(loteFilter.slice(5))
+                : 'filtrado'
+              }</strong></>}
               {vendorFilter && <> · vendor: <strong>{vendorFilter}</strong></>}
             </p>
           )}

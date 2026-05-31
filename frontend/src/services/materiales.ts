@@ -44,12 +44,27 @@ export interface MaterialPayload {
   fecha_importacion?: string | null
 }
 
+// Un "lote" de importación — devuelto por getImportDates en el campo `batches`
+export interface ImportBatch {
+  batch_id: string | null      // UUID, NULL para legacy
+  fecha: string                // YYYY-MM-DD
+  origen: string               // MTO / DIRECTA / etc
+  count: number                // cantidad de materiales en este lote
+  created_at_min: string       // timestamp ISO del primer INSERT del lote
+  created_at_max: string
+  vendor_principal: string | null
+  is_latest: boolean           // true para el lote más reciente del proyecto
+}
+
 export const materialesService = {
-  getAll: (params?: PaginationParams & { proyecto_id?: number; vendor?: string; estado_cotiz?: string; cotizar?: 'SI' | 'NO' | 'EN_STOCK'; categoria?: string; fecha_importacion?: string; origen?: 'MTO' | 'DIRECTA' | 'URGENTE' | 'OPERATIVA' | 'NO_MTO' }) =>
+  getAll: (params?: PaginationParams & { proyecto_id?: number; vendor?: string; estado_cotiz?: string; cotizar?: 'SI' | 'NO' | 'EN_STOCK'; categoria?: string; fecha_importacion?: string; import_batch_id?: string; origen?: 'MTO' | 'DIRECTA' | 'URGENTE' | 'OPERATIVA' | 'NO_MTO' }) =>
     api.get<ApiResponse<Material[]>>('/materiales', { params }).then((r) => r.data),
 
+  // Backward-compat: devuelve {data: string[]} (legacy fechas) Y {batches: ImportBatch[]} (nuevo)
   getImportDates: (proyecto_id: number) =>
-    api.get<ApiResponse<string[]>>('/materiales/import-dates', { params: { proyecto_id } }).then((r) => r.data),
+    api.get<ApiResponse<string[]> & { batches: ImportBatch[] }>(
+      '/materiales/import-dates', { params: { proyecto_id } }
+    ).then((r) => r.data),
 
   getKpis: (proyecto_id: number) =>
     api.get<ApiResponse<MtoKpis>>('/materiales/kpis', { params: { proyecto_id } }).then((r) => r.data),
