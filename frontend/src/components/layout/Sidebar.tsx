@@ -2,7 +2,7 @@ import { NavLink } from 'react-router-dom'
 import {
   LayoutDashboard, FolderOpen, ShoppingCart,
   Package, Truck, Users, ChevronLeft, ChevronRight, ShieldCheck,
-  Factory, Inbox,
+  Factory, Inbox, Beaker,
 } from 'lucide-react'
 import { useState } from 'react'
 import clsx from 'clsx'
@@ -25,6 +25,7 @@ const NAV_ITEMS: NavItem[] = [
   { to: '/recepciones',    label: 'Recepciones',        icon: Truck,           roles: ['ADMIN','PROCUREMENT','PRODUCTION'] },
   { to: '/proveedores',    label: 'Proveedores',        icon: Users,           roles: ['ADMIN','PROCUREMENT'] },
   { to: '/produccion',     label: 'Producción',         icon: Factory,         roles: ['ADMIN','SHOP_MANAGER'] },
+  { to: '/muestras',       label: 'Muestras',           icon: Beaker,          roles: ['ADMIN','ENGINEERING','SHOP_MANAGER','PROCUREMENT'] },
   { to: '/tareas',         label: 'Tareas',             icon: Inbox,           roles: ['ADMIN'] },
   { to: '/usuarios',       label: 'Usuarios',           icon: ShieldCheck,     roles: ['ADMIN'] },
 ]

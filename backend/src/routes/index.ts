@@ -44,6 +44,12 @@ import {
   getTareas, getTarea, updateTarea, getTareasStats, syncSystemHandler,
   updateTareaSchema,
 } from '../controllers/tareasController'
+import {
+  getMuestras, getMuestra, createMuestra, updateMuestra,
+  transicionarMuestra, registrarEnvio, confirmarRecepcion, getMuestrasKpis,
+  createMuestraSchema, updateMuestraSchema, transicionEstadoSchema,
+  registrarEnvioSchema,
+} from '../controllers/muestrasController'
 
 const router = Router()
 
@@ -146,5 +152,25 @@ router.post('/cotizaciones',                  WRITE, createCotizacion)
 router.put('/cotizaciones/:id',               WRITE, updateCotizacion)
 router.patch('/cotizaciones/:id/aprobar',     WRITE, aprobarCotizacion)
 router.delete('/cotizaciones/:id',            WRITE, deleteCotizacion)
+
+// ─── Muestras ────────────────────────────────────────────────────────────────
+// Permisos:
+//   - GET    todos los roles que ven proyectos (ADMIN, ENGINEERING, SHOP_MANAGER, PROCUREMENT)
+//   - CREATE ADMIN, ENGINEERING, SHOP_MANAGER
+//   - UPDATE ADMIN, ENGINEERING, SHOP_MANAGER (mismos)
+//   - Transición de estado ADMIN, SHOP_MANAGER (ENGINEERING solo puede archivar/solicitar)
+//   - Registro de envío ADMIN, SHOP_MANAGER
+const MUESTRAS_READ  = requireRole('ADMIN', 'ENGINEERING', 'SHOP_MANAGER', 'PROCUREMENT')
+const MUESTRAS_WRITE = requireRole('ADMIN', 'ENGINEERING', 'SHOP_MANAGER')
+const MUESTRAS_FLOW  = requireRole('ADMIN', 'SHOP_MANAGER')
+
+router.get   ('/muestras',                                MUESTRAS_READ,  getMuestras)
+router.get   ('/muestras/kpis',                           MUESTRAS_READ,  getMuestrasKpis)
+router.get   ('/muestras/:id',                            MUESTRAS_READ,  getMuestra)
+router.post  ('/muestras',                                MUESTRAS_WRITE, validateBody(createMuestraSchema), createMuestra)
+router.patch ('/muestras/:id',                            MUESTRAS_WRITE, validateBody(updateMuestraSchema), updateMuestra)
+router.post  ('/muestras/:id/transicion',                 MUESTRAS_FLOW,  validateBody(transicionEstadoSchema), transicionarMuestra)
+router.post  ('/muestras/:id/envios',                     MUESTRAS_FLOW,  validateBody(registrarEnvioSchema), registrarEnvio)
+router.patch ('/muestras/:id/envios/:envioId/recepcion',  MUESTRAS_FLOW,  confirmarRecepcion)
 
 export default router

@@ -12,6 +12,7 @@ import Proveedores from '@/pages/Proveedores'
 import Tareas from '@/pages/Tareas'
 import Usuarios from '@/pages/Usuarios'
 import Produccion from '@/pages/produccion/Produccion'
+import Muestras from '@/pages/Muestras'
 import KioskApp from '@/pages/kiosk/KioskApp'
 import { Loader2 } from 'lucide-react'
 
@@ -40,6 +41,13 @@ function ProduccionRoute({ children }: { children: React.ReactNode }) {
   return <>{children}</>
 }
 
+function MuestrasRoute({ children }: { children: React.ReactNode }) {
+  const { user } = useAuth()
+  const allowed = ['ADMIN', 'ENGINEERING', 'SHOP_MANAGER', 'PROCUREMENT']
+  if (!user || !allowed.includes(user.rol)) return <Navigate to="/" replace />
+  return <>{children}</>
+}
+
 export default function App() {
   return (
     <Routes>
@@ -58,6 +66,7 @@ export default function App() {
         <Route path="recepciones/*"    element={<Recepciones />} />
         <Route path="proveedores/*"    element={<Proveedores />} />
         <Route path="produccion/*"     element={<ProduccionRoute><Produccion /></ProduccionRoute>} />
+        <Route path="muestras"         element={<MuestrasRoute><Muestras /></MuestrasRoute>} />
         <Route path="tareas"           element={<AdminRoute><Tareas /></AdminRoute>} />
         <Route path="usuarios"         element={<AdminRoute><Usuarios /></AdminRoute>} />
       </Route>

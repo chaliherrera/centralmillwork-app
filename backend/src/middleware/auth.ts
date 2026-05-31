@@ -2,7 +2,7 @@ import { Request, Response, NextFunction } from 'express'
 import jwt from 'jsonwebtoken'
 import { createError } from './errorHandler'
 
-export type Role = 'ADMIN' | 'PROCUREMENT' | 'PRODUCTION' | 'PROJECT_MANAGEMENT' | 'CONTABILIDAD' | 'SHOP_MANAGER'
+export type Role = 'ADMIN' | 'PROCUREMENT' | 'PRODUCTION' | 'PROJECT_MANAGEMENT' | 'CONTABILIDAD' | 'SHOP_MANAGER' | 'ENGINEERING'
 
 declare global {
   namespace Express {

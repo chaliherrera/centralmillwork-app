@@ -591,6 +591,7 @@ export async function crearOCNoMTO(req: Request, res: Response, next: NextFuncti
     const {
       proyecto_id, vendor, origen, fecha_entrega_estimada,
       categoria, notas, items = [], freight = 0,
+      muestra_id = null,
     } = req.body as {
       proyecto_id: number | null
       vendor: string
@@ -600,6 +601,7 @@ export async function crearOCNoMTO(req: Request, res: Response, next: NextFuncti
       notas: string | null
       items: Array<{ descripcion: string; unidad: string; qty: number; unit_price: number }>
       freight?: number
+      muestra_id?: number | null
     }
 
     // Validations
@@ -614,6 +616,21 @@ export async function crearOCNoMTO(req: Request, res: Response, next: NextFuncti
     // OPERATIVA no tiene proyecto asociado (es un gasto del taller, no de obra)
     if (origen === 'OPERATIVA' && proyecto_id != null) {
       return next(createError('Compras OPERATIVAS no pueden tener proyecto asociado', 400))
+    }
+
+    // Si se especifica muestra_id, validar que existe y que el proyecto_id matchea
+    if (muestra_id != null) {
+      if (origen === 'OPERATIVA') {
+        return next(createError('Compras OPERATIVAS no pueden asociarse a una muestra', 400))
+      }
+      const { rows: [mu] } = await pool.query(
+        'SELECT id, proyecto_id FROM muestras WHERE id = $1',
+        [muestra_id]
+      )
+      if (!mu) return next(createError('Muestra no encontrada', 404))
+      if (proyecto_id != null && mu.proyecto_id !== proyecto_id) {
+        return next(createError('La muestra pertenece a otro proyecto', 400))
+      }
     }
 
     if (!Array.isArray(items) || items.length === 0)
@@ -660,16 +677,17 @@ export async function crearOCNoMTO(req: Request, res: Response, next: NextFuncti
 
     // Create OC (incluye origen + freight; sin IVA — opera en USD)
     // OPERATIVA arranca como 'recibida' + fecha_entrega_real=hoy
+    // muestra_id != NULL = OC asociada a una muestra específica
     const { rows: [orden] } = await client.query(
       `INSERT INTO ordenes_compra
          (numero, proyecto_id, proveedor_id, categoria, estado, fecha_emision,
-          fecha_entrega_estimada, fecha_entrega_real, notas, origen, freight)
-       VALUES ($1,$2,$3,$4,$5::estado_orden,NOW(),$6,$7,$8,$9,$10)
+          fecha_entrega_estimada, fecha_entrega_real, notas, origen, freight, muestra_id)
+       VALUES ($1,$2,$3,$4,$5::estado_orden,NOW(),$6,$7,$8,$9,$10,$11)
        RETURNING id`,
       [
         numero, proyecto_id ?? null, prov?.id ?? null, categoria ?? '',
         ocEstado, fecha_entrega_estimada || null, fechaRealOp,
-        notas ?? null, origen, Number(freight) || 0,
+        notas ?? null, origen, Number(freight) || 0, muestra_id,
       ]
     )
 
