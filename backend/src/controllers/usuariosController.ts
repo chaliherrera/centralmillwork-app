@@ -4,9 +4,9 @@ import pool from '../db/pool'
 import { createError } from '../middleware/errorHandler'
 import { parsePagination, paginatedResponse } from '../utils/pagination'
 
-// Mantener sincronizado con el CHECK constraint en la migración 015
+// Mantener sincronizado con el ENUM user_rol en la DB (migraciones 015 + 030)
 // y con `Role` en middleware/auth.ts.
-const VALID_ROLES = ['ADMIN', 'PROCUREMENT', 'PRODUCTION', 'PROJECT_MANAGEMENT', 'CONTABILIDAD', 'SHOP_MANAGER']
+const VALID_ROLES = ['ADMIN', 'PROCUREMENT', 'PRODUCTION', 'PROJECT_MANAGEMENT', 'CONTABILIDAD', 'SHOP_MANAGER', 'ENGINEERING']
 
 export async function getUsuarios(req: Request, res: Response, next: NextFunction) {
   try {

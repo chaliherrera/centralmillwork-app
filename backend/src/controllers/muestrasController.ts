@@ -1,8 +1,11 @@
 import { Request, Response, NextFunction } from 'express'
 import { z } from 'zod'
+import multer from 'multer'
+import path from 'path'
 import pool from '../db/pool'
 import { createError } from '../middleware/errorHandler'
 import { logger } from '../utils/logger'
+import { supabase, supabaseEnabled, SUPABASE_BUCKET } from '../utils/supabase'
 
 // ─── Tipos y constantes ──────────────────────────────────────────────────────
 
@@ -222,6 +225,26 @@ export async function getMuestra(req: Request, res: Response, next: NextFunction
       [id]
     )
 
+    // Archivos (todas las versiones)
+    const { rows: archivos } = await pool.query(
+      `SELECT a.*, u.nombre AS subido_por_nombre
+       FROM muestras_archivos a
+       LEFT JOIN usuarios u ON u.id = a.subido_por
+       WHERE a.muestra_id = $1
+       ORDER BY a.version_numero DESC, a.created_at DESC`,
+      [id]
+    )
+    // Re-generar URL pública si hace falta
+    if (supabaseEnabled && supabase) {
+      const sb = supabase
+      for (const a of archivos) {
+        if (!a.url || a.url.startsWith('/uploads/')) {
+          const { data } = sb.storage.from(SUPABASE_BUCKET).getPublicUrl(a.filename)
+          a.url = data.publicUrl
+        }
+      }
+    }
+
     res.json({
       data: {
         muestra,
@@ -231,6 +254,7 @@ export async function getMuestra(req: Request, res: Response, next: NextFunction
         ocs,
         envios,
         eventos,
+        archivos,
       },
     })
   } catch (err) { next(err) }
@@ -554,9 +578,171 @@ export async function getMuestrasKpis(_req: Request, res: Response, next: NextFu
            WHERE estado != 'ARCHIVADA'
              AND fecha_compromiso < CURRENT_DATE
          )::int                                                          AS vencidas,
-         COUNT(*) FILTER (WHERE estado = 'APROBADA')::int                AS aprobadas_total
+         COUNT(*) FILTER (WHERE estado = 'APROBADA')::int                AS aprobadas_total,
+         (SELECT COUNT(*) FROM muestras_versiones WHERE razon_de_revision IS NOT NULL)::int AS rechazos_historicos
        FROM muestras`
     )
     res.json({ data: k })
+  } catch (err) { next(err) }
+}
+
+// ─── Upload de archivos a Supabase ──────────────────────────────────────────
+// Multer en memoria — el binario se sube a Supabase, no se persiste a disco.
+// Mismo bucket que oc_imagenes (configurado en env: SUPABASE_BUCKET).
+const ALLOWED_MUESTRA_MIMES = new Set([
+  'application/pdf',
+  'image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'image/heic', 'image/heif',
+  'application/dwg', 'application/x-dwg',
+])
+const ALLOWED_MUESTRA_EXT = /\.(pdf|jpe?g|png|webp|heic|heif|dwg)$/i
+
+export const uploadMuestraArchivo = multer({
+  storage: multer.memoryStorage(),
+  fileFilter: (_req, file, cb) => {
+    const extOk = ALLOWED_MUESTRA_EXT.test(file.originalname)
+    const mimeOk = ALLOWED_MUESTRA_MIMES.has((file.mimetype ?? '').toLowerCase())
+    if (extOk && mimeOk) return cb(null, true)
+    cb(Object.assign(
+      new Error(`Tipo de archivo no permitido. PDF, imagen o DWG. Recibido: "${file.originalname}" (${file.mimetype})`),
+      { statusCode: 400 }
+    ))
+  },
+  limits: { fileSize: 20 * 1024 * 1024 },  // 20 MB
+})
+
+/**
+ * POST /api/muestras/:id/archivos
+ * Sube un archivo (PDF de sample request, foto, DWG) a la muestra.
+ * Body fields: tipo (sample_request|foto|pdf|dwg|otro), nombre opcional.
+ * Si no se especifica version, usa la version_actual de la muestra.
+ */
+export async function uploadArchivo(req: Request, res: Response, next: NextFunction) {
+  try {
+    const id = parseInt(String(req.params.id))
+    if (!Number.isFinite(id)) return next(createError('id inválido', 400))
+    if (!req.file) return next(createError('No se recibió ningún archivo', 400))
+
+    const muestra = await getMuestraOr404(id, next)
+    if (!muestra) return
+
+    const tipo = String(req.body.tipo ?? 'otro').toLowerCase()
+    const nombre = req.body.nombre?.trim() || req.file.originalname
+    const versionNumero = req.body.version_numero
+      ? parseInt(String(req.body.version_numero))
+      : muestra.version_actual
+
+    if (!supabaseEnabled || !supabase) {
+      return next(createError('Supabase Storage no configurado en el server', 500))
+    }
+
+    // Filename con prefijo para organizar y evitar colisiones
+    const ext = path.extname(req.file.originalname)
+    const filename = `muestra-${id}/v${versionNumero}/${Date.now()}-${Math.random().toString(36).slice(2)}${ext}`
+
+    const { error: upErr } = await supabase.storage
+      .from(SUPABASE_BUCKET)
+      .upload(filename, req.file.buffer, {
+        contentType: req.file.mimetype,
+        upsert: false,
+      })
+    if (upErr) {
+      logger.error('uploadArchivo muestra error', { requestId: req.id, muestraId: id, err: upErr })
+      return next(createError('Error subiendo a Supabase: ' + upErr.message, 500))
+    }
+
+    const { data: pub } = supabase.storage.from(SUPABASE_BUCKET).getPublicUrl(filename)
+    const url = pub.publicUrl
+
+    const { rows: [archivo] } = await pool.query(
+      `INSERT INTO muestras_archivos
+         (muestra_id, version_numero, tipo, nombre, filename, mime_type, size_bytes, url, subido_por)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+       RETURNING *`,
+      [
+        id, versionNumero, tipo, nombre, filename,
+        req.file.mimetype, req.file.size, url,
+        req.user?.id ?? null,
+      ]
+    )
+
+    // Log evento
+    await logEvento(id, versionNumero, 'comentario',
+      `Archivo subido: ${nombre} (${tipo})`,
+      req.user?.id ?? null
+    )
+
+    logger.info('archivo muestra subido', {
+      requestId: req.id, muestraId: id, archivoId: archivo.id,
+      tipo, tamano_kb: Math.round(req.file.size / 1024),
+    })
+    res.status(201).json({ data: archivo, message: 'Archivo subido' })
+  } catch (err) { next(err) }
+}
+
+/**
+ * GET /api/muestras/:id/archivos
+ * Lista todos los archivos de la muestra, agrupados por versión.
+ */
+export async function getArchivos(req: Request, res: Response, next: NextFunction) {
+  try {
+    const id = parseInt(String(req.params.id))
+    if (!Number.isFinite(id)) return next(createError('id inválido', 400))
+
+    const { rows } = await pool.query(
+      `SELECT a.*, u.nombre AS subido_por_nombre
+       FROM muestras_archivos a
+       LEFT JOIN usuarios u ON u.id = a.subido_por
+       WHERE a.muestra_id = $1
+       ORDER BY a.version_numero DESC, a.created_at DESC`,
+      [id]
+    )
+
+    // Re-generar URL pública (por si el bucket cambió de público a privado)
+    if (supabaseEnabled && supabase) {
+      const sb = supabase
+      for (const r of rows) {
+        if (!r.url || r.url.startsWith('/uploads/')) {
+          const { data } = sb.storage.from(SUPABASE_BUCKET).getPublicUrl(r.filename)
+          r.url = data.publicUrl
+        }
+      }
+    }
+
+    res.json({ data: rows })
+  } catch (err) { next(err) }
+}
+
+/**
+ * DELETE /api/muestras/:id/archivos/:archivoId
+ * Borra un archivo de Supabase + DB.
+ */
+export async function deleteArchivo(req: Request, res: Response, next: NextFunction) {
+  try {
+    const id = parseInt(String(req.params.id))
+    const archivoId = parseInt(String(req.params.archivoId))
+    if (!Number.isFinite(id) || !Number.isFinite(archivoId)) {
+      return next(createError('id o archivoId inválido', 400))
+    }
+
+    const { rows: [archivo] } = await pool.query(
+      'DELETE FROM muestras_archivos WHERE id = $1 AND muestra_id = $2 RETURNING *',
+      [archivoId, id]
+    )
+    if (!archivo) return next(createError('Archivo no encontrado', 404))
+
+    // Best-effort borrar de Supabase (si falla, igual ya quitamos el record)
+    if (supabaseEnabled && supabase) {
+      const { error } = await supabase.storage.from(SUPABASE_BUCKET).remove([archivo.filename])
+      if (error) {
+        logger.warn('deleteArchivo Supabase remove warn', { requestId: req.id, archivoId, err: error.message })
+      }
+    }
+
+    await logEvento(id, archivo.version_numero, 'comentario',
+      `Archivo eliminado: ${archivo.nombre}`,
+      req.user?.id ?? null
+    )
+
+    res.json({ message: 'Archivo eliminado' })
   } catch (err) { next(err) }
 }

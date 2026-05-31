@@ -56,6 +56,7 @@ export interface MuestrasKpis {
   enviadas_sin_respuesta_5d: number
   vencidas: number
   aprobadas_total: number
+  rechazos_historicos: number
 }
 
 export interface MuestraVersion {
@@ -110,6 +111,21 @@ export interface MuestraOC {
   vendor_nombre: string | null
 }
 
+export interface MuestraArchivo {
+  id: number
+  muestra_id: number
+  version_numero: number
+  tipo: string  // 'sample_request' | 'foto' | 'pdf' | 'dwg' | 'otro'
+  nombre: string
+  filename: string
+  mime_type: string | null
+  size_bytes: number | null
+  url: string
+  subido_por: string | null
+  subido_por_nombre: string | null
+  created_at: string
+}
+
 export interface MuestraDetalle {
   muestra: Muestra
   proyecto: { codigo: string; nombre: string; cliente: string; estado: string } | null
@@ -118,6 +134,7 @@ export interface MuestraDetalle {
   ocs: MuestraOC[]
   envios: MuestraEnvio[]
   eventos: MuestraEvento[]
+  archivos: MuestraArchivo[]
 }
 
 // Inputs para crear/editar

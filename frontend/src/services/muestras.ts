@@ -48,4 +48,24 @@ export const muestrasService = {
       `/muestras/${id}/envios/${envioId}/recepcion`,
       { fecha_recepcion_confirmada: fecha }
     ).then((r) => r.data),
+
+  /**
+   * Sube un archivo (PDF de sample request, foto, DWG) a la muestra.
+   * tipo: 'sample_request' | 'foto' | 'pdf' | 'dwg' | 'otro'
+   * versionNumero: opcional, default es la version_actual de la muestra
+   */
+  uploadArchivo: (id: number, file: File, tipo: string, versionNumero?: number, nombre?: string) => {
+    const form = new FormData()
+    form.append('archivo', file)
+    form.append('tipo', tipo)
+    if (versionNumero) form.append('version_numero', String(versionNumero))
+    if (nombre) form.append('nombre', nombre)
+    return api.post<{ message: string }>(
+      `/muestras/${id}/archivos`, form,
+      { headers: { 'Content-Type': 'multipart/form-data' } }
+    ).then((r) => r.data)
+  },
+
+  deleteArchivo: (id: number, archivoId: number) =>
+    api.delete<{ message: string }>(`/muestras/${id}/archivos/${archivoId}`).then((r) => r.data),
 }
