@@ -130,7 +130,7 @@ app.use(errorHandler)
     // Si querés cambiar la zona horaria, settealo en la env var TZ del
     // servicio en Railway. Por defecto usa America/Mexico_City.
     const SYNC_TIMEZONE = process.env.SYSTEM_SYNC_TZ || 'America/Mexico_City'
-    const SYNC_CRON     = '0 7,14 * * *'   // minuto 0 de las horas 7 y 14
+    const SYNC_CRON     = '0 7,13 * * *'   // minuto 0 de las horas 7 (AM) y 13 (1 PM)
     const LEADER_LOCK_KEY = 4751923         // arbitrario, cualquier int único
     const runSystemSync = async () => {
       const client = await pool.connect()
