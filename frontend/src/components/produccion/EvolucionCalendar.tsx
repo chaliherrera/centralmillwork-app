@@ -237,15 +237,20 @@ function GridHoras({ procesos, inicioMs, finMs }: {
                   const winEnd = winStart + 3_600_000
                   const ovr = inter ? overlapMs(inter.start, Math.min(inter.end, nowMs), winStart, winEnd) : 0
                   const pct = ovr / 3_600_000  // 0–1
+                  // ANY activity > 0 shows. Para micro-actividades (<10 min/hora)
+                  // forzamos opacity mínima del 50% para que se vea claramente,
+                  // sino se confunden con celdas inactivas.
+                  const hasActivity = ovr > 0
+                  const minPct = Math.max(0.5, pct)  // floor visual
                   return (
                     <td key={h} className="p-0.5">
                       <div
                         className={clsx(
                           'h-7 rounded transition-colors',
-                          pct > 0.05 ? 'bg-gold-400' : 'bg-gray-100',
+                          hasActivity ? 'bg-gold-400' : 'bg-gray-100',
                         )}
-                        style={pct > 0.05 ? { opacity: 0.35 + pct * 0.65 } : undefined}
-                        title={pct > 0.05 ? `${p.estacion}: activa ${Math.round(pct * 60)}m de ${h}:00 a ${h + 1}:00` : undefined}
+                        style={hasActivity ? { opacity: minPct } : undefined}
+                        title={hasActivity ? `${p.estacion}: activa ${Math.round(ovr / 60_000)}m de ${h}:00 a ${h + 1}:00` : undefined}
                       />
                     </td>
                   )
@@ -325,7 +330,9 @@ function GridDias({ procesos, inicioMs, finMs, onSelectDay }: {
                   const ovr = inter ? overlapMs(inter.start, Math.min(inter.end, nowMs), d, winEnd) : 0
                   const pct = ovr / (8 * 3_600_000)  // % de 8 horas de jornada
                   const isWeekend = (new Date(d).getDay() === 0 || new Date(d).getDay() === 6)
-                  const hasActivity = pct > 0.02
+                  const hasActivity = ovr > 0  // ANY activity shows
+                  // Floor visual del 50% para que micro-actividades sean claras
+                  const minPct = Math.max(0.5, Math.min(1, pct))
                   return (
                     <td key={d} className={clsx('p-0.5', i % 7 === 0 && 'border-l border-gray-200')}>
                       <button
@@ -337,7 +344,7 @@ function GridDias({ procesos, inicioMs, finMs, onSelectDay }: {
                             ? 'bg-gold-400 hover:ring-2 hover:ring-blue-300 cursor-pointer'
                             : isWeekend ? 'bg-gray-50' : 'bg-gray-100'
                         )}
-                        style={hasActivity ? { opacity: 0.35 + Math.min(1, pct) * 0.65 } : undefined}
+                        style={hasActivity ? { opacity: minPct } : undefined}
                         title={hasActivity ? `${p.estacion}: ${Math.round(ovr / 60_000)}m el ${toIsoDate(d)}` : undefined}
                       />
                     </td>
@@ -406,7 +413,8 @@ function GridSemanas({ procesos, inicioMs, finMs, onSelectDay }: {
                   const wEnd = w + 7 * 86_400_000
                   const ovr = inter ? overlapMs(inter.start, Math.min(inter.end, nowMs), w, wEnd) : 0
                   const pct = ovr / (5 * 8 * 3_600_000)  // % de 40 horas semanales
-                  const hasActivity = pct > 0.01
+                  const hasActivity = ovr > 0  // ANY activity shows
+                  const minPct = Math.max(0.5, Math.min(1, pct))
                   return (
                     <td key={w} className="p-0.5">
                       <button
@@ -418,7 +426,7 @@ function GridSemanas({ procesos, inicioMs, finMs, onSelectDay }: {
                             ? 'bg-gold-400 hover:ring-2 hover:ring-blue-300 cursor-pointer'
                             : 'bg-gray-100'
                         )}
-                        style={hasActivity ? { opacity: 0.35 + Math.min(1, pct) * 0.65 } : undefined}
+                        style={hasActivity ? { opacity: minPct } : undefined}
                         title={hasActivity ? `${p.estacion}: ${Math.round(ovr / 60_000)}m la semana de ${toIsoDate(w)}` : undefined}
                       />
                     </td>
