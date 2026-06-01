@@ -28,7 +28,15 @@ export default function OrdenEvolucion({ ordenId }: { ordenId: number }) {
     queryKey: ['orden-evolucion', ordenId],
     queryFn:  () => produccionService.ordenEvolucion(ordenId),
     enabled:  !!puedeVer,
-    refetchInterval: 30_000,  // auto-refresh para que el stepper "respire" si hay item activo
+    // Auto-refresh agresivo: el operario mueve la orden en el kiosko mientras
+    // el SHOP_MANAGER mira esta pantalla en otra device. Sin refetch en
+    // background, si la pestaña pierde foco (cambio de app en iPad, pantalla
+    // dormida, etc.) la vista queda congelada y requería refresh manual.
+    // 15s + background + on-focus garantiza que ver evolución se sienta vivo.
+    refetchInterval: 15_000,
+    refetchIntervalInBackground: true,
+    refetchOnWindowFocus: true,
+    staleTime: 5_000,
   })
 
   if (!puedeVer) return null

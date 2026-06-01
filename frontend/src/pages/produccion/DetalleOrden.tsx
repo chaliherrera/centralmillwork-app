@@ -39,6 +39,16 @@ export default function DetalleOrden() {
     queryKey: ['orden-produccion', ordenId],
     queryFn:  () => produccionService.orden(ordenId),
     enabled:  !!ordenId,
+    // Auto-refresh: el operario mueve la orden en el kiosko mientras el
+    // SHOP_MANAGER mira esta pantalla. Sin esto, el detalle quedaba
+    // congelado hasta F5 manual (status, estacion_actual, personal
+    // asignado, fecha_inicio/completada no se actualizaban).
+    // 15s + background + on-focus para que la vista se sienta viva en
+    // PC y iPad incluso si la pestaña pierde foco.
+    refetchInterval: 15_000,
+    refetchIntervalInBackground: true,
+    refetchOnWindowFocus: true,
+    staleTime: 5_000,
   })
 
   // Reaprovechamos la misma query que OrdenDocumentos (cache compartido por queryKey)
@@ -47,6 +57,11 @@ export default function DetalleOrden() {
     queryKey: ['orden-docs', ordenId],
     queryFn:  () => produccionService.documentos(ordenId),
     enabled:  !!ordenId,
+    // Menos urgente que la orden en sí, pero refresca para que si alguien sube
+    // un PDF nuevo aparezca sin F5.
+    refetchInterval: 30_000,
+    refetchIntervalInBackground: true,
+    refetchOnWindowFocus: true,
   })
   const docsCountByEstacion = useMemo(() => {
     const m: Record<string, number> = {}
