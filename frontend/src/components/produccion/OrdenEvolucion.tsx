@@ -10,6 +10,7 @@ import { useAuth } from '@/context/AuthContext'
 import type {
   EvolucionProceso, EvolucionEvento, EvolucionEventoTipo, OrdenEvolucionResp,
 } from '@/types/produccion'
+import EvolucionCalendar from './EvolucionCalendar'
 
 /**
  * Sección de "Evolución" para DetalleOrden.
@@ -59,42 +60,24 @@ export default function OrdenEvolucion({ ordenId }: { ordenId: number }) {
       <div className="p-5 space-y-5">
         <EvolucionStepper procesos={data.procesos} totalEstimadoHoras={data.orden.tiempo_estimado_horas} />
         <EvolucionResumen data={data} />
-        <EvolucionTimelineColapsable eventos={data.eventos} />
+        {/* Línea de tiempo: ahora calendario adaptativo. Auto-elige modo
+            (horas / días / semanas) según la duración total de la orden. */}
+        <EvolucionCalendar
+          procesos={data.procesos}
+          eventos={data.eventos}
+          inicio={data.orden.fecha_inicio ?? data.orden.created_at}
+          fin={data.orden.fecha_completada}
+        />
       </div>
     </div>
   )
 }
 
-// ─── Wrapper colapsable de la línea de tiempo ────────────────────────────────
-// La timeline es info densa de auditoría — la mantenemos cerrada por default
-// para no saturar la vista. Botón abajo de los KPIs la despliega.
-function EvolucionTimelineColapsable({ eventos }: { eventos: EvolucionEvento[] }) {
-  const [open, setOpen] = useState(false)
-  return (
-    <div className="border-t border-gray-100 pt-3">
-      <button
-        onClick={() => setOpen(!open)}
-        className="w-full flex items-center justify-between text-left px-3 py-2 rounded-md hover:bg-gray-50 transition-colors group"
-      >
-        <span className="flex items-center gap-2 text-sm font-semibold text-gray-700 group-hover:text-forest-700">
-          <Activity size={14} className="text-gray-500 group-hover:text-forest-700" />
-          Línea de tiempo
-          <span className="text-xs font-normal text-gray-500">
-            ({eventos.length} {eventos.length === 1 ? 'evento' : 'eventos'})
-          </span>
-        </span>
-        {open
-          ? <ChevronUp size={16} className="text-gray-500" />
-          : <ChevronDown size={16} className="text-gray-500" />}
-      </button>
-      {open && (
-        <div className="mt-3 px-1">
-          <EvolucionTimeline eventos={eventos} />
-        </div>
-      )}
-    </div>
-  )
-}
+// NOTA: EvolucionTimelineColapsable + EvolucionTimeline vertical fueron
+// reemplazados por EvolucionCalendar (modo adaptativo horas/días/semanas).
+// El componente EvolucionTimeline más abajo queda como helper interno
+// usado por el DayDetailDrawer si quisieramos reincorporarlo, pero no
+// está conectado en la vista actual.
 
 // ─── Stepper horizontal ──────────────────────────────────────────────────────
 function EvolucionStepper({
@@ -284,7 +267,10 @@ function ResumenItem({
   )
 }
 
-// ─── Timeline vertical ───────────────────────────────────────────────────────
+// ─── Timeline vertical (LEGACY: reemplazada por EvolucionCalendar) ─────────
+// Mantenida sin export ni uso para tenerla como referencia si quisieramos
+// volver al modo lista cronologica vertical en el futuro.
+// @ts-expect-error: intencionalmente no usada — ver nota arriba
 function EvolucionTimeline({ eventos }: { eventos: EvolucionEvento[] }) {
   const [showAll, setShowAll] = useState(false)
   const visibles = showAll ? eventos : eventos.slice(-12)  // últimos 12 por default cuando se abre
