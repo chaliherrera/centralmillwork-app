@@ -96,6 +96,29 @@ export interface KioskDocumento {
   created_at: string
 }
 
+export interface KioskEstacionConfig {
+  nombre: string
+  foto_obligatoria: boolean
+}
+
+export interface KioskAvanceFoto {
+  id: number
+  orden_id: number
+  proceso_id: number | null
+  estacion: string | null
+  personal_id: number | null
+  personal_nombre?: string | null
+  personal_iniciales?: string | null
+  filename: string
+  original_name: string | null
+  mime_type: string | null
+  size_bytes: number | null
+  url: string | null
+  comentario: string | null
+  visible_cliente: boolean
+  created_at: string
+}
+
 export interface KioskDiaSegmento {
   id: number
   proyecto_id: number

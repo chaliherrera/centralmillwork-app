@@ -2,7 +2,7 @@ import { kioskApi } from './kioskApi'
 import type {
   KioskLoginResponse, KioskMe, KioskProyectoDisponible,
   KioskOrdenEnCola, KioskDia, KioskRegistroActivo, KioskProyectoActivo, KioskPausaActiva,
-  KioskDocumento,
+  KioskDocumento, KioskEstacionConfig, KioskAvanceFoto,
 } from '@/types/kiosk'
 
 export const kioskService = {
@@ -73,4 +73,27 @@ export const kioskService = {
   documentosOrden: (ordenId: number) =>
     kioskApi.get<{ data: KioskDocumento[] }>(`/ordenes/${ordenId}/documentos`)
       .then((r) => r.data.data),
+
+  // Config de estaciones — qué estaciones requieren foto antes de completar.
+  // Cacheable en el cliente (cambia rara vez).
+  estacionesConfig: () =>
+    kioskApi.get<{ data: KioskEstacionConfig[] }>('/estaciones-config')
+      .then((r) => r.data.data),
+
+  // Fotos de avance previas de una orden (read-only desde el kiosko).
+  avanceFotosOrden: (ordenId: number) =>
+    kioskApi.get<{ data: KioskAvanceFoto[] }>(`/ordenes/${ordenId}/avance-fotos`)
+      .then((r) => r.data.data),
+
+  // Sube una foto de avance. La cámara nativa del iPad la entrega como File.
+  uploadAvanceFoto: (ordenId: number, archivo: File, comentario?: string) => {
+    const form = new FormData()
+    form.append('archivo', archivo)
+    if (comentario) form.append('comentario', comentario)
+    return kioskApi.post<{ data: KioskAvanceFoto; message: string }>(
+      `/ordenes/${ordenId}/avance-foto`,
+      form,
+      { headers: { 'Content-Type': 'multipart/form-data' } }
+    ).then((r) => r.data)
+  },
 }

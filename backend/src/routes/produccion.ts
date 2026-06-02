@@ -20,6 +20,9 @@ import {
   getDocumentos, createDocumento, deleteDocumento, uploadDocumento,
 } from '../controllers/documentosController'
 import {
+  listAvanceFotosAdmin, patchAvanceFoto, deleteAvanceFoto,
+} from '../controllers/avancesFotosController'
+import {
   getPersonalActivo, reportePersonal, reporteSemanal, reportePorProyecto, reporteDiario,
   exportarHoras,
 } from '../controllers/timeTrackingController'
@@ -78,6 +81,13 @@ router.post('/ruta-preview', async (req: Request, res: Response, next: NextFunct
 router.get('/ordenes/:id/documentos',         getDocumentos)
 router.post('/ordenes/:id/documentos',        PROD_WRITE, uploadDocumento.single('archivo'), createDocumento)
 router.delete('/documentos/:docId',           PROD_WRITE, deleteDocumento)
+
+// ─── Fotos de avance del kiosko (vista desde sistema) ──────────────────────
+// Endpoint público (ADMIN, ENGINEERING, SHOP_MANAGER, PROCUREMENT pueden ver
+// las fotos como evidencia). Modificación solo ADMIN/SHOP_MANAGER.
+router.get('/ordenes/:id/avance-fotos',  listAvanceFotosAdmin)
+router.patch('/avance-fotos/:fotoId',    PROD_WRITE, patchAvanceFoto)
+router.delete('/avance-fotos/:fotoId',   PROD_WRITE, deleteAvanceFoto)
 
 // ─── Quality Control ──────────────────────────────────────────────────────────
 router.get('/qc/inspecciones',                getInspecciones)
