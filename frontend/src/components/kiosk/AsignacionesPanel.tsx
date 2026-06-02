@@ -1,8 +1,8 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   ListChecks, Loader2, CheckCircle2, AlertTriangle, FileText, ExternalLink, X,
-  Play, PlayCircle,
+  Play, PlayCircle, Camera, ImagePlus, RotateCcw,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import clsx from 'clsx'
@@ -36,6 +36,7 @@ export default function AsignacionesPanel({ open, onClose }: Props) {
   const { status, refresh } = useKioskAuth()
   const qc = useQueryClient()
   const [completarId, setCompletarId] = useState<number | null>(null)
+  const [fotoModalOrden, setFotoModalOrden] = useState<KioskOrdenEnCola | null>(null)
   const [docsOrdenId, setDocsOrdenId] = useState<number | null>(null)
 
   const { data = [], isLoading } = useQuery({
@@ -44,6 +45,17 @@ export default function AsignacionesPanel({ open, onClose }: Props) {
     staleTime: 1000 * 30,
     refetchInterval: open ? 1000 * 30 : 1000 * 60,  // refresca más rápido si el panel está abierto
   })
+
+  // Config de estaciones (qué estación requiere foto) — cacheado largo.
+  const { data: estacionesConfig = [] } = useQuery({
+    queryKey: ['kiosk', 'estaciones-config'],
+    queryFn:  kioskService.estacionesConfig,
+    staleTime: 1000 * 60 * 30,  // 30 min, casi no cambia
+  })
+  const requiereFotoEstacion = (estacion: string) => {
+    const cfg = estacionesConfig.find((c) => c.nombre === estacion)
+    return cfg?.foto_obligatoria === true
+  }
 
   const tieneClockIn = !!status?.registro_activo
 
@@ -65,9 +77,37 @@ export default function AsignacionesPanel({ open, onClose }: Props) {
       qc.invalidateQueries({ queryKey: ['kiosk', 'dia'] })
       refresh()
       setCompletarId(null)
+      setFotoModalOrden(null)
     },
-    onError: () => setCompletarId(null),
+    onError: (err: any) => {
+      // 422 = backend bloqueó por falta de foto. El frontend ya debería haber
+      // abierto el modal, pero por las dudas re-abrimos.
+      const status = err?.response?.status
+      const orden  = data.find((o: KioskOrdenEnCola) => o.id === completarId)
+      if (status === 422 && orden) {
+        toast.error('Necesitás subir una foto antes de completar')
+        setFotoModalOrden(orden)
+      }
+      setCompletarId(null)
+    },
   })
+
+  // Click "Item completado" → si la estación pide foto, abre modal; si no,
+  // pasa directo a "Confirmar".
+  const handleCompletarClick = (orden: KioskOrdenEnCola) => {
+    if (requiereFotoEstacion(orden.mi_estacion)) {
+      setFotoModalOrden(orden)
+    } else {
+      setCompletarId(orden.id)
+    }
+  }
+
+  // Cuando la foto subió OK, pasamos al confirm final (que dispara completar).
+  const handleFotoUploaded = (ordenId: number) => {
+    setFotoModalOrden(null)
+    qc.invalidateQueries({ queryKey: ['kiosk', 'avance-fotos', ordenId] })
+    setCompletarId(ordenId)
+  }
 
   // Cerrar con tecla Escape (para teclados conectados a las tablets)
   useEffect(() => {
@@ -147,7 +187,7 @@ export default function AsignacionesPanel({ open, onClose }: Props) {
                   isCompleting={completar.isPending && completarId === o.id}
                   isConfirming={completarId === o.id}
                   onIniciar={() => iniciar.mutate(o.id)}
-                  onCompletarClick={() => setCompletarId(o.id)}
+                  onCompletarClick={() => handleCompletarClick(o)}
                   onConfirm={() => completar.mutate(o.id)}
                   onCancel={() => setCompletarId(null)}
                   onVerPlanos={() => setDocsOrdenId(o.id)}
@@ -160,6 +200,14 @@ export default function AsignacionesPanel({ open, onClose }: Props) {
 
       {docsOrdenId !== null && (
         <DocsModal ordenId={docsOrdenId} onClose={() => setDocsOrdenId(null)} />
+      )}
+
+      {fotoModalOrden && (
+        <AvanceFotoModal
+          orden={fotoModalOrden}
+          onClose={() => setFotoModalOrden(null)}
+          onUploaded={() => handleFotoUploaded(fotoModalOrden.id)}
+        />
       )}
     </>
   )
@@ -325,6 +373,170 @@ function OrdenItem({
         </div>
       </div>
     </li>
+  )
+}
+
+// ─── Modal "Foto de avance" — intercalado antes de Confirmar ─────────────────
+// El operario abre la cámara del iPad (input capture=environment), revisa el
+// preview, agrega un comentario opcional y sube. Al éxito, el flow pasa al
+// "Confirmar" (que dispara completar-proceso).
+function AvanceFotoModal({
+  orden, onClose, onUploaded,
+}: {
+  orden: KioskOrdenEnCola
+  onClose: () => void
+  onUploaded: () => void
+}) {
+  const inputRef = useRef<HTMLInputElement>(null)
+  const [file, setFile] = useState<File | null>(null)
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null)
+  const [comentario, setComentario] = useState('')
+
+  const upload = useMutation({
+    mutationFn: () => {
+      if (!file) throw new Error('Sin archivo')
+      return kioskService.uploadAvanceFoto(orden.id, file, comentario.trim() || undefined)
+    },
+    onSuccess: () => {
+      toast.success('Foto subida')
+      onUploaded()
+    },
+    onError: (err: any) => {
+      toast.error('Error subiendo: ' + (err?.response?.data?.error || err?.message || 'desconocido'))
+    },
+  })
+
+  useEffect(() => {
+    return () => {
+      if (previewUrl) URL.revokeObjectURL(previewUrl)
+    }
+  }, [previewUrl])
+
+  const handleFile = (f: File | null) => {
+    if (previewUrl) URL.revokeObjectURL(previewUrl)
+    setFile(f)
+    setPreviewUrl(f ? URL.createObjectURL(f) : null)
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/70 flex items-end sm:items-center justify-center z-[70]" onClick={onClose}>
+      <div
+        className="bg-white w-full sm:max-w-md sm:rounded-3xl shadow-2xl flex flex-col max-h-[92vh] rounded-t-3xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+          <div className="flex items-center gap-2">
+            <Camera size={20} className="text-emerald-600" />
+            <h2 className="text-lg font-bold text-forest-700">Foto de avance</h2>
+          </div>
+          <button onClick={onClose} className="p-2 rounded-full hover:bg-gray-100">
+            <X size={20} className="text-gray-500" />
+          </button>
+        </div>
+
+        {/* Info de la orden */}
+        <div className="px-5 py-3 bg-amber-50 border-b border-amber-100">
+          <div className="text-xs text-amber-700 font-semibold uppercase tracking-wide">
+            {orden.numero_orden} · {orden.mi_estacion.replace('_', ' ')}
+          </div>
+          <div className="text-sm text-amber-900 font-medium mt-0.5 truncate">
+            {orden.numero_item}
+          </div>
+        </div>
+
+        {/* Body */}
+        <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
+          {!file ? (
+            <>
+              <p className="text-sm text-gray-600">
+                Sacale una foto al trabajo terminado antes de confirmar. Va a quedar
+                como evidencia visual de avance del proyecto.
+              </p>
+              <button
+                onClick={() => inputRef.current?.click()}
+                className="w-full py-6 rounded-2xl border-2 border-dashed border-emerald-300 bg-emerald-50 hover:bg-emerald-100 active:bg-emerald-200 transition-colors flex flex-col items-center gap-2"
+              >
+                <ImagePlus size={32} className="text-emerald-600" />
+                <span className="text-emerald-700 font-bold">Abrir cámara</span>
+                <span className="text-emerald-600 text-xs">o elegir desde galería</span>
+              </button>
+              <input
+                ref={inputRef}
+                type="file"
+                accept="image/*"
+                capture="environment"
+                className="hidden"
+                onChange={(e) => handleFile(e.target.files?.[0] ?? null)}
+              />
+            </>
+          ) : (
+            <>
+              {/* Preview */}
+              <div className="relative rounded-2xl overflow-hidden bg-gray-900">
+                {previewUrl && (
+                  <img
+                    src={previewUrl}
+                    alt="preview"
+                    className="w-full h-auto max-h-[50vh] object-contain"
+                  />
+                )}
+                <button
+                  onClick={() => handleFile(null)}
+                  className="absolute top-2 right-2 p-2 rounded-full bg-black/70 text-white hover:bg-black/80"
+                  aria-label="Sacar otra foto"
+                >
+                  <RotateCcw size={16} />
+                </button>
+              </div>
+
+              {/* Comentario opcional */}
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 mb-1">
+                  Comentario (opcional)
+                </label>
+                <input
+                  type="text"
+                  value={comentario}
+                  onChange={(e) => setComentario(e.target.value)}
+                  placeholder="Ej: Banding terminado en panel A"
+                  maxLength={200}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-emerald-400 focus:border-transparent"
+                />
+              </div>
+            </>
+          )}
+        </div>
+
+        {/* Footer botones */}
+        <div className="px-5 py-4 border-t border-gray-100 flex gap-2">
+          <button
+            onClick={onClose}
+            className="flex-1 py-3 rounded-xl border border-gray-300 text-gray-700 font-semibold"
+            disabled={upload.isPending}
+          >
+            Cancelar
+          </button>
+          <button
+            onClick={() => upload.mutate()}
+            disabled={!file || upload.isPending}
+            className="flex-1 py-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-1.5"
+          >
+            {upload.isPending ? (
+              <>
+                <Loader2 size={16} className="animate-spin" />
+                Subiendo…
+              </>
+            ) : (
+              <>
+                <CheckCircle2 size={16} />
+                Subir y seguir
+              </>
+            )}
+          </button>
+        </div>
+      </div>
+    </div>
   )
 }
 

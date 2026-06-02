@@ -10,6 +10,10 @@ import {
 } from '../controllers/timeTrackingController'
 import { avanzarOrdenInterno, iniciarItemKiosk } from '../controllers/produccionController'
 import { getDocumentosKiosk } from '../controllers/documentosController'
+import {
+  uploadAvanceFoto, uploadAvanceFotoKiosk, listAvanceFotosKiosk,
+  tieneAvanceFotoSiRequerida,
+} from '../controllers/avancesFotosController'
 import pool from '../db/pool'
 import { createError } from '../middleware/errorHandler'
 
@@ -61,12 +65,24 @@ router.post('/ordenes/:id/completar-proceso', async (req, res, next) => {
     if (!orden) return next(createError('Orden no encontrada', 404))
 
     const { rows: [proceso] } = await pool.query(
-      `SELECT operador_id FROM orden_procesos
+      `SELECT id, operador_id FROM orden_procesos
        WHERE orden_id = $1 AND estacion = $2`,
       [ordenId, orden.estacion_actual]
     )
     if (proceso?.operador_id && proceso.operador_id !== personalId) {
       return next(createError('No estás asignado al proceso actual de esta orden', 403))
+    }
+
+    // Validar foto de avance si la estación la requiere.
+    // El frontend del kiosko consulta /estaciones-config para saber si tiene
+    // que abrir el modal antes; igual validamos servidor-side por defense-in-depth.
+    const check = await tieneAvanceFotoSiRequerida(
+      ordenId,
+      orden.estacion_actual,
+      proceso?.id ?? null
+    )
+    if (!check.ok) {
+      return next(createError(check.razon || 'Foto de avance requerida', 422))
     }
 
     const result = await avanzarOrdenInterno({
@@ -76,6 +92,27 @@ router.post('/ordenes/:id/completar-proceso', async (req, res, next) => {
       notas: req.body?.notas ?? null,
     })
     res.json({ data: result, message: result.siguiente_estacion ? 'Proceso completado, orden avanzó' : 'Orden completada' })
+  } catch (err) { next(err) }
+})
+
+// ─── Fotos de avance del kiosko ──────────────────────────────────────────────
+// POST: el operario sube una foto antes de completar el proceso (o en cualquier
+// momento mientras trabaja). Si la estación tiene foto_obligatoria=true, el
+// frontend abre este modal automáticamente al click "Completar proceso".
+router.post('/ordenes/:id/avance-foto',
+  uploadAvanceFoto.single('archivo'),
+  uploadAvanceFotoKiosk
+)
+router.get('/ordenes/:id/avance-fotos', listAvanceFotosKiosk)
+
+// Endpoint utilitario para que el frontend kiosko sepa si una estación
+// requiere foto antes de abrir el flujo "completar proceso".
+router.get('/estaciones-config', async (_req, res, next) => {
+  try {
+    const { rows } = await pool.query(
+      `SELECT nombre, foto_obligatoria FROM estaciones_config WHERE activa = true`
+    )
+    res.json({ data: rows })
   } catch (err) { next(err) }
 })
 
