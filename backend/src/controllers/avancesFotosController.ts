@@ -298,39 +298,52 @@ export async function deleteAvanceFoto(req: Request, res: Response, next: NextFu
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Helper interno usado por completar-proceso (en kiosk router) para validar
-// que existe foto del proceso actual si la estación la requiere.
-// Devuelve true si OK para completar, false si falta foto obligatoria.
+// que existen suficientes fotos del proceso actual si la estación las requiere.
+// Devuelve { ok, obligatoria, fotos_minimas, fotos_actuales, razon? }.
 // ─────────────────────────────────────────────────────────────────────────────
 export async function tieneAvanceFotoSiRequerida(
   ordenId: number,
   estacion: string,
   procesoId: number | null
-): Promise<{ ok: boolean; obligatoria: boolean; razon?: string }> {
-  // Es obligatoria para esta estación?
+): Promise<{
+  ok: boolean
+  obligatoria: boolean
+  fotos_minimas: number
+  fotos_actuales: number
+  razon?: string
+}> {
+  // Es obligatoria para esta estación? + cuántas fotos mínimo?
   const { rows: [cfg] } = await pool.query(
-    `SELECT foto_obligatoria FROM estaciones_config WHERE nombre = $1`,
+    `SELECT foto_obligatoria, fotos_minimas FROM estaciones_config WHERE nombre = $1`,
     [estacion]
   )
   const obligatoria = cfg?.foto_obligatoria === true
-  if (!obligatoria) return { ok: true, obligatoria: false }
+  const fotosMinimas = Number(cfg?.fotos_minimas ?? 0)
+  if (!obligatoria || fotosMinimas <= 0) {
+    return { ok: true, obligatoria, fotos_minimas: fotosMinimas, fotos_actuales: 0 }
+  }
 
-  // Existe al menos una foto para este proceso? (si no hay proceso_id,
-  // permitir con foto para la orden+estacion).
+  // Contar fotos para este proceso (o por orden+estacion como fallback).
   let queryText: string
   let queryVals: unknown[]
   if (procesoId != null) {
-    queryText = `SELECT 1 FROM orden_avance_fotos WHERE proceso_id = $1 LIMIT 1`
+    queryText = `SELECT COUNT(*)::int AS c FROM orden_avance_fotos WHERE proceso_id = $1`
     queryVals = [procesoId]
   } else {
-    queryText = `SELECT 1 FROM orden_avance_fotos WHERE orden_id = $1 AND estacion = $2 LIMIT 1`
+    queryText = `SELECT COUNT(*)::int AS c FROM orden_avance_fotos WHERE orden_id = $1 AND estacion = $2`
     queryVals = [ordenId, estacion]
   }
-  const { rows } = await pool.query(queryText, queryVals)
-  if (rows.length > 0) return { ok: true, obligatoria: true }
+  const { rows: [{ c: fotosActuales }] } = await pool.query<{ c: number }>(queryText, queryVals)
+
+  if (fotosActuales >= fotosMinimas) {
+    return { ok: true, obligatoria: true, fotos_minimas: fotosMinimas, fotos_actuales: fotosActuales }
+  }
 
   return {
     ok: false,
     obligatoria: true,
-    razon: `Esta estación requiere una foto de avance antes de completar el proceso.`,
+    fotos_minimas: fotosMinimas,
+    fotos_actuales: fotosActuales,
+    razon: `Esta estación requiere ${fotosMinimas} fotos. Llevás ${fotosActuales}.`,
   }
 }

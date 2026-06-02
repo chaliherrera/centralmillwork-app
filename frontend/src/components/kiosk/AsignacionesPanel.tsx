@@ -54,7 +54,10 @@ export default function AsignacionesPanel({ open, onClose }: Props) {
   })
   const requiereFotoEstacion = (estacion: string) => {
     const cfg = estacionesConfig.find((c) => c.nombre === estacion)
-    return cfg?.foto_obligatoria === true
+    return cfg?.foto_obligatoria === true && (cfg?.fotos_minimas ?? 0) > 0
+  }
+  const fotosMinimasDeEstacion = (estacion: string) => {
+    return estacionesConfig.find((c) => c.nombre === estacion)?.fotos_minimas ?? 3
   }
 
   const tieneClockIn = !!status?.registro_activo
@@ -102,11 +105,12 @@ export default function AsignacionesPanel({ open, onClose }: Props) {
     }
   }
 
-  // Cuando la foto subió OK, pasamos al confirm final (que dispara completar).
-  const handleFotoUploaded = (ordenId: number) => {
+  // Cuando el operario subió las N fotos y clickea "Completar proceso",
+  // disparamos completar-proceso directo (sin el paso "Confirmar" inline).
+  const handleFotoCompleto = (ordenId: number) => {
     setFotoModalOrden(null)
     qc.invalidateQueries({ queryKey: ['kiosk', 'avance-fotos', ordenId] })
-    setCompletarId(ordenId)
+    completar.mutate(ordenId)
   }
 
   // Cerrar con tecla Escape (para teclados conectados a las tablets)
@@ -205,8 +209,9 @@ export default function AsignacionesPanel({ open, onClose }: Props) {
       {fotoModalOrden && (
         <AvanceFotoModal
           orden={fotoModalOrden}
+          fotosMinimas={fotosMinimasDeEstacion(fotoModalOrden.mi_estacion)}
           onClose={() => setFotoModalOrden(null)}
-          onUploaded={() => handleFotoUploaded(fotoModalOrden.id)}
+          onCompleto={() => handleFotoCompleto(fotoModalOrden.id)}
         />
       )}
     </>
@@ -376,21 +381,39 @@ function OrdenItem({
   )
 }
 
-// ─── Modal "Foto de avance" — intercalado antes de Confirmar ─────────────────
-// El operario abre la cámara del iPad (input capture=environment), revisa el
-// preview, agrega un comentario opcional y sube. Al éxito, el flow pasa al
-// "Confirmar" (que dispara completar-proceso).
+// ─── Modal "Fotos de avance" — intercalado antes de Confirmar ────────────────
+// Stepper de N fotos (configurable por estación vía estaciones_config.fotos_minimas).
+// El operario:
+//   1. Saca cada foto con la cámara del iPad (capture=environment)
+//   2. Cada foto se sube inmediatamente al servidor (resiliente a crashes/refresh)
+//   3. Cuando llega al mínimo, aparece "Completar proceso"
+// Si abre y cierra modal a la mitad, al reabrir las fotos ya subidas se cuentan
+// (query al endpoint avance-fotos filtrado por estación).
 function AvanceFotoModal({
-  orden, onClose, onUploaded,
+  orden, fotosMinimas, onClose, onCompleto,
 }: {
   orden: KioskOrdenEnCola
+  fotosMinimas: number
   onClose: () => void
-  onUploaded: () => void
+  /** Llamado cuando el operario ya subió suficientes fotos Y clickea
+   *  "Completar proceso" — el padre dispara entonces completar-proceso. */
+  onCompleto: () => void
 }) {
   const inputRef = useRef<HTMLInputElement>(null)
   const [file, setFile] = useState<File | null>(null)
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
   const [comentario, setComentario] = useState('')
+
+  // Fotos previas de esta orden + estación (por si el operario cerró el modal
+  // a la mitad y volvió). Filtramos por mi_estacion (el server podría devolver
+  // fotos de otras estaciones de la misma orden).
+  const { data: fotosExistentes = [], refetch } = useQuery({
+    queryKey: ['kiosk', 'avance-fotos', orden.id],
+    queryFn:  () => kioskService.avanceFotosOrden(orden.id),
+  })
+  const fotosDeMiEstacion = fotosExistentes.filter((f) => f.estacion === orden.mi_estacion)
+  const subidas = fotosDeMiEstacion.length
+  const completo = subidas >= fotosMinimas
 
   const upload = useMutation({
     mutationFn: () => {
@@ -398,8 +421,13 @@ function AvanceFotoModal({
       return kioskService.uploadAvanceFoto(orden.id, file, comentario.trim() || undefined)
     },
     onSuccess: () => {
-      toast.success('Foto subida')
-      onUploaded()
+      toast.success(`Foto ${subidas + 1} subida`)
+      // Reset el preview y refetch el conteo
+      if (previewUrl) URL.revokeObjectURL(previewUrl)
+      setFile(null)
+      setPreviewUrl(null)
+      setComentario('')
+      refetch()
     },
     onError: (err: any) => {
       toast.error('Error subiendo: ' + (err?.response?.data?.error || err?.message || 'desconocido'))
@@ -418,6 +446,11 @@ function AvanceFotoModal({
     setPreviewUrl(f ? URL.createObjectURL(f) : null)
   }
 
+  // Texto del header según estado
+  const tituloEstado = completo
+    ? '¡Listo!'
+    : `Foto ${subidas + 1} de ${fotosMinimas}`
+
   return (
     <div className="fixed inset-0 bg-black/70 flex items-end sm:items-center justify-center z-[70]" onClick={onClose}>
       <div
@@ -427,15 +460,15 @@ function AvanceFotoModal({
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
           <div className="flex items-center gap-2">
-            <Camera size={20} className="text-emerald-600" />
-            <h2 className="text-lg font-bold text-forest-700">Foto de avance</h2>
+            <Camera size={20} className={completo ? 'text-emerald-600' : 'text-amber-600'} />
+            <h2 className="text-lg font-bold text-forest-700">{tituloEstado}</h2>
           </div>
-          <button onClick={onClose} className="p-2 rounded-full hover:bg-gray-100">
+          <button onClick={onClose} className="p-2 rounded-full hover:bg-gray-100" disabled={upload.isPending}>
             <X size={20} className="text-gray-500" />
           </button>
         </div>
 
-        {/* Info de la orden */}
+        {/* Info de la orden + progress bar */}
         <div className="px-5 py-3 bg-amber-50 border-b border-amber-100">
           <div className="text-xs text-amber-700 font-semibold uppercase tracking-wide">
             {orden.numero_orden} · {orden.mi_estacion.replace('_', ' ')}
@@ -443,15 +476,59 @@ function AvanceFotoModal({
           <div className="text-sm text-amber-900 font-medium mt-0.5 truncate">
             {orden.numero_item}
           </div>
+          {/* Progress visual: dots */}
+          <div className="flex items-center gap-1.5 mt-2">
+            {Array.from({ length: fotosMinimas }).map((_, i) => (
+              <div
+                key={i}
+                className={clsx(
+                  'h-1.5 flex-1 rounded-full transition-colors',
+                  i < subidas ? 'bg-emerald-500' : 'bg-amber-200'
+                )}
+              />
+            ))}
+            <span className="text-xs font-bold text-amber-800 ml-2 tabular-nums">
+              {subidas}/{fotosMinimas}
+            </span>
+          </div>
         </div>
 
         {/* Body */}
         <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
-          {!file ? (
+          {completo && !file ? (
+            // Estado: ya subió las suficientes, listo para completar
+            <div className="text-center py-6">
+              <div className="w-16 h-16 mx-auto rounded-full bg-emerald-100 flex items-center justify-center mb-3">
+                <CheckCircle2 size={32} className="text-emerald-600" />
+              </div>
+              <p className="text-base font-bold text-forest-700">Todas las fotos subidas</p>
+              <p className="text-sm text-gray-600 mt-1">
+                Subiste {subidas} {subidas === 1 ? 'foto' : 'fotos'}. Ya podés completar el proceso.
+              </p>
+              {/* Botón opcional para sacar foto extra */}
+              <button
+                onClick={() => inputRef.current?.click()}
+                className="mt-4 inline-flex items-center gap-1.5 px-4 py-2 rounded-lg border border-emerald-300 text-emerald-700 text-sm font-semibold hover:bg-emerald-50"
+              >
+                <ImagePlus size={14} />
+                Sacar otra (opcional)
+              </button>
+              <input
+                ref={inputRef}
+                type="file"
+                accept="image/*"
+                capture="environment"
+                className="hidden"
+                onChange={(e) => handleFile(e.target.files?.[0] ?? null)}
+              />
+            </div>
+          ) : !file ? (
+            // Estado: pidiéndole la próxima foto
             <>
               <p className="text-sm text-gray-600">
-                Sacale una foto al trabajo terminado antes de confirmar. Va a quedar
-                como evidencia visual de avance del proyecto.
+                {subidas === 0
+                  ? `Sacale ${fotosMinimas} fotos al trabajo terminado. Sirven como evidencia visual de avance.`
+                  : `Llevás ${subidas}. Te ${fotosMinimas - subidas === 1 ? 'falta 1' : `faltan ${fotosMinimas - subidas}`}.`}
               </p>
               <button
                 onClick={() => inputRef.current?.click()}
@@ -471,8 +548,8 @@ function AvanceFotoModal({
               />
             </>
           ) : (
+            // Estado: preview de la foto recién sacada
             <>
-              {/* Preview */}
               <div className="relative rounded-2xl overflow-hidden bg-gray-900">
                 {previewUrl && (
                   <img
@@ -485,12 +562,11 @@ function AvanceFotoModal({
                   onClick={() => handleFile(null)}
                   className="absolute top-2 right-2 p-2 rounded-full bg-black/70 text-white hover:bg-black/80"
                   aria-label="Sacar otra foto"
+                  disabled={upload.isPending}
                 >
                   <RotateCcw size={16} />
                 </button>
               </div>
-
-              {/* Comentario opcional */}
               <div>
                 <label className="block text-xs font-semibold text-gray-600 mb-1">
                   Comentario (opcional)
@@ -502,6 +578,7 @@ function AvanceFotoModal({
                   placeholder="Ej: Banding terminado en panel A"
                   maxLength={200}
                   className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-emerald-400 focus:border-transparent"
+                  disabled={upload.isPending}
                 />
               </div>
             </>
@@ -512,28 +589,48 @@ function AvanceFotoModal({
         <div className="px-5 py-4 border-t border-gray-100 flex gap-2">
           <button
             onClick={onClose}
-            className="flex-1 py-3 rounded-xl border border-gray-300 text-gray-700 font-semibold"
+            className="flex-1 py-3 rounded-xl border border-gray-300 text-gray-700 font-semibold disabled:opacity-50"
             disabled={upload.isPending}
           >
             Cancelar
           </button>
-          <button
-            onClick={() => upload.mutate()}
-            disabled={!file || upload.isPending}
-            className="flex-1 py-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-1.5"
-          >
-            {upload.isPending ? (
-              <>
-                <Loader2 size={16} className="animate-spin" />
-                Subiendo…
-              </>
-            ) : (
-              <>
-                <CheckCircle2 size={16} />
-                Subir y seguir
-              </>
-            )}
-          </button>
+          {file ? (
+            // Estado preview: subir esta foto
+            <button
+              onClick={() => upload.mutate()}
+              disabled={upload.isPending}
+              className="flex-1 py-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold disabled:opacity-50 flex items-center justify-center gap-1.5"
+            >
+              {upload.isPending ? (
+                <>
+                  <Loader2 size={16} className="animate-spin" />
+                  Subiendo…
+                </>
+              ) : (
+                <>
+                  <CheckCircle2 size={16} />
+                  Subir foto {subidas + 1}
+                </>
+              )}
+            </button>
+          ) : completo ? (
+            // Estado listo: completar proceso
+            <button
+              onClick={onCompleto}
+              className="flex-1 py-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold flex items-center justify-center gap-1.5"
+            >
+              <CheckCircle2 size={16} />
+              Completar proceso
+            </button>
+          ) : (
+            // Estado idle (sin file, sin completar): botón deshabilitado
+            <button
+              disabled
+              className="flex-1 py-3 rounded-xl bg-gray-200 text-gray-400 font-bold cursor-not-allowed"
+            >
+              Saca {fotosMinimas - subidas} {fotosMinimas - subidas === 1 ? 'foto' : 'fotos'} más
+            </button>
+          )}
         </div>
       </div>
     </div>

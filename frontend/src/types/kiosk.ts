@@ -99,6 +99,8 @@ export interface KioskDocumento {
 export interface KioskEstacionConfig {
   nombre: string
   foto_obligatoria: boolean
+  /** Cantidad mínima de fotos requeridas si foto_obligatoria=true. Default 3. */
+  fotos_minimas: number
 }
 
 export interface KioskAvanceFoto {

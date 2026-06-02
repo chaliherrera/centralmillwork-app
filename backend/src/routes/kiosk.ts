@@ -110,7 +110,7 @@ router.get('/ordenes/:id/avance-fotos', listAvanceFotosKiosk)
 router.get('/estaciones-config', async (_req, res, next) => {
   try {
     const { rows } = await pool.query(
-      `SELECT nombre, foto_obligatoria FROM estaciones_config WHERE activa = true`
+      `SELECT nombre, foto_obligatoria, fotos_minimas FROM estaciones_config WHERE activa = true`
     )
     res.json({ data: rows })
   } catch (err) { next(err) }
