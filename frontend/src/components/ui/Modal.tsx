@@ -29,8 +29,18 @@ export default function Modal({ open, onClose, title, children, size = 'md' }: M
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
-      <div className={clsx('relative w-full bg-white rounded-2xl shadow-2xl', sizeMap[size])}>
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+      {/*
+        max-h-[90vh] + flex flex-col + overflow-y-auto en el body hace que
+        si el contenido es más alto que el viewport, el body scrollea y el
+        header se mantiene visible. Sin esto, modales con listas largas
+        (ej. Asignar operario, MaterialForm) empujaban los botones de
+        acción fuera de la pantalla y obligaban a reducir zoom para verlos.
+      */}
+      <div className={clsx(
+        'relative w-full bg-white rounded-2xl shadow-2xl flex flex-col max-h-[90vh]',
+        sizeMap[size]
+      )}>
+        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 shrink-0">
           <h2 className="text-base font-semibold text-forest-700">{title}</h2>
           <button
             onClick={onClose}
@@ -39,7 +49,7 @@ export default function Modal({ open, onClose, title, children, size = 'md' }: M
             <X size={18} />
           </button>
         </div>
-        <div className="px-6 py-5">{children}</div>
+        <div className="px-6 py-5 overflow-y-auto flex-1">{children}</div>
       </div>
     </div>
   )
