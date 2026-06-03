@@ -4,8 +4,27 @@ import toast from 'react-hot-toast'
 import { produccionService } from '@/services/produccion'
 import type { EventoProduccion } from '@/types/produccion'
 
-const LS_LAST_SEEN = 'cm_eventos_last_seen'
+const LS_LAST_SEEN     = 'cm_eventos_last_seen'
+const LS_TOASTED_IDS   = 'cm_eventos_toasted_ids'   // de-dup: cada id toastea 1 sola vez
 const POLL_MS = 25_000  // 25s — balance entre frescura y carga del backend
+
+// ─── Helpers para persistir el set de IDs ya toastedos ──────────────────────
+function loadToastedIds(): Set<number> {
+  try {
+    const raw = localStorage.getItem(LS_TOASTED_IDS)
+    if (!raw) return new Set()
+    const arr = JSON.parse(raw)
+    if (!Array.isArray(arr)) return new Set()
+    return new Set(arr.filter((x) => typeof x === 'number'))
+  } catch {
+    return new Set()
+  }
+}
+function saveToastedIds(set: Set<number>) {
+  try {
+    localStorage.setItem(LS_TOASTED_IDS, JSON.stringify([...set]))
+  } catch { /* quota o disabled storage */ }
+}
 
 /**
  * Hook que polla el backend cada 25s buscando eventos nuevos (operario
@@ -23,6 +42,11 @@ const POLL_MS = 25_000  // 25s — balance entre frescura y carga del backend
 export function useEventosProduccion(enabled: boolean = true) {
   const qc = useQueryClient()
   const lastSeenRef = useRef<string>(localStorage.getItem(LS_LAST_SEEN) ?? new Date().toISOString())
+  // Set de IDs que YA dispararon toast. Persistido en localStorage para
+  // sobrevivir a refresh de página: si volvés a entrar, los toasts ya vistos
+  // NO se repiten. El conteo de la campana (unreadCount) sigue funcionando
+  // contra lastSeen, independiente de este set.
+  const toastedIdsRef = useRef<Set<number>>(loadToastedIds())
   const [unreadCount, setUnreadCount] = useState(0)
   const [notificationPermission, setNotificationPermission] = useState<NotificationPermission | 'unsupported'>(
     typeof window !== 'undefined' && 'Notification' in window
@@ -38,29 +62,44 @@ export function useEventosProduccion(enabled: boolean = true) {
     staleTime: POLL_MS,
   })
 
-  // Cuando llegan datos nuevos, comparar contra lastSeen y disparar notificaciones
+  // Cuando llegan datos nuevos, comparar contra lastSeen y disparar
+  // notificaciones SOLO para eventos que no fueron toasteados antes.
   useEffect(() => {
     if (!data?.eventos) return
     const lastSeen = lastSeenRef.current
     const nuevos = data.eventos.filter((e) => e.timestamp > lastSeen)
-    if (nuevos.length === 0) {
-      setUnreadCount(0)
-      return
-    }
-
     setUnreadCount(nuevos.length)
+    if (nuevos.length === 0) return
 
-    // Sólo disparamos toast y browser notif si el hook está enabled (evita
-    // duplicados si se monta en varios lugares). El más reciente primero.
-    // Si hay muchos (>3) agrupamos en un solo toast para no spammear.
-    if (nuevos.length > 3) {
+    // Filtrar los que YA mostraron toast en una iteración anterior. Estos
+    // siguen contando para el badge (unreadCount arriba), solo NO disparan
+    // toast ni browser notification de nuevo.
+    const aMostrar = nuevos.filter((e) => !toastedIdsRef.current.has(e.id))
+    if (aMostrar.length === 0) return
+
+    // Marcar como ya toasteados ANTES de disparar (evita re-fire si el
+    // useEffect se re-ejecuta en el mismo poll por algún motivo).
+    aMostrar.forEach((e) => toastedIdsRef.current.add(e.id))
+
+    // Auto-prune: el feed del servidor está limitado a 24h. Solo guardamos
+    // IDs que sigan apareciendo en la ventana actual; el resto se descarta
+    // para que el set no crezca sin límite.
+    const idsEnVentana = new Set(data.eventos.map((e) => e.id))
+    toastedIdsRef.current = new Set(
+      [...toastedIdsRef.current].filter((id) => idsEnVentana.has(id))
+    )
+    saveToastedIds(toastedIdsRef.current)
+
+    // Si hay muchos eventos nuevos (>3) agrupamos en un solo toast para no
+    // spammear. El más reciente primero.
+    if (aMostrar.length > 3) {
       toast.success(
-        `${nuevos.length} eventos nuevos en producción`,
+        `${aMostrar.length} eventos nuevos en producción`,
         { duration: 5000, icon: '🏭' }
       )
-      tryBrowserNotification(`${nuevos.length} eventos nuevos`, 'Click para ver el feed', '/produccion')
+      tryBrowserNotification(`${aMostrar.length} eventos nuevos`, 'Click para ver el feed', '/produccion')
     } else {
-      for (const ev of nuevos) {
+      for (const ev of aMostrar) {
         const { title, body } = formatEvento(ev)
         toast.success(`${title}\n${body}`, { duration: 6000, icon: '🏭' })
         tryBrowserNotification(title, body, `/produccion/ordenes/${ev.orden_id}`)
