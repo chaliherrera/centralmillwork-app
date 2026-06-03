@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   ListChecks, Loader2, CheckCircle2, AlertTriangle, FileText, ExternalLink, X,
-  Play, PlayCircle, Camera, ImagePlus, RotateCcw,
+  Play, PlayCircle, Camera, ImagePlus,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import clsx from 'clsx'
@@ -382,77 +382,145 @@ function OrdenItem({
 }
 
 // ─── Modal "Fotos de avance" — intercalado antes de Confirmar ────────────────
-// Stepper de N fotos (configurable por estación vía estaciones_config.fotos_minimas).
-// El operario:
-//   1. Saca cada foto con la cámara del iPad (capture=environment)
-//   2. Cada foto se sube inmediatamente al servidor (resiliente a crashes/refresh)
-//   3. Cuando llega al mínimo, aparece "Completar proceso"
-// Si abre y cierra modal a la mitad, al reabrir las fotos ya subidas se cuentan
-// (query al endpoint avance-fotos filtrado por estación).
+// Batch upload (estilo recepciones mobile):
+//   1. El operario saca N fotos seguidas (cada una se acumula localmente)
+//   2. Ve un strip de thumbnails con todas las locales (puede borrar cualquiera)
+//   3. Un solo botón "Subir las N y completar" sube TODAS en secuencia +
+//      dispara completar-proceso al final
+//   4. Si abre/cierra modal a la mitad, las fotos previamente subidas al
+//      servidor se cuentan (query a avance-fotos filtrado por estación)
 function AvanceFotoModal({
   orden, fotosMinimas, onClose, onCompleto,
 }: {
   orden: KioskOrdenEnCola
   fotosMinimas: number
   onClose: () => void
-  /** Llamado cuando el operario ya subió suficientes fotos Y clickea
-   *  "Completar proceso" — el padre dispara entonces completar-proceso. */
+  /** Llamado cuando el operario subió todo y disparó completar. El padre
+   *  ejecuta completar-proceso entonces. */
   onCompleto: () => void
 }) {
   const inputRef = useRef<HTMLInputElement>(null)
-  const [file, setFile] = useState<File | null>(null)
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null)
-  const [comentario, setComentario] = useState('')
 
-  // Fotos previas de esta orden + estación (por si el operario cerró el modal
-  // a la mitad y volvió). Filtramos por mi_estacion (el server podría devolver
-  // fotos de otras estaciones de la misma orden).
+  // Fotos locales pendientes de subir (recién capturadas, no llegaron al servidor)
+  const [archivosLocales, setArchivosLocales] = useState<File[]>([])
+  const [previewsLocales, setPreviewsLocales] = useState<string[]>([])
+
+  // Fotos ya en servidor (sesión interrumpida previa). Si alcanza el mínimo,
+  // el operario puede completar sin sacar más.
   const { data: fotosExistentes = [], refetch } = useQuery({
     queryKey: ['kiosk', 'avance-fotos', orden.id],
     queryFn:  () => kioskService.avanceFotosOrden(orden.id),
   })
   const fotosDeMiEstacion = fotosExistentes.filter((f) => f.estacion === orden.mi_estacion)
-  const subidas = fotosDeMiEstacion.length
-  const completo = subidas >= fotosMinimas
+  const subidasEnServer = fotosDeMiEstacion.length
+  const totalProyectado = subidasEnServer + archivosLocales.length
+  const cumpleMinimo = totalProyectado >= fotosMinimas
+  // Cap estricto: no permitir más fotos que el mínimo. Si ya llegó al límite,
+  // ocultamos el botón de captura.
+  const puedeAgregarMas = totalProyectado < fotosMinimas
 
-  const upload = useMutation({
-    mutationFn: () => {
-      if (!file) throw new Error('Sin archivo')
-      return kioskService.uploadAvanceFoto(orden.id, file, comentario.trim() || undefined)
+  const submit = useMutation({
+    mutationFn: async () => {
+      const fallidos: number[] = []
+      // Upload secuencial: si una falla, las anteriores quedan subidas y las
+      // posteriores no se intentan. Esto preserva orden de inserción.
+      for (let i = 0; i < archivosLocales.length; i++) {
+        try {
+          await kioskService.uploadAvanceFoto(orden.id, archivosLocales[i])
+        } catch (err) {
+          fallidos.push(i)
+        }
+      }
+      return { fallidos, totalIntento: archivosLocales.length }
     },
-    onSuccess: () => {
-      toast.success(`Foto ${subidas + 1} subida`)
-      // Reset el preview y refetch el conteo
-      if (previewUrl) URL.revokeObjectURL(previewUrl)
-      setFile(null)
-      setPreviewUrl(null)
-      setComentario('')
-      refetch()
+    onSuccess: async (res) => {
+      // Limpiar previews de las exitosas; preservar las fallidas para retry.
+      const fallidosSet = new Set(res.fallidos)
+      const previewsAEliminar = previewsLocales.filter((_, i) => !fallidosSet.has(i))
+      previewsAEliminar.forEach((url) => URL.revokeObjectURL(url))
+
+      const nuevosArchivos = archivosLocales.filter((_, i) => fallidosSet.has(i))
+      const nuevosPreviews = previewsLocales.filter((_, i) => fallidosSet.has(i))
+      setArchivosLocales(nuevosArchivos)
+      setPreviewsLocales(nuevosPreviews)
+
+      // Refrescamos contador desde server
+      const ref = await refetch()
+      const fotosNuevasEnServer = (ref.data ?? []).filter((f) => f.estacion === orden.mi_estacion).length
+
+      if (res.fallidos.length === 0) {
+        toast.success(`${res.totalIntento} ${res.totalIntento === 1 ? 'foto subida' : 'fotos subidas'}`)
+        // Si llegamos al mínimo, completamos
+        if (fotosNuevasEnServer >= fotosMinimas) {
+          onCompleto()
+        }
+      } else if (res.fallidos.length === res.totalIntento) {
+        toast.error('No se pudo subir ninguna foto. Verificá la conexión y reintentá.')
+      } else {
+        toast.error(`${res.fallidos.length} de ${res.totalIntento} fallaron. Tocá "Subir" para reintentar.`)
+      }
     },
     onError: (err: any) => {
-      toast.error('Error subiendo: ' + (err?.response?.data?.error || err?.message || 'desconocido'))
+      toast.error('Error: ' + (err?.message || 'desconocido'))
     },
   })
 
+  // Cleanup de object URLs al desmontar
   useEffect(() => {
     return () => {
-      if (previewUrl) URL.revokeObjectURL(previewUrl)
+      previewsLocales.forEach((url) => URL.revokeObjectURL(url))
     }
-  }, [previewUrl])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
-  const handleFile = (f: File | null) => {
-    if (previewUrl) URL.revokeObjectURL(previewUrl)
-    setFile(f)
-    setPreviewUrl(f ? URL.createObjectURL(f) : null)
+  const agregarFoto = (f: File | null) => {
+    if (!f) return
+    // Defensa: no exceder el mínimo configurado. El botón debería estar oculto
+    // cuando ya se alcanzó, pero por las dudas.
+    if (totalProyectado >= fotosMinimas) return
+    setArchivosLocales((prev) => [...prev, f])
+    setPreviewsLocales((prev) => [...prev, URL.createObjectURL(f)])
+    // Limpiar el value del input para que el mismo file pueda re-seleccionarse
+    if (inputRef.current) inputRef.current.value = ''
   }
 
-  // Texto del header según estado
-  const tituloEstado = completo
-    ? '¡Listo!'
-    : `Foto ${subidas + 1} de ${fotosMinimas}`
+  const eliminarFotoLocal = (idx: number) => {
+    URL.revokeObjectURL(previewsLocales[idx])
+    setArchivosLocales((prev) => prev.filter((_, i) => i !== idx))
+    setPreviewsLocales((prev) => prev.filter((_, i) => i !== idx))
+  }
+
+  // Cerrar con confirm si hay fotos sin subir
+  const handleClose = () => {
+    if (submit.isPending) return
+    if (archivosLocales.length > 0) {
+      const sigue = window.confirm(
+        `Tenés ${archivosLocales.length} ${archivosLocales.length === 1 ? 'foto sin subir' : 'fotos sin subir'}. ¿Salir y perderlas?`
+      )
+      if (!sigue) return
+    }
+    onClose()
+  }
+
+  const handleSubmit = () => {
+    // Si ya cumple con fotos del server y no hay locales nuevas, completar directo
+    if (archivosLocales.length === 0 && subidasEnServer >= fotosMinimas) {
+      onCompleto()
+      return
+    }
+    submit.mutate()
+  }
+
+  // Texto del botón principal
+  const labelBoton = (() => {
+    if (submit.isPending) return 'Subiendo…'
+    if (archivosLocales.length === 0 && subidasEnServer >= fotosMinimas) return 'Completar proceso'
+    const total = archivosLocales.length
+    return `Subir ${total === 1 ? '1 foto' : `las ${total}`} y completar`
+  })()
 
   return (
-    <div className="fixed inset-0 bg-black/70 flex items-end sm:items-center justify-center z-[70]" onClick={onClose}>
+    <div className="fixed inset-0 bg-black/70 flex items-end sm:items-center justify-center z-[70]" onClick={handleClose}>
       <div
         className="bg-white w-full sm:max-w-md sm:rounded-3xl shadow-2xl flex flex-col max-h-[92vh] rounded-t-3xl"
         onClick={(e) => e.stopPropagation()}
@@ -460,15 +528,19 @@ function AvanceFotoModal({
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
           <div className="flex items-center gap-2">
-            <Camera size={20} className={completo ? 'text-emerald-600' : 'text-amber-600'} />
-            <h2 className="text-lg font-bold text-forest-700">{tituloEstado}</h2>
+            <Camera size={20} className={cumpleMinimo ? 'text-emerald-600' : 'text-amber-600'} />
+            <h2 className="text-lg font-bold text-forest-700">Fotos de avance</h2>
           </div>
-          <button onClick={onClose} className="p-2 rounded-full hover:bg-gray-100" disabled={upload.isPending}>
+          <button
+            onClick={handleClose}
+            className="p-2 rounded-full hover:bg-gray-100 disabled:opacity-50"
+            disabled={submit.isPending}
+          >
             <X size={20} className="text-gray-500" />
           </button>
         </div>
 
-        {/* Info de la orden + progress bar */}
+        {/* Info de la orden + barra de progreso */}
         <div className="px-5 py-3 bg-amber-50 border-b border-amber-100">
           <div className="text-xs text-amber-700 font-semibold uppercase tracking-wide">
             {orden.numero_orden} · {orden.mi_estacion.replace('_', ' ')}
@@ -476,161 +548,137 @@ function AvanceFotoModal({
           <div className="text-sm text-amber-900 font-medium mt-0.5 truncate">
             {orden.numero_item}
           </div>
-          {/* Progress visual: dots */}
+          {/* Progress visual: dots (verde=server, ámbar=local, gris=falta) */}
           <div className="flex items-center gap-1.5 mt-2">
-            {Array.from({ length: fotosMinimas }).map((_, i) => (
-              <div
-                key={i}
-                className={clsx(
-                  'h-1.5 flex-1 rounded-full transition-colors',
-                  i < subidas ? 'bg-emerald-500' : 'bg-amber-200'
-                )}
-              />
-            ))}
+            {Array.from({ length: Math.max(fotosMinimas, totalProyectado) }).map((_, i) => {
+              const enServer = i < subidasEnServer
+              const enLocal  = !enServer && i < totalProyectado
+              return (
+                <div
+                  key={i}
+                  className={clsx(
+                    'h-1.5 flex-1 rounded-full transition-colors',
+                    enServer ? 'bg-emerald-500' : enLocal ? 'bg-amber-500' : 'bg-amber-200'
+                  )}
+                />
+              )
+            })}
             <span className="text-xs font-bold text-amber-800 ml-2 tabular-nums">
-              {subidas}/{fotosMinimas}
+              {totalProyectado}/{fotosMinimas}
             </span>
           </div>
         </div>
 
         {/* Body */}
         <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
-          {completo && !file ? (
-            // Estado: ya subió las suficientes, listo para completar
-            <div className="text-center py-6">
-              <div className="w-16 h-16 mx-auto rounded-full bg-emerald-100 flex items-center justify-center mb-3">
-                <CheckCircle2 size={32} className="text-emerald-600" />
-              </div>
-              <p className="text-base font-bold text-forest-700">Todas las fotos subidas</p>
-              <p className="text-sm text-gray-600 mt-1">
-                Subiste {subidas} {subidas === 1 ? 'foto' : 'fotos'}. Ya podés completar el proceso.
-              </p>
-              {/* Botón opcional para sacar foto extra */}
-              <button
-                onClick={() => inputRef.current?.click()}
-                className="mt-4 inline-flex items-center gap-1.5 px-4 py-2 rounded-lg border border-emerald-300 text-emerald-700 text-sm font-semibold hover:bg-emerald-50"
-              >
-                <ImagePlus size={14} />
-                Sacar otra (opcional)
-              </button>
-              <input
-                ref={inputRef}
-                type="file"
-                accept="image/*"
-                capture="environment"
-                className="hidden"
-                onChange={(e) => handleFile(e.target.files?.[0] ?? null)}
-              />
-            </div>
-          ) : !file ? (
-            // Estado: pidiéndole la próxima foto
-            <>
-              <p className="text-sm text-gray-600">
-                {subidas === 0
-                  ? `Sacale ${fotosMinimas} fotos al trabajo terminado. Sirven como evidencia visual de avance.`
-                  : `Llevás ${subidas}. Te ${fotosMinimas - subidas === 1 ? 'falta 1' : `faltan ${fotosMinimas - subidas}`}.`}
-              </p>
-              <button
-                onClick={() => inputRef.current?.click()}
-                className="w-full py-6 rounded-2xl border-2 border-dashed border-emerald-300 bg-emerald-50 hover:bg-emerald-100 active:bg-emerald-200 transition-colors flex flex-col items-center gap-2"
-              >
-                <ImagePlus size={32} className="text-emerald-600" />
-                <span className="text-emerald-700 font-bold">Abrir cámara</span>
-                <span className="text-emerald-600 text-xs">o elegir desde galería</span>
-              </button>
-              <input
-                ref={inputRef}
-                type="file"
-                accept="image/*"
-                capture="environment"
-                className="hidden"
-                onChange={(e) => handleFile(e.target.files?.[0] ?? null)}
-              />
-            </>
-          ) : (
-            // Estado: preview de la foto recién sacada
-            <>
-              <div className="relative rounded-2xl overflow-hidden bg-gray-900">
-                {previewUrl && (
-                  <img
-                    src={previewUrl}
-                    alt="preview"
-                    className="w-full h-auto max-h-[50vh] object-contain"
-                  />
-                )}
-                <button
-                  onClick={() => handleFile(null)}
-                  className="absolute top-2 right-2 p-2 rounded-full bg-black/70 text-white hover:bg-black/80"
-                  aria-label="Sacar otra foto"
-                  disabled={upload.isPending}
+          {/* Mensaje guía */}
+          <p className="text-sm text-gray-600">
+            {subidasEnServer > 0 && archivosLocales.length === 0 && (
+              <>Ya tenés <strong>{subidasEnServer}</strong> {subidasEnServer === 1 ? 'foto subida' : 'fotos subidas'} de antes. </>
+            )}
+            {!cumpleMinimo && (
+              <>Sacale <strong>{fotosMinimas - totalProyectado}</strong> {fotosMinimas - totalProyectado === 1 ? 'foto más' : 'fotos más'} al trabajo terminado.</>
+            )}
+            {cumpleMinimo && archivosLocales.length > 0 && (
+              <>Tenés las <strong>{fotosMinimas}</strong> fotos. Tocá "Subir" para enviar y completar.</>
+            )}
+            {cumpleMinimo && archivosLocales.length === 0 && (
+              <>Tenés todas las fotos. Tocá "Completar proceso" para terminar.</>
+            )}
+          </p>
+
+          {/* Grid de thumbnails (fotos locales) */}
+          {archivosLocales.length > 0 && (
+            <div className="grid grid-cols-3 gap-2">
+              {previewsLocales.map((url, idx) => (
+                <div
+                  key={idx}
+                  className="relative aspect-square rounded-xl overflow-hidden bg-gray-100 border border-gray-200"
                 >
-                  <RotateCcw size={16} />
-                </button>
-              </div>
-              <div>
-                <label className="block text-xs font-semibold text-gray-600 mb-1">
-                  Comentario (opcional)
-                </label>
-                <input
-                  type="text"
-                  value={comentario}
-                  onChange={(e) => setComentario(e.target.value)}
-                  placeholder="Ej: Banding terminado en panel A"
-                  maxLength={200}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-emerald-400 focus:border-transparent"
-                  disabled={upload.isPending}
-                />
-              </div>
-            </>
+                  <img src={url} alt={`Foto ${idx + 1}`} className="w-full h-full object-cover" />
+                  <span className="absolute bottom-1 left-1 bg-black/60 text-white text-[10px] font-bold px-1.5 py-0.5 rounded">
+                    {subidasEnServer + idx + 1}
+                  </span>
+                  <button
+                    onClick={() => eliminarFotoLocal(idx)}
+                    className="absolute top-1 right-1 p-1.5 rounded-full bg-red-600 hover:bg-red-700 text-white shadow-md disabled:opacity-50"
+                    aria-label="Eliminar foto"
+                    disabled={submit.isPending}
+                  >
+                    <X size={12} />
+                  </button>
+                </div>
+              ))}
+            </div>
           )}
+
+          {/* Botón "Sacar foto" — solo cuando falta llegar al mínimo.
+              Una vez alcanzadas las 3, desaparece. Si el operario quiere
+              cambiar alguna, primero borra de la grid (X rojo) y vuelve a sacar. */}
+          {!submit.isPending && puedeAgregarMas && (
+            <button
+              onClick={() => inputRef.current?.click()}
+              className={clsx(
+                'w-full rounded-2xl border-2 border-dashed transition-colors flex flex-col items-center justify-center gap-1.5',
+                archivosLocales.length === 0
+                  ? 'py-6 border-emerald-300 bg-emerald-50 hover:bg-emerald-100 active:bg-emerald-200'
+                  : 'py-4 border-gray-300 bg-gray-50 hover:bg-gray-100 active:bg-gray-200'
+              )}
+            >
+              <ImagePlus
+                size={archivosLocales.length === 0 ? 32 : 22}
+                className={archivosLocales.length === 0 ? 'text-emerald-600' : 'text-gray-600'}
+              />
+              <span className={clsx(
+                'font-bold',
+                archivosLocales.length === 0 ? 'text-emerald-700' : 'text-gray-700 text-sm'
+              )}>
+                {archivosLocales.length === 0
+                  ? 'Abrir cámara'
+                  : `Sacar foto ${totalProyectado + 1} de ${fotosMinimas}`}
+              </span>
+              {archivosLocales.length === 0 && (
+                <span className="text-emerald-600 text-xs">o elegir desde galería</span>
+              )}
+            </button>
+          )}
+
+          <input
+            ref={inputRef}
+            type="file"
+            accept="image/*"
+            capture="environment"
+            className="hidden"
+            onChange={(e) => agregarFoto(e.target.files?.[0] ?? null)}
+          />
         </div>
 
         {/* Footer botones */}
         <div className="px-5 py-4 border-t border-gray-100 flex gap-2">
           <button
-            onClick={onClose}
+            onClick={handleClose}
             className="flex-1 py-3 rounded-xl border border-gray-300 text-gray-700 font-semibold disabled:opacity-50"
-            disabled={upload.isPending}
+            disabled={submit.isPending}
           >
             Cancelar
           </button>
-          {file ? (
-            // Estado preview: subir esta foto
-            <button
-              onClick={() => upload.mutate()}
-              disabled={upload.isPending}
-              className="flex-1 py-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold disabled:opacity-50 flex items-center justify-center gap-1.5"
-            >
-              {upload.isPending ? (
-                <>
-                  <Loader2 size={16} className="animate-spin" />
-                  Subiendo…
-                </>
-              ) : (
-                <>
-                  <CheckCircle2 size={16} />
-                  Subir foto {subidas + 1}
-                </>
-              )}
-            </button>
-          ) : completo ? (
-            // Estado listo: completar proceso
-            <button
-              onClick={onCompleto}
-              className="flex-1 py-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold flex items-center justify-center gap-1.5"
-            >
-              <CheckCircle2 size={16} />
-              Completar proceso
-            </button>
-          ) : (
-            // Estado idle (sin file, sin completar): botón deshabilitado
-            <button
-              disabled
-              className="flex-1 py-3 rounded-xl bg-gray-200 text-gray-400 font-bold cursor-not-allowed"
-            >
-              Saca {fotosMinimas - subidas} {fotosMinimas - subidas === 1 ? 'foto' : 'fotos'} más
-            </button>
-          )}
+          <button
+            onClick={handleSubmit}
+            disabled={!cumpleMinimo || submit.isPending}
+            className="flex-1 py-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold disabled:bg-gray-200 disabled:text-gray-400 disabled:cursor-not-allowed flex items-center justify-center gap-1.5"
+          >
+            {submit.isPending ? (
+              <>
+                <Loader2 size={16} className="animate-spin" />
+                {labelBoton}
+              </>
+            ) : (
+              <>
+                <CheckCircle2 size={16} />
+                {labelBoton}
+              </>
+            )}
+          </button>
         </div>
       </div>
     </div>
