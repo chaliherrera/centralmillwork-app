@@ -4,7 +4,7 @@ import type {
   PersonalTaller, EstacionConStatus, EstacionDetalle, EstacionDistancia,
   RutaCalculada, Prioridad, OrdenDocumento, EventosRecientesResp,
   PersonalActivoReporte, ReportePersonalResp, ReporteSemanalResp, ReporteProyectoResp, ReporteDiarioResp,
-  ItemsDisponiblesResp, EstadoItemDisponible,
+  ItemsDisponiblesResp, EstadoItemDisponible, AvanceFoto,
 } from '@/types/produccion'
 
 interface OrdenesFilters {
@@ -160,6 +160,31 @@ export const produccionService = {
 
   borrarDocumento: (docId: number) =>
     api.delete<{ message: string }>(`/produccion/documentos/${docId}`).then((r) => r.data),
+
+  // ─── Fotos de avance (subidas desde kiosko, gestionadas desde admin) ─────
+  avanceFotos: (
+    ordenId: number,
+    params?: { estacion?: string; visible_cliente?: boolean }
+  ) =>
+    api.get<{ data: AvanceFoto[] }>(`/produccion/ordenes/${ordenId}/avance-fotos`, {
+      params: {
+        ...(params?.estacion ? { estacion: params.estacion } : {}),
+        ...(params?.visible_cliente ? { visible_cliente: 'true' } : {}),
+      },
+    }).then((r) => r.data.data),
+
+  patchAvanceFoto: (
+    fotoId: number,
+    body: { visible_cliente?: boolean; comentario?: string }
+  ) =>
+    api.patch<{ data: AvanceFoto; message: string }>(
+      `/produccion/avance-fotos/${fotoId}`,
+      body
+    ).then((r) => r.data),
+
+  borrarAvanceFoto: (fotoId: number) =>
+    api.delete<{ message: string }>(`/produccion/avance-fotos/${fotoId}`)
+      .then((r) => r.data),
 
   // ─── Ruta preview ────────────────────────────────────────────────────────
   rutaPreview: (procesos: string[], asignaciones: Record<string, number | null> = {}) =>

@@ -11,6 +11,7 @@ import Modal from '@/components/ui/Modal'
 import OrdenDocumentos from '@/components/modules/produccion/OrdenDocumentos'
 import OrdenEvolucion from '@/components/produccion/OrdenEvolucion'
 import MaterialesItem from '@/components/produccion/MaterialesItem'
+import FotosAvanceSection from '@/components/produccion/FotosAvanceSection'
 import { produccionService } from '@/services/produccion'
 import type { StatusOrden, Prioridad, OrdenProceso } from '@/types/produccion'
 
@@ -221,6 +222,11 @@ export default function DetalleOrden() {
 
           {/* Documentos adjuntos por estación */}
           <OrdenDocumentos ordenId={ordenId} procesos={orden.procesos} />
+
+          {/* Fotos de avance subidas desde el kiosko (Tarea #5).
+              Visible para todos los roles que ven el detalle. Solo
+              ADMIN/SHOP_MANAGER puede toggle visible_cliente o borrar. */}
+          <FotosAvanceSection ordenId={ordenId} />
 
           {/* Nota: el bloque "Historial" anterior fue removido.
               La información cronológica vive ahora dentro del componente
