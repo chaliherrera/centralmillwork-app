@@ -68,7 +68,10 @@ export function useEventosProduccion(enabled: boolean = true) {
     if (!data?.eventos) return
     const lastSeen = lastSeenRef.current
     const nuevos = data.eventos.filter((e) => e.timestamp > lastSeen)
-    setUnreadCount(nuevos.length)
+    // Fix #7: el badge no debe bajar solo cuando los eventos viejos salen
+    // de la ventana de 24h del feed. Usamos Math.max para que sea monotónico
+    // hasta que el usuario haga markAllSeen (que resetea a 0).
+    setUnreadCount((prev) => Math.max(prev, nuevos.length))
     if (nuevos.length === 0) return
 
     // Filtrar los que YA mostraron toast en una iteración anterior. Estos

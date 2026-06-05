@@ -1,77 +1,40 @@
 import { Request, Response, NextFunction } from 'express'
-import multer from 'multer'
-import path from 'path'
-import fs from 'fs'
 import pool from '../db/pool'
 import { createError } from '../middleware/errorHandler'
-import { supabase, supabaseEnabled, SUPABASE_BUCKET } from '../utils/supabase'
+import { SUPABASE_BUCKET } from '../utils/supabase'
 import { logger } from '../utils/logger'
+import {
+  createImageUploadMulter,
+  uploadToSupabaseOrDisk,
+  removeFromStorage,
+  enrichRowsWithPublicUrls,
+} from '../utils/fileUploadHelper'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Fotos de avance del kiosko
 //
-// El operario, antes de "Completar proceso", sube una foto desde el iPad como
-// evidencia. Mismo patrón de storage que imagenesController + qcController:
-// memoria si Supabase está activo, disco si no.
+// El operario, antes de "Completar proceso", sube N fotos desde el iPad como
+// evidencia. La cantidad mínima se configura por estación en
+// estaciones_config.fotos_minimas.
 //
-// Bucket: reutilizamos SUPABASE_BUCKET_PRODUCCION (el de QC). Si no está
-// seteado, cae al bucket genérico. Prefijo: orden-{id}/avance-{ts}-{rand}.{ext}
+// Bucket: SUPABASE_BUCKET_PRODUCCION (el de QC). Si no está seteado, cae al
+// bucket genérico. Prefijo: `orden-{id}/avance-{ts}-{rand}.{ext}`
 // ─────────────────────────────────────────────────────────────────────────────
-
-const UPLOADS_DIR = path.join(__dirname, '../../uploads')
-if (!fs.existsSync(UPLOADS_DIR)) fs.mkdirSync(UPLOADS_DIR, { recursive: true })
 
 const AVANCE_BUCKET = process.env.SUPABASE_BUCKET_PRODUCCION || SUPABASE_BUCKET
 
-const storage = supabaseEnabled
-  ? multer.memoryStorage()
-  : multer.diskStorage({
-      destination: (_req, _file, cb) => cb(null, UPLOADS_DIR),
-      filename: (_req, file, cb) => {
-        const ext = path.extname(file.originalname)
-        cb(null, `avance-${Date.now()}-${Math.random().toString(36).slice(2)}${ext}`)
-      },
-    })
-
-// Defense-in-depth: extensión + mimetype. Solo imágenes (no PDFs porque
-// el caso de uso es foto tomada con la cámara del iPad).
-const ALLOWED_MIMES = new Set([
-  'image/jpeg', 'image/jpg', 'image/png', 'image/webp',
-  'image/heic', 'image/heif',
-])
-const ALLOWED_EXT_RE = /\.(jpe?g|png|webp|heic|heif)$/i
-
-const fileFilter = (_req: Request, file: Express.Multer.File, cb: multer.FileFilterCallback) => {
-  const extOk  = ALLOWED_EXT_RE.test(file.originalname)
-  const mimeOk = ALLOWED_MIMES.has((file.mimetype ?? '').toLowerCase())
-  if (extOk && mimeOk) return cb(null, true)
-  cb(Object.assign(
-    new Error(`Solo imágenes (jpg/png/webp/heic). Recibido: name="${file.originalname}" mime="${file.mimetype}"`),
-    { statusCode: 400 }
-  ))
-}
-
-export const uploadAvanceFoto = multer({
-  storage,
-  fileFilter,
-  limits: { fileSize: 10 * 1024 * 1024 },  // 10 MB
+// Multer config delegado al helper. Solo imágenes (sin PDF) porque viene de
+// la cámara del iPad.
+export const uploadAvanceFoto = createImageUploadMulter({
+  diskPrefix: 'avance-',
+  sizeMb: 10,
+  allowedMimes: new Set([
+    'image/jpeg', 'image/jpg', 'image/png', 'image/webp',
+    'image/heic', 'image/heif',
+  ]),
+  allowedExtRe: /\.(jpe?g|png|webp|heic|heif)$/i,
+  formatsLabel: 'imágenes (jpg/png/webp/heic)',
 })
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Helper: enriquece rows con URL pública de Supabase si está activo y la URL
-// guardada en DB está vacía o desactualizada.
-// ─────────────────────────────────────────────────────────────────────────────
-function enrichWithUrls(rows: any[]) {
-  if (!supabaseEnabled || !supabase) return rows
-  const sb = supabase
-  for (const r of rows) {
-    if (!r.url || r.url.startsWith('/uploads/')) {
-      const { data } = sb.storage.from(AVANCE_BUCKET).getPublicUrl(r.filename)
-      r.url = data.publicUrl
-    }
-  }
-  return rows
-}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // POST /api/kiosk/ordenes/:id/avance-foto
@@ -79,12 +42,13 @@ function enrichWithUrls(rows: any[]) {
 //
 // Reglas:
 //   - El operario debe estar asignado a algún proceso de esta orden
-//     (defensa básica para evitar que cualquier operario suba a cualquier orden)
-//   - Se asocia automáticamente con:
-//       * estacion       = la estación actual de la orden
-//       * proceso_id     = el orden_proceso del operario en esa estación (si existe)
-//       * personal_id    = el operario logueado
-//   - Body multipart: campo `archivo` (la imagen), opcional `comentario`
+//   - Se asocia automáticamente con su proceso (preferentemente el que matchea
+//     la estación actual de la orden; fallback a cualquier proceso del operario)
+//   - estacion = la del proceso del operario (consistente con orden.mi_estacion
+//     en el frontend, que sale del mismo lugar). NO usamos orden.estacion_actual
+//     como fallback porque puede diverger del frontend filter (Fix #8).
+//   - **Cleanup en falla** (Fix #2): si la INSERT en DB falla DESPUÉS de subir
+//     a Supabase, removemos el blob para no dejar huérfanos.
 // ─────────────────────────────────────────────────────────────────────────────
 export async function uploadAvanceFotoKiosk(req: Request, res: Response, next: NextFunction) {
   try {
@@ -101,9 +65,8 @@ export async function uploadAvanceFotoKiosk(req: Request, res: Response, next: N
     )
     if (!orden) return next(createError('Orden no encontrada', 404))
 
-    // Buscar el proceso del operario en la estación actual.
-    // Si no hay match exacto, buscamos cualquier proceso del operario en esta orden
-    // (puede ser ayudante en un proceso colateral).
+    // Buscar el proceso del operario en la estación actual. Si no hay match
+    // exacto, buscamos cualquier proceso del operario en esta orden (ayudante).
     let { rows: [proceso] } = await pool.query(
       `SELECT id, estacion FROM orden_procesos
        WHERE orden_id = $1 AND operador_id = $2 AND estacion = $3`,
@@ -123,45 +86,56 @@ export async function uploadAvanceFotoKiosk(req: Request, res: Response, next: N
       return next(createError('No estás asignado a esta orden', 403))
     }
 
-    const estacionSnapshot = proceso.estacion || orden.estacion_actual
+    // Fix #8: snapshot SOLO desde proceso.estacion (no orden.estacion_actual).
+    // El frontend filtra por orden.mi_estacion (op.estacion del proceso del
+    // operario en mi-cola), así que si guardamos proceso.estacion siempre
+    // matchean. Si proceso.estacion es null, es data corrupta → error.
+    if (!proceso.estacion) {
+      logger.error('proceso sin estacion', { requestId: req.id, ordenId, procesoId: proceso.id })
+      return next(createError('Proceso sin estación asignada (data inválida)', 500))
+    }
+    const estacionSnapshot: string = proceso.estacion
+
     const comentario = req.body?.comentario?.toString().trim() || null
 
-    // Upload al storage
-    let filename: string
-    let url: string | null = null
+    // Subir al storage (Supabase o disk). Tirar throw → next(err).
+    const { filename, url } = await uploadToSupabaseOrDisk({
+      file: req.file,
+      bucket: AVANCE_BUCKET,
+      pathPrefix: `orden-${ordenId}`,
+      customPrefix: 'avance-',
+      requestId: req.id,
+      logCtx: { ordenId, personalId },
+    })
 
-    if (supabaseEnabled && supabase) {
-      const ext = path.extname(req.file.originalname)
-      filename = `orden-${ordenId}/avance-${Date.now()}-${Math.random().toString(36).slice(2)}${ext}`
-      const { error } = await supabase.storage
-        .from(AVANCE_BUCKET)
-        .upload(filename, req.file.buffer, {
-          contentType: req.file.mimetype,
-          upsert: false,
+    // Fix #2: si el INSERT falla DESPUÉS del upload, hay que limpiar el blob
+    // para no dejar archivos huérfanos en el bucket. Try/catch + cleanup.
+    let foto
+    try {
+      const { rows: [row] } = await pool.query(
+        `INSERT INTO orden_avance_fotos
+           (orden_id, proceso_id, estacion, personal_id, usuario_id,
+            filename, original_name, mime_type, size_bytes, url, comentario)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+         RETURNING *`,
+        [
+          ordenId, proceso.id, estacionSnapshot, personalId, null,
+          filename, req.file.originalname, req.file.mimetype, req.file.size, url, comentario,
+        ]
+      )
+      foto = row
+    } catch (insertErr: any) {
+      // Cleanup del blob recién subido (best effort, no bloquea el error).
+      await removeFromStorage({
+        filename, bucket: AVANCE_BUCKET, requestId: req.id,
+        logCtx: { ordenId, personalId, reason: 'INSERT failed, cleaning orphan' },
+      }).catch((cleanupErr) => {
+        logger.error('failed to cleanup orphan after INSERT failure', {
+          requestId: req.id, ordenId, filename, err: String(cleanupErr),
         })
-      if (error) {
-        logger.error('uploadAvanceFoto Supabase error', { requestId: req.id, ordenId, err: error })
-        return next(createError('Error subiendo a Supabase: ' + error.message, 500))
-      }
-      const { data } = supabase.storage.from(AVANCE_BUCKET).getPublicUrl(filename)
-      url = data.publicUrl
-    } else {
-      filename = req.file.filename
-      url = `/uploads/${filename}`
+      })
+      throw insertErr
     }
-
-    // Insert row
-    const { rows: [foto] } = await pool.query(
-      `INSERT INTO orden_avance_fotos
-         (orden_id, proceso_id, estacion, personal_id, usuario_id,
-          filename, original_name, mime_type, size_bytes, url, comentario)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
-       RETURNING *`,
-      [
-        ordenId, proceso.id, estacionSnapshot, personalId, null,
-        filename, req.file.originalname, req.file.mimetype, req.file.size, url, comentario,
-      ]
-    )
 
     logger.info('avance foto subida (kiosko)', {
       requestId: req.id,
@@ -193,7 +167,7 @@ export async function listAvanceFotosKiosk(req: Request, res: Response, next: Ne
        ORDER BY f.created_at DESC`,
       [ordenId]
     )
-    res.json({ data: enrichWithUrls(rows) })
+    res.json({ data: enrichRowsWithPublicUrls(rows, AVANCE_BUCKET) })
   } catch (err) { next(err) }
 }
 
@@ -229,7 +203,7 @@ export async function listAvanceFotosAdmin(req: Request, res: Response, next: Ne
        ORDER BY f.estacion, f.created_at DESC`,
       vals
     )
-    res.json({ data: enrichWithUrls(rows) })
+    res.json({ data: enrichRowsWithPublicUrls(rows, AVANCE_BUCKET) })
   } catch (err) { next(err) }
 }
 
@@ -268,7 +242,7 @@ export async function patchAvanceFoto(req: Request, res: Response, next: NextFun
 
 // ─────────────────────────────────────────────────────────────────────────────
 // DELETE /api/produccion/avance-fotos/:fotoId
-// Admin borra la foto (DB + storage). Solo ADMIN/ENGINEERING.
+// Admin borra la foto (DB + storage). Solo ADMIN/SHOP_MANAGER.
 // ─────────────────────────────────────────────────────────────────────────────
 export async function deleteAvanceFoto(req: Request, res: Response, next: NextFunction) {
   try {
@@ -281,15 +255,10 @@ export async function deleteAvanceFoto(req: Request, res: Response, next: NextFu
     )
     if (!foto) return next(createError('Foto no encontrada', 404))
 
-    if (supabaseEnabled && supabase) {
-      const { error } = await supabase.storage.from(AVANCE_BUCKET).remove([foto.filename])
-      if (error) {
-        logger.warn('deleteAvanceFoto Supabase warn', { requestId: req.id, fotoId, err: error.message })
-      }
-    } else {
-      const filePath = path.join(UPLOADS_DIR, foto.filename)
-      if (fs.existsSync(filePath)) fs.unlinkSync(filePath)
-    }
+    await removeFromStorage({
+      filename: foto.filename, bucket: AVANCE_BUCKET,
+      requestId: req.id, logCtx: { fotoId, ordenId: foto.orden_id },
+    })
 
     logger.info('avance foto eliminada', { requestId: req.id, fotoId, ordenId: foto.orden_id })
     res.json({ message: 'Foto eliminada' })
@@ -297,9 +266,11 @@ export async function deleteAvanceFoto(req: Request, res: Response, next: NextFu
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Helper interno usado por completar-proceso (en kiosk router) para validar
-// que existen suficientes fotos del proceso actual si la estación las requiere.
+// Helper interno usado por completar-proceso para validar fotos.
 // Devuelve { ok, obligatoria, fotos_minimas, fotos_actuales, razon? }.
+//
+// Fix #6: si foto_obligatoria=true y fotos_minimas<=0, forzamos a 1.
+// Para desactivar el gate hay que poner foto_obligatoria=false, no fotos_minimas=0.
 // ─────────────────────────────────────────────────────────────────────────────
 export async function tieneAvanceFotoSiRequerida(
   ordenId: number,
@@ -312,15 +283,24 @@ export async function tieneAvanceFotoSiRequerida(
   fotos_actuales: number
   razon?: string
 }> {
-  // Es obligatoria para esta estación? + cuántas fotos mínimo?
   const { rows: [cfg] } = await pool.query(
     `SELECT foto_obligatoria, fotos_minimas FROM estaciones_config WHERE nombre = $1`,
     [estacion]
   )
   const obligatoria = cfg?.foto_obligatoria === true
-  const fotosMinimas = Number(cfg?.fotos_minimas ?? 0)
-  if (!obligatoria || fotosMinimas <= 0) {
-    return { ok: true, obligatoria, fotos_minimas: fotosMinimas, fotos_actuales: 0 }
+  if (!obligatoria) {
+    return { ok: true, obligatoria: false, fotos_minimas: 0, fotos_actuales: 0 }
+  }
+
+  // Fix #6: si obligatoria=true pero fotos_minimas<=0 (config rara), forzamos
+  // a 1 — el admin claramente quería pedir al menos una foto. Para desactivar
+  // del todo debe poner foto_obligatoria=false.
+  const fotosMinimasConfig = Number(cfg?.fotos_minimas ?? 0)
+  const fotosMinimas = fotosMinimasConfig > 0 ? fotosMinimasConfig : 1
+  if (fotosMinimasConfig <= 0) {
+    logger.warn('estacion con foto_obligatoria=true pero fotos_minimas<=0; forzando a 1', {
+      estacion, fotos_minimas_config: fotosMinimasConfig,
+    })
   }
 
   // Contar fotos para este proceso (o por orden+estacion como fallback).
@@ -344,6 +324,6 @@ export async function tieneAvanceFotoSiRequerida(
     obligatoria: true,
     fotos_minimas: fotosMinimas,
     fotos_actuales: fotosActuales,
-    razon: `Esta estación requiere ${fotosMinimas} fotos. Llevás ${fotosActuales}.`,
+    razon: `Esta estación requiere ${fotosMinimas} foto${fotosMinimas === 1 ? '' : 's'}. Llevás ${fotosActuales}.`,
   }
 }

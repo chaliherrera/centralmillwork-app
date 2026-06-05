@@ -82,11 +82,13 @@ export default function AsignacionesPanel({ open, onClose }: Props) {
       setCompletarId(null)
       setFotoModalOrden(null)
     },
-    onError: (err: any) => {
-      // 422 = backend bloqueó por falta de foto. El frontend ya debería haber
-      // abierto el modal, pero por las dudas re-abrimos.
+    // Fix #3: onError recibe (err, variables) donde variables=ordenId.
+    // Antes leíamos completarId (state) que es null cuando el flujo viene
+    // desde el modal de fotos (handleFotoCompleto no lo setea). Eso hacía
+    // que el 422 nunca re-abriera el modal — el operario se quedaba mudo.
+    onError: (err: any, ordenId: number) => {
       const status = err?.response?.status
-      const orden  = data.find((o: KioskOrdenEnCola) => o.id === completarId)
+      const orden  = data.find((o: KioskOrdenEnCola) => o.id === ordenId)
       if (status === 422 && orden) {
         toast.error('Necesitás subir una foto antes de completar')
         setFotoModalOrden(orden)
@@ -405,6 +407,13 @@ function AvanceFotoModal({
   const [archivosLocales, setArchivosLocales] = useState<File[]>([])
   const [previewsLocales, setPreviewsLocales] = useState<string[]>([])
 
+  // Fix #1: ref sincronizada con previewsLocales para que el cleanup useEffect
+  // (que corre al desmontar con deps=[]) tenga acceso a la lista ACTUAL, no
+  // al snapshot inicial vacío. Sin esto, los blob URLs creados después del
+  // mount nunca se revocan al cerrar el modal → memory leak en el iPad.
+  const previewsLocalesRef = useRef<string[]>([])
+  useEffect(() => { previewsLocalesRef.current = previewsLocales }, [previewsLocales])
+
   // Fotos ya en servidor (sesión interrumpida previa). Si alcanza el mínimo,
   // el operario puede completar sin sacar más.
   const { data: fotosExistentes = [], refetch } = useQuery({
@@ -447,13 +456,25 @@ function AvanceFotoModal({
       // Refrescamos contador desde server
       const ref = await refetch()
       const fotosNuevasEnServer = (ref.data ?? []).filter((f) => f.estacion === orden.mi_estacion).length
+      const exitosas = res.totalIntento - res.fallidos.length
 
+      // Fix #5: el criterio para auto-completar es el SERVIDOR, no el frontend.
+      // Si el operario ya cumple el mínimo (aunque hayan fallado algunas),
+      // disparamos onCompleto. Antes se quedaba mostrando "X de Y fallaron"
+      // y el operario tenía que borrar manualmente la fallida y volver a click.
+      if (fotosNuevasEnServer >= fotosMinimas) {
+        if (res.fallidos.length > 0) {
+          toast.success(`${exitosas} subidas (ya cumplís el mínimo de ${fotosMinimas})`)
+        } else {
+          toast.success(`${res.totalIntento} ${res.totalIntento === 1 ? 'foto subida' : 'fotos subidas'}`)
+        }
+        onCompleto()
+        return
+      }
+
+      // No alcanzamos el mínimo: mostrar resultado para que retoque y reintente
       if (res.fallidos.length === 0) {
         toast.success(`${res.totalIntento} ${res.totalIntento === 1 ? 'foto subida' : 'fotos subidas'}`)
-        // Si llegamos al mínimo, completamos
-        if (fotosNuevasEnServer >= fotosMinimas) {
-          onCompleto()
-        }
       } else if (res.fallidos.length === res.totalIntento) {
         toast.error('No se pudo subir ninguna foto. Verificá la conexión y reintentá.')
       } else {
@@ -465,12 +486,12 @@ function AvanceFotoModal({
     },
   })
 
-  // Cleanup de object URLs al desmontar
+  // Cleanup de object URLs al desmontar (Fix #1: lee de la ref para tener
+  // siempre la lista actual, no el snapshot inicial vacío).
   useEffect(() => {
     return () => {
-      previewsLocales.forEach((url) => URL.revokeObjectURL(url))
+      previewsLocalesRef.current.forEach((url) => URL.revokeObjectURL(url))
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   const agregarFoto = (f: File | null) => {

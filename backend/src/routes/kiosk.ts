@@ -64,18 +64,33 @@ router.post('/ordenes/:id/completar-proceso', async (req, res, next) => {
     )
     if (!orden) return next(createError('Orden no encontrada', 404))
 
+    // Fix #4: priorizar el proceso DE ESTE OPERARIO en esta estación.
+    // Si no es de él pero está libre (operador_id IS NULL), igual lo aceptamos.
+    // Si está asignado a OTRO operario, 403.
+    //
+    // El ORDER BY garantiza que cuando hay múltiples filas para la misma
+    // (orden, estacion) preferimos: 1) la del propio operario, 2) las
+    // libres (NULL), 3) cualquier otra (que después rechazaremos).
     const { rows: [proceso] } = await pool.query(
       `SELECT id, operador_id FROM orden_procesos
-       WHERE orden_id = $1 AND estacion = $2`,
-      [ordenId, orden.estacion_actual]
+       WHERE orden_id = $1 AND estacion = $2
+       ORDER BY
+         CASE WHEN operador_id = $3 THEN 0
+              WHEN operador_id IS NULL THEN 1
+              ELSE 2 END,
+         id
+       LIMIT 1`,
+      [ordenId, orden.estacion_actual, personalId]
     )
     if (proceso?.operador_id && proceso.operador_id !== personalId) {
       return next(createError('No estás asignado al proceso actual de esta orden', 403))
     }
 
-    // Validar foto de avance si la estación la requiere.
-    // El frontend del kiosko consulta /estaciones-config para saber si tiene
-    // que abrir el modal antes; igual validamos servidor-side por defense-in-depth.
+    // Validar foto de avance (defensa en profundidad — el frontend ya intercala
+    // el modal antes de llamar a este endpoint, pero por las dudas validamos).
+    // Nota: avanzarOrdenInterno también valida (Fix #10) — el check acá es
+    // redundante a propósito para devolver el 422 con la razon específica
+    // antes de tomar el lock de la orden.
     const check = await tieneAvanceFotoSiRequerida(
       ordenId,
       orden.estacion_actual,

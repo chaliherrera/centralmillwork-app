@@ -321,6 +321,14 @@ export async function avanzarOrdenInterno(opts: {
   reqKioskPersonalId?: number | null
   dispositivo?: string | null
   notas?: string | null
+  /**
+   * Fix #10: skipFotoCheck=true permite a admins forzar el avance saltando
+   * la validación de fotos obligatorias (ej: kiosko caído, override de
+   * supervisor). El default es false → el gate aplica a TODOS los callers.
+   * Si querés saltearlo desde el frontend admin, pasá { bypass_foto_check: true }
+   * en el body y el route handler lo traslada acá.
+   */
+  skipFotoCheck?: boolean
 }) {
   const client = await pool.connect()
   try {
@@ -341,6 +349,36 @@ export async function avanzarOrdenInterno(opts: {
     if (!orden.estacion_actual) {
       await client.query('ROLLBACK')
       throw createError('La orden no tiene estación actual', 400)
+    }
+
+    // Fix #10: gate de fotos obligatorias en el CORE compartido. Antes solo
+    // estaba en routes/kiosk.ts → admins que llamaban /produccion/ordenes/:id/avanzar
+    // se saltaban el check silenciosamente. Ahora la regla aplica a TODOS los
+    // callers a menos que se pase explícitamente skipFotoCheck:true.
+    if (!opts.skipFotoCheck) {
+      // Resolver procesoId para que el helper cuente fotos por proceso. Si hay
+      // múltiples, preferimos el del operador (kiosk path) o el primero.
+      const { rows: [procActual] } = await client.query(
+        `SELECT id FROM orden_procesos
+         WHERE orden_id = $1 AND estacion = $2
+         ORDER BY
+           CASE WHEN operador_id = $3 THEN 0
+                WHEN operador_id IS NULL THEN 1
+                ELSE 2 END,
+           id
+         LIMIT 1`,
+        [opts.ordenId, orden.estacion_actual, opts.reqKioskPersonalId ?? null]
+      )
+      // Import dinámico para evitar dependencia circular controller↔controller.
+      // (avancesFotosController ya importa cosas de utils, pero no de producción.)
+      const { tieneAvanceFotoSiRequerida } = await import('./avancesFotosController')
+      const check = await tieneAvanceFotoSiRequerida(
+        opts.ordenId, orden.estacion_actual, procActual?.id ?? null
+      )
+      if (!check.ok) {
+        await client.query('ROLLBACK')
+        throw createError(check.razon || 'Foto de avance requerida', 422)
+      }
     }
 
     // 1) Cerrar cualquier segmento de time_proyectos abierto para el operario
@@ -607,13 +645,28 @@ export async function iniciarItemKiosk(req: Request, res: Response, next: NextFu
 /**
  * PATCH /api/produccion/ordenes/:id/avanzar
  * Override del SHOP_MANAGER para avanzar una orden a la siguiente estación.
+ *
+ * Body: { notas?: string, bypass_foto_check?: boolean }
+ *
+ * bypass_foto_check=true permite saltarse la validación de fotos obligatorias
+ * (Fix #10) — útil si el kiosko está caído o como override de supervisor.
+ * El bypass queda registrado en el log de la orden (orden_historial.motivo)
+ * con un prefijo "[FORZADO sin fotos]" para auditoría.
  */
 export async function avanzarOrden(req: Request, res: Response, next: NextFunction) {
   try {
+    const skipFotoCheck = req.body?.bypass_foto_check === true
+    const notas = skipFotoCheck && req.body?.notas
+      ? `[FORZADO sin fotos] ${req.body.notas}`
+      : skipFotoCheck
+        ? '[FORZADO sin fotos]'
+        : (req.body?.notas ?? null)
+
     const result = await avanzarOrdenInterno({
       ordenId: parseInt(String(req.params.id)),
       reqUserId: req.user?.id ?? null,
-      notas: req.body?.notas ?? null,
+      notas,
+      skipFotoCheck,
     })
     res.json({ data: result, message: result.siguiente_estacion ? 'Orden movida' : 'Orden completada' })
   } catch (err) { next(err) }
