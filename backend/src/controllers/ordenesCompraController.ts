@@ -3,6 +3,7 @@ import pool from '../db/pool'
 import { parsePagination, paginatedResponse } from '../utils/pagination'
 import { createError } from '../middleware/errorHandler'
 import { recomputeMaterialesEstadoByIds } from '../utils/materialesEstado'
+import { nextOcNumero } from '../utils/numeradorAtomico'
 
 // ─── Shared FROM/JOIN block (table + lateral recepcion) ──────────────────────
 const OC_JOINS = `
@@ -251,11 +252,8 @@ export async function createOrdenCompra(req: Request, res: Response, next: NextF
       fecha_entrega_estimada, fecha_mto, categoria, notas, items = [],
     } = req.body
 
-    const { rows: [last] } = await client.query(
-      `SELECT numero FROM ordenes_compra ORDER BY id DESC LIMIT 1`
-    )
-    const seq = last ? parseInt(last.numero.split('-')[2] ?? '0') + 1 : 1
-    const numero = `OC-${new Date().getFullYear()}-${String(seq).padStart(4, '0')}`
+    // Audit A2: numeración atómica via sequence Postgres en vez de SELECT MAX
+    const numero = await nextOcNumero(client)
 
     const { rows: [orden] } = await client.query(
       `INSERT INTO ordenes_compra
@@ -476,12 +474,8 @@ export async function generarOCs(req: Request, res: Response, next: NextFunction
       )
       const categoria = catRow?.categoria ?? ''
 
-      // Generate OC number — re-query inside loop so sequence is correct across iterations
-      const { rows: [last] } = await client.query(
-        `SELECT numero FROM ordenes_compra ORDER BY id DESC LIMIT 1`
-      )
-      const seq = last ? parseInt(last.numero.split('-')[2] ?? '0') + 1 : 1
-      const numero = `OC-${new Date().getFullYear()}-${String(seq).padStart(4, '0')}`
+      // Audit A2: numeración atómica via sequence Postgres en cada iteración
+      const numero = await nextOcNumero(client)
 
       const { rows: [orden] } = await client.query(
         `INSERT INTO ordenes_compra
@@ -669,11 +663,8 @@ export async function crearOCNoMTO(req: Request, res: Response, next: NextFuncti
     }
 
     // Generate OC number
-    const { rows: [last] } = await client.query(
-      `SELECT numero FROM ordenes_compra ORDER BY id DESC LIMIT 1`
-    )
-    const seq = last ? parseInt(last.numero.split('-')[2] ?? '0') + 1 : 1
-    const numero = `OC-${new Date().getFullYear()}-${String(seq).padStart(4, '0')}`
+    // Audit A2: numeración atómica via sequence Postgres en vez de SELECT MAX
+    const numero = await nextOcNumero(client)
 
     // Create OC (incluye origen + freight; sin IVA — opera en USD)
     // OPERATIVA arranca como 'recibida' + fecha_entrega_real=hoy

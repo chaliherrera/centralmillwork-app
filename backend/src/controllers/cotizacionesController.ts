@@ -3,6 +3,7 @@ import pool from '../db/pool'
 import { parsePagination, paginatedResponse } from '../utils/pagination'
 import { createError } from '../middleware/errorHandler'
 import { logger } from '../utils/logger'
+import { nextCotizacionFolio } from '../utils/numeradorAtomico'
 
 interface ProyectoRow { codigo: string; nombre: string; cliente: string }
 
@@ -86,11 +87,8 @@ export async function createCotizacion(req: Request, res: Response, next: NextFu
     if (!proyecto_id || !proveedor_id)
       return next(createError('proyecto_id y proveedor_id son requeridos', 400))
 
-    const { rows: [last] } = await pool.query(
-      `SELECT folio FROM solicitudes_cotizacion ORDER BY id DESC LIMIT 1`
-    )
-    const seq = last ? parseInt(last.folio.split('-')[2] ?? '0') + 1 : 1
-    const folio = `COT-${new Date().getFullYear()}-${String(seq).padStart(4, '0')}`
+    // Audit A2: numeración atómica via sequence Postgres
+    const folio = await nextCotizacionFolio()
 
     const { rows } = await pool.query(
       `INSERT INTO solicitudes_cotizacion (folio, proyecto_id, proveedor_id, fecha_solicitud, notas)
@@ -183,11 +181,6 @@ export async function marcarCotizacionesEnviadas(req: Request, res: Response, ne
     )
     if (!proyecto) return next(createError('Proyecto no encontrado', 404))
 
-    const { rows: [last] } = await pool.query(
-      `SELECT folio FROM solicitudes_cotizacion ORDER BY id DESC LIMIT 1`
-    )
-    let seq = last ? parseInt(last.folio.split('-')[2] ?? '0') + 1 : 1
-
     const results: Array<{ vendor: string; folio: string; materiales_count: number }> = []
 
     for (const { vendor } of validVendors) {
@@ -204,8 +197,8 @@ export async function marcarCotizacionesEnviadas(req: Request, res: Response, ne
       )
       if (!materiales.length) continue
 
-      const folio = `COT-${new Date().getFullYear()}-${String(seq).padStart(4, '0')}`
-      seq++
+      // Audit A2: numeración atómica por iteración (sequence Postgres)
+      const folio = await nextCotizacionFolio()
 
       await pool.query(
         `INSERT INTO solicitudes_cotizacion

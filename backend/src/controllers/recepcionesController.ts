@@ -4,6 +4,7 @@ import { parsePagination, paginatedResponse } from '../utils/pagination'
 import { createError } from '../middleware/errorHandler'
 import { logger } from '../utils/logger'
 import { recomputeMaterialesEstadoForOC } from '../utils/materialesEstado'
+import { nextRecepcionFolio } from '../utils/numeradorAtomico'
 
 const REC_SORT_WHITELIST = [
   'r.fecha_recepcion', 'r.folio', 'r.estado', 'r.created_at',
@@ -90,11 +91,8 @@ export async function createRecepcion(req: Request, res: Response, next: NextFun
     const { orden_compra_id, fecha_recepcion, recibio, notas, items = [] } = req.body
     if (!orden_compra_id) return next(createError('orden_compra_id es requerido', 400))
 
-    const { rows: [last] } = await client.query(
-      `SELECT folio FROM recepciones ORDER BY id DESC LIMIT 1`
-    )
-    const seq = last ? parseInt(last.folio.split('-')[2] ?? '0') + 1 : 1
-    const folio = `REC-${new Date().getFullYear()}-${String(seq).padStart(4, '0')}`
+    // Audit A2: numeración atómica via sequence Postgres en vez de SELECT MAX
+    const folio = await nextRecepcionFolio(client)
 
     const hayDiferencias = (items as { cantidad_ordenada: number; cantidad_recibida: number }[])
       .some((i) => Number(i.cantidad_recibida) !== Number(i.cantidad_ordenada))
@@ -159,11 +157,8 @@ export async function createRecepcionCompleta(req: Request, res: Response, next:
     )
     if (!ocRow) return next(createError(`OC ${orden_compra_id} no encontrada`, 404))
 
-    const { rows: [last] } = await client.query(
-      `SELECT folio FROM recepciones ORDER BY id DESC LIMIT 1`
-    )
-    const seq = last ? parseInt(last.folio.split('-')[2] ?? '0') + 1 : 1
-    const folio = `REC-${new Date().getFullYear()}-${String(seq).padStart(4, '0')}`
+    // Audit A2: numeración atómica via sequence Postgres en vez de SELECT MAX
+    const folio = await nextRecepcionFolio(client)
 
     const estadoRecepcion = tipo === 'total' ? 'completa' : 'con_diferencias'
     const estadoOrden     = tipo === 'total' ? 'recibida'  : 'en_transito'
@@ -330,11 +325,8 @@ export async function inicializarMateriales(req: Request, res: Response, next: N
     }
 
     // Generate folio for the template recepcion
-    const { rows: [last] } = await client.query(
-      `SELECT folio FROM recepciones ORDER BY id DESC LIMIT 1`
-    )
-    const seq = last ? parseInt(last.folio.split('-')[2] ?? '0') + 1 : 1
-    const folio = `REC-${new Date().getFullYear()}-${String(seq).padStart(4, '0')}`
+    // Audit A2: numeración atómica via sequence Postgres en vez de SELECT MAX
+    const folio = await nextRecepcionFolio(client)
 
     const { rows: [recepcion] } = await client.query(
       `INSERT INTO recepciones (folio, orden_compra_id, estado, fecha_recepcion, recibio, notas)
