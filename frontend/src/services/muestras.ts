@@ -68,4 +68,23 @@ export const muestrasService = {
 
   deleteArchivo: (id: number, archivoId: number) =>
     api.delete<{ message: string }>(`/muestras/${id}/archivos/${archivoId}`).then((r) => r.data),
+
+  // ─── Fase 2 — UI Procurement (endpoints del módulo modules/muestras/) ────
+  ocsStatus: (id: number) =>
+    api.get<{ data: MuestraOCsStatus }>(`/muestras/${id}/ocs-status`).then((r) => r.data.data),
+
+  marcarSinCompras: (id: number, motivo?: string) =>
+    api.post<{ data: MuestraOCsStatus; message: string }>(
+      `/muestras/${id}/sin-compras`,
+      { motivo }
+    ).then((r) => r.data),
+}
+
+/** Devuelto por GET /api/muestras/:id/ocs-status (Fase 2). */
+export interface MuestraOCsStatus {
+  total: number
+  recibidas: number
+  pendientes: Array<{ id: number; numero: string; estado: string }>
+  puede_fabricar: boolean
+  sin_compras_marcado: boolean
 }

@@ -95,6 +95,8 @@ export const ordenesCompraService = {
     categoria: string | null
     notas: string | null
     freight: number
+    /** Muestras F2: si la compra es para una muestra, se asocia acá. */
+    muestra_id?: number | null
     items: { descripcion: string; unidad: string; qty: number; unit_price: number }[]
   }) =>
     api.post<{ data: { id: number; numero: string; total: number; freight: number; materiales_count: number; origen: string }; message: string }>(

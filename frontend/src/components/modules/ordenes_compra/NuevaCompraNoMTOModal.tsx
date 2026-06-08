@@ -11,6 +11,7 @@ import Modal from '@/components/ui/Modal'
 import { ordenesCompraService } from '@/services/ordenesCompra'
 import { proyectosService } from '@/services/proyectos'
 import { proveedoresService } from '@/services/proveedores'
+import { muestrasService } from '@/services/muestras'
 import { useAuth } from '@/context/AuthContext'
 
 // Categorías para compras vinculadas a proyectos (DIRECTA / URGENTE)
@@ -31,6 +32,8 @@ const itemSchema = z.object({
 const schema = z.object({
   // Stored as string in the form; converted to number|null at submit time
   proyecto_id:            z.string().optional(),
+  /** Muestras F2: id de la muestra asociada (opcional). */
+  muestra_id:             z.string().optional(),
   vendor:                 z.string().min(1, 'Requerido').max(200),
   origen:                 z.enum(['DIRECTA', 'URGENTE', 'OPERATIVA']),
   categoria:              z.string().optional(),
@@ -49,9 +52,11 @@ interface Props {
   open: boolean
   onClose: () => void
   defaultProyectoId?: number | null
+  /** Muestras F2: pre-llenar muestra asociada (cuando se abre desde el detalle de muestra). */
+  defaultMuestraId?: number | null
 }
 
-export default function NuevaCompraNoMTOModal({ open, onClose, defaultProyectoId }: Props) {
+export default function NuevaCompraNoMTOModal({ open, onClose, defaultProyectoId, defaultMuestraId }: Props) {
   const qc = useQueryClient()
   const navigate = useNavigate()
   const { user } = useAuth()
@@ -73,6 +78,7 @@ export default function NuevaCompraNoMTOModal({ open, onClose, defaultProyectoId
 
   const defaultValues: FormValues = {
     proyecto_id:            defaultProyectoId ? String(defaultProyectoId) : '',
+    muestra_id:             defaultMuestraId  ? String(defaultMuestraId)  : '',
     vendor:                 '',
     origen:                 'DIRECTA',
     categoria:              '',
@@ -93,7 +99,25 @@ export default function NuevaCompraNoMTOModal({ open, onClose, defaultProyectoId
   useEffect(() => {
     if (open) reset(defaultValues)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, defaultProyectoId])
+  }, [open, defaultProyectoId, defaultMuestraId])
+
+  // Muestras F2: dropdown de muestras del proyecto seleccionado (filtradas
+  // a estados SOLICITADA y EN_FABRICACION — las que pueden recibir OCs).
+  const watchProyectoId = watch('proyecto_id')
+  const proyectoIdNum   = watchProyectoId ? Number(watchProyectoId) : null
+  const { data: muestrasProyecto = [] } = useQuery({
+    queryKey: ['muestras-asociables', proyectoIdNum],
+    queryFn: async () => {
+      if (!proyectoIdNum) return []
+      const resp = await muestrasService.list({
+        proyecto_id: proyectoIdNum,
+        estado: ['SOLICITADA', 'EN_FABRICACION'],
+      })
+      return resp.items ?? []
+    },
+    enabled: !!proyectoIdNum,
+    staleTime: 30_000,
+  })
 
   // Live totals
   const watchItems   = watch('items')
@@ -117,6 +141,10 @@ export default function NuevaCompraNoMTOModal({ open, onClose, defaultProyectoId
       categoria:              data.categoria || null,
       notas:                  data.notas || null,
       freight:                Number(data.freight) || 0,
+      // Muestras F2: solo si NO es OPERATIVA y la muestra está seleccionada
+      muestra_id:             data.origen !== 'OPERATIVA' && data.muestra_id
+                                ? Number(data.muestra_id)
+                                : null,
       items:                  data.items.map((it) => ({
         descripcion: it.descripcion.trim(),
         unidad:      it.unidad,
@@ -214,6 +242,26 @@ export default function NuevaCompraNoMTOModal({ open, onClose, defaultProyectoId
                   <option key={p.id} value={p.id}>{p.codigo} — {p.nombre}</option>
                 ))}
               </select>
+              {/* Muestras F2: dropdown muestra solo si hay proyecto Y hay muestras del proyecto */}
+              {!isOperativa && proyectoIdNum && muestrasProyecto.length > 0 && (
+                <div className="mt-2">
+                  <label className="label text-xs">
+                    Asociar a muestra <span className="text-gray-400">(opcional)</span>
+                  </label>
+                  <select className="input w-full text-sm" {...register('muestra_id')}>
+                    <option value="">— Ninguna —</option>
+                    {muestrasProyecto.map((m) => (
+                      <option key={m.id} value={m.id}>
+                        {m.codigo} · {m.descripcion.slice(0, 60)}
+                        {m.descripcion.length > 60 ? '…' : ''}
+                      </option>
+                    ))}
+                  </select>
+                  <p className="text-[10px] text-gray-500 mt-0.5">
+                    Si la asociás, al recibir esta OC se auto-cierra la tarea de procurement de la muestra.
+                  </p>
+                </div>
+              )}
             </div>
           )}
           <div>
