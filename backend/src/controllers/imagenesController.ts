@@ -55,22 +55,41 @@ export async function getImagenes(req: Request, res: Response, next: NextFunctio
       [id]
     )
 
-    // FIX: siempre devolver URL absoluta para que el frontend no tenga que
-    // adivinar el host del backend. Antes en disk mode no se devolvía url
-    // y el frontend caía a un fallback localhost que solo funcionaba en dev.
     if (supabaseEnabled && supabase) {
-      // Supabase activo: URL pública del bucket
+      // FIX bug imágenes 2026-06-08: usar createSignedUrl en vez de
+      // getPublicUrl. getPublicUrl SOLO funciona si el bucket es público.
+      // Las fotos de avance del kiosko funcionan porque van a SUPABASE_BUCKET_PRODUCCION
+      // (otro bucket, posiblemente público), pero oc_imagenes va a SUPABASE_BUCKET
+      // que probablemente es privado. createSignedUrl funciona para ambos casos
+      // (genera URL firmada con expiración).
       const sb = supabase
-      const enriched = rows.map((img) => {
-        const { data } = sb.storage.from(SUPABASE_BUCKET).getPublicUrl(img.filename)
-        return { ...img, url: data.publicUrl }
-      })
+      const SIGNED_URL_TTL_SECONDS = 3600  // 1 hora — el frontend usa la URL
+                                            // al renderizar la imagen. Si la
+                                            // página queda abierta >1h, refresca
+                                            // al refetch del query (10s staleTime).
+      const enriched = await Promise.all(
+        rows.map(async (img) => {
+          const { data, error } = await sb.storage
+            .from(SUPABASE_BUCKET)
+            .createSignedUrl(img.filename, SIGNED_URL_TTL_SECONDS)
+          if (error) {
+            logger.warn('createSignedUrl error', {
+              requestId: req.id,
+              filename: img.filename,
+              bucket: SUPABASE_BUCKET,
+              err: error.message,
+            })
+            // Fallback a getPublicUrl (si el bucket SÍ es público, esto funciona)
+            const { data: pub } = sb.storage.from(SUPABASE_BUCKET).getPublicUrl(img.filename)
+            return { ...img, url: pub.publicUrl }
+          }
+          return { ...img, url: data.signedUrl }
+        })
+      )
       res.json({ data: enriched })
     } else {
-      // Disk mode: derivar URL absoluta del request. Esto SOLO funciona si el
-      // archivo está físicamente en la réplica que sirve la request — con 2
-      // réplicas y filesystem efímero esto es flaky. Para fix definitivo
-      // configurar SUPABASE_URL + SUPABASE_SERVICE_KEY en Railway.
+      // Disk mode: derivar URL absoluta. Flaky con filesystem efímero +
+      // 2 réplicas. Solo para dev local.
       const proto = req.protocol
       const host  = req.get('host')
       const baseUrl = process.env.BACKEND_PUBLIC_URL || `${proto}://${host}`
@@ -80,8 +99,7 @@ export async function getImagenes(req: Request, res: Response, next: NextFunctio
       }))
       res.json({
         data: enriched,
-        // Warning visible para el frontend admin (logueable con Sentry)
-        warning: 'disk_mode_enabled — imágenes pueden perderse en redeploy. Configurar Supabase para fix definitivo.',
+        warning: 'disk_mode_enabled — configurar Supabase para fix definitivo.',
       })
     }
   } catch (err) { next(err) }
