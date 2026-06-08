@@ -9,13 +9,19 @@ import { supabase, supabaseEnabled, SUPABASE_BUCKET } from '../utils/supabase'
 
 // ─── Tipos y constantes ──────────────────────────────────────────────────────
 
-const ESTADOS = ['SOLICITADA','EN_FABRICACION','EN_QC','ENVIADA','APROBADA','RECHAZADA','ARCHIVADA'] as const
-const TIPOS = ['PUERTA','ACABADO','HARDWARE','CABINET','OTRO'] as const
-const PRIORIDADES = ['ALTA','MEDIA','BAJA'] as const
+// Exportados para que tests + (futura) extracción a domain/ los consuman.
+// La carpeta domain/muestras/ aún no existe — extracción gradual cuando
+// haya 3+ helpers que justifiquen el módulo. Por ahora vive acá pero ya
+// exportado como "interfaz canónica del state machine".
+export const ESTADOS = ['SOLICITADA','EN_FABRICACION','EN_QC','ENVIADA','APROBADA','RECHAZADA','ARCHIVADA'] as const
+export const TIPOS = ['PUERTA','ACABADO','HARDWARE','CABINET','OTRO'] as const
+export const PRIORIDADES = ['ALTA','MEDIA','BAJA'] as const
+
+export type EstadoMuestra = typeof ESTADOS[number]
 
 // Transiciones válidas. Forma: { [estado_actual]: [estados destino válidos] }
 // Permitimos volver atrás solo en casos puntuales (admin override).
-const TRANSICIONES: Record<typeof ESTADOS[number], typeof ESTADOS[number][]> = {
+export const TRANSICIONES: Record<EstadoMuestra, EstadoMuestra[]> = {
   SOLICITADA:     ['EN_FABRICACION', 'ARCHIVADA'],
   EN_FABRICACION: ['EN_QC', 'SOLICITADA', 'ARCHIVADA'],  // SOLICITADA = "esperar más materiales"
   EN_QC:          ['ENVIADA', 'EN_FABRICACION', 'ARCHIVADA'],  // QC fail vuelve a fabricación
