@@ -4,12 +4,14 @@ import {
   Plus, Beaker, Calendar, User as UserIcon, AlertTriangle, RefreshCw,
   Truck, X, ArrowRight, FileText, Upload, Trash2, Download, Paperclip,
   RotateCcw, CalendarDays, ChevronLeft, ChevronRight,
+  ShoppingCart, Check,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import clsx from 'clsx'
 import { muestrasService } from '@/services/muestras'
 import { proyectosService } from '@/services/proyectos'
 import { useAuth } from '@/context/AuthContext'
+import NuevaCompraNoMTOModal from '@/components/modules/ordenes_compra/NuevaCompraNoMTOModal'
 import type {
   MuestraConDetalle, MuestraEstado, MuestraTipo, MuestraPrioridad,
   CreateMuestraInput, TransicionInput, RegistrarEnvioInput,
@@ -469,9 +471,31 @@ function DetalleMuestraDrawer({ id, onClose, onChange }: { id: number; onClose: 
   const [showEnvio, setShowEnvio] = useState(false)
   const [tab, setTab] = useState<'overview' | 'archivos' | 'ocs' | 'envios' | 'timeline' | 'calendar'>('overview')
 
+  // Muestras F2: state para el modal de crear OC asociada
+  const [showCrearOC, setShowCrearOC] = useState(false)
+
   const { data, isLoading } = useQuery({
     queryKey: ['muestra', id],
     queryFn:  () => muestrasService.get(id),
+  })
+
+  // Muestras F2: status de OCs asociadas. Refresca cuando cambia detalle.
+  const { data: ocsStatus, refetch: refetchOcsStatus } = useQuery({
+    queryKey: ['muestra-ocs-status', id],
+    queryFn:  () => muestrasService.ocsStatus(id),
+    staleTime: 10_000,
+  })
+
+  // Muestras F2: mutación para marcar "sin compras necesarias"
+  const sinCompras = useMutation({
+    mutationFn: (motivo?: string) => muestrasService.marcarSinCompras(id, motivo),
+    onSuccess: (res) => {
+      toast.success(res.message)
+      refetchOcsStatus()
+      qc.invalidateQueries({ queryKey: ['muestra', id] })
+      qc.invalidateQueries({ queryKey: ['tareas'] })  // se cerró tarea procurement + creó shop_manager
+    },
+    onError: (err: any) => toast.error(err?.response?.data?.message ?? 'No se pudo marcar sin compras'),
   })
 
   const transicion = useMutation({
@@ -728,11 +752,73 @@ function DetalleMuestraDrawer({ id, onClose, onChange }: { id: number; onClose: 
               )}
 
               {tab === 'ocs' && (
-                <div className="space-y-2">
+                <div className="space-y-3">
+                  {/* F2: Header de progreso si hay OCs */}
+                  {ocsStatus && ocsStatus.total > 0 && (
+                    <div className={clsx(
+                      'rounded-lg p-3 flex items-center justify-between',
+                      ocsStatus.puede_fabricar
+                        ? 'bg-emerald-50 border border-emerald-200'
+                        : 'bg-amber-50 border border-amber-200'
+                    )}>
+                      <div className="flex items-center gap-2">
+                        {ocsStatus.puede_fabricar
+                          ? <Check size={16} className="text-emerald-700" />
+                          : <ShoppingCart size={16} className="text-amber-700" />
+                        }
+                        <span className="text-sm font-semibold">
+                          {ocsStatus.recibidas}/{ocsStatus.total} OCs recibidas
+                        </span>
+                      </div>
+                      {ocsStatus.puede_fabricar && (
+                        <span className="text-xs font-bold text-emerald-700 uppercase">
+                          Listo para fabricar
+                        </span>
+                      )}
+                    </div>
+                  )}
+
+                  {/* F2: Banner contextual cuando SOLICITADA sin OCs */}
+                  {m.estado === 'SOLICITADA' && data.ocs.length === 0 && !ocsStatus?.sin_compras_marcado && (user?.rol === 'PROCUREMENT' || user?.rol === 'ADMIN') && (
+                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 space-y-2">
+                      <div className="text-sm font-semibold text-blue-900">¿Materiales en stock?</div>
+                      <p className="text-xs text-blue-700">
+                        Si todo lo necesario para esta muestra ya está en el taller, marcala sin compras.
+                        Si faltan materiales, creá las OCs directas asociadas.
+                      </p>
+                      <div className="flex gap-2 pt-1">
+                        <button
+                          onClick={() => sinCompras.mutate(undefined)}
+                          disabled={sinCompras.isPending}
+                          className="text-xs font-semibold px-3 py-1.5 rounded-md bg-emerald-600 hover:bg-emerald-700 text-white disabled:opacity-50"
+                        >
+                          {sinCompras.isPending ? 'Marcando…' : 'Sí, sin compras necesarias'}
+                        </button>
+                        <button
+                          onClick={() => setShowCrearOC(true)}
+                          className="text-xs font-semibold px-3 py-1.5 rounded-md bg-blue-600 hover:bg-blue-700 text-white"
+                        >
+                          No, crear OC asociada
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* F2: Indicación si ya se marcó "sin compras" */}
+                  {ocsStatus?.sin_compras_marcado && data.ocs.length === 0 && (
+                    <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-3 text-sm flex items-center gap-2">
+                      <Check size={16} className="text-emerald-700" />
+                      <span className="text-emerald-900 font-medium">Marcado como "sin compras necesarias" — materiales en stock</span>
+                    </div>
+                  )}
+
+                  {/* Lista de OCs */}
                   {data.ocs.length === 0 ? (
-                    <p className="text-sm text-gray-500 italic text-center py-8">
-                      Sin OCs asociadas. {user?.rol === 'PROCUREMENT' || user?.rol === 'ADMIN' ? 'Creá una compra directa con muestra_id desde el módulo de Compras.' : ''}
-                    </p>
+                    !ocsStatus?.sin_compras_marcado && m.estado !== 'SOLICITADA' && (
+                      <p className="text-sm text-gray-500 italic text-center py-8">
+                        Sin OCs asociadas.
+                      </p>
+                    )
                   ) : (
                     data.ocs.map((oc) => (
                       <div key={oc.id} className="bg-gray-50 rounded-lg p-3 text-sm flex items-center justify-between">
@@ -741,11 +827,29 @@ function DetalleMuestraDrawer({ id, onClose, onChange }: { id: number; onClose: 
                           <div className="text-xs text-gray-600">{oc.vendor_nombre} · {oc.origen}</div>
                         </div>
                         <div className="text-right">
-                          <div className="text-xs font-semibold capitalize">{oc.estado}</div>
+                          <div className={clsx(
+                            'text-xs font-semibold capitalize',
+                            oc.estado === 'recibida' ? 'text-emerald-700' : 'text-amber-700'
+                          )}>
+                            {oc.estado}
+                          </div>
                           <div className="text-xs text-gray-500">${Number(oc.total).toLocaleString('en-US')}</div>
                         </div>
                       </div>
                     ))
+                  )}
+
+                  {/* F2: Botón para crear OC asociada (cuando hay OCs ya pero faltan o cuando se quiere agregar más) */}
+                  {(user?.rol === 'PROCUREMENT' || user?.rol === 'ADMIN') &&
+                    (m.estado === 'SOLICITADA' || m.estado === 'EN_FABRICACION') &&
+                    (data.ocs.length > 0 || ocsStatus?.sin_compras_marcado === false) && (
+                    <button
+                      onClick={() => setShowCrearOC(true)}
+                      className="w-full text-sm font-medium px-3 py-2 rounded-md border border-dashed border-blue-300 text-blue-700 hover:bg-blue-50 flex items-center justify-center gap-2"
+                    >
+                      <Plus size={14} />
+                      Crear OC directa asociada
+                    </button>
                   )}
                 </div>
               )}
@@ -824,6 +928,21 @@ function DetalleMuestraDrawer({ id, onClose, onChange }: { id: number; onClose: 
             setShowEnvio(false)
           }}
           muestraId={id}
+        />
+      )}
+
+      {/* Muestras F2: modal Crear OC pre-llenado con proyecto + muestra */}
+      {showCrearOC && m && (
+        <NuevaCompraNoMTOModal
+          open={showCrearOC}
+          onClose={() => {
+            setShowCrearOC(false)
+            // Refrescar OCs status + datos del drawer al cerrar
+            refetchOcsStatus()
+            qc.invalidateQueries({ queryKey: ['muestra', id] })
+          }}
+          defaultProyectoId={m.proyecto_id}
+          defaultMuestraId={id}
         />
       )}
     </div>
