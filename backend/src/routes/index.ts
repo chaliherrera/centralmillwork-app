@@ -51,6 +51,7 @@ import {
   createMuestraSchema, updateMuestraSchema, transicionEstadoSchema,
   registrarEnvioSchema,
 } from '../controllers/muestrasController'
+import { muestrasModuleRouter } from '../modules/muestras'
 
 const router = Router()
 
@@ -176,5 +177,10 @@ router.patch ('/muestras/:id/envios/:envioId/recepcion',  MUESTRAS_FLOW,  confir
 router.get   ('/muestras/:id/archivos',                   MUESTRAS_READ,  getArchivos)
 router.post  ('/muestras/:id/archivos',                   MUESTRAS_WRITE, uploadMuestraArchivo.single('archivo'), uploadArchivo)
 router.delete('/muestras/:id/archivos/:archivoId',        MUESTRAS_WRITE, deleteArchivo)
+
+// Fase 2 — endpoints nuevos del módulo modules/muestras/ (patrón canónico
+// del workflow estratégico 2026-06-07). Los CRUD viejos siguen arriba
+// apuntando a muestrasController.ts hasta migración completa.
+router.use('/muestras', muestrasModuleRouter)
 
 export default router

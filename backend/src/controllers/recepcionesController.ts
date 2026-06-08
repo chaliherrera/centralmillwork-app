@@ -5,6 +5,7 @@ import { createError } from '../middleware/errorHandler'
 import { logger } from '../utils/logger'
 import { recomputeMaterialesEstadoForOC } from '../utils/materialesEstado'
 import { nextRecepcionFolio } from '../utils/numeradorAtomico'
+import { onOCRecibidaParaMuestras } from '../modules/muestras'
 
 const REC_SORT_WHITELIST = [
   'r.fecha_recepcion', 'r.folio', 'r.estado', 'r.created_at',
@@ -127,6 +128,13 @@ export async function createRecepcion(req: Request, res: Response, next: NextFun
     // Sync materiales_mto.estado_cotiz with the OC's new state (ORDENADO → RECIBIDO when recibida)
     await recomputeMaterialesEstadoForOC(client, orden_compra_id)
 
+    // Muestras F2: si esta OC tenía muestra_id y todas las OCs de la muestra
+    // están recibidas, auto-cerrar tarea procurement + crear tarea SHOP_MANAGER.
+    // Idempotente — no-op si ya se disparó por una OC previa de la misma muestra.
+    if (estadoOrden === 'recibida') {
+      await onOCRecibidaParaMuestras(client, orden_compra_id)
+    }
+
     await client.query('COMMIT')
     res.status(201).json({ data: { ...recepcion, folio }, message: `Recepción ${folio} registrada` })
   } catch (err) {
@@ -192,6 +200,11 @@ export async function createRecepcionCompleta(req: Request, res: Response, next:
 
     // Sync materiales_mto.estado_cotiz with the OC's new state (ORDENADO → RECIBIDO when recibida)
     await recomputeMaterialesEstadoForOC(client, orden_compra_id)
+
+    // Muestras F2: idem createRecepcion (idempotente)
+    if (estadoOrden === 'recibida') {
+      await onOCRecibidaParaMuestras(client, orden_compra_id)
+    }
 
     await client.query('COMMIT')
     res.status(201).json({ data: { ...recepcion, folio }, message: `Recepción ${folio} registrada` })
