@@ -18,6 +18,7 @@
 
 import pool from '../db/pool'
 import { logger } from '../utils/logger'
+import { notifyTareaBySourceRef } from '../utils/notifyTarea'
 
 interface RuleStats {
   created: number
@@ -240,7 +241,16 @@ export async function syncSystemTareas(): Promise<SyncResult> {
           [cond.area, cond.title, cond.description, cond.priority, FROM_EMAIL_SYSTEM, cond.subject, cond.sourceRef],
         )
         // xmax = 0 cuando es INSERT genuino. Si fue UPDATE (reactivación), xmax != 0.
-        if (upsert.rows[0]?.inserted) ruleStats.created++
+        if (upsert.rows[0]?.inserted) {
+          ruleStats.created++
+          // F7: mandar email a destinatarios (rol según area). Idempotente
+          // — si email_sent_at ya está, no se manda. Fire-and-forget para
+          // no bloquear el cron si Resend está lento.
+          notifyTareaBySourceRef(pool, cond.sourceRef)
+            .catch((err) => logger.warn('notifyTarea after sync upsert failed', {
+              sourceRef: cond.sourceRef, err: String(err),
+            }))
+        }
         else if (upsert.rows.length > 0) ruleStats.reactivated++
         else ruleStats.userClosedSkipped++   // existía cerrada por user — respetada
       } catch (err) {

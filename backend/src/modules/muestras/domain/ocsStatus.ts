@@ -14,6 +14,8 @@
 
 import type { PoolClient } from 'pg'
 import pool from '../../../db/pool'
+import { notifyTareaBySourceRef } from '../../../utils/notifyTarea'
+import { logger } from '../../../utils/logger'
 
 type QueryRunner = PoolClient | typeof pool
 
@@ -168,4 +170,11 @@ export async function cerrarProcurementYCrearShopManager(
       `muestra:${muestraId}:ready_to_fab`,
     ]
   )
+
+  // F7: notificar a SHOP_MANAGER por email. Fire-and-forget — si falla
+  // el email no abortamos el flujo de procurement→fabricación.
+  notifyTareaBySourceRef(pool, `muestra:${muestraId}:ready_to_fab`)
+    .catch((err) => logger.warn('notifyTarea after ready_to_fab failed', {
+      muestraId, err: String(err),
+    }))
 }

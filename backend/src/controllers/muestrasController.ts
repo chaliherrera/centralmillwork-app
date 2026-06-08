@@ -6,6 +6,7 @@ import pool from '../db/pool'
 import { createError } from '../middleware/errorHandler'
 import { logger } from '../utils/logger'
 import { supabase, supabaseEnabled, SUPABASE_BUCKET } from '../utils/supabase'
+import { notifyTareaBySourceRef } from '../utils/notifyTarea'
 
 // ─── Tipos y constantes ──────────────────────────────────────────────────────
 
@@ -377,6 +378,13 @@ export async function createMuestra(req: Request, res: Response, next: NextFunct
     )
 
     await client.query('COMMIT')
+
+    // F7: notificar a PROCUREMENT por email tras COMMIT. Fire-and-forget —
+    // si falla el email no abortamos la creación de la muestra.
+    notifyTareaBySourceRef(pool, `muestra:${muestra.id}:request`)
+      .catch((err) => logger.warn('notifyTarea after createMuestra failed', {
+        muestraId: muestra.id, err: String(err),
+      }))
     logger.info('muestra creada', {
       requestId: req.id, muestraId: muestra.id, codigo: muestra.codigo,
       usuario: req.user?.email,

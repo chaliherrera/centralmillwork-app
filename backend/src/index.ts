@@ -25,6 +25,7 @@ import pool from './db/pool'
 import { requestId } from './middleware/requestId'
 import { logger } from './utils/logger'
 import { initSentry } from './utils/sentry'
+import { initMailer } from './utils/mailer'
 
 // Load .env only in development — Railway injects env vars directly into process.env
 if (process.env.NODE_ENV !== 'production') {
@@ -36,6 +37,10 @@ logger.info('boot', { jwtSecret: process.env.JWT_SECRET ? 'configurado' : 'MISSI
 // Audit roadmap "ahora #1": Sentry init lazy (passthrough si SENTRY_DSN no
 // está configurada). Fire-and-forget para no bloquear el boot.
 initSentry().catch((err) => logger.warn('sentry init failed', { err: String(err) }))
+
+// Muestras F7: Mailer init lazy (passthrough si RESEND_API_KEY/EMAIL_FROM
+// no están configurados). Fire-and-forget.
+initMailer().catch((err) => logger.warn('mailer init failed', { err: String(err) }))
 
 const app  = express()
 const PORT = process.env.PORT ?? 4000
