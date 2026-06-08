@@ -76,6 +76,7 @@ export interface Material {
   manufacturer?: string
   notas?: string | null
   fecha_importacion?: string | null
+  import_batch_id?: string | null
   // OC más reciente (no cancelada) donde participa este material — null si aún no fue ordenado
   oc_id?: number | null
   oc_numero?: string | null

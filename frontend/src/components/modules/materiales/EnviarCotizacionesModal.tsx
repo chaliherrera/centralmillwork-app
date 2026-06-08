@@ -16,21 +16,46 @@ interface Props {
   proyectoNombre?: string
   proyectoCliente?: string
   allMaterials: Material[]
+  // Filtros activos en la tabla principal. El modal los respeta para no
+  // mezclar materiales viejos huérfanos cuando el user está enfocado en un
+  // lote o vendor específico (bug 2026-06-08: RUGBY mostraba 14 cuando el
+  // lote nuevo tenía solo 12 — los 2 sobrantes eran de un Excel viejo).
+  loteFilter?: string       // ''  | 'batch:<uuid>' | 'date:<YYYY-MM-DD>'
+  vendorFilter?: string     // texto exacto del vendor o ''
+  loteLabel?: string        // texto humano del lote para el banner
 }
 
 export default function EnviarCotizacionesModal({
   open, onClose, proyectoId, proyectoCodigo, proyectoNombre, proyectoCliente, allMaterials,
+  loteFilter = '', vendorFilter = '', loteLabel = '',
 }: Props) {
   const [selectedVendors, setSelectedVendors] = useState<Set<string>>(new Set())
   const [generatingPdf, setGeneratingPdf] = useState(false)
   const [results, setResults] = useState<MarcarEnviadaResult[] | null>(null)
+
+  // Aplicar filtros activos (lote y/o vendor) al universo de materiales
+  // antes de construir summaries y grouping. Si no hay filtros, opera sobre
+  // todo el proyecto (comportamiento original).
+  const filteredMaterials = useMemo(() => {
+    const wantBatchId    = loteFilter.startsWith('batch:') ? loteFilter.slice(6) : null
+    const wantFecha      = loteFilter.startsWith('date:')  ? loteFilter.slice(5) : null
+    const wantVendor     = vendorFilter || null
+    if (!wantBatchId && !wantFecha && !wantVendor) return allMaterials
+    return allMaterials.filter((m) => {
+      if (wantBatchId && m.import_batch_id !== wantBatchId) return false
+      // fecha_importacion del backend viene como ISO; comparamos sólo el día
+      if (wantFecha && (m.fecha_importacion ?? '').slice(0, 10) !== wantFecha) return false
+      if (wantVendor && m.vendor !== wantVendor) return false
+      return true
+    })
+  }, [allMaterials, loteFilter, vendorFilter])
 
   // Vendor summaries: count materials per vendor (cotizar='SI' only)
   // Solo se listan vendors que tengan al menos un material PENDIENTE — no
   // tiene sentido pedir cotización a vendors que ya tienen todo cotizado.
   const vendorSummaries = useMemo(() => {
     const map = new Map<string, { total: number; pendiente: number }>()
-    for (const m of allMaterials) {
+    for (const m of filteredMaterials) {
       if (!m.vendor || m.cotizar !== 'SI') continue
       const existing = map.get(m.vendor) ?? { total: 0, pendiente: 0 }
       existing.total++
@@ -41,21 +66,29 @@ export default function EnviarCotizacionesModal({
       .filter(([, counts]) => counts.pendiente > 0)
       .map(([vendor, counts]) => ({ vendor, ...counts }))
       .sort((a, b) => a.vendor.localeCompare(b.vendor))
-  }, [allMaterials])
+  }, [filteredMaterials])
 
   // Materials grouped by vendor — solo PENDIENTES (estos van al PDF y al
   // registro de cotización enviada). Los ya cotizados no van porque ya tienen
   // precio.
   const materialsByVendor = useMemo(() => {
     const map = new Map<string, Material[]>()
-    for (const m of allMaterials) {
+    for (const m of filteredMaterials) {
       if (!m.vendor || m.cotizar !== 'SI' || m.estado_cotiz !== 'PENDIENTE') continue
       const arr = map.get(m.vendor) ?? []
       arr.push(m)
       map.set(m.vendor, arr)
     }
     return map
-  }, [allMaterials])
+  }, [filteredMaterials])
+
+  // Banner: texto que describe sobre qué subset se va a cotizar.
+  const scopeBanner = useMemo(() => {
+    const parts: string[] = []
+    if (loteLabel) parts.push(loteLabel)
+    if (vendorFilter) parts.push(`vendor ${vendorFilter}`)
+    return parts.length ? parts.join(' · ') : 'todo el proyecto'
+  }, [loteLabel, vendorFilter])
 
   useEffect(() => {
     if (open) {
@@ -109,7 +142,12 @@ export default function EnviarCotizacionesModal({
     mutationFn: () =>
       cotizacionesService.marcarEnviadas({
         proyecto_id: proyectoId,
-        vendors: selectedList.map((v) => ({ vendor: v.vendor })),
+        vendors: selectedList.map((v) => ({
+          vendor: v.vendor,
+          // Mandar los IDs específicos del subset filtrado para que el
+          // backend NO incluya materiales fuera del scope activo (lote/vendor).
+          material_ids: (materialsByVendor.get(v.vendor) ?? []).map((m) => m.id),
+        })),
       }),
     onSuccess: (res) => {
       setResults(res.data)
@@ -164,6 +202,12 @@ export default function EnviarCotizacionesModal({
             </div>
           ) : (
             <>
+              <div className="bg-forest-50 border border-forest-200 rounded-lg px-4 py-2.5 text-xs text-forest-800">
+                <p className="leading-snug">
+                  <span className="font-medium">Cotizando:</span> {scopeBanner}
+                </p>
+              </div>
+
               <div className="bg-amber-50 border border-amber-200 rounded-lg px-4 py-3 text-xs text-amber-800">
                 <p className="leading-snug">
                   <strong>Flujo:</strong> 1) generá los PDF, 2) adjuntalos a un email desde tu cliente

@@ -618,6 +618,32 @@ export default function Materiales() {
         proyectoNombre={selectedProyecto?.nombre}
         proyectoCliente={selectedProyecto?.cliente}
         allMaterials={allItems?.data ?? []}
+        vendorFilter={vendorFilter}
+        // Resolución de 'latest' al UUID concreto del batch más reciente.
+        // El primer elemento de `batches` ya es el más reciente porque viene
+        // ordenado DESC por fecha del endpoint /materiales/import-dates.
+        loteFilter={loteFilter === 'latest'
+          ? (batches[0]?.batch_id ? `batch:${batches[0].batch_id}` : `date:${batches[0]?.fecha ?? ''}`)
+          : loteFilter}
+        loteLabel={
+          loteFilter === 'latest'
+            ? 'último lote subido'
+            : loteFilter.startsWith('batch:')
+              ? (() => {
+                  const b = batches.find((x) => x.batch_id === loteFilter.slice(6))
+                  return b
+                    ? `lote del ${fmtDate(b.fecha)}${
+                        batches.filter((x) => x.fecha === b.fecha).length > 1
+                          ? ' ' +
+                            new Date(b.created_at_min).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })
+                          : ''
+                      }`
+                    : 'lote seleccionado'
+                })()
+              : loteFilter.startsWith('date:')
+                ? `lotes del ${fmtDate(loteFilter.slice(5))}`
+                : ''
+        }
       />
       <GenerarOCsModal
         open={generarOpen}

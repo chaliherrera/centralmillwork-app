@@ -160,7 +160,7 @@ export async function marcarCotizacionesEnviadas(req: Request, res: Response, ne
   try {
     const { proyecto_id, vendors } = req.body as {
       proyecto_id: number
-      vendors: Array<{ vendor: string }>
+      vendors: Array<{ vendor: string; material_ids?: number[] }>
     }
     if (!proyecto_id || !Array.isArray(vendors) || !vendors.length)
       return next(createError('proyecto_id y vendors son requeridos', 400))
@@ -183,17 +183,29 @@ export async function marcarCotizacionesEnviadas(req: Request, res: Response, ne
 
     const results: Array<{ vendor: string; folio: string; materiales_count: number }> = []
 
-    for (const { vendor } of validVendors) {
+    for (const { vendor, material_ids } of validVendors) {
       // Solo materiales con cotizar='SI' Y estado_cotiz='PENDIENTE' — los que
       // efectivamente se le pidieron al vendor en el PDF. Los ya COTIZADOS no
       // forman parte de esta solicitud (ya tienen precio).
+      //
+      // material_ids (opcional): si llega, restringe a ese subset — permite
+      // al frontend cerrarse a un lote/batch específico y no incluir
+      // materiales huérfanos viejos del mismo proyecto+vendor (bug 2026-06-08).
+      // Se sanea a array de enteros positivos para evitar inyección o NaN.
+      const idsClean = Array.isArray(material_ids)
+        ? material_ids.map((n) => Number(n)).filter((n) => Number.isInteger(n) && n > 0)
+        : []
+      const extraCond = idsClean.length ? ` AND id = ANY($3::int[])` : ''
+      const queryParams: any[] = [proyecto_id, vendor]
+      if (idsClean.length) queryParams.push(idsClean)
       const { rows: materiales } = await pool.query(
         `SELECT codigo, descripcion, unidad, qty
          FROM materiales_mto
          WHERE proyecto_id = $1 AND vendor = $2
            AND cotizar = 'SI' AND estado_cotiz = 'PENDIENTE'
+           ${extraCond}
          ORDER BY item NULLS LAST, codigo`,
-        [proyecto_id, vendor]
+        queryParams
       )
       if (!materiales.length) continue
 
