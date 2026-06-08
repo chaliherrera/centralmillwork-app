@@ -52,6 +52,7 @@ import {
   registrarEnvioSchema,
 } from '../controllers/muestrasController'
 import { muestrasModuleRouter } from '../modules/muestras'
+import diagnosticRouter from './diagnostic'
 
 const router = Router()
 
@@ -182,5 +183,9 @@ router.delete('/muestras/:id/archivos/:archivoId',        MUESTRAS_WRITE, delete
 // del workflow estratégico 2026-06-07). Los CRUD viejos siguen arriba
 // apuntando a muestrasController.ts hasta migración completa.
 router.use('/muestras', muestrasModuleRouter)
+
+// ─── Diagnóstico (solo ADMIN) ────────────────────────────────────────────────
+// GET /api/admin/storage-status: para debuggear el bug de imágenes 2026-06-08
+router.use('/admin', diagnosticRouter)
 
 export default router

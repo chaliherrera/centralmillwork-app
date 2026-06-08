@@ -54,8 +54,12 @@ export async function getImagenes(req: Request, res: Response, next: NextFunctio
       `SELECT * FROM oc_imagenes WHERE orden_compra_id = $1 ORDER BY tipo, created_at`,
       [id]
     )
-    // Si Supabase está activo, agregar URL pública a cada imagen
+
+    // FIX: siempre devolver URL absoluta para que el frontend no tenga que
+    // adivinar el host del backend. Antes en disk mode no se devolvía url
+    // y el frontend caía a un fallback localhost que solo funcionaba en dev.
     if (supabaseEnabled && supabase) {
+      // Supabase activo: URL pública del bucket
       const sb = supabase
       const enriched = rows.map((img) => {
         const { data } = sb.storage.from(SUPABASE_BUCKET).getPublicUrl(img.filename)
@@ -63,7 +67,22 @@ export async function getImagenes(req: Request, res: Response, next: NextFunctio
       })
       res.json({ data: enriched })
     } else {
-      res.json({ data: rows })
+      // Disk mode: derivar URL absoluta del request. Esto SOLO funciona si el
+      // archivo está físicamente en la réplica que sirve la request — con 2
+      // réplicas y filesystem efímero esto es flaky. Para fix definitivo
+      // configurar SUPABASE_URL + SUPABASE_SERVICE_KEY en Railway.
+      const proto = req.protocol
+      const host  = req.get('host')
+      const baseUrl = process.env.BACKEND_PUBLIC_URL || `${proto}://${host}`
+      const enriched = rows.map((img) => ({
+        ...img,
+        url: `${baseUrl}/uploads/${img.filename}`,
+      }))
+      res.json({
+        data: enriched,
+        // Warning visible para el frontend admin (logueable con Sentry)
+        warning: 'disk_mode_enabled — imágenes pueden perderse en redeploy. Configurar Supabase para fix definitivo.',
+      })
     }
   } catch (err) { next(err) }
 }
