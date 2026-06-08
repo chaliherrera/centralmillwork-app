@@ -18,7 +18,14 @@ export function parsePagination(
   allowedSorts?: readonly string[],
 ): PaginationOptions {
   const page   = Math.max(1, parseInt(String(req.query.page  ?? 1)))
-  const limit  = Math.min(100, Math.max(1, parseInt(String(req.query.limit ?? 20))))
+  // Cap subido de 100 → 1000 el 2026-06-08 tras bug RUGBY 8/12 en PRY-2026-577.
+  // El frontend usa `allItems` con limit=500 en varias páginas (Materiales,
+  // ProyectoDetalle) para no paginar listados internos chicos. El cap previo
+  // de 100 truncaba silenciosamente cualquier proyecto con >100 materiales
+  // (ej. PRY-2026-577 tiene 147), y los modales secundarios (cotizaciones,
+  // captura de precios) contaban sobre el subset truncado. 1000 sigue siendo
+  // un techo razonable contra abuso y cubre proyectos grandes reales.
+  const limit  = Math.min(1000, Math.max(1, parseInt(String(req.query.limit ?? 20))))
   const offset = (page - 1) * limit
   const search = String(req.query.search ?? '')
   const requestedSort = String(req.query.sort ?? defaultSort)
