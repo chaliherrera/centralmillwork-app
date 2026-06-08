@@ -3,6 +3,7 @@ import pool from '../db/pool'
 import { createError } from '../middleware/errorHandler'
 import { SUPABASE_BUCKET } from '../utils/supabase'
 import { logger } from '../utils/logger'
+import { captureException } from '../utils/sentry'
 import {
   createImageUploadMulter,
   uploadToSupabaseOrDisk,
@@ -130,6 +131,13 @@ export async function uploadAvanceFotoKiosk(req: Request, res: Response, next: N
         filename, bucket: AVANCE_BUCKET, requestId: req.id,
         logCtx: { ordenId, personalId, reason: 'INSERT failed, cleaning orphan' },
       }).catch((cleanupErr) => {
+        // Reporte explícito a Sentry: si el cleanup falla, dejamos huérfano
+        // en Supabase — necesitamos visibilidad para limpiar manualmente.
+        captureException(cleanupErr, {
+          tags: { hot_path: 'avance_foto_orphan_cleanup', ordenId, personalId },
+          extra: { filename, bucket: AVANCE_BUCKET, insertErrMessage: String(insertErr?.message) },
+          requestId: req.id,
+        })
         logger.error('failed to cleanup orphan after INSERT failure', {
           requestId: req.id, ordenId, filename, err: String(cleanupErr),
         })

@@ -24,6 +24,7 @@ import cron from 'node-cron'
 import pool from './db/pool'
 import { requestId } from './middleware/requestId'
 import { logger } from './utils/logger'
+import { initSentry } from './utils/sentry'
 
 // Load .env only in development — Railway injects env vars directly into process.env
 if (process.env.NODE_ENV !== 'production') {
@@ -31,6 +32,10 @@ if (process.env.NODE_ENV !== 'production') {
 }
 
 logger.info('boot', { jwtSecret: process.env.JWT_SECRET ? 'configurado' : 'MISSING — auth will fail' })
+
+// Audit roadmap "ahora #1": Sentry init lazy (passthrough si SENTRY_DSN no
+// está configurada). Fire-and-forget para no bloquear el boot.
+initSentry().catch((err) => logger.warn('sentry init failed', { err: String(err) }))
 
 const app  = express()
 const PORT = process.env.PORT ?? 4000
