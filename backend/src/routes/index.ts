@@ -10,6 +10,7 @@ import {
 import {
   getProyectos, getProyecto, createProyecto, updateProyecto, deleteProyecto,
   getProyectoResumen, getProyectoActividad, getProyectoItemsReadiness,
+  getProyectoMuestrasAprobadas,
   createProyectoSchema, updateProyectoSchema,
 } from '../controllers/proyectosController'
 import {
@@ -85,6 +86,7 @@ router.get('/proyectos',                      getProyectos)
 router.get('/proyectos/:id/resumen',          getProyectoResumen)
 router.get('/proyectos/:id/actividad',        getProyectoActividad)
 router.get('/proyectos/:id/items-readiness',  getProyectoItemsReadiness)
+router.get('/proyectos/:id/muestras-aprobadas', getProyectoMuestrasAprobadas)
 router.get('/proyectos/:id',                  getProyecto)
 router.post('/proyectos',                     WRITE, validateBody(createProyectoSchema), createProyecto)
 router.put('/proyectos/:id',                  WRITE, validateBody(updateProyectoSchema), updateProyecto)

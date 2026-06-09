@@ -519,8 +519,10 @@ function DetalleMuestraDrawer({ id, onClose, onChange }: { id: number; onClose: 
   // F5: registrar envío + confirmar recepción es decisión de logística.
   // PROCUREMENT/ADMIN, NO SHOP_MANAGER.
   const canEnvio = user?.rol === 'ADMIN' || user?.rol === 'PROCUREMENT'
+  // F6: aprobar / rechazar es decisión de ingeniería. ADMIN+ENGINEERING.
+  const canApprove = user?.rol === 'ADMIN' || user?.rol === 'ENGINEERING'
 
-  // Transiciones disponibles según estado actual
+  // Transiciones disponibles según estado actual + rol
   const transicionesDisponibles = useMemo<MuestraEstado[]>(() => {
     if (!m) return []
     const all: Record<MuestraEstado, MuestraEstado[]> = {
@@ -532,8 +534,15 @@ function DetalleMuestraDrawer({ id, onClose, onChange }: { id: number; onClose: 
       RECHAZADA:      ['SOLICITADA', 'EN_FABRICACION', 'ARCHIVADA'],
       ARCHIVADA:      [],
     }
-    return all[m.estado] ?? []
-  }, [m])
+    const raw = all[m.estado] ?? []
+    // F6: APROBADA / RECHAZADA solo si el rol puede aprobar.
+    // Resto de transiciones requieren canFlow (ADMIN/SHOP_MANAGER).
+    return raw.filter((dest) => {
+      const isApprovalFlow = dest === 'APROBADA' || dest === 'RECHAZADA'
+      if (isApprovalFlow) return canApprove
+      return canFlow
+    })
+  }, [m, canFlow, canApprove])
 
   return (
     <div className="fixed inset-0 z-50 flex">
@@ -566,7 +575,7 @@ function DetalleMuestraDrawer({ id, onClose, onChange }: { id: number; onClose: 
               </div>
 
               {/* Acciones de transición de estado */}
-              {canFlow && transicionesDisponibles.length > 0 && (
+              {(canFlow || canApprove) && transicionesDisponibles.length > 0 && (
                 <div className="flex flex-wrap gap-2 mt-3">
                   {transicionesDisponibles.map((dest) => {
                     const isReject = dest === 'RECHAZADA'

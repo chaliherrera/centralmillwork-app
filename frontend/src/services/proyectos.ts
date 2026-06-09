@@ -151,6 +151,9 @@ export const proyectosService = {
   getItemsReadiness: (id: number) =>
     api.get<ApiResponse<ProyectoItemsReadiness>>(`/proyectos/${id}/items-readiness`).then((r) => r.data),
 
+  getMuestrasAprobadas: (id: number) =>
+    api.get<ApiResponse<MuestraAprobada[]>>(`/proyectos/${id}/muestras-aprobadas`).then((r) => r.data),
+
   create: (data: Omit<Proyecto, 'id' | 'created_at' | 'updated_at'>) =>
     api.post<ApiResponse<Proyecto>>('/proyectos', data).then((r) => r.data),
 
@@ -159,4 +162,22 @@ export const proyectosService = {
 
   delete: (id: number) =>
     api.delete(`/proyectos/${id}`).then((r) => r.data),
+}
+
+// ─── Tipos del endpoint /muestras-aprobadas (F6 Muestras) ────────────────────
+export interface MuestraAprobada {
+  id: number
+  muestra_id: number
+  version_numero: number
+  codigo: string
+  descripcion: string
+  tipo: 'PUERTA' | 'ACABADO' | 'HARDWARE' | 'CABINET' | 'OTRO'
+  pdf_archivo_id: number | null
+  pdf_filename: string | null
+  pdf_nombre: string | null
+  pdf_url: string | null     // signed URL fresca, 1h TTL
+  fecha_aprobacion: string
+  aprobado_por_nombre: string | null
+  notas: string | null
+  created_at: string
 }

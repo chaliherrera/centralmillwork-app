@@ -6,7 +6,7 @@ import {
   Activity, BarChart3, Calendar, CalendarDays, User, DollarSign,
   CheckCircle2, AlertCircle, MessageSquare, Truck, Layers, FileText,
   ChevronLeft, ChevronRight, ChevronDown, ChevronRight as ChevronRightSm,
-  Hammer,
+  Hammer, Beaker, Download, ExternalLink,
 } from 'lucide-react'
 import clsx from 'clsx'
 import {
@@ -41,7 +41,7 @@ const fmtDateTime = (d: string | null | undefined) => {
   return dt.toLocaleString('es-MX', { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
 }
 
-type TabKey = 'materiales' | 'items' | 'ocs' | 'recepciones' | 'actividad' | 'calendar' | 'graficas'
+type TabKey = 'materiales' | 'items' | 'ocs' | 'recepciones' | 'muestras' | 'actividad' | 'calendar' | 'graficas'
 
 export default function ProyectoDetalle() {
   const { id } = useParams<{ id: string }>()
@@ -151,6 +151,7 @@ export default function ProyectoDetalle() {
           { key: 'items',       label: 'Items',                           icon: Hammer },
           { key: 'ocs',         label: `Órdenes (${oc.total})`,           icon: ShoppingCart },
           { key: 'recepciones', label: `Recepciones (${kpis.recepciones.total})`, icon: Warehouse },
+          { key: 'muestras',    label: 'Muestras aprobadas',              icon: Beaker },
           { key: 'actividad',   label: 'Actividad',                       icon: Activity },
           { key: 'calendar',    label: 'Calendar',                        icon: CalendarDays },
           { key: 'graficas',    label: 'Gráficas',                        icon: BarChart3 },
@@ -175,6 +176,7 @@ export default function ProyectoDetalle() {
       {tab === 'items'       && <ItemsTab       proyectoId={proyectoId} />}
       {tab === 'ocs'         && <OcsTab         proyectoId={proyectoId} />}
       {tab === 'recepciones' && <RecepcionesTab proyectoId={proyectoId} />}
+      {tab === 'muestras'    && <MuestrasAprobadasTab proyectoId={proyectoId} />}
       {tab === 'actividad'   && <ActividadTab   proyectoId={proyectoId} />}
       {tab === 'calendar'    && <CalendarTab    proyectoId={proyectoId} proyectoNombre={proyecto.nombre} />}
       {tab === 'graficas'    && <GraficasTab    kpis={kpis} presupuesto={Number(proyecto.presupuesto)} />}
@@ -518,6 +520,94 @@ function RecepcionesTab({ proyectoId }: { proyectoId: number }) {
               <span className="italic">{r.notas}</span>
             </div>
           )}
+        </div>
+      ))}
+    </div>
+  )
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Tab: Muestras aprobadas (F6 — vínculo formal muestra ↔ proyecto)
+// ──────────────────────────────────────────────────────────────────────────────
+function MuestrasAprobadasTab({ proyectoId }: { proyectoId: number }) {
+  const { data, isLoading } = useQuery({
+    queryKey: ['proyecto-detalle', proyectoId, 'muestras-aprobadas'],
+    queryFn: () => proyectosService.getMuestrasAprobadas(proyectoId),
+    staleTime: 30_000,
+  })
+  const items = data?.data ?? []
+
+  if (isLoading) {
+    return <div className="text-center py-8 text-gray-400 text-sm">Cargando…</div>
+  }
+  if (!items.length) {
+    return (
+      <div className="text-center py-12 text-gray-400 text-sm border border-dashed border-gray-200 rounded-lg">
+        <Beaker size={28} className="mx-auto mb-2 opacity-40" />
+        <p>No hay muestras aprobadas para este proyecto.</p>
+        <p className="text-xs mt-1">Aparecen acá cuando INGENIERIA aprueba una muestra vinculada al proyecto.</p>
+      </div>
+    )
+  }
+
+  const TIPO_COLOR: Record<string, string> = {
+    PUERTA:   'bg-amber-100 text-amber-800 border-amber-200',
+    ACABADO:  'bg-purple-100 text-purple-800 border-purple-200',
+    HARDWARE: 'bg-blue-100 text-blue-800 border-blue-200',
+    CABINET:  'bg-emerald-100 text-emerald-800 border-emerald-200',
+    OTRO:     'bg-gray-100 text-gray-700 border-gray-200',
+  }
+
+  return (
+    <div className="space-y-3">
+      {items.map((m) => (
+        <div key={m.id} className="bg-white border border-gray-200 rounded-lg p-4 hover:shadow-sm transition-shadow">
+          <div className="flex items-start gap-3 flex-wrap">
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 mb-1">
+                <Link
+                  to={`/muestras?focus=${m.muestra_id}`}
+                  className="font-mono text-sm font-semibold text-forest-700 hover:underline"
+                >
+                  {m.codigo}{m.version_numero > 1 && <span className="text-purple-700 ml-1">V{m.version_numero}</span>}
+                </Link>
+                <span className={clsx('text-[10px] font-semibold px-1.5 py-0.5 rounded-full border', TIPO_COLOR[m.tipo] ?? TIPO_COLOR.OTRO)}>
+                  {m.tipo}
+                </span>
+                <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200">
+                  ✓ APROBADA
+                </span>
+              </div>
+              <p className="text-sm text-gray-800 leading-snug">{m.descripcion}</p>
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-2 text-xs text-gray-500">
+                <span>Aprobada: {new Date(m.fecha_aprobacion).toLocaleDateString('es-MX', { year: 'numeric', month: 'short', day: 'numeric' })}</span>
+                {m.aprobado_por_nombre && <span>por {m.aprobado_por_nombre}</span>}
+              </div>
+              {m.notas && (
+                <p className="text-xs text-gray-600 italic mt-1">{m.notas}</p>
+              )}
+            </div>
+            <div className="flex flex-col gap-1 flex-shrink-0">
+              {m.pdf_url ? (
+                <a
+                  href={m.pdf_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded bg-forest-50 text-forest-700 hover:bg-forest-100 border border-forest-200"
+                >
+                  <Download size={12} /> Sample Request PDF
+                </a>
+              ) : (
+                <span className="text-xs text-gray-400 italic">Sin PDF</span>
+              )}
+              <Link
+                to={`/muestras?focus=${m.muestra_id}`}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded text-gray-500 hover:bg-gray-50 border border-gray-200"
+              >
+                <ExternalLink size={12} /> Ver muestra
+              </Link>
+            </div>
+          </div>
         </div>
       ))}
     </div>

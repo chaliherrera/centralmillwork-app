@@ -482,6 +482,22 @@ export async function transicionarMuestra(req: Request, res: Response, next: Nex
       ))
     }
 
+    // ── F6 (2026-06-09): APROBADA / RECHAZADA solo INGENIERIA o ADMIN ──────
+    // Antes lo podía hacer SHOP_MANAGER también. Ahora la decisión queda
+    // formalmente en ingeniería (que es quien tiene el sample request del
+    // cliente y valida si la respuesta corresponde a aprobación o rechazo).
+    if (nuevo_estado === 'APROBADA' || nuevo_estado === 'RECHAZADA') {
+      const rol = req.user?.rol
+      if (rol !== 'ADMIN' && rol !== 'ENGINEERING') {
+        await client.query('ROLLBACK')
+        return next(createError(
+          `Solo INGENIERIA (o ADMIN) puede ${nuevo_estado === 'APROBADA' ? 'aprobar' : 'rechazar'} una muestra. ` +
+          `Tu rol actual es ${rol ?? 'desconocido'}.`,
+          403
+        ))
+      }
+    }
+
     // ── Constraint especial RECHAZADA → SOLICITADA (Chali 2026-05-31) ──────
     // "Una vez rechazada, es INGENIERIA quien debe llevarla nuevamente a
     // SOLICITADAS, con un nuevo PDF Sample Request".
@@ -640,6 +656,51 @@ export async function transicionarMuestra(req: Request, res: Response, next: Nex
        VALUES ($1, $2, $3, $4, $5)`,
       [id, nuevaVersion, tipoEvento[nuevo_estado] ?? 'comentario', detalle, req.user?.id ?? null]
     )
+
+    // ── F6 (2026-06-09): vincular formalmente muestra aprobada ↔ proyecto ──
+    // Cuando se aprueba, generamos un row en proyectos_muestras_aprobadas
+    // con snapshot de codigo/desc/tipo + ref al PDF sample_request más
+    // reciente de la versión. Si la muestra no tiene proyecto, NO podemos
+    // vincular — se loggea pero no falla la transición (no debería pasar
+    // porque APROBADA viene siempre desde ENVIADA, y ENVIADA requiere
+    // EN_FABRICACION que ya requiere proyecto).
+    //
+    // UNIQUE(muestra_id, version_numero) → idempotente: si ya existe el row
+    // (re-aprobación post-RECHAZADA), ON CONFLICT DO NOTHING preserva el
+    // original. Si la versión cambia (V2 aprobada), inserta nuevo row.
+    if (nuevo_estado === 'APROBADA') {
+      if (updated.proyecto_id == null) {
+        logger.warn('muestra aprobada sin proyecto — no se vincula', {
+          muestraId: id, codigo: updated.codigo,
+        })
+      } else {
+        const { rows: [pdf] } = await client.query<{ id: number }>(
+          `SELECT id FROM muestras_archivos
+            WHERE muestra_id = $1 AND version_numero = $2 AND tipo = 'sample_request'
+            ORDER BY created_at DESC
+            LIMIT 1`,
+          [id, nuevaVersion]
+        )
+        await client.query(
+          `INSERT INTO proyectos_muestras_aprobadas
+             (proyecto_id, muestra_id, version_numero, codigo, descripcion,
+              tipo, pdf_archivo_id, fecha_aprobacion, aprobado_por, notas)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, CURRENT_DATE, $8, $9)
+           ON CONFLICT (muestra_id, version_numero) DO NOTHING`,
+          [
+            updated.proyecto_id, id, nuevaVersion,
+            updated.codigo, updated.descripcion, updated.tipo,
+            pdf?.id ?? null,
+            req.user?.id ?? null,
+            comentario ?? null,
+          ]
+        )
+        logger.info('muestra aprobada vinculada a proyecto', {
+          muestraId: id, proyectoId: updated.proyecto_id, version: nuevaVersion,
+          pdfArchivoId: pdf?.id ?? null,
+        })
+      }
+    }
 
     // ── Auto-crear OP cuando vamos a EN_FABRICACION ──────────────────────
     // El check de materiales recibidos ya pasó arriba. Acá creamos la OP

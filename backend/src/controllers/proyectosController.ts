@@ -3,6 +3,7 @@ import { z } from 'zod'
 import pool from '../db/pool'
 import { parsePagination, paginatedResponse } from '../utils/pagination'
 import { createError } from '../middleware/errorHandler'
+import { supabase, supabaseEnabled, SUPABASE_BUCKET } from '../utils/supabase'
 
 // ─── Schemas de validación ──────────────────────────────────────────────────
 const ESTADOS_PROYECTO = ['cotizacion', 'activo', 'en_pausa', 'completado', 'cancelado'] as const
@@ -456,5 +457,69 @@ export async function getProyectoItemsReadiness(req: Request, res: Response, nex
     }
 
     res.json({ data: { items, resumen } })
+  } catch (err) { next(err) }
+}
+
+/**
+ * GET /api/proyectos/:id/muestras-aprobadas — F6 Muestras (2026-06-09)
+ *
+ * Devuelve las muestras aprobadas vinculadas al proyecto, con URL firmada
+ * del PDF sample_request si existe. Sirve para:
+ *  - Mostrar subsección "Muestras aprobadas" en /proyectos/:id
+ *  - Cruzar con items de producción para badges "spec aprobada disponible"
+ */
+export async function getProyectoMuestrasAprobadas(req: Request, res: Response, next: NextFunction) {
+  try {
+    const proyecto_id = parseInt(String(req.params.id))
+    if (!proyecto_id) return next(createError('id inválido', 400))
+
+    const { rows } = await pool.query<{
+      id: number
+      muestra_id: number
+      version_numero: number
+      codigo: string
+      descripcion: string
+      tipo: string
+      pdf_archivo_id: number | null
+      pdf_filename: string | null
+      pdf_nombre: string | null
+      fecha_aprobacion: string
+      aprobado_por_nombre: string | null
+      notas: string | null
+      created_at: string
+    }>(
+      `SELECT
+         pma.id, pma.muestra_id, pma.version_numero,
+         pma.codigo, pma.descripcion, pma.tipo,
+         pma.pdf_archivo_id,
+         ma.filename AS pdf_filename,
+         ma.nombre AS pdf_nombre,
+         pma.fecha_aprobacion,
+         u.nombre AS aprobado_por_nombre,
+         pma.notas, pma.created_at
+       FROM proyectos_muestras_aprobadas pma
+       LEFT JOIN muestras_archivos ma ON ma.id = pma.pdf_archivo_id
+       LEFT JOIN usuarios u ON u.id = pma.aprobado_por
+       WHERE pma.proyecto_id = $1
+       ORDER BY pma.fecha_aprobacion DESC, pma.created_at DESC`,
+      [proyecto_id]
+    )
+
+    // Generar signed URL para el PDF si existe (bucket privado)
+    if (supabaseEnabled && supabase) {
+      const sb = supabase
+      for (const r of rows) {
+        if (r.pdf_filename) {
+          const { data } = await sb.storage
+            .from(SUPABASE_BUCKET)
+            .createSignedUrl(r.pdf_filename, 3600)
+          ;(r as any).pdf_url = data?.signedUrl ?? null
+        } else {
+          ;(r as any).pdf_url = null
+        }
+      }
+    }
+
+    res.json({ data: rows })
   } catch (err) { next(err) }
 }
