@@ -12,6 +12,7 @@ import { muestrasService } from '@/services/muestras'
 import { proyectosService } from '@/services/proyectos'
 import { useAuth } from '@/context/AuthContext'
 import NuevaCompraNoMTOModal from '@/components/modules/ordenes_compra/NuevaCompraNoMTOModal'
+import IniciarFabricacionModal from '@/components/modules/muestras/IniciarFabricacionModal'
 import type {
   MuestraConDetalle, MuestraEstado, MuestraTipo, MuestraPrioridad,
   CreateMuestraInput, TransicionInput, RegistrarEnvioInput,
@@ -508,6 +509,11 @@ function DetalleMuestraDrawer({ id, onClose, onChange }: { id: number; onClose: 
     onError: (err: any) => toast.error(err?.response?.data?.message ?? 'Error en la transición'),
   })
 
+  // F3: el modal "Iniciar fabricación" intercepta la transición SOLICITADA →
+  // EN_FABRICACION para pre-llenar procesos según tipo. Sólo aplica desde
+  // SOLICITADA (RECHAZADA → EN_FABRICACION sigue el flow viejo legacy).
+  const [showIniciarFab, setShowIniciarFab] = useState(false)
+
   const m = data?.muestra
   const canFlow = user?.rol === 'ADMIN' || user?.rol === 'SHOP_MANAGER'
 
@@ -569,6 +575,12 @@ function DetalleMuestraDrawer({ id, onClose, onChange }: { id: number; onClose: 
                             const razon = window.prompt('Razón del rechazo del cliente (qué pidió cambiar):')
                             if (!razon) return
                             transicion.mutate({ nuevo_estado: dest, razon_revision: razon })
+                          } else if (dest === 'EN_FABRICACION' && m.estado === 'SOLICITADA') {
+                            // F3: abrir modal con procesos pre-llenados en vez
+                            // de transicionar directo. El endpoint del modal
+                            // hace ambas cosas (crea OP con procesos +
+                            // transición) en una sola transacción.
+                            setShowIniciarFab(true)
                           } else {
                             transicion.mutate({ nuevo_estado: dest })
                           }
@@ -943,6 +955,17 @@ function DetalleMuestraDrawer({ id, onClose, onChange }: { id: number; onClose: 
           }}
           defaultProyectoId={m.proyecto_id}
           defaultMuestraId={id}
+        />
+      )}
+
+      {/* F3: modal "Iniciar fabricación" con procesos pre-llenados por tipo */}
+      {showIniciarFab && m && (
+        <IniciarFabricacionModal
+          open={showIniciarFab}
+          onClose={() => setShowIniciarFab(false)}
+          muestraId={id}
+          muestraCodigo={m.codigo}
+          muestraTipo={m.tipo}
         />
       )}
     </div>

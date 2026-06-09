@@ -78,6 +78,47 @@ export const muestrasService = {
       `/muestras/${id}/sin-compras`,
       { motivo }
     ).then((r) => r.data),
+
+  // ─── Fase 3 — Iniciar fabricación con procesos pre-llenados ─────────────
+  procesosDefault: (id: number) =>
+    api.get<{ data: ProcesosDefaultResp }>(`/muestras/${id}/procesos-default`)
+       .then((r) => r.data.data),
+
+  iniciarFabricacion: (id: number, body: IniciarFabricacionInput) =>
+    api.post<{ data: IniciarFabricacionResult; message: string }>(
+      `/muestras/${id}/iniciar-fabricacion`, body
+    ).then((r) => r.data),
+}
+
+export interface ProcesoDefault {
+  secuencia: number
+  estacion: string
+  tiempo_estimado_minutos: number
+}
+export interface ProcesosDefaultResp {
+  muestra_id: number
+  codigo: string
+  tipo: string
+  procesos: ProcesoDefault[]
+}
+export interface ProcesoInput {
+  estacion: string
+  tiempo_estimado_minutos?: number | null
+  operador_id?: number | null
+}
+export interface IniciarFabricacionInput {
+  procesos: ProcesoInput[]
+  notas?: string | null
+}
+export interface IniciarFabricacionResult {
+  op_id: number
+  op_numero: string
+  procesos_creados: number
+  muestra: {
+    id: number
+    estado: string
+    version_actual: number
+  }
 }
 
 /** Devuelto por GET /api/muestras/:id/ocs-status (Fase 2). */

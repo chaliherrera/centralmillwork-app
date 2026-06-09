@@ -13,6 +13,7 @@
 import { Router } from 'express'
 import { requireRole } from '../../middleware/auth'
 import { getOCsStatus, marcarSinCompras } from './controllers/muestrasOCs.controller'
+import { getProcesosDefault, iniciarFabricacionHandler } from './controllers/muestrasFabricacion.controller'
 
 const router = Router()
 
@@ -22,7 +23,13 @@ const MUESTRAS_READ_F2 = requireRole('ADMIN', 'ENGINEERING', 'SHOP_MANAGER', 'PR
 // Escritura sobre OCs status: PROCUREMENT + ADMIN (es decisión de compras)
 const MUESTRAS_OCS_WRITE = requireRole('ADMIN', 'PROCUREMENT')
 
-router.get('/:id/ocs-status',    MUESTRAS_READ_F2, getOCsStatus)
-router.post('/:id/sin-compras',  MUESTRAS_OCS_WRITE, marcarSinCompras)
+// Iniciar fabricación: ADMIN + SHOP_MANAGER (decisión productiva). PROCUREMENT
+// no fabrica.
+const MUESTRAS_FABRICACION = requireRole('ADMIN', 'SHOP_MANAGER')
+
+router.get ('/:id/ocs-status',           MUESTRAS_READ_F2,      getOCsStatus)
+router.post('/:id/sin-compras',          MUESTRAS_OCS_WRITE,    marcarSinCompras)
+router.get ('/:id/procesos-default',     MUESTRAS_READ_F2,      getProcesosDefault)
+router.post('/:id/iniciar-fabricacion',  MUESTRAS_FABRICACION,  iniciarFabricacionHandler)
 
 export default router
