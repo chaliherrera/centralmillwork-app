@@ -16,7 +16,7 @@
 import type { PoolClient } from 'pg'
 import pool from '../db/pool'
 import { logger } from './logger'
-import { sendEmail, muestraEnQCEmail } from './mailer'
+import { sendEmail, muestraEnQCEmail, muestraEnviadaEmail } from './mailer'
 
 type QueryRunner = PoolClient | typeof pool
 
@@ -92,6 +92,70 @@ export async function notifyMuestraEnQC(
   } catch (err) {
     // Nunca propagar: el callsite NO debe abortar la transición por un email.
     logger.error('notifyMuestraEnQC: throw inesperado', {
+      muestraId: input.muestraId, codigo: input.codigo, err: String(err),
+    })
+  }
+}
+
+interface NotifyMuestraEnviadaInput {
+  muestraId: number
+  codigo: string
+  descripcion: string
+  versionNumero?: number
+  destinatario: string
+  carrier?: string | null
+  trackingNumber?: string | null
+}
+
+/**
+ * Notifica a INGENIERIA que una muestra fue enviada al cliente y hay que
+ * estar atento a la respuesta. F5 (2026-06-09): reemplaza la creación de
+ * tarea INGENIERIA por email puro, consistente con el patrón de F4.
+ *
+ * No bloquea. Failures van a logger + Sentry pero no propagan.
+ */
+export async function notifyMuestraEnviada(
+  input: NotifyMuestraEnviadaInput,
+  runner: QueryRunner = pool
+): Promise<void> {
+  try {
+    const destinatarios = await buscarDestinatariosPorRol(runner, 'ENGINEERING')
+    if (destinatarios.length === 0) {
+      logger.warn('notifyMuestraEnviada: sin ENGINEERING activos con email', {
+        muestraId: input.muestraId, codigo: input.codigo,
+      })
+      return
+    }
+
+    const { subject, html, text } = muestraEnviadaEmail({
+      codigo: input.codigo,
+      descripcion: input.descripcion,
+      versionNumero: input.versionNumero,
+      destinatario: input.destinatario,
+      carrier: input.carrier,
+      trackingNumber: input.trackingNumber,
+    })
+
+    const result = await sendEmail({
+      to: destinatarios.map((u) => u.email),
+      subject,
+      html,
+      text,
+      tags: [
+        { name: 'evento', value: 'muestra_enviada' },
+        { name: 'muestra_id', value: String(input.muestraId) },
+      ],
+    })
+
+    logger.info('notifyMuestraEnviada: dispatched', {
+      muestraId: input.muestraId,
+      codigo: input.codigo,
+      destinatarios: destinatarios.length,
+      passthrough: result.passthrough ?? false,
+      ok: result.ok,
+    })
+  } catch (err) {
+    logger.error('notifyMuestraEnviada: throw inesperado', {
       muestraId: input.muestraId, codigo: input.codigo, err: String(err),
     })
   }

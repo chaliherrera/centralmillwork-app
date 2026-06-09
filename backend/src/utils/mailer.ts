@@ -184,6 +184,91 @@ export function tareaNuevaEmail(input: {
   return { subject, html, text }
 }
 
+/**
+ * Template "Muestra enviada al cliente — esperar respuesta" — F5 Muestras
+ * (2026-06-09). Se dispara cuando PROCUREMENT/ADMIN registra el envío.
+ * Va al/los ENGINEERING para que estén atentos a la respuesta del cliente
+ * (aprobación o rechazo) y la registren en la app cuando llegue.
+ *
+ * Como F4: email puro, sin crear tarea (el módulo Tareas hoy solo lo ve
+ * ADMIN; ENGINEERING no entra al inbox).
+ */
+export function muestraEnviadaEmail(input: {
+  codigo: string
+  descripcion: string
+  versionNumero?: number
+  destinatario: string
+  carrier?: string | null
+  trackingNumber?: string | null
+}): { subject: string; html: string; text: string } {
+  const baseUrl = process.env.FRONTEND_URL || 'https://centralmillwork-frontend-production.up.railway.app'
+  const link = `${baseUrl}/muestras`
+  const versionTxt = input.versionNumero ? `V${input.versionNumero}` : ''
+  const tracking = [input.carrier, input.trackingNumber].filter(Boolean).join(' · ')
+
+  const subject = `[Central Millwork] Muestra ${input.codigo} enviada — esperar respuesta`
+
+  const html = `
+<!DOCTYPE html>
+<html lang="es">
+<body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; background: #f8f6f0;">
+  <div style="background: white; border-radius: 12px; padding: 24px; border-left: 4px solid #3B82F6;">
+    <div style="font-size: 12px; color: #6B6356; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px;">
+      Central Millwork · Muestra enviada
+    </div>
+    <h1 style="font-size: 18px; color: #2C3126; margin: 0 0 12px;">
+      ${escapeHtml(input.codigo)} ${escapeHtml(versionTxt)}
+    </h1>
+    <div style="font-size: 14px; color: #1F1B14; line-height: 1.5; margin-bottom: 16px;">
+      ${escapeHtml(input.descripcion)}
+    </div>
+    <table style="width: 100%; font-size: 13px; color: #1F1B14; border-collapse: collapse; margin-bottom: 16px;">
+      <tr>
+        <td style="padding: 4px 0; color: #6B6356; width: 110px;">Destinatario:</td>
+        <td style="padding: 4px 0;"><strong>${escapeHtml(input.destinatario)}</strong></td>
+      </tr>
+      ${tracking ? `
+      <tr>
+        <td style="padding: 4px 0; color: #6B6356;">Tracking:</td>
+        <td style="padding: 4px 0;">${escapeHtml(tracking)}</td>
+      </tr>` : ''}
+    </table>
+    <div style="font-size: 13px; color: #4A5240; background: #EBF1FB; padding: 12px 14px; border-radius: 8px; margin-bottom: 20px;">
+      Cuando el cliente responda con <strong>aprobación</strong> o <strong>rechazo</strong>,
+      registralo en la app transicionando la muestra al estado correspondiente.
+    </div>
+    <div style="margin-top: 20px;">
+      <a href="${link}" style="display: inline-block; background: #4A5240; color: white; padding: 10px 20px; border-radius: 8px; text-decoration: none; font-weight: 600; font-size: 14px;">
+        Abrir Muestras
+      </a>
+    </div>
+    <div style="margin-top: 24px; padding-top: 16px; border-top: 1px solid #ECE7DC; font-size: 11px; color: #B0A89A;">
+      Email automático del sistema. No respondas a esta dirección.
+    </div>
+  </div>
+</body>
+</html>`.trim()
+
+  const text = [
+    `[Central Millwork] Muestra ${input.codigo} enviada — esperar respuesta`,
+    '',
+    `${input.codigo} ${versionTxt}`,
+    input.descripcion,
+    '',
+    `Destinatario: ${input.destinatario}`,
+    tracking ? `Tracking: ${tracking}` : '',
+    '',
+    'Cuando el cliente responda con aprobación o rechazo, registralo en la app transicionando la muestra al estado correspondiente.',
+    '',
+    `Abrir: ${link}`,
+    '',
+    '--',
+    'Email automático del sistema.',
+  ].filter((l) => l !== '').join('\n')
+
+  return { subject, html, text }
+}
+
 function escapeHtml(s: string): string {
   return s
     .replace(/&/g, '&amp;')

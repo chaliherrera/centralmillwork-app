@@ -782,7 +782,9 @@ export async function registrarEnvio(req: Request, res: Response, next: NextFunc
     )
 
     // F5: cerrar tareas SHOP_MANAGER abiertas de esta muestra (ready_to_fab,
-    // qc, etc) que quedaron sin marcar. Idempotente: WHERE estado abierto.
+    // qc, etc) que quedaron sin marcar. Estas tareas SÍ existen porque F2
+    // las crea y el ADMIN las ve en su inbox — auto-cerrarlas evita basura
+    // colgada cuando el flow ya avanzó.
     await client.query(
       `UPDATE tareas
           SET estado = 'completada',
@@ -795,38 +797,22 @@ export async function registrarEnvio(req: Request, res: Response, next: NextFunc
       [`muestra:${id}:%`]
     )
 
-    // F5: crear tarea INGENIERIA "Esperar respuesta cliente". Es para que
-    // ADMIN la vea en el inbox. ENGINEERING no tiene Tareas hoy — se le
-    // notifica via email (notifyTareaBySourceRef llama buscarEmails(rol)).
-    const sourceRefIng = `muestra:${id}:client_response:envio${envio.id}`
-    await client.query(
-      `INSERT INTO tareas (area, title, description, priority, from_email, subject, source_email_id, origen, source_ref)
-       VALUES ('ingenieria', $1, $2, 'medium', 'sistema@centralmillwork.com', $3, NULL, 'sistema', $4)
-       ON CONFLICT (source_ref) WHERE origen = 'sistema' AND source_ref IS NOT NULL
-       DO NOTHING`,
-      [
-        `Esperar respuesta cliente: ${muestra.codigo}`,
-        [
-          `Muestra: ${muestra.codigo} V${muestra.version_actual}`,
-          `Descripción: ${muestra.descripcion}`,
-          `Envío: ${body.destinatario}${body.tracking_carrier ? ` vía ${body.tracking_carrier}` : ''}${body.tracking_number ? ` (#${body.tracking_number})` : ''}`,
-          '',
-          `Acción: cuando el cliente responda con aprobación o rechazo, transicionar la muestra a APROBADA o RECHAZADA en el sistema.`,
-        ].join('\n'),
-        `Awaiting client response — ${muestra.codigo}`,
-        sourceRefIng,
-      ]
-    )
-
     await client.query('COMMIT')
 
-    // Notificación post-COMMIT (fire-and-forget). Si Resend está activo,
-    // INGENIERIA recibe email; si no, queda como passthrough en logs.
-    const { notifyTareaBySourceRef } = await import('../utils/notifyTarea')
-    void notifyTareaBySourceRef(pool, sourceRefIng)
-      .catch((err) => logger.warn('notifyTarea ingenieria envio failed', {
-        muestraId: id, envioId: envio.id, err: String(err),
-      }))
+    // F5 cleanup (2026-06-09): patrón email puro a INGENIERIA, consistente
+    // con F4. Antes creábamos tarea + email; el módulo Tareas hoy sólo lo
+    // ve ADMIN, así que para ENGINEERING el único canal útil es el mail.
+    // Fire-and-forget post-COMMIT — no bloquea ni rompe la transición.
+    const { notifyMuestraEnviada } = await import('../utils/notifyMuestra')
+    void notifyMuestraEnviada({
+      muestraId: id,
+      codigo: muestra.codigo,
+      descripcion: muestra.descripcion,
+      versionNumero: muestra.version_actual,
+      destinatario: body.destinatario,
+      carrier: body.tracking_carrier ?? null,
+      trackingNumber: body.tracking_number ?? null,
+    })
 
     res.status(201).json({ data: envio, message: 'Envío registrado' })
   } catch (err) {
