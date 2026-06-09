@@ -516,6 +516,9 @@ function DetalleMuestraDrawer({ id, onClose, onChange }: { id: number; onClose: 
 
   const m = data?.muestra
   const canFlow = user?.rol === 'ADMIN' || user?.rol === 'SHOP_MANAGER'
+  // F5: registrar envío + confirmar recepción es decisión de logística.
+  // PROCUREMENT/ADMIN, NO SHOP_MANAGER.
+  const canEnvio = user?.rol === 'ADMIN' || user?.rol === 'PROCUREMENT'
 
   // Transiciones disponibles según estado actual
   const transicionesDisponibles = useMemo<MuestraEstado[]>(() => {
@@ -602,14 +605,19 @@ function DetalleMuestraDrawer({ id, onClose, onChange }: { id: number; onClose: 
                       </button>
                     )
                   })}
-                  {(m.estado === 'EN_QC' || m.estado === 'ENVIADA') && (
-                    <button
-                      onClick={() => setShowEnvio(true)}
-                      className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded bg-blue-50 text-blue-700 hover:bg-blue-100"
-                    >
-                      <Truck size={11} /> Registrar envío
-                    </button>
-                  )}
+                </div>
+              )}
+
+              {/* F5: botón Registrar envío visible para PROCUREMENT/ADMIN,
+                  no para SHOP_MANAGER (cambio de responsabilidad). */}
+              {canEnvio && (m.estado === 'EN_QC' || m.estado === 'ENVIADA') && (
+                <div className="mt-3">
+                  <button
+                    onClick={() => setShowEnvio(true)}
+                    className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded bg-blue-50 text-blue-700 hover:bg-blue-100"
+                  >
+                    <Truck size={11} /> Registrar envío
+                  </button>
                 </div>
               )}
             </div>
@@ -883,11 +891,27 @@ function DetalleMuestraDrawer({ id, onClose, onChange }: { id: number; onClose: 
                             {e.tracking_carrier}{e.tracking_number && ` · ${e.tracking_number}`}
                           </div>
                         )}
+                        {/* F5: foto del paquete/etiqueta si fue subida */}
+                        {(e as any).foto_url && (
+                          <a
+                            href={(e as any).foto_url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-block mt-2"
+                            title="Ver foto en tamaño completo"
+                          >
+                            <img
+                              src={(e as any).foto_url}
+                              alt="Foto del paquete"
+                              className="max-h-32 rounded border border-gray-200 hover:opacity-90 transition-opacity"
+                            />
+                          </a>
+                        )}
                         {e.fecha_recepcion_confirmada ? (
                           <div className="text-xs text-emerald-700 font-medium mt-1">
                             ✓ Cliente confirmó recepción el {new Date(e.fecha_recepcion_confirmada).toLocaleDateString('es-MX')}
                           </div>
-                        ) : canFlow && (
+                        ) : canEnvio && (
                           <button
                             onClick={() => {
                               const today = new Date().toISOString().slice(0, 10)
@@ -973,15 +997,36 @@ function DetalleMuestraDrawer({ id, onClose, onChange }: { id: number; onClose: 
 }
 
 // ─── Modal registrar envío ───────────────────────────────────────────────────
+// F5: agrega input opcional de foto del paquete/etiqueta. Tras crear el envío
+// hace una segunda llamada para subir la foto si existe — el endpoint nuevo
+// /envios/:envioId/foto reemplaza la foto anterior si la hay.
 function RegistrarEnvioModal({ muestraId, onClose, onSuccess }: { muestraId: number; onClose: () => void; onSuccess: () => void }) {
   const [destinatario, setDestinatario] = useState('')
   const [direccion, setDireccion] = useState('')
   const [carrier, setCarrier] = useState('')
   const [tracking, setTracking] = useState('')
   const [notas, setNotas] = useState('')
+  const [foto, setFoto] = useState<File | null>(null)
+  const fotoPreview = useMemo(
+    () => foto ? URL.createObjectURL(foto) : null,
+    [foto]
+  )
 
   const mut = useMutation({
-    mutationFn: (body: RegistrarEnvioInput) => muestrasService.registrarEnvio(muestraId, body),
+    mutationFn: async (body: RegistrarEnvioInput) => {
+      const res = await muestrasService.registrarEnvio(muestraId, body)
+      // Si hay foto, segunda llamada para asociarla. Si falla, NO abortamos
+      // — el envío ya quedó registrado.
+      const envio = (res as any)?.data
+      if (foto && envio?.id) {
+        try {
+          await muestrasService.uploadEnvioFoto(muestraId, envio.id, foto)
+        } catch (err: any) {
+          toast.error('Envío registrado, pero falló la subida de la foto: ' + (err?.response?.data?.message ?? 'error'))
+        }
+      }
+      return res
+    },
     onSuccess: () => { toast.success('Envío registrado'); onSuccess() },
     onError: (err: any) => toast.error(err?.response?.data?.message ?? 'Error registrando envío'),
   })
@@ -1000,8 +1045,8 @@ function RegistrarEnvioModal({ muestraId, onClose, onSuccess }: { muestraId: num
 
   return (
     <div className="fixed inset-0 z-[60] bg-black/40 flex items-center justify-center px-4" onClick={onClose}>
-      <div className="bg-white rounded-2xl max-w-md w-full shadow-2xl" onClick={(e) => e.stopPropagation()}>
-        <div className="flex items-center justify-between p-5 border-b border-gray-100">
+      <div className="bg-white rounded-2xl max-w-md w-full shadow-2xl max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between p-5 border-b border-gray-100 sticky top-0 bg-white">
           <h3 className="text-lg font-semibold flex items-center gap-2"><Truck size={18} /> Registrar envío</h3>
           <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-gray-100"><X size={18} /></button>
         </div>
@@ -1027,6 +1072,30 @@ function RegistrarEnvioModal({ muestraId, onClose, onSuccess }: { muestraId: num
           <div>
             <label className="label">Notas</label>
             <textarea value={notas} onChange={(e) => setNotas(e.target.value)} rows={2} className="input resize-none" placeholder="Detalles adicionales" />
+          </div>
+          <div>
+            <label className="label flex items-center gap-2">
+              <Paperclip size={14} /> Foto del paquete / etiqueta (opcional)
+            </label>
+            <input
+              type="file"
+              accept="image/*,application/pdf"
+              onChange={(e) => setFoto(e.target.files?.[0] ?? null)}
+              className="text-xs"
+            />
+            {fotoPreview && (
+              <div className="mt-2 relative inline-block">
+                <img src={fotoPreview} alt="Preview" className="max-h-32 rounded border border-gray-200" />
+                <button
+                  type="button"
+                  onClick={() => setFoto(null)}
+                  className="absolute -top-2 -right-2 p-0.5 bg-white border border-gray-300 rounded-full shadow"
+                  title="Quitar foto"
+                >
+                  <X size={12} />
+                </button>
+              </div>
+            )}
           </div>
           <div className="flex gap-2 pt-3 border-t border-gray-100">
             <button type="button" onClick={onClose} className="btn-ghost flex-1 justify-center">Cancelar</button>

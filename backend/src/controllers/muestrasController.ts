@@ -224,6 +224,22 @@ export async function getMuestra(req: Request, res: Response, next: NextFunction
        ORDER BY fecha_envio DESC`,
       [id]
     )
+    // F5: si hay foto_filename, generar signed URL para mostrarla. Usamos
+    // createSignedUrl porque el bucket oc-imagenes es privado (mismo fix
+    // que se aplicó a oc_imagenes el 2026-06-08).
+    if (supabaseEnabled && supabase) {
+      const sb = supabase
+      for (const e of envios) {
+        if (e.foto_filename) {
+          const { data } = await sb.storage
+            .from(SUPABASE_BUCKET)
+            .createSignedUrl(e.foto_filename, 3600)
+          ;(e as any).foto_url = data?.signedUrl ?? null
+        } else {
+          ;(e as any).foto_url = null
+        }
+      }
+    }
 
     // Timeline reciente (últimos 50 eventos)
     const { rows: eventos } = await pool.query(
@@ -765,7 +781,53 @@ export async function registrarEnvio(req: Request, res: Response, next: NextFunc
       ]
     )
 
+    // F5: cerrar tareas SHOP_MANAGER abiertas de esta muestra (ready_to_fab,
+    // qc, etc) que quedaron sin marcar. Idempotente: WHERE estado abierto.
+    await client.query(
+      `UPDATE tareas
+          SET estado = 'completada',
+              completed_at = NOW(),
+              updated_at = NOW()
+        WHERE area = 'shop_manager'
+          AND origen = 'sistema'
+          AND source_ref LIKE $1
+          AND estado NOT IN ('completada', 'descartada')`,
+      [`muestra:${id}:%`]
+    )
+
+    // F5: crear tarea INGENIERIA "Esperar respuesta cliente". Es para que
+    // ADMIN la vea en el inbox. ENGINEERING no tiene Tareas hoy — se le
+    // notifica via email (notifyTareaBySourceRef llama buscarEmails(rol)).
+    const sourceRefIng = `muestra:${id}:client_response:envio${envio.id}`
+    await client.query(
+      `INSERT INTO tareas (area, title, description, priority, from_email, subject, source_email_id, origen, source_ref)
+       VALUES ('ingenieria', $1, $2, 'medium', 'sistema@centralmillwork.com', $3, NULL, 'sistema', $4)
+       ON CONFLICT (source_ref) WHERE origen = 'sistema' AND source_ref IS NOT NULL
+       DO NOTHING`,
+      [
+        `Esperar respuesta cliente: ${muestra.codigo}`,
+        [
+          `Muestra: ${muestra.codigo} V${muestra.version_actual}`,
+          `Descripción: ${muestra.descripcion}`,
+          `Envío: ${body.destinatario}${body.tracking_carrier ? ` vía ${body.tracking_carrier}` : ''}${body.tracking_number ? ` (#${body.tracking_number})` : ''}`,
+          '',
+          `Acción: cuando el cliente responda con aprobación o rechazo, transicionar la muestra a APROBADA o RECHAZADA en el sistema.`,
+        ].join('\n'),
+        `Awaiting client response — ${muestra.codigo}`,
+        sourceRefIng,
+      ]
+    )
+
     await client.query('COMMIT')
+
+    // Notificación post-COMMIT (fire-and-forget). Si Resend está activo,
+    // INGENIERIA recibe email; si no, queda como passthrough en logs.
+    const { notifyTareaBySourceRef } = await import('../utils/notifyTarea')
+    void notifyTareaBySourceRef(pool, sourceRefIng)
+      .catch((err) => logger.warn('notifyTarea ingenieria envio failed', {
+        muestraId: id, envioId: envio.id, err: String(err),
+      }))
+
     res.status(201).json({ data: envio, message: 'Envío registrado' })
   } catch (err) {
     await client.query('ROLLBACK')
@@ -932,6 +994,93 @@ export async function uploadArchivo(req: Request, res: Response, next: NextFunct
     res.status(201).json({ data: archivo, message: 'Archivo subido' })
   } catch (err) { next(err) }
 }
+
+/**
+ * POST /api/muestras/:id/envios/:envioId/foto — F5 Muestras
+ *
+ * Sube la foto del paquete/etiqueta de un envío. Body multipart con campo
+ * 'foto'. Reusa SUPABASE_BUCKET (mismo de oc_imagenes) y signed URLs
+ * privadas. Permisos: ADMIN, PROCUREMENT (es decisión de logística).
+ */
+export async function uploadEnvioFoto(req: Request, res: Response, next: NextFunction) {
+  try {
+    const id = parseInt(String(req.params.id))
+    const envioId = parseInt(String(req.params.envioId))
+    if (!Number.isFinite(id) || !Number.isFinite(envioId)) {
+      return next(createError('id o envio_id inválido', 400))
+    }
+    if (!req.file) return next(createError('No se recibió ninguna foto', 400))
+
+    // Validar que el envío pertenece a la muestra
+    const { rows: [envio] } = await pool.query<{ id: number; foto_filename: string | null }>(
+      `SELECT id, foto_filename FROM muestras_envios WHERE id = $1 AND muestra_id = $2`,
+      [envioId, id]
+    )
+    if (!envio) return next(createError('Envío no encontrado para esta muestra', 404))
+
+    if (!supabaseEnabled || !supabase) {
+      return next(createError('Supabase Storage no configurado en el server', 500))
+    }
+
+    // Generar filename — incluye muestra-id/envio-id para organizar
+    const ext = path.extname(req.file.originalname)
+    const filename = `muestra-${id}/envio-${envioId}/${Date.now()}-${Math.random().toString(36).slice(2)}${ext}`
+
+    const { error: upErr } = await supabase.storage
+      .from(SUPABASE_BUCKET)
+      .upload(filename, req.file.buffer, {
+        contentType: req.file.mimetype,
+        upsert: false,
+      })
+    if (upErr) {
+      logger.error('uploadEnvioFoto error', { requestId: req.id, muestraId: id, envioId, err: upErr })
+      return next(createError('Error subiendo a Supabase: ' + upErr.message, 500))
+    }
+
+    // Si ya había foto previa, borrarla post-update (no en transacción —
+    // tolerar falla del cleanup, ya tenemos la nueva referenciada).
+    const fotoAnterior = envio.foto_filename
+    await pool.query(
+      `UPDATE muestras_envios SET foto_filename = $1 WHERE id = $2`,
+      [filename, envioId]
+    )
+    if (fotoAnterior) {
+      void supabase.storage.from(SUPABASE_BUCKET).remove([fotoAnterior])
+        .then(({ error }) => {
+          if (error) logger.warn('uploadEnvioFoto: cleanup foto anterior failed', {
+            envioId, fotoAnterior, err: error.message,
+          })
+        })
+    }
+
+    // Devolver URL firmada para que el frontend la renderice de una
+    const { data: signed } = await supabase.storage
+      .from(SUPABASE_BUCKET)
+      .createSignedUrl(filename, 3600)
+
+    logger.info('envio foto subida', {
+      requestId: req.id, muestraId: id, envioId,
+      tamano_kb: Math.round(req.file.size / 1024),
+    })
+    res.status(201).json({
+      data: { envio_id: envioId, foto_filename: filename, foto_url: signed?.signedUrl ?? null },
+      message: 'Foto subida',
+    })
+  } catch (err) { next(err) }
+}
+
+// Multer setup para foto de envío — usa fileUploadHelper para no duplicar config.
+import { createImageUploadMulter } from '../utils/fileUploadHelper'
+export const uploadEnvioFotoMulter = createImageUploadMulter({
+  diskPrefix: 'envio-',
+  sizeMb: 10,
+  allowedMimes: new Set([
+    'image/jpeg', 'image/jpg', 'image/png', 'image/webp',
+    'image/gif', 'image/heic', 'image/heif', 'application/pdf',
+  ]),
+  allowedExtRe: /\.(jpe?g|png|webp|gif|heic|heif|pdf)$/i,
+  formatsLabel: 'imágenes (jpg/png/webp/heic) o PDF',
+})
 
 /**
  * GET /api/muestras/:id/archivos

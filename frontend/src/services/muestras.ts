@@ -49,6 +49,17 @@ export const muestrasService = {
       { fecha_recepcion_confirmada: fecha }
     ).then((r) => r.data),
 
+  /** F5: sube foto del paquete/etiqueta de un envío. Reemplaza la anterior si existe. */
+  uploadEnvioFoto: (id: number, envioId: number, file: File) => {
+    const form = new FormData()
+    form.append('foto', file)
+    return api.post<{ data: { envio_id: number; foto_filename: string; foto_url: string | null }; message: string }>(
+      `/muestras/${id}/envios/${envioId}/foto`,
+      form,
+      { headers: { 'Content-Type': 'multipart/form-data' } }
+    ).then((r) => r.data)
+  },
+
   /**
    * Sube un archivo (PDF de sample request, foto, DWG) a la muestra.
    * tipo: 'sample_request' | 'foto' | 'pdf' | 'dwg' | 'otro'

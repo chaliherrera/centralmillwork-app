@@ -48,6 +48,7 @@ import {
   getMuestras, getMuestra, createMuestra, updateMuestra,
   transicionarMuestra, registrarEnvio, confirmarRecepcion, getMuestrasKpis,
   uploadArchivo, getArchivos, deleteArchivo, uploadMuestraArchivo,
+  uploadEnvioFoto, uploadEnvioFotoMulter,
   createMuestraSchema, updateMuestraSchema, transicionEstadoSchema,
   registrarEnvioSchema,
 } from '../controllers/muestrasController'
@@ -166,6 +167,9 @@ router.delete('/cotizaciones/:id',            WRITE, deleteCotizacion)
 const MUESTRAS_READ  = requireRole('ADMIN', 'ENGINEERING', 'SHOP_MANAGER', 'PROCUREMENT')
 const MUESTRAS_WRITE = requireRole('ADMIN', 'ENGINEERING', 'SHOP_MANAGER')
 const MUESTRAS_FLOW  = requireRole('ADMIN', 'SHOP_MANAGER')
+// F5: logística de envío es responsabilidad de procurement (ya no shop_manager).
+// confirmarRecepcion también pasa porque es seguimiento del envío.
+const MUESTRAS_ENVIO = requireRole('ADMIN', 'PROCUREMENT')
 
 router.get   ('/muestras',                                MUESTRAS_READ,  getMuestras)
 router.get   ('/muestras/kpis',                           MUESTRAS_READ,  getMuestrasKpis)
@@ -173,8 +177,9 @@ router.get   ('/muestras/:id',                            MUESTRAS_READ,  getMue
 router.post  ('/muestras',                                MUESTRAS_WRITE, validateBody(createMuestraSchema), createMuestra)
 router.patch ('/muestras/:id',                            MUESTRAS_WRITE, validateBody(updateMuestraSchema), updateMuestra)
 router.post  ('/muestras/:id/transicion',                 MUESTRAS_FLOW,  validateBody(transicionEstadoSchema), transicionarMuestra)
-router.post  ('/muestras/:id/envios',                     MUESTRAS_FLOW,  validateBody(registrarEnvioSchema), registrarEnvio)
-router.patch ('/muestras/:id/envios/:envioId/recepcion',  MUESTRAS_FLOW,  confirmarRecepcion)
+router.post  ('/muestras/:id/envios',                     MUESTRAS_ENVIO, validateBody(registrarEnvioSchema), registrarEnvio)
+router.post  ('/muestras/:id/envios/:envioId/foto',       MUESTRAS_ENVIO, uploadEnvioFotoMulter.single('foto'), uploadEnvioFoto)
+router.patch ('/muestras/:id/envios/:envioId/recepcion',  MUESTRAS_ENVIO, confirmarRecepcion)
 router.get   ('/muestras/:id/archivos',                   MUESTRAS_READ,  getArchivos)
 router.post  ('/muestras/:id/archivos',                   MUESTRAS_WRITE, uploadMuestraArchivo.single('archivo'), uploadArchivo)
 router.delete('/muestras/:id/archivos/:archivoId',        MUESTRAS_WRITE, deleteArchivo)
