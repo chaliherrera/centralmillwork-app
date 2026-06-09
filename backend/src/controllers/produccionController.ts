@@ -469,6 +469,79 @@ export async function avanzarOrdenInterno(opts: {
       )
     }
 
+    // ── F4 Muestras (2026-06-09) ────────────────────────────────────────────
+    // Si la OP que acaba de completar es de tipo='MUESTRA', transicionar la
+    // muestra a EN_QC automáticamente. La OP se ata a la muestra vía
+    // muestras_versiones.op_id (no hay FK directo en ordenes_produccion).
+    //
+    // Captura datos para email post-COMMIT — el email NO va dentro de la
+    // transacción para no extender el tiempo de lock ni hacer la transición
+    // dependiente del mailer.
+    let emailMuestraEnQC: {
+      muestraId: number
+      codigo: string
+      descripcion: string
+      versionNumero: number
+      opNumero: string | null
+    } | null = null
+
+    if (!siguiente) {
+      // Solo cuando la orden completó (no en transiciones intermedias).
+      const { rows: [opMeta] } = await client.query<{
+        tipo: string
+        numero_orden: string
+        muestra_id: number | null
+        codigo: string | null
+        descripcion: string | null
+        version_numero: number | null
+        estado_muestra: string | null
+      }>(
+        `SELECT
+           op.tipo, op.numero_orden,
+           m.id AS muestra_id, m.codigo, m.descripcion, m.estado AS estado_muestra,
+           mv.version_numero
+         FROM ordenes_produccion op
+         LEFT JOIN muestras_versiones mv ON mv.op_id = op.id
+         LEFT JOIN muestras m ON m.id = mv.muestra_id
+         WHERE op.id = $1`,
+        [opts.ordenId]
+      )
+
+      if (
+        opMeta?.tipo === 'MUESTRA' &&
+        opMeta.muestra_id != null &&
+        opMeta.estado_muestra === 'EN_FABRICACION'
+      ) {
+        // Guard: solo si está en EN_FABRICACION. Si ya fue movida a otro
+        // estado por un humano (vuelve atrás, archiva, etc), respetamos eso.
+        await client.query(
+          `UPDATE muestras
+             SET estado = 'EN_QC', updated_at = NOW()
+           WHERE id = $1 AND estado = 'EN_FABRICACION'`,
+          [opMeta.muestra_id]
+        )
+        // Evento en timeline para auditoría
+        await client.query(
+          `INSERT INTO muestras_eventos
+             (muestra_id, version_numero, tipo, detalle, usuario_id)
+           VALUES ($1, $2, 'comentario', $3, $4)`,
+          [
+            opMeta.muestra_id,
+            opMeta.version_numero ?? 1,
+            `Auto-transición: OP ${opMeta.numero_orden} completó último proceso → EN_QC`,
+            opts.reqUserId ?? null,
+          ]
+        )
+        emailMuestraEnQC = {
+          muestraId: opMeta.muestra_id,
+          codigo: opMeta.codigo ?? '',
+          descripcion: opMeta.descripcion ?? '',
+          versionNumero: opMeta.version_numero ?? 1,
+          opNumero: opMeta.numero_orden ?? null,
+        }
+      }
+    }
+
     // 3) Historial
     // Cuando es el último proceso, `estacionDestino` es null porque no hay
     // siguiente — pero la columna `orden_historial.estacion_destino` es NOT NULL.
@@ -488,6 +561,16 @@ export async function avanzarOrdenInterno(opts: {
     )
 
     await client.query('COMMIT')
+
+    // Email post-COMMIT (no bloquea, no falla la transición si rompe)
+    if (emailMuestraEnQC) {
+      // Lazy import — el helper carga mailer/Resend lazy también, así que
+      // este path no agrega costo cuando no es OP de muestra.
+      const { notifyMuestraEnQC } = await import('../utils/notifyMuestra')
+      // No `await` — fire-and-forget. La respuesta HTTP no debe esperar al
+      // email; el helper captura sus propios errores y nunca tira.
+      void notifyMuestraEnQC(emailMuestraEnQC)
+    }
 
     return { siguiente_estacion: estacionDestino, status: nuevoStatus }
   } catch (err) {

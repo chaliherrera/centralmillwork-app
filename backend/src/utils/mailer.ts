@@ -192,3 +192,74 @@ function escapeHtml(s: string): string {
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#039;')
 }
+
+/**
+ * Template para "Muestra lista para QC" — Fase 4 Muestras (2026-06-09).
+ *
+ * Se dispara cuando una OP de tipo='MUESTRA' completa su último proceso de
+ * producción y la muestra transiciona automáticamente a EN_QC. Va al/los
+ * SHOP_MANAGER para que arranquen el control de calidad.
+ *
+ * Nota: el módulo de Tareas hoy solo lo ve el ADMIN — por eso no creamos
+ * tarea sino que mandamos email directo al rol responsable.
+ */
+export function muestraEnQCEmail(input: {
+  codigo: string
+  descripcion: string
+  versionNumero?: number
+  opNumero?: string | null
+}): { subject: string; html: string; text: string } {
+  const baseUrl = process.env.FRONTEND_URL || 'https://centralmillwork-frontend-production.up.railway.app'
+  const link = `${baseUrl}/muestras`
+  const versionTxt = input.versionNumero ? `V${input.versionNumero}` : ''
+  const opTxt = input.opNumero ? ` (OP ${input.opNumero})` : ''
+
+  const subject = `[Central Millwork] Muestra ${input.codigo} lista para QC`
+
+  const html = `
+<!DOCTYPE html>
+<html lang="es">
+<body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; background: #f8f6f0;">
+  <div style="background: white; border-radius: 12px; padding: 24px; border-left: 4px solid #10B981;">
+    <div style="font-size: 12px; color: #6B6356; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px;">
+      Central Millwork · Muestra lista para QC
+    </div>
+    <h1 style="font-size: 18px; color: #2C3126; margin: 0 0 12px;">
+      ${escapeHtml(input.codigo)} ${escapeHtml(versionTxt)}${escapeHtml(opTxt)}
+    </h1>
+    <div style="font-size: 14px; color: #1F1B14; line-height: 1.5; margin-bottom: 16px;">
+      ${escapeHtml(input.descripcion)}
+    </div>
+    <div style="font-size: 13px; color: #4A5240; background: #ECF8F1; padding: 12px 14px; border-radius: 8px; margin-bottom: 20px;">
+      Esta muestra completó el último proceso de producción y pasó automáticamente a
+      <strong>EN QC</strong>. Por favor revisá la calidad y registrá la decisión en el sistema.
+    </div>
+    <div style="margin-top: 20px;">
+      <a href="${link}" style="display: inline-block; background: #4A5240; color: white; padding: 10px 20px; border-radius: 8px; text-decoration: none; font-weight: 600; font-size: 14px;">
+        Abrir Muestras
+      </a>
+    </div>
+    <div style="margin-top: 24px; padding-top: 16px; border-top: 1px solid #ECE7DC; font-size: 11px; color: #B0A89A;">
+      Email automático del sistema. No respondas a esta dirección.
+    </div>
+  </div>
+</body>
+</html>`.trim()
+
+  const text = [
+    `[Central Millwork] Muestra ${input.codigo} lista para QC`,
+    '',
+    `${input.codigo} ${versionTxt}${opTxt}`,
+    input.descripcion,
+    '',
+    'Esta muestra completó el último proceso de producción y pasó automáticamente a EN QC.',
+    'Por favor revisá la calidad y registrá la decisión en el sistema.',
+    '',
+    `Abrir: ${link}`,
+    '',
+    '--',
+    'Email automático del sistema.',
+  ].filter((l) => l !== '').join('\n')
+
+  return { subject, html, text }
+}
