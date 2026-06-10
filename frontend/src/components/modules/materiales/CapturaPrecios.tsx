@@ -14,19 +14,42 @@ interface Props {
   vendor: string
   proyectoId: number
   proyectoNombre: string
+  // Filtro de lote activo en la tabla principal. Si está, restringe el
+  // panel a los materiales de ese batch/fecha (sin esto se mezclan huérfanos
+  // PENDIENTES viejos de otras importaciones del proyecto+vendor).
+  // Misma idea que en EnviarCotizacionesModal (commit 3ae9b72).
+  loteFilter?: string       // ''  | 'batch:<uuid>' | 'date:<YYYY-MM-DD>'
+  loteLabel?: string        // texto humano del lote para el banner
   onClose: () => void
 }
 
-export default function CapturaPrecios({ open, vendor, proyectoId, proyectoNombre, onClose }: Props) {
+export default function CapturaPrecios({
+  open, vendor, proyectoId, proyectoNombre,
+  loteFilter = '', loteLabel = '',
+  onClose,
+}: Props) {
   const qc = useQueryClient()
   const [prices, setPrices] = useState<Record<number, string>>({})
   const [freight, setFreight] = useState('')
 
   const enabled = open && !!vendor && !!proyectoId
 
+  // Parsear el lote a query param del backend (mismo formato que Materiales.tsx)
+  const loteParams = useMemo(() => {
+    if (!loteFilter) return {}
+    if (loteFilter.startsWith('batch:')) return { import_batch_id: loteFilter.slice(6) }
+    if (loteFilter.startsWith('date:'))  return { fecha_importacion: loteFilter.slice(5) }
+    return {}
+  }, [loteFilter])
+
   const { data: matsData, isLoading } = useQuery({
-    queryKey: ['materiales-captura', proyectoId, vendor],
-    queryFn: () => materialesService.getAll({ proyecto_id: proyectoId, vendor, estado_cotiz: 'PENDIENTE', cotizar: 'SI', limit: 500 }),
+    queryKey: ['materiales-captura', proyectoId, vendor, loteFilter],
+    queryFn: () => materialesService.getAll({
+      proyecto_id: proyectoId, vendor,
+      estado_cotiz: 'PENDIENTE', cotizar: 'SI',
+      limit: 500,
+      ...loteParams,
+    }),
     enabled,
     staleTime: 5_000,
   })
@@ -129,6 +152,11 @@ export default function CapturaPrecios({ open, vendor, proyectoId, proyectoNombr
               <X size={18} />
             </button>
           </div>
+        </div>
+
+        {/* Banner de scope: avisa qué subset se está cotizando. */}
+        <div className="bg-forest-50 border-b border-forest-200 px-5 py-2 text-xs text-forest-800 flex-shrink-0">
+          <span className="font-medium">Capturando:</span> {loteLabel || 'todos los pendientes del vendor'}
         </div>
 
         {/* ─── Scrollable table ─── */}

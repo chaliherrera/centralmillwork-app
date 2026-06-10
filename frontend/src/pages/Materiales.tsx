@@ -601,6 +601,31 @@ export default function Materiales() {
         vendor={vendorFilter}
         proyectoId={selectedProyectoId as number}
         proyectoNombre={selectedProyecto?.nombre ?? ''}
+        // Resolver 'latest' al UUID concreto del batch más reciente (mismo
+        // patrón que EnviarCotizacionesModal). Sin esto, el panel mezcla
+        // huérfanos viejos de otras importaciones del proyecto.
+        loteFilter={loteFilter === 'latest'
+          ? (batches[0]?.batch_id ? `batch:${batches[0].batch_id}` : `date:${batches[0]?.fecha ?? ''}`)
+          : loteFilter}
+        loteLabel={
+          loteFilter === 'latest'
+            ? 'último lote subido'
+            : loteFilter.startsWith('batch:')
+              ? (() => {
+                  const b = batches.find((x) => x.batch_id === loteFilter.slice(6))
+                  return b
+                    ? `lote del ${fmtDate(b.fecha)}${
+                        batches.filter((x) => x.fecha === b.fecha).length > 1
+                          ? ' ' +
+                            new Date(b.created_at_min).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })
+                          : ''
+                      }`
+                    : 'lote seleccionado'
+                })()
+              : loteFilter.startsWith('date:')
+                ? `lotes del ${fmtDate(loteFilter.slice(5))}`
+                : ''
+        }
         onClose={() => setCapturaOpen(false)}
       />
 
