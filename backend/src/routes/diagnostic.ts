@@ -11,6 +11,8 @@ import pool from '../db/pool'
 import { requireRole } from '../middleware/auth'
 import { supabase, supabaseEnabled, SUPABASE_BUCKET } from '../utils/supabase'
 import { createError } from '../middleware/errorHandler'
+import { captureMessage, captureException } from '../utils/sentry'
+import { logger } from '../utils/logger'
 
 const router = Router()
 
@@ -72,6 +74,51 @@ router.get('/storage-status', requireRole('ADMIN'), async (req: Request, res: Re
         },
         backend_public_url: process.env.BACKEND_PUBLIC_URL || `${req.protocol}://${req.get('host')}`,
       },
+    })
+  } catch (err) { next(err) }
+})
+
+// ─────────────────────────────────────────────────────────────────────────────
+// GET /api/admin/sentry-test — Validación de Sentry backend
+// ─────────────────────────────────────────────────────────────────────────────
+// Captura un mensaje + un evento de error simulado y los manda a Sentry.
+// Útil para confirmar que SENTRY_DSN está bien configurada en el environment
+// activo. Solo ADMIN. Si Sentry está en passthrough, devuelve passthrough=true.
+// ─────────────────────────────────────────────────────────────────────────────
+router.get('/sentry-test', requireRole('ADMIN'), async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const stamp = new Date().toISOString()
+
+    // 1) Mensaje informativo (level=warning para que aparezca prominente)
+    captureMessage(
+      `Sentry backend test desde ${req.user?.email ?? 'admin'} — ${stamp}`,
+      'warning',
+      {
+        tags: { hot_path: 'sentry_test' },
+        extra: { initiated_by: req.user?.id ?? null, timestamp: stamp },
+      }
+    )
+
+    // 2) Excepción simulada (no se tira al cliente — solo a Sentry)
+    try {
+      throw new Error(`Sentry backend test exception — ${stamp}`)
+    } catch (err) {
+      captureException(err, {
+        tags: { hot_path: 'sentry_test' },
+        extra: { simulated: true, timestamp: stamp },
+      })
+    }
+
+    logger.info('sentry-test invocado', {
+      requestId: req.id, userId: req.user?.id ?? null, stamp,
+    })
+
+    res.json({
+      ok: true,
+      message: 'Si SENTRY_DSN está bien, vas a ver 2 eventos en el proyecto `node`: 1 message + 1 exception.',
+      timestamp: stamp,
+      env: process.env.NODE_ENV,
+      sentryDsnConfigured: !!process.env.SENTRY_DSN,
     })
   } catch (err) { next(err) }
 })
