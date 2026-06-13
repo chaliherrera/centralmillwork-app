@@ -256,7 +256,7 @@ function OcDetailPanel({
             <button onClick={() => onEdit(oc)} className="p-1.5 hover:bg-white/10 rounded transition-colors" title="Editar">
               <Pencil size={14} />
             </button>
-            <button onClick={() => onDelete(oc)} className="p-1.5 hover:bg-red-400/20 rounded transition-colors" title="Eliminar">
+            <button onClick={() => onDelete(oc)} className="p-1.5 hover:bg-red-400/20 rounded transition-colors" title="Cancelar orden">
               <Trash2 size={14} />
             </button>
             <button onClick={onClose} className="p-1.5 hover:bg-white/10 rounded transition-colors">
@@ -507,8 +507,14 @@ export default function OrdenesCompra() {
   }
   const hasFilters = !!(search || vendorFilter || catFilter || estadoFilter || fechaDesde || fechaHasta)
 
-  const deleteMutation = useMutation({
-    mutationFn: (id: number) => ordenesCompraService.delete(id),
+  // Patrón "cancelar" en lugar de "eliminar duro". Razones:
+  //  1) Preserva el folio y trazabilidad histórica.
+  //  2) Evita 500 cuando hay recepción esqueleto (FK RESTRICT en
+  //     recepciones.orden_compra_id).
+  //  3) recomputeMaterialesEstadoForOC libera los materiales al estado
+  //     correspondiente (COTIZADO si no quedan OC activas).
+  const cancelMutation = useMutation({
+    mutationFn: (id: number) => ordenesCompraService.updateEstado(id, 'cancelada'),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['ordenes-compra-kanban'], refetchType: 'all' })
       qc.invalidateQueries({ queryKey: ['oc-kpis'],               refetchType: 'all' })
@@ -516,7 +522,10 @@ export default function OrdenesCompra() {
       qc.invalidateQueries({ queryKey: ['materiales-all'],        refetchType: 'all' })
       qc.invalidateQueries({ queryKey: ['materiales-kpis'],       refetchType: 'all' })
       setSelectedOc(undefined)
-      toast.success('Orden eliminada')
+      toast.success('Orden cancelada')
+    },
+    onError: (err: any) => {
+      toast.error(err?.response?.data?.message ?? 'No se pudo cancelar la orden')
     },
   })
 
@@ -531,7 +540,15 @@ export default function OrdenesCompra() {
   const handleClose = () => { setFormOpen(false); setEditing(undefined) }
 
   const confirmDelete = (o: OrdenCompra) => {
-    if (window.confirm(`¿Eliminar la orden "${o.numero}"?`)) deleteMutation.mutate(o.id)
+    if (o.estado === 'cancelada') {
+      toast(`La orden ${o.numero} ya está cancelada`)
+      return
+    }
+    if (window.confirm(
+      `¿Cancelar la orden ${o.numero}?\n\n` +
+      `La orden queda registrada como CANCELADA (no se elimina, para preservar el historial). ` +
+      `Los materiales que la integraban vuelven a estar disponibles.`
+    )) cancelMutation.mutate(o.id)
   }
 
   const montoTotal = kpis

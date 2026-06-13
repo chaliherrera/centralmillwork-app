@@ -66,7 +66,10 @@ router.use('/produccion', produccionRouter)
 // Role shorthand helpers
 const ADMIN      = requireRole('ADMIN')
 const WRITE      = requireRole('ADMIN', 'PROCUREMENT')
-const REC_WRITE  = requireRole('ADMIN', 'PROCUREMENT', 'PRODUCTION')
+// SHOP_MANAGER agregado 2026-06-13: el rol coordina el taller y debe poder
+// registrar recepciones (caso de uso real: operario hace la entrega física
+// y el SHOP_MANAGER la asienta en el sistema).
+const REC_WRITE  = requireRole('ADMIN', 'PROCUREMENT', 'PRODUCTION', 'SHOP_MANAGER')
 
 // ─── Usuarios (ADMIN only) ────────────────────────────────────────────────────
 router.get('/usuarios',      ADMIN, getUsuarios)
