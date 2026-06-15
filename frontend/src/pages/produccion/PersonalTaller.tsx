@@ -11,6 +11,7 @@ import type { TipoPersonal } from '@/types/kiosk'
 const TIPOS: { value: TipoPersonal; label: string; color: string }[] = [
   { value: 'operador',   label: 'Operador',    color: 'bg-blue-100 text-blue-800' },
   { value: 'carpintero', label: 'Carpintero',  color: 'bg-amber-100 text-amber-800' },
+  { value: 'pintor',     label: 'Pintor',      color: 'bg-rose-100 text-rose-800' },
   { value: 'ayudante',   label: 'Ayudante',    color: 'bg-emerald-100 text-emerald-800' },
   { value: 'inspector',  label: 'Inspector',   color: 'bg-purple-100 text-purple-800' },
   { value: 'logistica',  label: 'Logística',   color: 'bg-gray-100 text-gray-800' },
