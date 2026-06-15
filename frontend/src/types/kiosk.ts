@@ -1,7 +1,7 @@
 // Tipos del módulo de kiosko (producción).
 // Mantener sincronizado con backend/src/{controllers,routes}/kiosk*.ts
 
-export type TipoPersonal = 'carpintero' | 'operador' | 'inspector' | 'logistica'
+export type TipoPersonal = 'carpintero' | 'operador' | 'inspector' | 'logistica' | 'ayudante'
 
 export interface KioskPersonal {
   id: number

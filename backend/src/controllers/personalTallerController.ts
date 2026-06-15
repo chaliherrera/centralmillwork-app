@@ -4,7 +4,7 @@ import pool from '../db/pool'
 import { createError } from '../middleware/errorHandler'
 import { logger } from '../utils/logger'
 
-const VALID_TIPOS = ['carpintero', 'operador', 'inspector', 'logistica']
+const VALID_TIPOS = ['carpintero', 'operador', 'inspector', 'logistica', 'ayudante']
 
 /**
  * GET /api/produccion/personal
