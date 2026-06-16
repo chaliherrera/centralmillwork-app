@@ -8,6 +8,7 @@
     "@supabase/supabase-js": "^2.105.1",
     "@types/multer": "^2.1.0",
     "bcryptjs": "^2.4.3",
+    "botbuilder": "^4.23.3",
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
     "express": "^4.21.0",
