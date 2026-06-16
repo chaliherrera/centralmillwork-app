@@ -16,6 +16,7 @@ import router from './routes'
 import authRouter from './routes/auth'
 import kioskRouter from './routes/kiosk'
 import webhooksRouter from './routes/webhooks'
+import teamsBotRouter from './routes/teamsBot'
 import { syncSystemTareas } from './jobs/tareasFromSystem'
 import { authenticate } from './middleware/auth'
 import { errorHandler, notFound } from './middleware/errorHandler'
@@ -100,6 +101,11 @@ app.use('/api/kiosk', kioskRouter)
 // Webhooks (machine-to-machine, autenticados con WEBHOOK_API_TOKEN, no JWT).
 // Deben ir ANTES del authenticate global para que no exija JWT de usuario.
 app.use('/api/webhooks', webhooksRouter)
+
+// Teams Bot (machine-to-machine, autenticado por Bot Framework SDK con JWT
+// firmado por Microsoft Bot Connector — NO el JWT de usuario del sistema).
+// Tiene su propia validación de firma adentro. /status es público a propósito.
+app.use('/api/teams-bot', teamsBotRouter)
 
 // All other API routes require a valid JWT
 app.use('/api', authenticate, router)

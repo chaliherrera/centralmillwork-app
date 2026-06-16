@@ -55,7 +55,8 @@ import {
 } from '../controllers/muestrasController'
 import { muestrasModuleRouter } from '../modules/muestras'
 import diagnosticRouter from './diagnostic'
-import teamsBotRouter from './teamsBot'
+// teamsBotRouter se monta directamente en src/index.ts (antes de authenticate),
+// porque su autenticación la hace el Bot Framework SDK internamente.
 
 const router = Router()
 
@@ -198,11 +199,5 @@ router.use('/muestras', muestrasModuleRouter)
 // ─── Diagnóstico (solo ADMIN) ────────────────────────────────────────────────
 // GET /api/admin/storage-status: para debuggear el bug de imágenes 2026-06-08
 router.use('/admin', diagnosticRouter)
-
-// ─── Teams Bot — webhook para Microsoft Bot Connector ────────────────────
-// Endpoint POST /api/teams-bot/webhook valida la firma JWT del Bot Framework
-// internamente (no usa el middleware authenticate). GET /api/teams-bot/status
-// es público y devuelve si el bot está configurado (sin secretos).
-router.use('/teams-bot', teamsBotRouter)
 
 export default router
