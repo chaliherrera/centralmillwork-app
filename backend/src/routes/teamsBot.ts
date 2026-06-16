@@ -31,7 +31,8 @@ import {
   ConfigurationServiceClientCredentialFactory,
   createBotFrameworkAuthenticationFromConfiguration,
   TurnContext,
-  ActivityHandler,
+  TeamsActivityHandler,
+  TeamsInfo,
   Attachment,
 } from 'botbuilder'
 import pool from '../db/pool'
@@ -45,6 +46,24 @@ const router = Router()
 const BOT_APP_ID = process.env.BOT_APP_ID || ''
 const BOT_APP_PASSWORD = process.env.BOT_APP_PASSWORD || ''
 const BOT_ENABLED = !!(BOT_APP_ID && BOT_APP_PASSWORD)
+
+// ─── Whitelist de emails autorizados ─────────────────────────────────────
+// Configurable via env var BOT_ALLOWED_EMAILS (separados por coma).
+// Si está vacía, el bot rechaza TODO mensaje (fail-closed). Para autorizar
+// nuevos usuarios, basta con sumar el email a la env var en Railway.
+// Los emails se normalizan en lowercase para comparación case-insensitive.
+const BOT_ALLOWED_EMAILS = new Set(
+  (process.env.BOT_ALLOWED_EMAILS || '')
+    .split(',')
+    .map((e) => e.trim().toLowerCase())
+    .filter(Boolean)
+)
+if (BOT_ENABLED) {
+  logger.info('teamsBot whitelist', { count: BOT_ALLOWED_EMAILS.size })
+  if (BOT_ALLOWED_EMAILS.size === 0) {
+    logger.warn('teamsBot: BOT_ALLOWED_EMAILS vacío — el bot rechazará todos los mensajes (fail-closed)')
+  }
+}
 
 let adapter: CloudAdapter | null = null
 
@@ -494,18 +513,57 @@ async function dispatch(parsed: ParsedCmd): Promise<Attachment> {
   }
 }
 
+// ─── Resolución del email real del usuario Teams ─────────────────────────
+// El campo from.aadObjectId es un UUID interno de AD, no el email. Para
+// obtener el email real usamos TeamsInfo.getMember que consulta la API de
+// Microsoft Graph internamente. Cacheamos el resultado por conversación
+// para no llamar a Graph en cada mensaje del mismo chat.
+const emailCache = new Map<string, string>()
+
+async function resolveUserEmail(context: TurnContext): Promise<string> {
+  const cacheKey = context.activity.from?.id || ''
+  if (cacheKey && emailCache.has(cacheKey)) return emailCache.get(cacheKey)!
+  try {
+    const member = await TeamsInfo.getMember(context, context.activity.from.id)
+    const email = (member.email || (member as any).userPrincipalName || '').toLowerCase()
+    if (cacheKey) emailCache.set(cacheKey, email)
+    return email
+  } catch (err) {
+    logger.warn('teamsBot no se pudo resolver email del usuario', {
+      from: context.activity.from?.id, err: String(err),
+    })
+    return ''
+  }
+}
+
+function adaptiveDenied(email: string): Attachment {
+  return adaptive([
+    { type: 'TextBlock', text: '🚫 Acceso denegado', weight: 'Bolder', size: 'Medium', color: 'Attention' },
+    { type: 'TextBlock', wrap: true,
+      text: `Tu cuenta (${email || 'desconocida'}) no está autorizada a consultar el bot. Pedile a Chali que te agregue a la lista de usuarios autorizados.` },
+  ])
+}
+
 // ─── ActivityHandler: recibe el message activity y responde ──────────────
 
-class CentralMillworkBot extends ActivityHandler {
+class CentralMillworkBot extends TeamsActivityHandler {
   constructor() {
     super()
     this.onMessage(async (context, next) => {
       const text = context.activity.text || ''
-      const userEmail =
-        (context.activity.from as any)?.aadObjectId
-        || context.activity.from?.id
-        || 'unknown'
-      logger.info('teamsBot message', { from: userEmail, text })
+      const userEmail = await resolveUserEmail(context)
+      logger.info('teamsBot message', { from: userEmail || 'unknown', text })
+
+      // Whitelist: si el email no está, rechazar antes de procesar comando.
+      if (!BOT_ALLOWED_EMAILS.has(userEmail)) {
+        logger.warn('teamsBot acceso denegado', {
+          from: userEmail || 'unknown',
+          allowedCount: BOT_ALLOWED_EMAILS.size,
+        })
+        await context.sendActivity({ attachments: [adaptiveDenied(userEmail)] })
+        await next()
+        return
+      }
 
       const parsed = parseCommand(text)
       const card = await dispatch(parsed)
@@ -517,6 +575,8 @@ class CentralMillworkBot extends ActivityHandler {
       const added = context.activity.membersAdded ?? []
       for (const member of added) {
         if (member.id !== context.activity.recipient.id) {
+          // Bienvenida: NO requiere whitelist (es el primer contacto).
+          // El siguiente mensaje del user sí va a pasar por la whitelist.
           await context.sendActivity({
             attachments: [await cmdAyuda()],
           })
@@ -554,6 +614,7 @@ router.get('/status', (_req: Request, res: Response) => {
     enabled: BOT_ENABLED,
     appIdPrefix: BOT_APP_ID ? BOT_APP_ID.slice(0, 8) : null,
     tenantConfigured: !!process.env.BOT_TENANT_ID,
+    allowedEmailsCount: BOT_ALLOWED_EMAILS.size,
   })
 })
 
