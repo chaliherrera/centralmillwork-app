@@ -846,11 +846,11 @@ export async function registrarEnvio(req: Request, res: Response, next: NextFunc
     // qc, etc) que quedaron sin marcar. Estas tareas SÍ existen porque F2
     // las crea y el ADMIN las ve en su inbox — auto-cerrarlas evita basura
     // colgada cuando el flow ya avanzó.
+    // NOTA: tabla tareas no tiene updated_at — completed_at marca el cambio
     await client.query(
       `UPDATE tareas
           SET estado = 'completada',
-              completed_at = NOW(),
-              updated_at = NOW()
+              completed_at = NOW()
         WHERE area = 'shop_manager'
           AND origen = 'sistema'
           AND source_ref LIKE $1

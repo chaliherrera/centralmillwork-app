@@ -135,11 +135,11 @@ export async function cerrarProcurementYCrearShopManager(
   motivo: 'sin_compras' | 'ocs_recibidas'
 ): Promise<void> {
   // 1. Cerrar tarea procurement (si está abierta)
+  // NOTA: tabla tareas no tiene updated_at — completed_at marca el cambio
   await runner.query(
     `UPDATE tareas
         SET estado = 'completada',
-            completed_at = NOW(),
-            updated_at = NOW()
+            completed_at = NOW()
       WHERE source_ref = $1
         AND estado NOT IN ('completada', 'descartada')`,
     [`muestra:${muestraId}:request`]
