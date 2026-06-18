@@ -13,6 +13,7 @@
 import type { PoolClient } from 'pg'
 import pool from '../../../db/pool'
 import { logger } from '../../../utils/logger'
+import { findAutoAssignableOperator } from '../../../utils/autoAsignarOperario'
 
 export interface ProcesoDefault {
   secuencia: number
@@ -169,29 +170,37 @@ export async function iniciarFabricacion(
     )
 
     // ── 5. Insertar procesos. Reasignamos secuencia 1..N por orden recibido
-    //    para evitar inconsistencias del cliente.
+    //    para evitar inconsistencias del cliente. Si un proceso viene sin
+    //    operador_id, intentar auto-asignar al único candidato activo de
+    //    la estación.
+    const procesosResueltos: Array<{ estacion: string; operador_id: number | null }> = []
     for (let i = 0; i < input.procesos.length; i++) {
       const p = input.procesos[i]
       const tiempo = typeof p.tiempo_estimado_minutos === 'number' && p.tiempo_estimado_minutos > 0
         ? Math.round(p.tiempo_estimado_minutos)
         : null
+      let operadorId: number | null = p.operador_id ?? null
+      if (!operadorId) {
+        operadorId = await findAutoAssignableOperator(client, p.estacion)
+      }
+      procesosResueltos.push({ estacion: p.estacion, operador_id: operadorId })
       await client.query(
         `INSERT INTO orden_procesos
            (orden_id, estacion, secuencia, requerido, tiempo_estimado_minutos, operador_id)
          VALUES ($1, $2, $3, true, $4, $5)`,
-        [op.id, p.estacion, i + 1, tiempo, p.operador_id ?? null]
+        [op.id, p.estacion, i + 1, tiempo, operadorId]
       )
     }
 
     // Setear estacion_actual y operador asignado al primer proceso
-    const primerProceso = input.procesos[0]
+    const primerProceso = procesosResueltos[0]
     await client.query(
       `UPDATE ordenes_produccion
          SET estacion_actual = $1,
              personal_asignado_id = $2,
              updated_at = NOW()
        WHERE id = $3`,
-      [primerProceso.estacion, primerProceso.operador_id ?? null, op.id]
+      [primerProceso.estacion, primerProceso.operador_id, op.id]
     )
 
     // ── 6. Vincular OP a la version actual

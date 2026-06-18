@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from 'express'
 import pool from '../db/pool'
 import { createError } from '../middleware/errorHandler'
 import { parsePagination, paginatedResponse } from '../utils/pagination'
+import { findAutoAssignableOperator } from '../utils/autoAsignarOperario'
 
 const ORDEN_BASE_SECUENCIA = [
   'cnc', 'edge_banding', 'assembly', 'lamina', 'pintura', 'final', 'registro', 'shipping',
@@ -178,12 +179,23 @@ export async function createOrden(req: Request, res: Response, next: NextFunctio
       )
     }
 
-    // Si la primera estación tiene operador asignado, ponerlo como personal_asignado_id de la orden
-    const operadorPrimera = asignaciones?.[primeraEstacion] ?? null
+    // Si la primera estación tiene operador asignado, ponerlo como personal_asignado_id.
+    // Si NO viene en `asignaciones`, intentar auto-asignar al único candidato activo
+    // de la estación (helper findAutoAssignableOperator).
+    let operadorPrimera = asignaciones?.[primeraEstacion] ?? null
+    if (!operadorPrimera) {
+      operadorPrimera = await findAutoAssignableOperator(client, primeraEstacion)
+    }
     if (operadorPrimera) {
       await client.query(
         `UPDATE ordenes_produccion SET personal_asignado_id = $1 WHERE id = $2`,
         [operadorPrimera, orden.id]
+      )
+      // También actualizar el operador_id del primer proceso si quedó NULL
+      await client.query(
+        `UPDATE orden_procesos SET operador_id = COALESCE(operador_id, $1)
+         WHERE orden_id = $2 AND estacion = $3`,
+        [operadorPrimera, orden.id, primeraEstacion]
       )
     }
 
@@ -441,6 +453,19 @@ export async function avanzarOrdenInterno(opts: {
     if (siguiente) {
       estacionDestino = siguiente.estacion
       nuevoStatus = 'En Proceso'
+      // Si el proceso siguiente no tiene operador pre-cargado, intentar
+      // auto-asignar al único candidato activo de la estación.
+      let operadorSiguiente: number | null = siguiente.operador_id || null
+      if (!operadorSiguiente) {
+        operadorSiguiente = await findAutoAssignableOperator(client, siguiente.estacion)
+        if (operadorSiguiente) {
+          await client.query(
+            `UPDATE orden_procesos SET operador_id = $1
+             WHERE orden_id = $2 AND estacion = $3 AND completado = false`,
+            [operadorSiguiente, opts.ordenId, siguiente.estacion]
+          )
+        }
+      }
       await client.query(
         `UPDATE ordenes_produccion
          SET estacion_actual = $1,
@@ -448,7 +473,7 @@ export async function avanzarOrdenInterno(opts: {
              status = $3,
              updated_at = NOW()
          WHERE id = $4`,
-        [estacionDestino, siguiente.operador_id || null, nuevoStatus, opts.ordenId]
+        [estacionDestino, operadorSiguiente, nuevoStatus, opts.ordenId]
       )
       // Nota: NO auto-seteamos `fecha_inicio` de la siguiente estación.
       // Ahora el operario tiene que hacer click en "Iniciar item" para
