@@ -929,9 +929,10 @@ function DetalleMuestraDrawer({ id, onClose, onChange }: { id: number; onClose: 
                                 qc.invalidateQueries({ queryKey: ['muestra', id] })
                               })
                             }}
-                            className="text-xs text-blue-700 hover:underline mt-1"
+                            className="mt-2 inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg border border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100 transition-colors"
                           >
-                            Marcar como recibido por el cliente
+                            <Check className="w-3.5 h-3.5" />
+                            Marcar como recibido por cliente
                           </button>
                         )}
                       </div>
