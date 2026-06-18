@@ -31,7 +31,19 @@ async function buscarDestinatariosPorRol(
        WHERE rol = $1 AND activo = true AND email IS NOT NULL AND email <> ''`,
     [rol]
   )
-  return rows
+  if (rows.length > 0 || rol === 'ADMIN') return rows
+
+  // Fallback: si el rol primario no tiene users activos, mandar a ADMIN para
+  // que la notificación llegue a alguien. Útil en setups donde algún rol
+  // (ej. PROCUREMENT) todavía no fue asignado a nadie pero el flujo lo invoca.
+  const { rows: adminRows } = await runner.query<DestinatarioRow>(
+    `SELECT email, nombre FROM usuarios
+       WHERE rol = 'ADMIN' AND activo = true AND email IS NOT NULL AND email <> ''`
+  )
+  if (adminRows.length > 0) {
+    logger.warn('notifyMuestra: sin users del rol primario, fallback a ADMIN', { rol, fallbackCount: adminRows.length })
+  }
+  return adminRows
 }
 
 interface NotifyMuestraEnQCInput {

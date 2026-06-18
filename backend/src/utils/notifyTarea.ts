@@ -80,12 +80,26 @@ export async function notifyTareaPending(
       logger.warn('notifyTareaPending: area sin mapping de rol', { tareaId, area: t.area })
       return
     }
-    const { rows: users } = await runner.query<{ email: string; nombre: string }>(
+    let { rows: users } = await runner.query<{ email: string; nombre: string }>(
       `SELECT email, nombre FROM usuarios WHERE rol = $1 AND activo = true`,
       [rol]
     )
+    // Fallback: si el rol primario no tiene users activos, mandar a ADMIN para
+    // que la notificación no se pierda. Útil en setups donde algún rol
+    // (ej. PROCUREMENT) todavía no está asignado a nadie pero el cron lo invoca.
+    if (users.length === 0 && rol !== 'ADMIN') {
+      const { rows: adminUsers } = await runner.query<{ email: string; nombre: string }>(
+        `SELECT email, nombre FROM usuarios WHERE rol = 'ADMIN' AND activo = true`
+      )
+      if (adminUsers.length > 0) {
+        logger.warn('notifyTareaPending: sin users del rol primario, fallback a ADMIN', {
+          tareaId, area: t.area, rol, fallbackCount: adminUsers.length,
+        })
+        users = adminUsers
+      }
+    }
     if (users.length === 0) {
-      logger.warn('notifyTareaPending: sin destinatarios para el rol', { tareaId, area: t.area, rol })
+      logger.warn('notifyTareaPending: sin destinatarios (ni siquiera ADMIN)', { tareaId, area: t.area, rol })
       return
     }
 
