@@ -5,7 +5,7 @@ import pool from '../db/pool'
 // ─── Schemas ────────────────────────────────────────────────────────────────
 
 const taskDataSchema = z.object({
-  area:        z.enum(['procurement', 'despachos', 'recepcion', 'administracion']),
+  area:        z.enum(['procurement', 'despachos', 'recepcion', 'administracion', 'shop_manager']),
   title:       z.string().trim().min(1, 'requerido').max(200),
   description: z.string().max(2000).nullable().optional(),
   priority:    z.enum(['low', 'medium', 'high']),

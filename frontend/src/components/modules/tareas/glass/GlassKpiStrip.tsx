@@ -72,6 +72,7 @@ export default function GlassKpiStrip({ stats }: Props) {
       <GlassCell label="Hoy"            value={t?.hoy ?? 0} />
       <GlassCell label="Hechas hoy"     value={t?.completadas_hoy ?? 0} />
       <GlassCell label="Procurement"    value={stats?.by_area?.procurement ?? 0}    accent={AREA_META.procurement.color} />
+      <GlassCell label="Shop Manager"   value={stats?.by_area?.shop_manager ?? 0}   accent={AREA_META.shop_manager.color} />
       <GlassCell label="Administración" value={stats?.by_area?.administracion ?? 0} accent={AREA_META.administracion.color} />
       <GlassCell label="Recepción"      value={stats?.by_area?.recepcion ?? 0}      accent={AREA_META.recepcion.color} />
       <GlassCell label="Despachos"      value={stats?.by_area?.despachos ?? 0}      accent={AREA_META.despachos.color} />

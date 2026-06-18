@@ -6,7 +6,7 @@ import { syncSystemTareas } from '../jobs/tareasFromSystem'
 
 // ─── Schemas ─────────────────────────────────────────────────────────────────
 
-const AREAS = ['procurement', 'despachos', 'recepcion', 'administracion'] as const
+const AREAS = ['procurement', 'despachos', 'recepcion', 'administracion', 'shop_manager'] as const
 const PRIORITIES = ['low', 'medium', 'high'] as const
 const ESTADOS = ['pendiente', 'en_progreso', 'completada', 'descartada'] as const
 

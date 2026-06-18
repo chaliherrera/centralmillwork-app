@@ -38,6 +38,7 @@ export default function KpiStrip({ stats }: Props) {
       <StatCell label="Hoy"              value={t?.hoy ?? 0} />
       <StatCell label="Hechas hoy"       value={t?.completadas_hoy ?? 0} muted />
       <StatCell label="Procurement"      value={stats?.by_area?.procurement ?? 0}    accent={AREA_META.procurement.color} />
+      <StatCell label="Shop Manager"     value={stats?.by_area?.shop_manager ?? 0}   accent={AREA_META.shop_manager.color} />
       <StatCell label="Administración"   value={stats?.by_area?.administracion ?? 0} accent={AREA_META.administracion.color} />
       <StatCell label="Recepción"        value={stats?.by_area?.recepcion ?? 0}      accent={AREA_META.recepcion.color} />
       <StatCell label="Despachos"        value={stats?.by_area?.despachos ?? 0}      accent={AREA_META.despachos.color} />

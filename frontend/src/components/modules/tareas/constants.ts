@@ -12,6 +12,7 @@ export const AREA_META: Record<TareaArea, {
   despachos:      { label: 'Despachos',       short: 'DESP', color: '#5C4A3A', bg: '#F1ECE5' },
   recepcion:      { label: 'Recepción',       short: 'RCPN', color: '#8A3F1E', bg: '#F8ECE5' },
   administracion: { label: 'Administración',  short: 'ADMN', color: '#9B7200', bg: '#F8F1DC' },
+  shop_manager:   { label: 'Shop Manager',    short: 'SHOP', color: '#2c3126', bg: '#E8EAE4' },
 }
 
 export const PRIORITY_META: Record<TareaPriority, {
