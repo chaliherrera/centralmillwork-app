@@ -13,6 +13,7 @@ import { proyectosService } from '@/services/proyectos'
 import { useAuth } from '@/context/AuthContext'
 import NuevaCompraNoMTOModal from '@/components/modules/ordenes_compra/NuevaCompraNoMTOModal'
 import IniciarFabricacionModal from '@/components/modules/muestras/IniciarFabricacionModal'
+import FotosAvanceSection from '@/components/produccion/FotosAvanceSection'
 import type {
   MuestraConDetalle, MuestraEstado, MuestraTipo, MuestraPrioridad,
   CreateMuestraInput, TransicionInput, RegistrarEnvioInput,
@@ -470,7 +471,7 @@ function DetalleMuestraDrawer({ id, onClose, onChange }: { id: number; onClose: 
   const { user } = useAuth()
   const qc = useQueryClient()
   const [showEnvio, setShowEnvio] = useState(false)
-  const [tab, setTab] = useState<'overview' | 'archivos' | 'ocs' | 'envios' | 'timeline' | 'calendar'>('overview')
+  const [tab, setTab] = useState<'overview' | 'archivos' | 'ocs' | 'fotos' | 'envios' | 'timeline' | 'calendar'>('overview')
 
   // Muestras F2: state para el modal de crear OC asociada
   const [showCrearOC, setShowCrearOC] = useState(false)
@@ -515,6 +516,12 @@ function DetalleMuestraDrawer({ id, onClose, onChange }: { id: number; onClose: 
   const [showIniciarFab, setShowIniciarFab] = useState(false)
 
   const m = data?.muestra
+  // F8: OP de la versión actual (si existe) — usado para el tab Fotos
+  const opIdActual = useMemo(() => {
+    if (!m || !data?.versiones) return null
+    const v = data.versiones.find((x) => x.version_numero === m.version_actual)
+    return v?.op_id ?? null
+  }, [m, data?.versiones])
   const canFlow = user?.rol === 'ADMIN' || user?.rol === 'SHOP_MANAGER'
   // F5: registrar envío + confirmar recepción es decisión de logística.
   // PROCUREMENT/ADMIN, NO SHOP_MANAGER.
@@ -633,14 +640,17 @@ function DetalleMuestraDrawer({ id, onClose, onChange }: { id: number; onClose: 
 
             {/* Tabs */}
             <div className="flex border-b border-gray-100 px-5 overflow-x-auto">
-              {[
+              {([
                 ['overview', 'Overview'],
                 ['archivos', `Archivos (${data.archivos?.length ?? 0})`],
                 ['ocs',      `OCs (${data.ocs.length})`],
+                // Tab Fotos solo si la muestra ya tiene una OP asociada (versión
+                // actual con op_id). Aparece después de iniciar fabricación.
+                ...(opIdActual ? [['fotos' as const, 'Fotos']] : []),
                 ['envios',   `Envíos (${data.envios.length})`],
                 ['timeline', 'Timeline'],
                 ['calendar', 'Calendar'],
-              ].map(([key, label]) => (
+              ] as Array<[string, string]>).map(([key, label]) => (
                 <button
                   key={key}
                   onClick={() => setTab(key as any)}
@@ -881,6 +891,10 @@ function DetalleMuestraDrawer({ id, onClose, onChange }: { id: number; onClose: 
                     </button>
                   )}
                 </div>
+              )}
+
+              {tab === 'fotos' && opIdActual && (
+                <FotosAvanceSection ordenId={opIdActual} />
               )}
 
               {tab === 'envios' && (
