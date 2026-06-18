@@ -791,6 +791,7 @@ export async function transicionarMuestra(req: Request, res: Response, next: Nex
         versionNumero: nuevaVersion,
         aprobadaPor: req.user?.email ?? null,
         proyectoCodigo: (updated as any)?.proyecto_codigo ?? null,
+        ownerId: muestra.owner_id ?? null,
       })
     } else if (nuevo_estado === 'RECHAZADA') {
       const { notifyMuestraRechazada } = await import('../utils/notifyMuestra')

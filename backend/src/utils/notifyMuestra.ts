@@ -297,29 +297,40 @@ interface NotifyMuestraAprobadaInput {
   versionNumero?: number
   aprobadaPor?: string | null
   proyectoCodigo?: string | null
+  /** Owner del solicitante. Incluido para evitar asimetría con RECHAZADA:
+   *  el solicitante también merece saber el veredicto cuando es positivo. */
+  ownerId?: string | null
 }
 
 /**
- * F6 v2 (2026-06-17): Notifica a PROCUREMENT + SHOP_MANAGER que el cliente
- * aprobó la muestra. La aprobación la hace ENGINEERING (el solicitante o el
- * dueño del proyecto), así que NO va al owner — quien aprobó ya sabe.
+ * F6 v3 (2026-06-17, fix asimetría): Notifica a PROCUREMENT + SHOP_MANAGER +
+ * OWNER cuando el cliente aprueba la muestra. Antes del fix el owner quedaba
+ * fuera con el argumento "él aprobó, ya sabe", pero ese asumption es frágil:
+ * el clic-aprobador puede ser otro ENGINEERING distinto al solicitante.
+ * Mantiene paridad con RECHAZADA.
  *
  * Para PROCUREMENT: el ciclo cerró exitosamente; pueden archivar y avanzar a
  * la OP real del proyecto si corresponde. Para SHOP_MANAGER: confirmación
- * de que la calidad fue aceptada por el cliente.
+ * de que la calidad fue aceptada por el cliente. Para OWNER: cierre del ciclo
+ * que él inició.
  */
 export async function notifyMuestraAprobada(
   input: NotifyMuestraAprobadaInput,
   runner: QueryRunner = pool
 ): Promise<void> {
   try {
-    const [procurement, shopManager] = await Promise.all([
+    const [procurement, shopManager, owner] = await Promise.all([
       buscarDestinatariosPorRol(runner, 'PROCUREMENT'),
       buscarDestinatariosPorRol(runner, 'SHOP_MANAGER'),
+      buscarUserPorId(runner, input.ownerId),
     ])
-    const destinatarios = dedupePorEmail([...procurement, ...shopManager])
+    const destinatarios = dedupePorEmail([
+      ...procurement,
+      ...shopManager,
+      ...(owner ? [owner] : []),
+    ])
     if (destinatarios.length === 0) {
-      logger.warn('notifyMuestraAprobada: sin destinatarios PROCUREMENT/SHOP_MANAGER', {
+      logger.warn('notifyMuestraAprobada: sin destinatarios', {
         muestraId: input.muestraId, codigo: input.codigo,
       })
       return
@@ -347,6 +358,7 @@ export async function notifyMuestraAprobada(
     logger.info('notifyMuestraAprobada: dispatched', {
       muestraId: input.muestraId,
       codigo: input.codigo,
+      includeOwner: owner != null,
       to: destinatarios.length,
       procurement: procurement.length,
       shopManager: shopManager.length,
