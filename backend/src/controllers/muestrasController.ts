@@ -7,6 +7,7 @@ import { createError } from '../middleware/errorHandler'
 import { logger } from '../utils/logger'
 import { supabase, supabaseEnabled, SUPABASE_BUCKET } from '../utils/supabase'
 import { notifyTareaBySourceRef } from '../utils/notifyTarea'
+import { notifyMuestraQCAprobado } from '../utils/notifyMuestra'
 
 // ─── Tipos y constantes ──────────────────────────────────────────────────────
 
@@ -793,6 +794,88 @@ export async function transicionarMuestra(req: Request, res: Response, next: Nex
 }
 
 /**
+ * POST /api/muestras/:id/aprobar-qc
+ *
+ * F4.5 (2026-06-17): handoff explícito Shop Manager → Procurement.
+ * SHOP_MANAGER aprueba el QC de una muestra en EN_QC. La muestra NO cambia
+ * de estado (sigue EN_QC) — la transición a ENVIADA la dispara registrarEnvio
+ * cuando Procurement carga los datos del envío. Este endpoint solo:
+ *   1) inserta evento timeline tipo='qc_aprobado'
+ *   2) crea tarea procurement source_ref='muestra:{id}:registrar_envio'
+ *      (idempotente vía idx_tareas_system_dedup)
+ *   3) manda email a PROCUREMENT
+ *
+ * Permisos: ADMIN, SHOP_MANAGER (MUESTRAS_FLOW).
+ */
+export async function aprobarQC(req: Request, res: Response, next: NextFunction) {
+  const client = await pool.connect()
+  try {
+    await client.query('BEGIN')
+    const id = parseInt(String(req.params.id))
+    if (!Number.isFinite(id)) {
+      await client.query('ROLLBACK')
+      return next(createError('id inválido', 400))
+    }
+
+    const muestra = await getMuestraOr404(id, next)
+    if (!muestra) { await client.query('ROLLBACK'); return }
+
+    if (muestra.estado !== 'EN_QC') {
+      await client.query('ROLLBACK')
+      return next(createError(`Solo se puede aprobar QC desde EN_QC (actual: ${muestra.estado})`, 400))
+    }
+
+    // 1. Evento timeline
+    await client.query(
+      `INSERT INTO muestras_eventos (muestra_id, version_numero, tipo, detalle, usuario_id)
+       VALUES ($1, $2, 'qc_aprobado', $3, $4)`,
+      [id, muestra.version_actual, 'QC aprobado — lista para envío al cliente', req.user?.id ?? null]
+    )
+
+    // 2. Tarea procurement (idempotente vía idx_tareas_system_dedup)
+    const tareaDesc = [
+      `Muestra: ${muestra.codigo}`,
+      muestra.descripcion ?? '',
+      '',
+      'Acción: registrar envío al cliente desde el módulo Muestras',
+      `Link: /muestras (abrir ${muestra.codigo})`,
+    ].filter(Boolean).join('\n')
+
+    await client.query(
+      `INSERT INTO tareas (area, title, description, priority, from_email, subject, source_email_id, origen, source_ref)
+       VALUES ('procurement', $1, $2, 'medium', 'sistema@centralmillwork.com', $3, NULL, 'sistema', $4)
+       ON CONFLICT (source_ref) WHERE origen = 'sistema' AND source_ref IS NOT NULL
+       DO NOTHING`,
+      [
+        `Registrar envío de muestra: ${muestra.codigo}`,
+        tareaDesc,
+        `Ready to ship — ${muestra.codigo}`,
+        `muestra:${id}:registrar_envio`,
+      ]
+    )
+
+    await client.query('COMMIT')
+
+    // 3. Email a PROCUREMENT (post-COMMIT, fire-and-forget)
+    void notifyMuestraQCAprobado({
+      muestraId: id,
+      codigo: muestra.codigo,
+      descripcion: muestra.descripcion ?? '',
+      versionNumero: muestra.version_actual,
+      opNumero: null, // se podría joinear con versiones.op_numero si vale la pena
+      aprobadoPor: req.user?.email ?? null,
+    })
+
+    res.json({ data: { muestraId: id, estado: muestra.estado }, message: 'QC aprobado — Procurement notificado para registrar envío' })
+  } catch (err) {
+    await client.query('ROLLBACK')
+    next(err)
+  } finally {
+    client.release()
+  }
+}
+
+/**
  * POST /api/muestras/:id/envios
  * Registra envío físico al cliente. Cambia automáticamente el estado a ENVIADA
  * si no lo estaba ya.
@@ -856,6 +939,16 @@ export async function registrarEnvio(req: Request, res: Response, next: NextFunc
           AND source_ref LIKE $1
           AND estado NOT IN ('completada', 'descartada')`,
       [`muestra:${id}:%`]
+    )
+
+    // F4.5: cerrar tarea procurement "registrar envío" generada por aprobarQC
+    await client.query(
+      `UPDATE tareas
+          SET estado = 'completada',
+              completed_at = NOW()
+        WHERE source_ref = $1
+          AND estado NOT IN ('completada', 'descartada')`,
+      [`muestra:${id}:registrar_envio`]
     )
 
     await client.query('COMMIT')

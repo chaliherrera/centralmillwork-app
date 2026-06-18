@@ -510,6 +510,17 @@ function DetalleMuestraDrawer({ id, onClose, onChange }: { id: number; onClose: 
     onError: (err: any) => toast.error(err?.response?.data?.message ?? 'Error en la transición'),
   })
 
+  // F4.5: aprobar QC sin transición de estado (handoff Shop Manager → Procurement)
+  const aprobarQC = useMutation({
+    mutationFn: () => muestrasService.aprobarQC(id),
+    onSuccess: (res) => {
+      toast.success(res.message)
+      qc.invalidateQueries({ queryKey: ['muestra', id] })
+      qc.invalidateQueries({ queryKey: ['tareas'] })
+    },
+    onError: (err: any) => toast.error(err?.response?.data?.message ?? 'No se pudo aprobar QC'),
+  })
+
   // F3: el modal "Iniciar fabricación" intercepta la transición SOLICITADA →
   // EN_FABRICACION para pre-llenar procesos según tipo. Sólo aplica desde
   // SOLICITADA (RECHAZADA → EN_FABRICACION sigue el flow viejo legacy).
@@ -522,6 +533,11 @@ function DetalleMuestraDrawer({ id, onClose, onChange }: { id: number; onClose: 
     const v = data.versiones.find((x) => x.version_numero === m.version_actual)
     return v?.op_id ?? null
   }, [m, data?.versiones])
+  // F4.5: QC ya aprobado para la versión actual? Lo detectamos por evento timeline
+  const qcAprobado = useMemo(() => {
+    if (!m || !data?.eventos) return false
+    return data.eventos.some((e) => e.tipo === 'qc_aprobado' && e.version_numero === m.version_actual)
+  }, [m, data?.eventos])
   const canFlow = user?.rol === 'ADMIN' || user?.rol === 'SHOP_MANAGER'
   // F5: registrar envío + confirmar recepción es decisión de logística.
   // PROCUREMENT/ADMIN, NO SHOP_MANAGER.
@@ -621,6 +637,29 @@ function DetalleMuestraDrawer({ id, onClose, onChange }: { id: number; onClose: 
                       </button>
                     )
                   })}
+                </div>
+              )}
+
+              {/* F4.5: handoff explícito Shop Manager → Procurement.
+                  Botón visible para SHOP_MANAGER/ADMIN cuando estado=EN_QC
+                  y aún no se aprobó. Cuando se aprueba, aparece badge "QC ✅"
+                  para que Procurement sepa que puede registrar el envío. */}
+              {canFlow && m.estado === 'EN_QC' && !qcAprobado && (
+                <div className="mt-3">
+                  <button
+                    onClick={() => aprobarQC.mutate()}
+                    disabled={aprobarQC.isPending}
+                    className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded bg-emerald-50 text-emerald-700 hover:bg-emerald-100 disabled:opacity-50"
+                  >
+                    <Check size={11} /> Aprobar QC
+                  </button>
+                </div>
+              )}
+              {m.estado === 'EN_QC' && qcAprobado && (
+                <div className="mt-3">
+                  <span className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold rounded bg-emerald-100 text-emerald-800">
+                    <Check size={11} /> QC aprobado · listo para envío
+                  </span>
                 </div>
               )}
 

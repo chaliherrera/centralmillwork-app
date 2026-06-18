@@ -48,6 +48,7 @@ import {
 import {
   getMuestras, getMuestra, createMuestra, updateMuestra,
   transicionarMuestra, registrarEnvio, confirmarRecepcion, getMuestrasKpis,
+  aprobarQC,
   uploadArchivo, getArchivos, deleteArchivo, uploadMuestraArchivo,
   uploadEnvioFoto, uploadEnvioFotoMulter,
   createMuestraSchema, updateMuestraSchema, transicionEstadoSchema,
@@ -184,6 +185,7 @@ router.get   ('/muestras/:id',                            MUESTRAS_READ,  getMue
 router.post  ('/muestras',                                MUESTRAS_WRITE, validateBody(createMuestraSchema), createMuestra)
 router.patch ('/muestras/:id',                            MUESTRAS_WRITE, validateBody(updateMuestraSchema), updateMuestra)
 router.post  ('/muestras/:id/transicion',                 MUESTRAS_FLOW,  validateBody(transicionEstadoSchema), transicionarMuestra)
+router.post  ('/muestras/:id/aprobar-qc',                 MUESTRAS_FLOW,  aprobarQC)
 router.post  ('/muestras/:id/envios',                     MUESTRAS_ENVIO, validateBody(registrarEnvioSchema), registrarEnvio)
 router.post  ('/muestras/:id/envios/:envioId/foto',       MUESTRAS_ENVIO, uploadEnvioFotoMulter.single('foto'), uploadEnvioFoto)
 router.patch ('/muestras/:id/envios/:envioId/recepcion',  MUESTRAS_ENVIO, confirmarRecepcion)

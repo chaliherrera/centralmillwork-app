@@ -40,6 +40,9 @@ export const muestrasService = {
   transicion: (id: number, body: TransicionInput) =>
     api.post<{ data: Muestra; message: string }>(`/muestras/${id}/transicion`, body).then((r) => r.data),
 
+  aprobarQC: (id: number) =>
+    api.post<{ message: string }>(`/muestras/${id}/aprobar-qc`).then((r) => r.data),
+
   registrarEnvio: (id: number, body: RegistrarEnvioInput) =>
     api.post<{ message: string }>(`/muestras/${id}/envios`, body).then((r) => r.data),
 

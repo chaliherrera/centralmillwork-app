@@ -16,7 +16,7 @@
 import type { PoolClient } from 'pg'
 import pool from '../db/pool'
 import { logger } from './logger'
-import { sendEmail, muestraEnQCEmail, muestraEnviadaEmail } from './mailer'
+import { sendEmail, muestraEnQCEmail, muestraEnviadaEmail, muestraQCAprobadoEmail } from './mailer'
 
 type QueryRunner = PoolClient | typeof pool
 
@@ -168,6 +168,68 @@ export async function notifyMuestraEnviada(
     })
   } catch (err) {
     logger.error('notifyMuestraEnviada: throw inesperado', {
+      muestraId: input.muestraId, codigo: input.codigo, err: String(err),
+    })
+  }
+}
+
+interface NotifyMuestraQCAprobadoInput {
+  muestraId: number
+  codigo: string
+  descripcion: string
+  versionNumero?: number
+  opNumero?: string | null
+  aprobadoPor?: string | null
+}
+
+/**
+ * Notifica a PROCUREMENT que una muestra fue aprobada por Shop Manager en QC
+ * y está lista para envío al cliente. F4.5 (2026-06-17): handoff explícito
+ * Shop Manager → Procurement, antes hoy era implícito.
+ *
+ * No bloquea. Failures van a logger + Sentry pero no propagan.
+ */
+export async function notifyMuestraQCAprobado(
+  input: NotifyMuestraQCAprobadoInput,
+  runner: QueryRunner = pool
+): Promise<void> {
+  try {
+    const destinatarios = await buscarDestinatariosPorRol(runner, 'PROCUREMENT')
+    if (destinatarios.length === 0) {
+      logger.warn('notifyMuestraQCAprobado: sin PROCUREMENT activos con email', {
+        muestraId: input.muestraId, codigo: input.codigo,
+      })
+      return
+    }
+
+    const { subject, html, text } = muestraQCAprobadoEmail({
+      codigo: input.codigo,
+      descripcion: input.descripcion,
+      versionNumero: input.versionNumero,
+      opNumero: input.opNumero,
+      aprobadoPor: input.aprobadoPor,
+    })
+
+    const result = await sendEmail({
+      to: destinatarios.map((u) => u.email),
+      subject,
+      html,
+      text,
+      tags: [
+        { name: 'evento', value: 'muestra_qc_aprobado' },
+        { name: 'muestra_id', value: String(input.muestraId) },
+      ],
+    })
+
+    logger.info('notifyMuestraQCAprobado: dispatched', {
+      muestraId: input.muestraId,
+      codigo: input.codigo,
+      destinatarios: destinatarios.length,
+      passthrough: result.passthrough ?? false,
+      ok: result.ok,
+    })
+  } catch (err) {
+    logger.error('notifyMuestraQCAprobado: throw inesperado', {
       muestraId: input.muestraId, codigo: input.codigo, err: String(err),
     })
   }

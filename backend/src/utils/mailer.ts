@@ -348,3 +348,75 @@ export function muestraEnQCEmail(input: {
 
   return { subject, html, text }
 }
+
+/**
+ * Template "Muestra aprobada por QC — registrar envío al cliente" — F4.5
+ * (2026-06-17). Disparado cuando SHOP_MANAGER aprueba el QC de una muestra
+ * en estado EN_QC. Va a PROCUREMENT para que prepare el envío al cliente.
+ *
+ * El estado de la muestra se mantiene en EN_QC; la transición a ENVIADA la
+ * dispara registrarEnvio cuando Procurement carga los datos del envío.
+ */
+export function muestraQCAprobadoEmail(input: {
+  codigo: string
+  descripcion: string
+  versionNumero?: number
+  opNumero?: string | null
+  aprobadoPor?: string | null
+}): { subject: string; html: string; text: string } {
+  const baseUrl = process.env.FRONTEND_URL || 'https://centralmillwork-frontend-production.up.railway.app'
+  const link = `${baseUrl}/muestras`
+  const versionTxt = input.versionNumero ? `V${input.versionNumero}` : ''
+  const opTxt = input.opNumero ? ` (OP ${input.opNumero})` : ''
+  const aprobadoTxt = input.aprobadoPor ? `Aprobada por ${input.aprobadoPor}` : 'QC aprobado por Shop Manager'
+
+  const subject = `[Central Millwork] Muestra ${input.codigo} aprobó QC — registrar envío`
+
+  const html = `
+<!DOCTYPE html>
+<html lang="es">
+<body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; background: #f8f6f0;">
+  <div style="background: white; border-radius: 12px; padding: 24px; border-left: 4px solid #2563EB;">
+    <div style="font-size: 12px; color: #6B6356; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px;">
+      Central Millwork · Lista para envío al cliente
+    </div>
+    <h1 style="font-size: 18px; color: #2C3126; margin: 0 0 12px;">
+      ${escapeHtml(input.codigo)} ${escapeHtml(versionTxt)}${escapeHtml(opTxt)}
+    </h1>
+    <div style="font-size: 14px; color: #1F1B14; line-height: 1.5; margin-bottom: 16px;">
+      ${escapeHtml(input.descripcion)}
+    </div>
+    <div style="font-size: 13px; color: #1E40AF; background: #DBEAFE; padding: 12px 14px; border-radius: 8px; margin-bottom: 20px;">
+      <strong>${escapeHtml(aprobadoTxt)}.</strong><br/>
+      La muestra pasó el control de calidad. Por favor preparar y registrar el envío
+      al cliente desde el sistema.
+    </div>
+    <div style="margin-top: 20px;">
+      <a href="${link}" style="display: inline-block; background: #4A5240; color: white; padding: 10px 20px; border-radius: 8px; text-decoration: none; font-weight: 600; font-size: 14px;">
+        Abrir Muestras
+      </a>
+    </div>
+    <div style="margin-top: 24px; padding-top: 16px; border-top: 1px solid #ECE7DC; font-size: 11px; color: #B0A89A;">
+      Email automático del sistema. No respondas a esta dirección.
+    </div>
+  </div>
+</body>
+</html>`.trim()
+
+  const text = [
+    `[Central Millwork] Muestra ${input.codigo} aprobó QC — registrar envío`,
+    '',
+    `${input.codigo} ${versionTxt}${opTxt}`,
+    input.descripcion,
+    '',
+    `${aprobadoTxt}.`,
+    'La muestra pasó el control de calidad. Por favor preparar y registrar el envío al cliente.',
+    '',
+    `Abrir: ${link}`,
+    '',
+    '--',
+    'Email automático del sistema.',
+  ].filter((l) => l !== '').join('\n')
+
+  return { subject, html, text }
+}
