@@ -695,7 +695,7 @@ export async function transicionarMuestra(req: Request, res: Response, next: Nex
             comentario ?? null,
           ]
         )
-        logger.info('muestra aprobada vinculada a proyecto', {
+        logger.info('muestra aprobada registrada en catalogo del proyecto', {
           muestraId: id, proyectoId: updated.proyecto_id, version: nuevaVersion,
           pdfArchivoId: pdf?.id ?? null,
         })
