@@ -856,7 +856,8 @@ export async function aprobarQC(req: Request, res: Response, next: NextFunction)
 
     await client.query('COMMIT')
 
-    // 3. Email a PROCUREMENT (post-COMMIT, fire-and-forget)
+    // 3. Email a PROCUREMENT (post-COMMIT, fire-and-forget).
+    //    F8: owner en CC para visibilidad del progreso de su muestra.
     void notifyMuestraQCAprobado({
       muestraId: id,
       codigo: muestra.codigo,
@@ -864,6 +865,7 @@ export async function aprobarQC(req: Request, res: Response, next: NextFunction)
       versionNumero: muestra.version_actual,
       opNumero: null, // se podría joinear con versiones.op_numero si vale la pena
       aprobadoPor: req.user?.email ?? null,
+      ownerId: muestra.owner_id ?? null,
     })
 
     res.json({ data: { muestraId: id, estado: muestra.estado }, message: 'QC aprobado — Procurement notificado para registrar envío' })
@@ -965,6 +967,8 @@ export async function registrarEnvio(req: Request, res: Response, next: NextFunc
       versionNumero: muestra.version_actual,
       destinatario: body.destinatario,
       carrier: body.tracking_carrier ?? null,
+      // F8: owner = ENGINEERING que creó la muestra → va en to (primary)
+      ownerId: muestra.owner_id ?? null,
       trackingNumber: body.tracking_number ?? null,
     })
 

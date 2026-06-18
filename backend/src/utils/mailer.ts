@@ -56,6 +56,8 @@ export async function initMailer(): Promise<void> {
 
 export interface SendEmailParams {
   to: string | string[]
+  /** Destinatarios en copia (visibilidad sin acción requerida). */
+  cc?: string | string[]
   subject: string
   /** Cuerpo HTML del mail. */
   html?: string
@@ -85,6 +87,7 @@ export async function sendEmail(params: SendEmailParams): Promise<SendEmailResul
     // Passthrough: log estructurado para visibilidad
     logger.info('mailer: passthrough (no enviado)', {
       to: params.to,
+      cc: params.cc,
       subject: params.subject,
       tags: params.tags,
     })
@@ -95,6 +98,7 @@ export async function sendEmail(params: SendEmailParams): Promise<SendEmailResul
     const { data, error } = await resendClient.emails.send({
       from: mailerFrom,
       to: params.to,
+      cc: params.cc,
       subject: params.subject,
       html: params.html,
       text: params.text,

@@ -508,6 +508,7 @@ export async function avanzarOrdenInterno(opts: {
       descripcion: string
       versionNumero: number
       opNumero: string | null
+      ownerId: string | null
     } | null = null
 
     if (!siguiente) {
@@ -520,10 +521,12 @@ export async function avanzarOrdenInterno(opts: {
         descripcion: string | null
         version_numero: number | null
         estado_muestra: string | null
+        owner_id: string | null
       }>(
         `SELECT
            op.tipo, op.numero_orden,
            m.id AS muestra_id, m.codigo, m.descripcion, m.estado AS estado_muestra,
+           m.owner_id,
            mv.version_numero
          FROM ordenes_produccion op
          LEFT JOIN muestras_versiones mv ON mv.op_id = op.id
@@ -563,6 +566,8 @@ export async function avanzarOrdenInterno(opts: {
           descripcion: opMeta.descripcion ?? '',
           versionNumero: opMeta.version_numero ?? 1,
           opNumero: opMeta.numero_orden ?? null,
+          // F8: owner para CC (visibilidad del ingeniero creador)
+          ownerId: opMeta.owner_id ?? null,
         }
       }
     }
