@@ -424,3 +424,142 @@ export function muestraQCAprobadoEmail(input: {
 
   return { subject, html, text }
 }
+
+/**
+ * F6 (2026-06-17): Template "Muestra APROBADA por el cliente".
+ * Va a PROCUREMENT + SHOP_MANAGER — cierre del ciclo de muestras.
+ */
+export function muestraAprobadaEmail(input: {
+  codigo: string
+  descripcion: string
+  versionNumero?: number
+  aprobadaPor?: string | null
+  proyectoCodigo?: string | null
+}): { subject: string; html: string; text: string } {
+  const baseUrl = process.env.FRONTEND_URL || 'https://centralmillwork-frontend-production.up.railway.app'
+  const link = `${baseUrl}/muestras`
+  const versionTxt = input.versionNumero ? `V${input.versionNumero}` : ''
+  const aprobadaTxt = input.aprobadaPor ? `Aprobada por ${input.aprobadaPor}` : 'Cliente aprobó la muestra'
+  const proyectoTxt = input.proyectoCodigo ? ` · Proyecto ${input.proyectoCodigo}` : ''
+
+  const subject = `[Central Millwork] Muestra ${input.codigo} APROBADA por el cliente`
+
+  const html = `
+<!DOCTYPE html>
+<html lang="es">
+<body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; background: #f8f6f0;">
+  <div style="background: white; border-radius: 12px; padding: 24px; border-left: 4px solid #10B981;">
+    <div style="font-size: 12px; color: #6B6356; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px;">
+      Central Millwork · Muestra aprobada${escapeHtml(proyectoTxt)}
+    </div>
+    <h1 style="font-size: 18px; color: #2C3126; margin: 0 0 12px;">
+      ✅ ${escapeHtml(input.codigo)} ${escapeHtml(versionTxt)}
+    </h1>
+    <div style="font-size: 14px; color: #1F1B14; line-height: 1.5; margin-bottom: 16px;">
+      ${escapeHtml(input.descripcion)}
+    </div>
+    <div style="font-size: 13px; color: #047857; background: #D1FAE5; padding: 12px 14px; border-radius: 8px; margin-bottom: 20px;">
+      <strong>${escapeHtml(aprobadaTxt)}.</strong><br/>
+      El ciclo de muestras cerró exitosamente. La muestra queda registrada en el
+      catálogo de muestras aprobadas del proyecto.
+    </div>
+    <div style="margin-top: 20px;">
+      <a href="${link}" style="display: inline-block; background: #4A5240; color: white; padding: 10px 20px; border-radius: 8px; text-decoration: none; font-weight: 600; font-size: 14px;">
+        Abrir Muestras
+      </a>
+    </div>
+    <div style="margin-top: 24px; padding-top: 16px; border-top: 1px solid #ECE7DC; font-size: 11px; color: #B0A89A;">
+      Email automático del sistema. No respondas a esta dirección.
+    </div>
+  </div>
+</body>
+</html>`.trim()
+
+  const text = [
+    `[Central Millwork] Muestra ${input.codigo} APROBADA por el cliente`,
+    '',
+    `${input.codigo} ${versionTxt}${proyectoTxt}`,
+    input.descripcion,
+    '',
+    `${aprobadaTxt}.`,
+    'El ciclo de muestras cerró exitosamente. La muestra queda registrada en el catálogo del proyecto.',
+    '',
+    `Abrir: ${link}`,
+    '',
+    '--',
+    'Email automático del sistema.',
+  ].filter((l) => l !== '').join('\n')
+
+  return { subject, html, text }
+}
+
+/**
+ * F6 (2026-06-17): Template "Muestra RECHAZADA por el cliente".
+ * Va a PROCUREMENT + SHOP_MANAGER + owner (para crear V+1).
+ */
+export function muestraRechazadaEmail(input: {
+  codigo: string
+  descripcion: string
+  versionNumero?: number
+  razonRevision?: string | null
+  rechazadaPor?: string | null
+}): { subject: string; html: string; text: string } {
+  const baseUrl = process.env.FRONTEND_URL || 'https://centralmillwork-frontend-production.up.railway.app'
+  const link = `${baseUrl}/muestras`
+  const versionTxt = input.versionNumero ? `V${input.versionNumero}` : ''
+  const rechazadaTxt = input.rechazadaPor ? `Rechazada por ${input.rechazadaPor}` : 'Cliente rechazó la muestra'
+  const razonTxt = input.razonRevision?.trim() || '(sin razón especificada)'
+
+  const subject = `[Central Millwork] Muestra ${input.codigo} RECHAZADA — preparar V${(input.versionNumero ?? 1) + 1}`
+
+  const html = `
+<!DOCTYPE html>
+<html lang="es">
+<body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; background: #f8f6f0;">
+  <div style="background: white; border-radius: 12px; padding: 24px; border-left: 4px solid #9F3818;">
+    <div style="font-size: 12px; color: #6B6356; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px;">
+      Central Millwork · Muestra rechazada — preparar próxima versión
+    </div>
+    <h1 style="font-size: 18px; color: #2C3126; margin: 0 0 12px;">
+      ❌ ${escapeHtml(input.codigo)} ${escapeHtml(versionTxt)}
+    </h1>
+    <div style="font-size: 14px; color: #1F1B14; line-height: 1.5; margin-bottom: 16px;">
+      ${escapeHtml(input.descripcion)}
+    </div>
+    <div style="font-size: 13px; color: #9F3818; background: #FEE2E2; padding: 12px 14px; border-radius: 8px; margin-bottom: 12px;">
+      <strong>${escapeHtml(rechazadaTxt)}.</strong>
+    </div>
+    <div style="font-size: 13px; color: #4A5240; background: #FFF7DC; padding: 12px 14px; border-radius: 8px; margin-bottom: 20px;">
+      <div style="font-weight: 600; margin-bottom: 4px;">Razón de revisión:</div>
+      <div style="white-space: pre-wrap;">${escapeHtml(razonTxt)}</div>
+    </div>
+    <div style="margin-top: 20px;">
+      <a href="${link}" style="display: inline-block; background: #4A5240; color: white; padding: 10px 20px; border-radius: 8px; text-decoration: none; font-weight: 600; font-size: 14px;">
+        Abrir Muestras
+      </a>
+    </div>
+    <div style="margin-top: 24px; padding-top: 16px; border-top: 1px solid #ECE7DC; font-size: 11px; color: #B0A89A;">
+      Email automático del sistema. No respondas a esta dirección.
+    </div>
+  </div>
+</body>
+</html>`.trim()
+
+  const text = [
+    `[Central Millwork] Muestra ${input.codigo} RECHAZADA — preparar V${(input.versionNumero ?? 1) + 1}`,
+    '',
+    `${input.codigo} ${versionTxt}`,
+    input.descripcion,
+    '',
+    `${rechazadaTxt}.`,
+    '',
+    `Razón de revisión: ${razonTxt}`,
+    '',
+    `Abrir: ${link}`,
+    '',
+    '--',
+    'Email automático del sistema.',
+  ].filter((l) => l !== '').join('\n')
+
+  return { subject, html, text }
+}

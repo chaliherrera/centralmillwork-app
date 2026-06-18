@@ -778,6 +778,33 @@ export async function transicionarMuestra(req: Request, res: Response, next: Nex
       de: muestra.estado, a: nuevo_estado, version: nuevaVersion,
       opCreada: opCreada?.numero_orden ?? null,
     })
+
+    // F6 (2026-06-17): notificaciones de cierre de ciclo.
+    // PROCUREMENT + SHOP_MANAGER se enteran del veredicto del cliente.
+    // RECHAZADA incluye al owner para que prepare V+1.
+    if (nuevo_estado === 'APROBADA') {
+      const { notifyMuestraAprobada } = await import('../utils/notifyMuestra')
+      void notifyMuestraAprobada({
+        muestraId: id,
+        codigo: muestra.codigo,
+        descripcion: muestra.descripcion ?? '',
+        versionNumero: nuevaVersion,
+        aprobadaPor: req.user?.email ?? null,
+        proyectoCodigo: (updated as any)?.proyecto_codigo ?? null,
+      })
+    } else if (nuevo_estado === 'RECHAZADA') {
+      const { notifyMuestraRechazada } = await import('../utils/notifyMuestra')
+      void notifyMuestraRechazada({
+        muestraId: id,
+        codigo: muestra.codigo,
+        descripcion: muestra.descripcion ?? '',
+        versionNumero: nuevaVersion,
+        razonRevision: (req.body as any)?.razon_revision ?? null,
+        rechazadaPor: req.user?.email ?? null,
+        ownerId: muestra.owner_id ?? null,
+      })
+    }
+
     res.json({
       data: updated,
       op_creada: opCreada,

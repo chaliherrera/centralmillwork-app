@@ -16,29 +16,24 @@
 import type { PoolClient } from 'pg'
 import pool from '../db/pool'
 import { logger } from './logger'
-import { sendEmail, muestraEnQCEmail, muestraEnviadaEmail, muestraQCAprobadoEmail } from './mailer'
+import { sendEmail, muestraEnQCEmail, muestraEnviadaEmail, muestraQCAprobadoEmail, muestraAprobadaEmail, muestraRechazadaEmail } from './mailer'
 
 type QueryRunner = PoolClient | typeof pool
 
 interface DestinatarioRow { email: string; nombre: string }
 
-interface RecipientPlan {
-  to: DestinatarioRow[]
-  cc: DestinatarioRow[]
-  /** Para logging: motivo del plan ('owner-in-role' | 'owner-out-role' | 'broadcast-no-owner' | 'fallback-admin'). */
-  motivo: string
-}
-
 /**
  * Trae un usuario por id (uuid) si está activo y tiene email. Helper interno.
+ * Usado para resolver el "owner" (solicitante) de una muestra cuando una
+ * notificación debe ir SOLO a ese ingeniero (F5 envío).
  */
 async function buscarUserPorId(
   runner: QueryRunner,
   userId: string | null | undefined
-): Promise<(DestinatarioRow & { rol: string }) | null> {
+): Promise<DestinatarioRow | null> {
   if (!userId) return null
-  const { rows } = await runner.query<DestinatarioRow & { rol: string }>(
-    `SELECT email, nombre, rol FROM usuarios
+  const { rows } = await runner.query<DestinatarioRow>(
+    `SELECT email, nombre FROM usuarios
        WHERE id = $1 AND activo = true AND email IS NOT NULL AND email <> ''`,
     [userId]
   )
@@ -46,35 +41,19 @@ async function buscarUserPorId(
 }
 
 /**
- * Arma el plan de destinatarios "owner + CC al rol":
- *   - Si el owner pertenece al rol receptor: to=[owner], cc=[resto del rol]
- *   - Si el owner NO pertenece al rol receptor: to=[todos del rol], cc=[owner]
- *     (mantiene al owner informado de su muestra aunque no actúe)
- *   - Si no hay owner activo: to=[todos del rol], cc=[] (fallback broadcast)
- *
- * Mantiene el fallback a ADMIN del helper anterior (cuando el rol no tiene
- * users activos).
+ * Deduplica destinatarios por email (case-insensitive). Útil cuando combinamos
+ * varios roles + owner para una misma notificación.
  */
-async function planRecipientesOwnerCC(
-  runner: QueryRunner,
-  rolReceptor: string,
-  ownerId: string | null | undefined
-): Promise<RecipientPlan> {
-  const rolUsers = await buscarDestinatariosPorRol(runner, rolReceptor)
-  const owner = await buscarUserPorId(runner, ownerId)
-
-  if (!owner) {
-    return { to: rolUsers, cc: [], motivo: rolUsers.length === 0 ? 'sin-destinatarios' : 'broadcast-no-owner' }
+function dedupePorEmail(users: DestinatarioRow[]): DestinatarioRow[] {
+  const seen = new Set<string>()
+  const out: DestinatarioRow[] = []
+  for (const u of users) {
+    const key = u.email.toLowerCase()
+    if (seen.has(key)) continue
+    seen.add(key)
+    out.push(u)
   }
-
-  const ownerEnRol = rolUsers.some((u) => u.email.toLowerCase() === owner.email.toLowerCase())
-  if (ownerEnRol) {
-    const resto = rolUsers.filter((u) => u.email.toLowerCase() !== owner.email.toLowerCase())
-    return { to: [owner], cc: resto, motivo: 'owner-in-role' }
-  }
-
-  // Owner es de otro rol → notificar al rol primary, con owner en copia
-  return { to: rolUsers, cc: [owner], motivo: 'owner-out-role' }
+  return out
 }
 
 async function buscarDestinatariosPorRol(
@@ -107,17 +86,16 @@ interface NotifyMuestraEnQCInput {
   descripcion: string
   versionNumero?: number
   opNumero?: string | null
-  /** Owner de la muestra (típicamente ENGINEERING). Si está activo, recibe en
-   *  CC para mantener visibilidad del progreso de su muestra. */
+  /** @deprecated F8 v2 (2026-06-17): owner no entra en EN_QC. Campo se ignora
+   *  para mantener compat con callsites; se elimina cuando migren todos. */
   ownerId?: string | null
 }
 
 /**
- * Notifica al/los SHOP_MANAGER que una muestra completó fabricación y está
- * pendiente de QC. Idempotencia: el caller decide cuándo invocar (típicamente
- * justo después del COMMIT que setea estado='EN_QC'); no hay flag interno
- * porque la transición es la fuente de verdad — si vuelven a transicionar
- * EN_FABRICACION → EN_QC tras un rollback, es OK mandar email de nuevo.
+ * Notifica al rol SHOP_MANAGER que una muestra completó fabricación y está
+ * pendiente de QC. F8 v2 (2026-06-17): solo SHOP_MANAGER, sin CC al owner
+ * (regla de negocio: durante fabricación/QC el solicitante no necesita
+ * tracking en tiempo real).
  *
  * No bloquea — fallos van a logger + Sentry pero no propagan.
  */
@@ -126,10 +104,10 @@ export async function notifyMuestraEnQC(
   runner: QueryRunner = pool
 ): Promise<void> {
   try {
-    const plan = await planRecipientesOwnerCC(runner, 'SHOP_MANAGER', input.ownerId)
-    if (plan.to.length === 0) {
-      logger.warn('notifyMuestraEnQC: sin destinatarios', {
-        muestraId: input.muestraId, codigo: input.codigo, motivo: plan.motivo,
+    const destinatarios = await buscarDestinatariosPorRol(runner, 'SHOP_MANAGER')
+    if (destinatarios.length === 0) {
+      logger.warn('notifyMuestraEnQC: sin destinatarios SHOP_MANAGER', {
+        muestraId: input.muestraId, codigo: input.codigo,
       })
       return
     }
@@ -142,8 +120,7 @@ export async function notifyMuestraEnQC(
     })
 
     const result = await sendEmail({
-      to: plan.to.map((u) => u.email),
-      cc: plan.cc.length > 0 ? plan.cc.map((u) => u.email) : undefined,
+      to: destinatarios.map((u) => u.email),
       subject,
       html,
       text,
@@ -156,9 +133,7 @@ export async function notifyMuestraEnQC(
     logger.info('notifyMuestraEnQC: dispatched', {
       muestraId: input.muestraId,
       codigo: input.codigo,
-      to: plan.to.length,
-      cc: plan.cc.length,
-      motivo: plan.motivo,
+      to: destinatarios.length,
       passthrough: result.passthrough ?? false,
       ok: result.ok,
     })
@@ -178,14 +153,17 @@ interface NotifyMuestraEnviadaInput {
   destinatario: string
   carrier?: string | null
   trackingNumber?: string | null
-  /** Owner de la muestra. Si es ENGINEERING, va en to; si no, en cc. */
+  /** Owner de la muestra (ingeniero solicitante). Único destinatario.
+   *  F8 v2 (2026-06-17): solo el solicitante se entera del envío, no toda
+   *  ENGINEERING. Si no hay owner activo → fallback a rol ENGINEERING. */
   ownerId?: string | null
 }
 
 /**
- * Notifica a INGENIERIA que una muestra fue enviada al cliente y hay que
- * estar atento a la respuesta. F5 (2026-06-09): reemplaza la creación de
- * tarea INGENIERIA por email puro, consistente con el patrón de F4.
+ * Notifica al INGENIERO SOLICITANTE (owner) que su muestra fue enviada al
+ * cliente. F8 v2 (2026-06-17): solo al owner, no broadcast a ENGINEERING.
+ * Fallback al rol ENGINEERING solo si el owner no está activo o no hay
+ * owner_id (muestras huérfanas).
  *
  * No bloquea. Failures van a logger + Sentry pero no propagan.
  */
@@ -194,10 +172,18 @@ export async function notifyMuestraEnviada(
   runner: QueryRunner = pool
 ): Promise<void> {
   try {
-    const plan = await planRecipientesOwnerCC(runner, 'ENGINEERING', input.ownerId)
-    if (plan.to.length === 0) {
+    let destinatarios: DestinatarioRow[] = []
+    let motivo = 'owner-only'
+    const owner = await buscarUserPorId(runner, input.ownerId)
+    if (owner) {
+      destinatarios = [owner]
+    } else {
+      destinatarios = await buscarDestinatariosPorRol(runner, 'ENGINEERING')
+      motivo = 'fallback-rol-engineering'
+    }
+    if (destinatarios.length === 0) {
       logger.warn('notifyMuestraEnviada: sin destinatarios', {
-        muestraId: input.muestraId, codigo: input.codigo, motivo: plan.motivo,
+        muestraId: input.muestraId, codigo: input.codigo,
       })
       return
     }
@@ -212,8 +198,7 @@ export async function notifyMuestraEnviada(
     })
 
     const result = await sendEmail({
-      to: plan.to.map((u) => u.email),
-      cc: plan.cc.length > 0 ? plan.cc.map((u) => u.email) : undefined,
+      to: destinatarios.map((u) => u.email),
       subject,
       html,
       text,
@@ -226,9 +211,8 @@ export async function notifyMuestraEnviada(
     logger.info('notifyMuestraEnviada: dispatched', {
       muestraId: input.muestraId,
       codigo: input.codigo,
-      to: plan.to.length,
-      cc: plan.cc.length,
-      motivo: plan.motivo,
+      to: destinatarios.length,
+      motivo,
       passthrough: result.passthrough ?? false,
       ok: result.ok,
     })
@@ -246,14 +230,15 @@ interface NotifyMuestraQCAprobadoInput {
   versionNumero?: number
   opNumero?: string | null
   aprobadoPor?: string | null
-  /** Owner de la muestra. Si no es PROCUREMENT, va en CC (visibilidad). */
+  /** @deprecated F8 v2 (2026-06-17): owner no entra en QC aprobado. */
   ownerId?: string | null
 }
 
 /**
- * Notifica a PROCUREMENT que una muestra fue aprobada por Shop Manager en QC
- * y está lista para envío al cliente. F4.5 (2026-06-17): handoff explícito
- * Shop Manager → Procurement, antes hoy era implícito.
+ * Notifica al rol PROCUREMENT que una muestra fue aprobada por Shop Manager
+ * en QC y está lista para envío al cliente. F8 v2 (2026-06-17): solo
+ * PROCUREMENT (con fallback a ADMIN del helper si no hay users del rol),
+ * sin CC al owner.
  *
  * No bloquea. Failures van a logger + Sentry pero no propagan.
  */
@@ -262,10 +247,10 @@ export async function notifyMuestraQCAprobado(
   runner: QueryRunner = pool
 ): Promise<void> {
   try {
-    const plan = await planRecipientesOwnerCC(runner, 'PROCUREMENT', input.ownerId)
-    if (plan.to.length === 0) {
-      logger.warn('notifyMuestraQCAprobado: sin destinatarios', {
-        muestraId: input.muestraId, codigo: input.codigo, motivo: plan.motivo,
+    const destinatarios = await buscarDestinatariosPorRol(runner, 'PROCUREMENT')
+    if (destinatarios.length === 0) {
+      logger.warn('notifyMuestraQCAprobado: sin destinatarios PROCUREMENT', {
+        muestraId: input.muestraId, codigo: input.codigo,
       })
       return
     }
@@ -279,8 +264,7 @@ export async function notifyMuestraQCAprobado(
     })
 
     const result = await sendEmail({
-      to: plan.to.map((u) => u.email),
-      cc: plan.cc.length > 0 ? plan.cc.map((u) => u.email) : undefined,
+      to: destinatarios.map((u) => u.email),
       subject,
       html,
       text,
@@ -293,14 +277,157 @@ export async function notifyMuestraQCAprobado(
     logger.info('notifyMuestraQCAprobado: dispatched', {
       muestraId: input.muestraId,
       codigo: input.codigo,
-      to: plan.to.length,
-      cc: plan.cc.length,
-      motivo: plan.motivo,
+      to: destinatarios.length,
       passthrough: result.passthrough ?? false,
       ok: result.ok,
     })
   } catch (err) {
     logger.error('notifyMuestraQCAprobado: throw inesperado', {
+      muestraId: input.muestraId, codigo: input.codigo, err: String(err),
+    })
+  }
+}
+
+// ─── F6: Aprobada / Rechazada — notifica el cierre del ciclo ─────────────────
+
+interface NotifyMuestraAprobadaInput {
+  muestraId: number
+  codigo: string
+  descripcion: string
+  versionNumero?: number
+  aprobadaPor?: string | null
+  proyectoCodigo?: string | null
+}
+
+/**
+ * F6 v2 (2026-06-17): Notifica a PROCUREMENT + SHOP_MANAGER que el cliente
+ * aprobó la muestra. La aprobación la hace ENGINEERING (el solicitante o el
+ * dueño del proyecto), así que NO va al owner — quien aprobó ya sabe.
+ *
+ * Para PROCUREMENT: el ciclo cerró exitosamente; pueden archivar y avanzar a
+ * la OP real del proyecto si corresponde. Para SHOP_MANAGER: confirmación
+ * de que la calidad fue aceptada por el cliente.
+ */
+export async function notifyMuestraAprobada(
+  input: NotifyMuestraAprobadaInput,
+  runner: QueryRunner = pool
+): Promise<void> {
+  try {
+    const [procurement, shopManager] = await Promise.all([
+      buscarDestinatariosPorRol(runner, 'PROCUREMENT'),
+      buscarDestinatariosPorRol(runner, 'SHOP_MANAGER'),
+    ])
+    const destinatarios = dedupePorEmail([...procurement, ...shopManager])
+    if (destinatarios.length === 0) {
+      logger.warn('notifyMuestraAprobada: sin destinatarios PROCUREMENT/SHOP_MANAGER', {
+        muestraId: input.muestraId, codigo: input.codigo,
+      })
+      return
+    }
+
+    const { subject, html, text } = muestraAprobadaEmail({
+      codigo: input.codigo,
+      descripcion: input.descripcion,
+      versionNumero: input.versionNumero,
+      aprobadaPor: input.aprobadaPor,
+      proyectoCodigo: input.proyectoCodigo,
+    })
+
+    const result = await sendEmail({
+      to: destinatarios.map((u) => u.email),
+      subject,
+      html,
+      text,
+      tags: [
+        { name: 'evento', value: 'muestra_aprobada' },
+        { name: 'muestra_id', value: String(input.muestraId) },
+      ],
+    })
+
+    logger.info('notifyMuestraAprobada: dispatched', {
+      muestraId: input.muestraId,
+      codigo: input.codigo,
+      to: destinatarios.length,
+      procurement: procurement.length,
+      shopManager: shopManager.length,
+      passthrough: result.passthrough ?? false,
+      ok: result.ok,
+    })
+  } catch (err) {
+    logger.error('notifyMuestraAprobada: throw inesperado', {
+      muestraId: input.muestraId, codigo: input.codigo, err: String(err),
+    })
+  }
+}
+
+interface NotifyMuestraRechazadaInput {
+  muestraId: number
+  codigo: string
+  descripcion: string
+  versionNumero?: number
+  razonRevision?: string | null
+  rechazadaPor?: string | null
+  /** Owner del solicitante — incluido para que pueda crear V2. */
+  ownerId?: string | null
+}
+
+/**
+ * F6 v2 (2026-06-17): Notifica a PROCUREMENT + SHOP_MANAGER + owner que el
+ * cliente rechazó la muestra. PROCUREMENT/SHOP_MANAGER: para frenar el ciclo
+ * de esta versión y prepararse para una próxima. Owner: para que prepare la
+ * V+1 con los ajustes pedidos en razon_revision.
+ */
+export async function notifyMuestraRechazada(
+  input: NotifyMuestraRechazadaInput,
+  runner: QueryRunner = pool
+): Promise<void> {
+  try {
+    const [procurement, shopManager, owner] = await Promise.all([
+      buscarDestinatariosPorRol(runner, 'PROCUREMENT'),
+      buscarDestinatariosPorRol(runner, 'SHOP_MANAGER'),
+      buscarUserPorId(runner, input.ownerId),
+    ])
+    const destinatarios = dedupePorEmail([
+      ...procurement,
+      ...shopManager,
+      ...(owner ? [owner] : []),
+    ])
+    if (destinatarios.length === 0) {
+      logger.warn('notifyMuestraRechazada: sin destinatarios', {
+        muestraId: input.muestraId, codigo: input.codigo,
+      })
+      return
+    }
+
+    const { subject, html, text } = muestraRechazadaEmail({
+      codigo: input.codigo,
+      descripcion: input.descripcion,
+      versionNumero: input.versionNumero,
+      razonRevision: input.razonRevision,
+      rechazadaPor: input.rechazadaPor,
+    })
+
+    const result = await sendEmail({
+      to: destinatarios.map((u) => u.email),
+      subject,
+      html,
+      text,
+      tags: [
+        { name: 'evento', value: 'muestra_rechazada' },
+        { name: 'muestra_id', value: String(input.muestraId) },
+      ],
+    })
+
+    logger.info('notifyMuestraRechazada: dispatched', {
+      muestraId: input.muestraId,
+      codigo: input.codigo,
+      to: destinatarios.length,
+      includeOwner: owner != null,
+      passthrough: result.passthrough ?? false,
+      ok: result.ok,
+    })
+  } catch (err) {
+    logger.error('notifyMuestraRechazada: throw inesperado', {
       muestraId: input.muestraId, codigo: input.codigo, err: String(err),
     })
   }
