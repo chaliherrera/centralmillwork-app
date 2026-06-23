@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   Search, ShoppingCart, Warehouse, DollarSign, Clock,
   AlertTriangle, FileText, X, Pencil, Trash2,
@@ -15,6 +15,7 @@ import ReporteModal from '@/components/ui/ReporteModal'
 import { ordenesCompraService } from '@/services/ordenesCompra'
 import { recepcionesService } from '@/services/recepciones'
 import DynamicImageGrid from '@/components/ui/DynamicImageGrid'
+import CancelarOCModal from '@/components/modules/ordenes_compra/CancelarOCModal'
 import type { OrdenCompra, Material } from '@/types'
 
 const fmt = (n: number) =>
@@ -472,6 +473,8 @@ export default function OrdenesCompra() {
   const [editing, setEditing]           = useState<OrdenCompra | undefined>()
   const [editingNotas, setEditingNotas] = useState<OrdenCompra | undefined>()
   const [reporteOpen, setReporteOpen]   = useState(false)
+  // OC pendiente de confirmar cancelación (abre CancelarOCModal)
+  const [cancelling, setCancelling]     = useState<OrdenCompra | undefined>()
 
   const qc = useQueryClient()
 
@@ -533,21 +536,16 @@ export default function OrdenesCompra() {
   //     recepciones.orden_compra_id).
   //  3) recomputeMaterialesEstadoForOC libera los materiales al estado
   //     correspondiente (COTIZADO si no quedan OC activas).
-  const cancelMutation = useMutation({
-    mutationFn: (id: number) => ordenesCompraService.updateEstado(id, 'cancelada'),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['ordenes-compra-kanban'], refetchType: 'all' })
-      qc.invalidateQueries({ queryKey: ['oc-kpis'],               refetchType: 'all' })
-      qc.invalidateQueries({ queryKey: ['materiales'],            refetchType: 'all' })
-      qc.invalidateQueries({ queryKey: ['materiales-all'],        refetchType: 'all' })
-      qc.invalidateQueries({ queryKey: ['materiales-kpis'],       refetchType: 'all' })
-      setSelectedOc(undefined)
-      toast.success('Orden cancelada')
-    },
-    onError: (err: any) => {
-      toast.error(err?.response?.data?.message ?? 'No se pudo cancelar la orden')
-    },
-  })
+  // La mutación vive en CancelarOCModal (con campo motivo). Este handler
+  // solo invalida queries y limpia selección al volver del modal.
+  const onCancelledOC = () => {
+    qc.invalidateQueries({ queryKey: ['ordenes-compra-kanban'], refetchType: 'all' })
+    qc.invalidateQueries({ queryKey: ['oc-kpis'],               refetchType: 'all' })
+    qc.invalidateQueries({ queryKey: ['materiales'],            refetchType: 'all' })
+    qc.invalidateQueries({ queryKey: ['materiales-all'],        refetchType: 'all' })
+    qc.invalidateQueries({ queryKey: ['materiales-kpis'],       refetchType: 'all' })
+    setSelectedOc(undefined)
+  }
 
   const openEdit  = (o: OrdenCompra) => {
     if (o.estado_display === 'EN_EL_TALLER') {
@@ -564,11 +562,7 @@ export default function OrdenesCompra() {
       toast(`La orden ${o.numero} ya está cancelada`)
       return
     }
-    if (window.confirm(
-      `¿Cancelar la orden ${o.numero}?\n\n` +
-      `La orden queda registrada como CANCELADA (no se elimina, para preservar el historial). ` +
-      `Los materiales que la integraban vuelven a estar disponibles.`
-    )) cancelMutation.mutate(o.id)
+    setCancelling(o)
   }
 
   const montoTotal = kpis
@@ -837,6 +831,12 @@ export default function OrdenesCompra() {
         />
       )}
       <ReporteModal open={reporteOpen} onClose={() => setReporteOpen(false)} />
+      <CancelarOCModal
+        open={!!cancelling}
+        oc={cancelling}
+        onClose={() => setCancelling(undefined)}
+        onCancelled={onCancelledOC}
+      />
     </div>
   )
 }

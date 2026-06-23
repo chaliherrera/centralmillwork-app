@@ -342,15 +342,39 @@ export async function updateOrdenCompra(req: Request, res: Response, next: NextF
 export async function updateEstadoOrden(req: Request, res: Response, next: NextFunction) {
   const client = await pool.connect()
   try {
-    const { estado } = req.body
+    const { estado, motivo } = req.body as { estado?: string; motivo?: string }
     if (!estado) return next(createError('El estado es requerido', 400))
 
     await client.query('BEGIN')
 
-    const { rows } = await client.query(
-      `UPDATE ordenes_compra SET estado = $2, updated_at = NOW() WHERE id = $1 RETURNING *`,
-      [req.params.id, estado]
-    )
+    // Si pasa a 'cancelada' y viene motivo, appendear a notas con prefijo
+    // estandarizado para auditoría. NOTA: usamos COALESCE para concatenar de
+    // forma segura cuando notas es NULL o vacío.
+    const isCancel = estado === 'cancelada'
+    const motivoTxt = isCancel && motivo && motivo.trim()
+      ? motivo.trim()
+      : null
+
+    const { rows } = motivoTxt
+      ? await client.query(
+          `UPDATE ordenes_compra
+              SET estado = $2,
+                  notas = CASE
+                    WHEN notas IS NULL OR notas = '' THEN $3
+                    ELSE notas || E'\n\n' || $3
+                  END,
+                  updated_at = NOW()
+            WHERE id = $1 RETURNING *`,
+          [
+            req.params.id,
+            estado,
+            `[Cancelada ${new Date().toISOString().slice(0, 10)}${req.user?.email ? ' por ' + req.user.email : ''}]: ${motivoTxt}`,
+          ]
+        )
+      : await client.query(
+          `UPDATE ordenes_compra SET estado = $2, updated_at = NOW() WHERE id = $1 RETURNING *`,
+          [req.params.id, estado]
+        )
     if (!rows[0]) {
       await client.query('ROLLBACK')
       return next(createError('Orden no encontrada', 404))
