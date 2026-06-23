@@ -9,6 +9,21 @@ import type { Material } from '@/types'
 const fmt = (n: number) =>
   new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(n)
 
+// Días pendientes desde la importación → badge "rezagado" para alertar
+// al user que un material lleva tiempo sin cotizarse y puede haber sido
+// reesepecificado / haber quedado obsoleto. Umbral 14d amarillo, 30d rojo.
+// Descubierto en cleanup OC-2026-0123 (2026-06-23): material 358 llevaba
+// 16 días en PENDIENTE cuando se cotizó sin verificación → se ordenó algo
+// que no debía. Este badge hubiera prevenido el caso.
+function rezagadoMeta(fechaImportacion?: string | null): { days: number; level: 'warn' | 'crit' } | null {
+  if (!fechaImportacion) return null
+  const imp = new Date(fechaImportacion)
+  if (isNaN(imp.getTime())) return null
+  const days = Math.floor((Date.now() - imp.getTime()) / (1000 * 60 * 60 * 24))
+  if (days < 14) return null
+  return { days, level: days >= 30 ? 'crit' : 'warn' }
+}
+
 interface Props {
   open: boolean
   vendor: string
@@ -188,13 +203,29 @@ export default function CapturaPrecios({
                   const p = parseFloat(prices[m.id] || '0') || 0
                   const rowTotal = Number(m.qty) * p
                   const hasError = p <= 0
+                  const rezagado = rezagadoMeta(m.fecha_importacion)
 
                   return (
                     <tr key={m.id} className="border-b border-gray-50 hover:bg-gray-50/80 transition-colors">
                       <td className="px-4 py-2.5">
-                        {m.codigo
-                          ? <span className="font-mono text-xs bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded">{m.codigo}</span>
-                          : <span className="text-gray-300 text-xs">—</span>}
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          {m.codigo
+                            ? <span className="font-mono text-xs bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded">{m.codigo}</span>
+                            : <span className="text-gray-300 text-xs">—</span>}
+                          {rezagado && (
+                            <span
+                              className={clsx(
+                                'text-[10px] font-semibold px-1.5 py-0.5 rounded leading-none whitespace-nowrap',
+                                rezagado.level === 'crit'
+                                  ? 'bg-red-100 text-red-700'
+                                  : 'bg-amber-100 text-amber-800'
+                              )}
+                              title={`Este material lleva ${rezagado.days} días en PENDIENTE. Verificá con Ingeniería si todavía aplica antes de cotizar.`}
+                            >
+                              {rezagado.level === 'crit' ? '🔴' : '🟡'} {rezagado.days}d
+                            </span>
+                          )}
+                        </div>
                       </td>
                       <td className="px-4 py-2.5">
                         <p className="text-xs font-medium text-gray-800 truncate max-w-[200px]">{m.descripcion}</p>
