@@ -11,6 +11,7 @@ import {
 import clsx from 'clsx'
 import { dashboardService } from '@/services/dashboard'
 import ReporteModal from '@/components/ui/ReporteModal'
+import DailyBriefing from '@/components/modules/dashboard/DailyBriefing'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -144,6 +145,7 @@ export default function Dashboard() {
           <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
           <p className="text-sm text-gray-400 mt-0.5">Central Millwork · Procurement Overview</p>
         </div>
+
         <button
           onClick={() => setReporteOpen(true)}
           className="flex items-center gap-2 px-4 py-2 text-sm border border-gray-200 rounded-lg text-gray-600 hover:bg-gray-50 transition-colors bg-white shadow-sm"
@@ -152,6 +154,9 @@ export default function Dashboard() {
           Generar Reporte
         </button>
       </div>
+
+      {/* ── Daily Briefing — ritual diario para Procurement/ADMIN ── */}
+      <DailyBriefing />
 
       {/* ── KPI Row — 6 cards ── */}
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">

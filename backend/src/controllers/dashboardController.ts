@@ -371,3 +371,128 @@ export async function getDashboardProyectosRecientes(req: Request, res: Response
     })
   } catch (err) { next(err) }
 }
+
+// ─── Daily Briefing ──────────────────────────────────────────────────────────
+// "Buenos días" panel para Procurement/ADMIN. NO es reporte que se genera —
+// es un ritual diario que aparece al entrar al dashboard. 5 buckets accionables:
+//
+//   🟡 Rezagados      materiales en PENDIENTE >14 días
+//   🔴 Vencidas       OCs con ETA pasada, no recibidas
+//   🟠 Estancadas     recepciones pendientes >5 días
+//   📅 Vence pronto   OCs que llegan hoy/mañana
+//   🆕 Importados ayer materiales nuevos a cotizar
+//
+// Cada bucket: count + ejemplos top 3 + filtros para deep-link al detalle.
+
+export async function getDashboardDailyBriefing(_req: Request, res: Response, next: NextFunction) {
+  try {
+    const [
+      rezagados, vencidas, estancadas, vencePronto, importadosAyer,
+    ] = await Promise.all([
+      // 🟡 Materiales rezagados — PENDIENTE >14 días desde su fecha_importacion
+      pool.query(
+        `SELECT m.id, m.codigo, m.descripcion, m.vendor, m.qty,
+                m.fecha_importacion,
+                CURRENT_DATE - m.fecha_importacion AS dias_pendiente,
+                p.codigo AS proyecto_codigo, p.nombre AS proyecto_nombre
+           FROM materiales_mto m
+           LEFT JOIN proyectos p ON p.id = m.proyecto_id
+          WHERE m.estado_cotiz = 'PENDIENTE'
+            AND m.cotizar = 'SI'
+            AND m.fecha_importacion IS NOT NULL
+            AND m.fecha_importacion <= CURRENT_DATE - INTERVAL '14 days'
+          ORDER BY m.fecha_importacion ASC
+          LIMIT 100`
+      ),
+
+      // 🔴 OCs vencidas — ETA pasada y no recibidas / no canceladas
+      pool.query(
+        `SELECT o.id, o.numero, o.fecha_entrega_estimada,
+                CURRENT_DATE - o.fecha_entrega_estimada AS dias_vencida,
+                o.total, o.estado,
+                p.codigo AS proyecto_codigo, p.nombre AS proyecto_nombre,
+                v.nombre AS proveedor_nombre
+           FROM ordenes_compra o
+           LEFT JOIN proyectos p ON p.id = o.proyecto_id
+           LEFT JOIN proveedores v ON v.id = o.proveedor_id
+          WHERE o.estado NOT IN ('cancelada', 'recibida')
+            AND o.fecha_entrega_estimada IS NOT NULL
+            AND o.fecha_entrega_estimada < CURRENT_DATE
+          ORDER BY o.fecha_entrega_estimada ASC
+          LIMIT 100`
+      ),
+
+      // 🟠 Recepciones estancadas — pendientes >5 días sin cerrar
+      pool.query(
+        `SELECT r.id, r.folio, r.created_at,
+                CURRENT_DATE - r.created_at::date AS dias_estancada,
+                o.numero AS oc_numero,
+                p.codigo AS proyecto_codigo, p.nombre AS proyecto_nombre,
+                v.nombre AS proveedor_nombre
+           FROM recepciones r
+           LEFT JOIN ordenes_compra o ON o.id = r.orden_compra_id
+           LEFT JOIN proyectos p ON p.id = o.proyecto_id
+           LEFT JOIN proveedores v ON v.id = o.proveedor_id
+          WHERE r.estado = 'pendiente'
+            AND r.created_at::date <= CURRENT_DATE - INTERVAL '5 days'
+          ORDER BY r.created_at ASC
+          LIMIT 100`
+      ),
+
+      // 📅 OCs que vencen hoy o mañana
+      pool.query(
+        `SELECT o.id, o.numero, o.fecha_entrega_estimada, o.total, o.estado,
+                p.codigo AS proyecto_codigo, p.nombre AS proyecto_nombre,
+                v.nombre AS proveedor_nombre
+           FROM ordenes_compra o
+           LEFT JOIN proyectos p ON p.id = o.proyecto_id
+           LEFT JOIN proveedores v ON v.id = o.proveedor_id
+          WHERE o.estado NOT IN ('cancelada', 'recibida')
+            AND o.fecha_entrega_estimada BETWEEN CURRENT_DATE AND CURRENT_DATE + INTERVAL '1 day'
+          ORDER BY o.fecha_entrega_estimada ASC
+          LIMIT 100`
+      ),
+
+      // 🆕 Materiales importados ayer (fecha_importacion = CURRENT_DATE-1)
+      // que aún están PENDIENTE de cotizar
+      pool.query(
+        `SELECT m.id, m.codigo, m.descripcion, m.vendor, m.qty,
+                m.fecha_importacion,
+                p.codigo AS proyecto_codigo, p.nombre AS proyecto_nombre
+           FROM materiales_mto m
+           LEFT JOIN proyectos p ON p.id = m.proyecto_id
+          WHERE m.estado_cotiz = 'PENDIENTE'
+            AND m.cotizar = 'SI'
+            AND m.fecha_importacion = CURRENT_DATE - INTERVAL '1 day'
+          ORDER BY p.codigo, m.vendor, m.codigo
+          LIMIT 100`
+      ),
+    ])
+
+    res.json({
+      data: {
+        rezagados: {
+          count: rezagados.rows.length,
+          top: rezagados.rows.slice(0, 3),
+        },
+        vencidas: {
+          count: vencidas.rows.length,
+          top: vencidas.rows.slice(0, 3),
+        },
+        estancadas: {
+          count: estancadas.rows.length,
+          top: estancadas.rows.slice(0, 3),
+        },
+        vencePronto: {
+          count: vencePronto.rows.length,
+          top: vencePronto.rows.slice(0, 3),
+        },
+        importadosAyer: {
+          count: importadosAyer.rows.length,
+          top: importadosAyer.rows.slice(0, 3),
+        },
+        fecha_servidor: new Date().toISOString(),
+      },
+    })
+  } catch (err) { next(err) }
+}

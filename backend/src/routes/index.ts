@@ -6,6 +6,7 @@ import {
   getStats, getGastoPorMes,
   getDashboardKpis, getDashboardCharts,
   getDashboardResumenEstados, getDashboardProyectosRecientes,
+  getDashboardDailyBriefing,
 } from '../controllers/dashboardController'
 import {
   getProyectos, getProyecto, createProyecto, updateProyecto, deleteProyecto,
@@ -86,6 +87,7 @@ router.get('/dashboard/kpis',                getDashboardKpis)
 router.get('/dashboard/charts',              getDashboardCharts)
 router.get('/dashboard/resumen-estados',     getDashboardResumenEstados)
 router.get('/dashboard/proyectos-recientes', getDashboardProyectosRecientes)
+router.get('/dashboard/daily-briefing',      requireRole('ADMIN', 'PROCUREMENT'), getDashboardDailyBriefing)
 
 // ─── Proyectos ────────────────────────────────────────────────────────────────
 router.get('/proyectos',                      getProyectos)
