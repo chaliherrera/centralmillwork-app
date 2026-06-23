@@ -31,19 +31,28 @@ const fmt = (n: number) =>
 
 export default function CancelarOCModal({ open, onClose, oc, onCancelled }: Props) {
   const [motivo, setMotivo] = useState('')
+  const [inactivarMateriales, setInactivarMateriales] = useState(false)
 
   // Reset cuando se abre con otra OC distinta
   useEffect(() => {
-    if (open) setMotivo('')
+    if (open) {
+      setMotivo('')
+      setInactivarMateriales(false)
+    }
   }, [open, oc?.id])
 
   const mutation = useMutation({
     mutationFn: () => {
       if (!oc) throw new Error('Sin OC')
-      return ordenesCompraService.updateEstado(oc.id, 'cancelada', motivo.trim() || undefined)
+      return ordenesCompraService.updateEstado(oc.id, 'cancelada', {
+        motivo: motivo.trim() || undefined,
+        inactivar_materiales: inactivarMateriales,
+      })
     },
-    onSuccess: () => {
-      toast.success(`Orden ${oc?.numero} cancelada`)
+    onSuccess: (res) => {
+      // El backend devuelve un message contextual (informa cuántos materiales
+      // se inactivaron cuando aplica). Lo usamos como toast para feedback rico.
+      toast.success(res?.message ?? `Orden ${oc?.numero} cancelada`)
       onCancelled?.()
       onClose()
     },
@@ -100,6 +109,31 @@ export default function CancelarOCModal({ open, onClose, oc, onCancelled }: Prop
             Se appendea a las notas de la OC con fecha y tu email para auditoría posterior. {motivo.length}/500
           </p>
         </div>
+
+        {/* Inactivar materiales — opcional. Por default DESMARCADO porque la
+            cancelación habitual solo libera los materiales (para re-cotizar).
+            Solo se marca cuando el procurement ya NO va a comprar esos
+            materiales nunca (cliente cambió de spec, item removido del
+            proyecto, etc). */}
+        <label className="flex items-start gap-2 p-3 rounded-lg border border-gray-200 hover:border-gray-300 transition-colors cursor-pointer">
+          <input
+            type="checkbox"
+            checked={inactivarMateriales}
+            onChange={(e) => setInactivarMateriales(e.target.checked)}
+            className="mt-0.5 w-4 h-4 accent-red-600 shrink-0"
+          />
+          <div className="text-xs leading-relaxed">
+            <p className="font-semibold text-gray-800">
+              También marcar los materiales como NO cotizar
+            </p>
+            <p className="text-gray-500 mt-0.5">
+              Útil si el cliente cambió la especificación o el item ya no se va a comprar nunca. Los
+              materiales desaparecen del panel <strong>Capturar Precios</strong> y del{' '}
+              <strong>Daily Briefing</strong>. Para volver a cotizarlos hay que reactivarlos a mano
+              desde Materiales MTO.
+            </p>
+          </div>
+        </label>
 
         {/* Acciones */}
         <div className="flex items-center justify-end gap-2 pt-2 border-t border-gray-100">

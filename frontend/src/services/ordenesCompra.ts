@@ -73,8 +73,17 @@ export const ordenesCompraService = {
   update: (id: number, data: OrdenCompraPayload) =>
     api.put<ApiResponse<OrdenCompra>>(`/ordenes-compra/${id}`, data).then((r) => r.data),
 
-  updateEstado: (id: number, estado: string, motivo?: string) =>
-    api.patch<ApiResponse<OrdenCompra>>(`/ordenes-compra/${id}/estado`, { estado, motivo }).then((r) => r.data),
+  updateEstado: (
+    id: number,
+    estado: string,
+    opts?: { motivo?: string; inactivar_materiales?: boolean }
+  ) =>
+    api
+      .patch<ApiResponse<OrdenCompra> & { materiales_inactivados?: number; message?: string }>(
+        `/ordenes-compra/${id}/estado`,
+        { estado, motivo: opts?.motivo, inactivar_materiales: opts?.inactivar_materiales }
+      )
+      .then((r) => r.data),
 
   delete: (id: number) =>
     api.delete(`/ordenes-compra/${id}`).then((r) => r.data),

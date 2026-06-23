@@ -342,7 +342,15 @@ export async function updateOrdenCompra(req: Request, res: Response, next: NextF
 export async function updateEstadoOrden(req: Request, res: Response, next: NextFunction) {
   const client = await pool.connect()
   try {
-    const { estado, motivo } = req.body as { estado?: string; motivo?: string }
+    const { estado, motivo, inactivar_materiales } = req.body as {
+      estado?: string
+      motivo?: string
+      /** Solo aplica cuando estado='cancelada'. Si true, marca todos los
+       *  materiales asociados a la OC con cotizar='NO' (no volver a comprar).
+       *  Por default false → los materiales quedan disponibles para
+       *  re-cotización via captura de precios. */
+      inactivar_materiales?: boolean
+    }
     if (!estado) return next(createError('El estado es requerido', 400))
 
     await client.query('BEGIN')
@@ -388,13 +396,32 @@ export async function updateEstadoOrden(req: Request, res: Response, next: NextF
        WHERE orden_compra_id = $1 AND material_id IS NOT NULL`,
       [req.params.id]
     )
-    await recomputeMaterialesEstadoByIds(
-      client,
-      items.map((it: { material_id: number }) => it.material_id)
-    )
+    const materialIds = items.map((it: { material_id: number }) => it.material_id)
+
+    // Cancelación + inactivar_materiales: marcar todos los materiales como
+    // cotizar='NO' antes del recompute. Atómico dentro de la misma tx. Esto
+    // los saca del panel Capturar Precios y del Daily Briefing. Se aplica
+    // SÓLO cuando estado='cancelada' por seguridad (no permitir inactivar
+    // materiales por otras transiciones).
+    let materialesInactivados = 0
+    if (isCancel && inactivar_materiales === true && materialIds.length > 0) {
+      const { rowCount } = await client.query(
+        `UPDATE materiales_mto
+            SET cotizar = 'NO', updated_at = NOW()
+          WHERE id = ANY($1::int[])
+            AND cotizar <> 'NO'`,
+        [materialIds]
+      )
+      materialesInactivados = rowCount ?? 0
+    }
+
+    await recomputeMaterialesEstadoByIds(client, materialIds)
 
     await client.query('COMMIT')
-    res.json({ data: rows[0], message: `Estado actualizado a "${estado}"` })
+    const msg = isCancel && materialesInactivados > 0
+      ? `Orden cancelada. ${materialesInactivados} material(es) marcados como NO cotizar.`
+      : `Estado actualizado a "${estado}"`
+    res.json({ data: rows[0], message: msg, materiales_inactivados: materialesInactivados })
   } catch (err) {
     await client.query('ROLLBACK').catch(() => {})
     next(err)
