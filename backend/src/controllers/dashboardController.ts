@@ -422,11 +422,17 @@ export async function getDashboardDailyBriefing(_req: Request, res: Response, ne
           LIMIT 100`
       ),
 
-      // 🟠 Recepciones estancadas — pendientes >5 días sin cerrar
+      // 🟠 Recepciones estancadas — pendientes >5 días sin cerrar.
+      // IMPORTANTE: excluir OCs ya recibidas o canceladas. Cuando una OC se
+      // emite, el sistema crea una recepción "plantilla" con estado='pendiente'.
+      // Si después se hace la recepción real (estado='completa'), la plantilla
+      // queda huérfana — sigue pendiente pero la OC ya está recibida.
+      // Sin este filtro, el bucket se llenaba de plantillas huérfanas (47 de
+      // 54 en prod 2026-06-23) ocultando los 6 casos reales.
       pool.query(
         `SELECT r.id, r.folio, r.created_at,
                 CURRENT_DATE - r.created_at::date AS dias_estancada,
-                o.numero AS oc_numero,
+                o.numero AS oc_numero, o.estado AS oc_estado,
                 p.codigo AS proyecto_codigo, p.nombre AS proyecto_nombre,
                 v.nombre AS proveedor_nombre
            FROM recepciones r
@@ -435,6 +441,8 @@ export async function getDashboardDailyBriefing(_req: Request, res: Response, ne
            LEFT JOIN proveedores v ON v.id = o.proveedor_id
           WHERE r.estado = 'pendiente'
             AND r.created_at::date <= CURRENT_DATE - INTERVAL '5 days'
+            AND o.estado IS NOT NULL
+            AND o.estado NOT IN ('recibida', 'cancelada')
           ORDER BY r.created_at ASC
           LIMIT 100`
       ),
