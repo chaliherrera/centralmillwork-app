@@ -387,7 +387,7 @@ export async function getDashboardProyectosRecientes(req: Request, res: Response
 export async function getDashboardDailyBriefing(_req: Request, res: Response, next: NextFunction) {
   try {
     const [
-      rezagados, vencidas, estancadas, vencePronto, importadosAyer,
+      rezagados, vencidas, estancadas, vencePronto, importadosAyer, cotizadosSinOC,
     ] = await Promise.all([
       // 🟡 Materiales rezagados — PENDIENTE >14 días desde su fecha_importacion
       pool.query(
@@ -475,6 +475,33 @@ export async function getDashboardDailyBriefing(_req: Request, res: Response, ne
           ORDER BY p.codigo, m.vendor, m.codigo
           LIMIT 100`
       ),
+
+      // 💰 Cotizados sin OC — materiales en estado COTIZADO con precio cargado
+      // pero que aún no figuran en ninguna OC no-cancelada. Cubre el limbo
+      // entre "ya cotizamos" y "emitimos la OC". Filtro updated_at últimos
+      // 14 días para no mostrar materiales viejos descartados que quedaron
+      // con estado COTIZADO histórico.
+      pool.query(
+        `SELECT m.id, m.codigo, m.descripcion, m.vendor, m.qty, m.unit_price,
+                m.fecha_importacion, m.updated_at,
+                CURRENT_DATE - m.updated_at::date AS dias_cotizado,
+                p.codigo AS proyecto_codigo, p.nombre AS proyecto_nombre
+           FROM materiales_mto m
+           LEFT JOIN proyectos p ON p.id = m.proyecto_id
+          WHERE m.estado_cotiz = 'COTIZADO'
+            AND m.cotizar = 'SI'
+            AND m.unit_price > 0
+            AND m.updated_at >= CURRENT_DATE - INTERVAL '14 days'
+            AND NOT EXISTS (
+              SELECT 1
+                FROM items_orden_compra ioc
+                JOIN ordenes_compra oc ON oc.id = ioc.orden_compra_id
+               WHERE ioc.material_id = m.id
+                 AND oc.estado <> 'cancelada'
+            )
+          ORDER BY m.updated_at ASC
+          LIMIT 100`
+      ),
     ])
 
     // Cada bucket devuelve count + lista completa (capada a 100 por query).
@@ -507,6 +534,11 @@ export async function getDashboardDailyBriefing(_req: Request, res: Response, ne
           count: importadosAyer.rows.length,
           top: importadosAyer.rows.slice(0, 3),
           items: importadosAyer.rows,
+        },
+        cotizadosSinOC: {
+          count: cotizadosSinOC.rows.length,
+          top: cotizadosSinOC.rows.slice(0, 3),
+          items: cotizadosSinOC.rows,
         },
         fecha_servidor: new Date().toISOString(),
       },

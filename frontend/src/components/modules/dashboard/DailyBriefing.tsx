@@ -54,7 +54,8 @@ export default function DailyBriefing() {
     briefing.rezagados.count +
     briefing.vencidas.count +
     briefing.estancadas.count +
-    briefing.vencePronto.count
+    briefing.vencePronto.count +
+    briefing.cotizadosSinOC.count
 
   const greeting = saludoSegunHora()
   const fecha = new Date(briefing.fecha_servidor).toLocaleDateString('es-MX', {
@@ -87,7 +88,7 @@ export default function DailyBriefing() {
           ETAs cercanas. Buen trabajo. ✨
         </p>
       ) : (
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
           <BucketCard
             emoji="🟡"
             color="amber"
@@ -132,6 +133,15 @@ export default function DailyBriefing() {
             subtitle="materiales nuevos a cotizar"
             onClick={() => setOpenBucket('importadosAyer')}
             action="cotizar"
+          />
+          <BucketCard
+            emoji="💰"
+            color="purple"
+            count={briefing.cotizadosSinOC.count}
+            title="Cotizados sin OC"
+            subtitle="precio cargado, falta emitir OC"
+            onClick={() => setOpenBucket('cotizadosSinOC')}
+            action="emitir OC"
           />
         </div>
       )}
@@ -191,7 +201,7 @@ export default function DailyBriefing() {
 
 interface BucketCardProps {
   emoji: string
-  color: 'amber' | 'red' | 'orange' | 'blue' | 'emerald'
+  color: 'amber' | 'red' | 'orange' | 'blue' | 'emerald' | 'purple'
   count: number
   title: string
   subtitle: string
@@ -207,6 +217,7 @@ function BucketCard({ emoji, color, count, title, subtitle, onClick, action }: B
     orange:  { ring: 'ring-orange-200',  text: 'text-orange-700',  bg: 'bg-orange-50' },
     blue:    { ring: 'ring-blue-200',    text: 'text-blue-700',    bg: 'bg-blue-50' },
     emerald: { ring: 'ring-emerald-200', text: 'text-emerald-700', bg: 'bg-emerald-50' },
+    purple:  { ring: 'ring-purple-200',  text: 'text-purple-700',  bg: 'bg-purple-50' },
   }
   const c = colorMap[color]
 

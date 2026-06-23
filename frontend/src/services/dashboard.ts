@@ -18,6 +18,9 @@ export interface DailyBriefingItem {
   dias_pendiente?: number | null
   dias_vencida?: number | null
   dias_estancada?: number | null
+  dias_cotizado?: number | null
+  unit_price?: number | null
+  updated_at?: string | null
   created_at?: string | null
   oc_numero?: string | null
   proyecto_codigo?: string | null
@@ -40,6 +43,7 @@ export interface DailyBriefing {
   estancadas: DailyBriefingBucket
   vencePronto: DailyBriefingBucket
   importadosAyer: DailyBriefingBucket
+  cotizadosSinOC: DailyBriefingBucket
   fecha_servidor: string
 }
 

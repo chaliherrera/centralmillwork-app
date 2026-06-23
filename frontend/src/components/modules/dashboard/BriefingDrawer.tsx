@@ -22,7 +22,7 @@ import type { DailyBriefingBucket, DailyBriefingItem } from '@/services/dashboar
  *   - importadosAyer → "Cotizar ahora"
  */
 
-export type BucketKey = 'rezagados' | 'vencidas' | 'estancadas' | 'vencePronto' | 'importadosAyer'
+export type BucketKey = 'rezagados' | 'vencidas' | 'estancadas' | 'vencePronto' | 'importadosAyer' | 'cotizadosSinOC'
 
 const BUCKET_META: Record<BucketKey, { title: string; emoji: string; subtitle: string }> = {
   rezagados:      { title: 'Materiales rezagados', emoji: '🟡', subtitle: '>14 días en PENDIENTE — verificá si todavía aplican antes de cotizar' },
@@ -30,6 +30,7 @@ const BUCKET_META: Record<BucketKey, { title: string; emoji: string; subtitle: s
   estancadas:     { title: 'Recepciones estancadas', emoji: '🟠', subtitle: 'Pendientes >5 días sin cerrar — ¿llegó el material?' },
   vencePronto:    { title: 'OCs que vencen pronto', emoji: '📅', subtitle: 'Llegan hoy o mañana — preparar espacio en taller' },
   importadosAyer: { title: 'Materiales importados ayer', emoji: '🆕', subtitle: 'Nuevos en MTO — cotizá con sus vendors' },
+  cotizadosSinOC: { title: 'Cotizados sin OC',     emoji: '💰', subtitle: 'Tienen precio cargado pero falta emitir la OC — no perder el hilo' },
 }
 
 interface Props {
@@ -200,6 +201,7 @@ function ComingSoonPlaceholder({ bucketKey, items }: { bucketKey: BucketKey; ite
     estancadas:     '/recepciones?estado=pendiente',
     vencePronto:    '/ordenes-compra?flag=2dias',
     importadosAyer: '/materiales?estado_cotiz=PENDIENTE',
+    cotizadosSinOC: '/materiales?estado_cotiz=COTIZADO',
   }
   return (
     <div className="px-6 py-6 space-y-3">
