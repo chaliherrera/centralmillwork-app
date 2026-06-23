@@ -469,27 +469,36 @@ export async function getDashboardDailyBriefing(_req: Request, res: Response, ne
       ),
     ])
 
+    // Cada bucket devuelve count + lista completa (capada a 100 por query).
+    // El frontend usa `top` (slice 3) para el card summary del Daily Briefing
+    // y `items` (completo) para el drawer cuando el user hace click para tomar
+    // acción.
     res.json({
       data: {
         rezagados: {
           count: rezagados.rows.length,
           top: rezagados.rows.slice(0, 3),
+          items: rezagados.rows,
         },
         vencidas: {
           count: vencidas.rows.length,
           top: vencidas.rows.slice(0, 3),
+          items: vencidas.rows,
         },
         estancadas: {
           count: estancadas.rows.length,
           top: estancadas.rows.slice(0, 3),
+          items: estancadas.rows,
         },
         vencePronto: {
           count: vencePronto.rows.length,
           top: vencePronto.rows.slice(0, 3),
+          items: vencePronto.rows,
         },
         importadosAyer: {
           count: importadosAyer.rows.length,
           top: importadosAyer.rows.slice(0, 3),
+          items: importadosAyer.rows,
         },
         fecha_servidor: new Date().toISOString(),
       },

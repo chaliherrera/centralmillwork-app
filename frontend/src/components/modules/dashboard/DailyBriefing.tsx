@@ -1,9 +1,10 @@
+import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { Link } from 'react-router-dom'
 import { CheckCircle2, Sparkles, Loader2 } from 'lucide-react'
 import clsx from 'clsx'
 import { dashboardService } from '@/services/dashboard'
 import { useAuth } from '@/context/AuthContext'
+import BriefingDrawer, { type BucketKey } from './BriefingDrawer'
 
 /**
  * Daily Briefing — "Buenos días" panel para Procurement / ADMIN.
@@ -23,6 +24,7 @@ import { useAuth } from '@/context/AuthContext'
 export default function DailyBriefing() {
   const { user } = useAuth()
   const allowed = user?.rol === 'ADMIN' || user?.rol === 'PROCUREMENT'
+  const [openBucket, setOpenBucket] = useState<BucketKey | null>(null)
 
   const { data, isLoading, isError } = useQuery({
     queryKey: ['dashboard-daily-briefing'],
@@ -92,7 +94,7 @@ export default function DailyBriefing() {
             count={briefing.rezagados.count}
             title="Rezagados"
             subtitle="materiales pendientes >14d"
-            to="/materiales?estado_cotiz=PENDIENTE"
+            onClick={() => setOpenBucket('rezagados')}
             action="revisar"
           />
           <BucketCard
@@ -101,7 +103,7 @@ export default function DailyBriefing() {
             count={briefing.vencidas.count}
             title="OCs vencidas"
             subtitle="ETA pasada, no recibidas"
-            to="/ordenes-compra?flag=vencidas"
+            onClick={() => setOpenBucket('vencidas')}
             action="pedir tracking"
           />
           <BucketCard
@@ -110,7 +112,7 @@ export default function DailyBriefing() {
             count={briefing.estancadas.count}
             title="Recepciones"
             subtitle="estancadas >5 días"
-            to="/recepciones?estado=pendiente"
+            onClick={() => setOpenBucket('estancadas')}
             action="cerrar"
           />
           <BucketCard
@@ -119,7 +121,7 @@ export default function DailyBriefing() {
             count={briefing.vencePronto.count}
             title="Vence pronto"
             subtitle="OCs llegan hoy/mañana"
-            to="/ordenes-compra?flag=2dias"
+            onClick={() => setOpenBucket('vencePronto')}
             action="preparar"
           />
           <BucketCard
@@ -128,7 +130,7 @@ export default function DailyBriefing() {
             count={briefing.importadosAyer.count}
             title="Importados ayer"
             subtitle="materiales nuevos a cotizar"
-            to="/materiales?estado_cotiz=PENDIENTE"
+            onClick={() => setOpenBucket('importadosAyer')}
             action="cotizar"
           />
         </div>
@@ -171,6 +173,16 @@ export default function DailyBriefing() {
           </ul>
         </div>
       )}
+
+      {/* Drawer lateral con la lista completa + acciones inline. Solo
+          renderiza cuando hay un bucket seleccionado para no crear DOM
+          innecesario en cada render. */}
+      <BriefingDrawer
+        open={openBucket !== null}
+        onClose={() => setOpenBucket(null)}
+        bucketKey={openBucket ?? 'rezagados'}
+        bucket={openBucket ? briefing[openBucket] : null}
+      />
     </div>
   )
 }
@@ -183,11 +195,11 @@ interface BucketCardProps {
   count: number
   title: string
   subtitle: string
-  to: string
+  onClick: () => void
   action: string
 }
 
-function BucketCard({ emoji, color, count, title, subtitle, to, action }: BucketCardProps) {
+function BucketCard({ emoji, color, count, title, subtitle, onClick, action }: BucketCardProps) {
   const isZero = count === 0
   const colorMap: Record<BucketCardProps['color'], { ring: string; text: string; bg: string }> = {
     amber:   { ring: 'ring-amber-200',   text: 'text-amber-800',   bg: 'bg-amber-50' },
@@ -198,33 +210,36 @@ function BucketCard({ emoji, color, count, title, subtitle, to, action }: Bucket
   }
   const c = colorMap[color]
 
-  const Wrapper = isZero ? 'div' : Link
+  if (isZero) {
+    return (
+      <div className="p-3 rounded-lg ring-1 bg-gray-50 ring-gray-100 opacity-60 flex flex-col gap-1">
+        <div className="flex items-center gap-1">
+          <span className="text-base leading-none">{emoji}</span>
+          <span className="text-2xl font-bold tabular-nums leading-none text-gray-300">{count}</span>
+        </div>
+        <p className="text-xs font-semibold text-gray-400">{title}</p>
+        <p className="text-[10px] text-gray-500 leading-tight">{subtitle}</p>
+      </div>
+    )
+  }
 
   return (
-    <Wrapper
-      {...(isZero ? {} : { to } as any)}
+    <button
+      type="button"
+      onClick={onClick}
       className={clsx(
-        'p-3 rounded-lg ring-1 transition-all flex flex-col gap-1',
-        isZero
-          ? 'bg-gray-50 ring-gray-100 opacity-60'
-          : `${c.bg} ${c.ring} hover:ring-2 cursor-pointer hover:shadow-sm`
+        'p-3 rounded-lg ring-1 transition-all flex flex-col gap-1 text-left',
+        `${c.bg} ${c.ring} hover:ring-2 cursor-pointer hover:shadow-sm`
       )}
     >
       <div className="flex items-center gap-1">
         <span className="text-base leading-none">{emoji}</span>
-        <span className={clsx(
-          'text-2xl font-bold tabular-nums leading-none',
-          isZero ? 'text-gray-300' : c.text
-        )}>
-          {count}
-        </span>
+        <span className={clsx('text-2xl font-bold tabular-nums leading-none', c.text)}>{count}</span>
       </div>
-      <p className={clsx('text-xs font-semibold', isZero ? 'text-gray-400' : 'text-gray-800')}>{title}</p>
+      <p className="text-xs font-semibold text-gray-800">{title}</p>
       <p className="text-[10px] text-gray-500 leading-tight">{subtitle}</p>
-      {!isZero && (
-        <p className={clsx('text-[10px] font-medium mt-0.5', c.text)}>→ {action}</p>
-      )}
-    </Wrapper>
+      <p className={clsx('text-[10px] font-medium mt-0.5', c.text)}>→ {action}</p>
+    </button>
   )
 }
 

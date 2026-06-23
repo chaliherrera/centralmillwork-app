@@ -27,7 +27,11 @@ export interface DailyBriefingItem {
 
 export interface DailyBriefingBucket {
   count: number
+  /** Top 3 items para el preview del card en el Daily Briefing. */
   top: DailyBriefingItem[]
+  /** Lista completa (capada a 100 en backend). Usada por el drawer cuando
+   *  el usuario hace click para tomar acción inline. */
+  items: DailyBriefingItem[]
 }
 
 export interface DailyBriefing {
