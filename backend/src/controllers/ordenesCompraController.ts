@@ -39,7 +39,13 @@ const OC_COMPUTED = `
   CASE WHEN o.estado NOT IN ('cancelada','recibida')
             AND o.fecha_entrega_estimada IS NOT NULL
             AND (o.fecha_entrega_estimada - CURRENT_DATE) BETWEEN 0 AND 2
-       THEN true ELSE false END AS flag_2dias`
+       THEN true ELSE false END AS flag_2dias,
+  -- Agregado UX (2026-06-22): items del proyecto cubiertos por esta OC,
+  -- útil para distinguir OCs al mismo proveedor de batches MTO distintos.
+  (SELECT STRING_AGG(DISTINCT NULLIF(TRIM(m.item), ''), ', ' ORDER BY NULLIF(TRIM(m.item), ''))
+   FROM items_orden_compra ioc
+   LEFT JOIN materiales_mto m ON m.id = ioc.material_id
+   WHERE ioc.orden_compra_id = o.id) AS items_cubiertos`
 
 export async function getOrdenesCompraImportDates(req: Request, res: Response, next: NextFunction) {
   try {

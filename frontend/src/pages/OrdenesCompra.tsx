@@ -419,19 +419,39 @@ function OcCard({ oc, selected, onClick }: { oc: OrdenCompra; selected: boolean;
         <p className="text-xs text-gray-400 truncate">{oc.proveedor?.nombre ?? '—'}</p>
       </div>
 
-      {/* Category */}
-      {oc.categoria && (
-        <span className="inline-block text-xs px-1.5 py-0.5 rounded bg-gray-100 text-gray-500 font-medium">
-          {oc.categoria}
-        </span>
-      )}
+      {/* Category + items_cubiertos: ambos chips, desambiguar OCs de mismo
+          proveedor/categoría que vienen de batches MTO distintos. */}
+      <div className="flex items-center gap-1 flex-wrap">
+        {oc.categoria && (
+          <span className="inline-block text-xs px-1.5 py-0.5 rounded bg-gray-100 text-gray-500 font-medium">
+            {oc.categoria}
+          </span>
+        )}
+        {oc.items_cubiertos && (
+          <span
+            className="inline-block text-xs px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 font-medium truncate max-w-[180px]"
+            title={`Items del proyecto cubiertos: ${oc.items_cubiertos}`}
+          >
+            ítems {oc.items_cubiertos}
+          </span>
+        )}
+      </div>
 
-      {/* Amount + date */}
+      {/* Amount + dates (emisión + MTO). fecha_mto = batch del Excel,
+          permite distinguir 2 OCs al mismo proveedor de importaciones
+          distintas del proyecto. */}
       <div className="flex items-center justify-between pt-1 border-t border-gray-50">
         <span className="text-sm font-bold text-gray-800">{fmt(Number(oc.total))}</span>
-        <div className="flex items-center gap-1 text-xs text-gray-400">
-          <Calendar size={10} />
-          <span className="tabular-nums">{fmtDate(oc.fecha_emision)}</span>
+        <div className="flex flex-col items-end gap-0.5 text-xs text-gray-400">
+          <div className="flex items-center gap-1">
+            <Calendar size={10} />
+            <span className="tabular-nums" title="Fecha de emisión de la OC">{fmtDate(oc.fecha_emision)}</span>
+          </div>
+          {oc.fecha_mto && (
+            <span className="tabular-nums text-[10px] text-gray-400" title="Fecha del lote MTO (Excel) que originó la OC">
+              MTO {fmtDate(oc.fecha_mto)}
+            </span>
+          )}
         </div>
       </div>
     </div>
