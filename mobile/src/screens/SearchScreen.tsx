@@ -9,7 +9,7 @@ import {
   ActivityIndicator, Modal, Image, ScrollView, Alert,
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
-import { mobileService, ProyectoLite, SearchMaterial, SearchOC, SearchResult } from '../services/mobile'
+import { mobileService, ProyectoLite, SearchMaterial, SearchOC, SearchResult, VendorLite } from '../services/mobile'
 
 interface Props {
   onBack: () => void
@@ -32,6 +32,14 @@ export default function SearchScreen({ onBack }: Props) {
   const [q, setQ] = useState('')
   const debouncedQ = useDebounced(q)
 
+  // Vendor dropdown (2026-07-12): reemplaza búsqueda por texto libre. El
+  // user prefiere elegir de la lista de vendors del proyecto. Se carga al
+  // seleccionar proyecto; se limpia al cambiar proyecto o al limpiarlo.
+  const [vendors, setVendors] = useState<VendorLite[]>([])
+  const [vendorPickerOpen, setVendorPickerOpen] = useState(false)
+  const [vendor, setVendor] = useState<string | null>(null)
+  const [vendorsLoading, setVendorsLoading] = useState(false)
+
   const [result, setResult] = useState<SearchResult | null>(null)
   const [searching, setSearching] = useState(false)
   const [proyectosLoading, setProyectosLoading] = useState(true)
@@ -48,22 +56,38 @@ export default function SearchScreen({ onBack }: Props) {
     return () => { mounted = false }
   }, [])
 
-  // Buscar cuando cambia proyecto o query (debounced)
+  // Cargar vendors del proyecto seleccionado
+  useEffect(() => {
+    if (!proyectoId) {
+      setVendors([])
+      setVendor(null)
+      return
+    }
+    let mounted = true
+    setVendorsLoading(true)
+    mobileService.proyectoVendors(proyectoId)
+      .then((data) => { if (mounted) setVendors(data) })
+      .catch(() => { if (mounted) setVendors([]) })
+      .finally(() => { if (mounted) setVendorsLoading(false) })
+    return () => { mounted = false }
+  }, [proyectoId])
+
+  // Buscar cuando cambia proyecto, vendor o query (debounced)
   const runSearch = useCallback(async () => {
-    if (!proyectoId && !debouncedQ.trim()) {
+    if (!proyectoId && !vendor && !debouncedQ.trim()) {
       setResult(null)
       return
     }
     setSearching(true)
     try {
-      const r = await mobileService.search({ proyecto_id: proyectoId, q: debouncedQ })
+      const r = await mobileService.search({ proyecto_id: proyectoId, vendor, q: debouncedQ })
       setResult(r)
     } catch (err: any) {
       Alert.alert('Error', err?.response?.data?.message || 'Error de búsqueda')
     } finally {
       setSearching(false)
     }
-  }, [proyectoId, debouncedQ])
+  }, [proyectoId, vendor, debouncedQ])
 
   useEffect(() => { runSearch() }, [runSearch])
 
@@ -102,11 +126,37 @@ export default function SearchScreen({ onBack }: Props) {
           <Text style={styles.chevron}>▾</Text>
         </TouchableOpacity>
 
-        {/* Query */}
+        {/* Vendor — solo cuando hay proyecto seleccionado */}
+        {proyectoId && (
+          <TouchableOpacity
+            style={styles.proyectoBtn}
+            onPress={() => setVendorPickerOpen(true)}
+            disabled={vendorsLoading || vendors.length === 0}
+          >
+            <Text style={styles.filterLabel}>VENDOR</Text>
+            <Text style={styles.proyectoValue} numberOfLines={1}>
+              {vendorsLoading
+                ? 'Cargando...'
+                : vendors.length === 0
+                  ? 'Sin vendors en este proyecto'
+                  : vendor
+                    ? vendor
+                    : 'Todos los vendors'}
+            </Text>
+            {vendor && (
+              <TouchableOpacity onPress={() => setVendor(null)} style={styles.clearBtn}>
+                <Text style={styles.clearTxt}>✕</Text>
+              </TouchableOpacity>
+            )}
+            {!vendor && <Text style={styles.chevron}>▾</Text>}
+          </TouchableOpacity>
+        )}
+
+        {/* Query — búsqueda por texto */}
         <View style={styles.searchWrap}>
           <TextInput
             style={styles.searchInput}
-            placeholder="Vendor, código, descripción, item..."
+            placeholder={proyectoId ? 'Código, descripción, item...' : 'Vendor, código, descripción...'}
             placeholderTextColor="#8a8375"
             value={q}
             onChangeText={setQ}
@@ -180,49 +230,102 @@ export default function SearchScreen({ onBack }: Props) {
         />
       )}
 
-      {/* Picker Proyecto — modal */}
+      {/* Picker Proyecto — modal
+          Fix (2026-07-12): SafeAreaView con backgroundColor forest para que el
+          notch/Dynamic Island quede pintado con el color del header; body
+          separado en color cream adentro. Sin esto, el header verde queda
+          debajo del status bar y los botones son inaccesibles. */}
       <Modal
         visible={proyectoPickerOpen}
         animationType="slide"
         onRequestClose={() => setProyectoPickerOpen(false)}
       >
-        <SafeAreaView style={{ flex: 1, backgroundColor: '#faf7f0' }}>
+        <SafeAreaView style={{ flex: 1, backgroundColor: '#2c3126' }} edges={['top', 'bottom']}>
           <View style={styles.pickerHeader}>
             <Text style={styles.pickerTitle}>Elegí un proyecto</Text>
             <TouchableOpacity onPress={() => setProyectoPickerOpen(false)}>
               <Text style={styles.pickerCancel}>Cancelar</Text>
             </TouchableOpacity>
           </View>
-          <FlatList
-            data={[{ id: null as null, codigo: '—', nombre: 'Todos los proyectos', cliente: null }, ...proyectos]}
-            keyExtractor={(p) => String(p.id ?? 'all')}
-            renderItem={({ item: p }) => (
-              <TouchableOpacity
-                style={[
-                  styles.pickerRow,
-                  proyectoId === p.id && styles.pickerRowActive,
-                ]}
-                onPress={() => {
-                  setProyectoId(p.id)
-                  setProyectoPickerOpen(false)
-                }}
-              >
-                <Text style={styles.pickerRowCode}>{p.codigo}</Text>
-                <Text style={styles.pickerRowName} numberOfLines={2}>{p.nombre}</Text>
-                {p.cliente && <Text style={styles.pickerRowCliente}>{p.cliente}</Text>}
-              </TouchableOpacity>
-            )}
-          />
+          <View style={{ flex: 1, backgroundColor: '#faf7f0' }}>
+            <FlatList
+              data={[{ id: null as null, codigo: '—', nombre: 'Todos los proyectos', cliente: null }, ...proyectos]}
+              keyExtractor={(p) => String(p.id ?? 'all')}
+              renderItem={({ item: p }) => (
+                <TouchableOpacity
+                  style={[
+                    styles.pickerRow,
+                    proyectoId === p.id && styles.pickerRowActive,
+                  ]}
+                  onPress={() => {
+                    setProyectoId(p.id)
+                    setProyectoPickerOpen(false)
+                  }}
+                >
+                  <Text style={styles.pickerRowCode}>{p.codigo}</Text>
+                  <Text style={styles.pickerRowName} numberOfLines={2}>{p.nombre}</Text>
+                  {p.cliente && <Text style={styles.pickerRowCliente}>{p.cliente}</Text>}
+                </TouchableOpacity>
+              )}
+            />
+          </View>
         </SafeAreaView>
       </Modal>
 
-      {/* Detalle Material — modal con fotos */}
+      {/* Picker Vendor — modal
+          Vendors únicos del proyecto seleccionado, ordenados por cantidad de
+          materiales (los más "voluminosos" arriba). */}
+      <Modal
+        visible={vendorPickerOpen}
+        animationType="slide"
+        onRequestClose={() => setVendorPickerOpen(false)}
+      >
+        <SafeAreaView style={{ flex: 1, backgroundColor: '#2c3126' }} edges={['top', 'bottom']}>
+          <View style={styles.pickerHeader}>
+            <Text style={styles.pickerTitle}>Elegí un vendor</Text>
+            <TouchableOpacity onPress={() => setVendorPickerOpen(false)}>
+              <Text style={styles.pickerCancel}>Cancelar</Text>
+            </TouchableOpacity>
+          </View>
+          <View style={{ flex: 1, backgroundColor: '#faf7f0' }}>
+            <FlatList
+              data={[{ vendor: null as unknown as string, count: 0 }, ...vendors]}
+              keyExtractor={(v, idx) => v.vendor ?? `all-${idx}`}
+              renderItem={({ item: v }) => (
+                <TouchableOpacity
+                  style={[
+                    styles.pickerRow,
+                    vendor === v.vendor && styles.pickerRowActive,
+                  ]}
+                  onPress={() => {
+                    setVendor(v.vendor ?? null)
+                    setVendorPickerOpen(false)
+                  }}
+                >
+                  <Text style={styles.pickerRowName}>
+                    {v.vendor ?? 'Todos los vendors'}
+                  </Text>
+                  {v.vendor && (
+                    <Text style={styles.pickerRowCliente}>
+                      {v.count} {v.count === 1 ? 'material' : 'materiales'}
+                    </Text>
+                  )}
+                </TouchableOpacity>
+              )}
+            />
+          </View>
+        </SafeAreaView>
+      </Modal>
+
+      {/* Detalle Material — modal con fotos
+          Fix (2026-07-12): mismo patrón que el picker — SafeAreaView forest
+          para el notch, body cream adentro. */}
       <Modal
         visible={!!selectedMaterial}
         animationType="slide"
         onRequestClose={() => setSelectedMaterial(null)}
       >
-        <SafeAreaView style={{ flex: 1, backgroundColor: '#faf7f0' }}>
+        <SafeAreaView style={{ flex: 1, backgroundColor: '#2c3126' }} edges={['top', 'bottom']}>
           <View style={styles.pickerHeader}>
             <Text style={styles.pickerTitle}>Material</Text>
             <TouchableOpacity onPress={() => setSelectedMaterial(null)}>
@@ -230,7 +333,7 @@ export default function SearchScreen({ onBack }: Props) {
             </TouchableOpacity>
           </View>
           {selectedMaterial && (
-            <ScrollView contentContainerStyle={styles.detailWrap}>
+            <ScrollView contentContainerStyle={styles.detailWrap} style={{ backgroundColor: '#faf7f0' }}>
               {selectedMaterial.codigo && (
                 <Text style={styles.detailCode}>{selectedMaterial.codigo}</Text>
               )}

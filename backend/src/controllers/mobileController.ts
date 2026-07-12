@@ -68,10 +68,14 @@ export async function mobileSearch(req: Request, res: Response, next: NextFuncti
       ? parseInt(String(req.query.proyecto_id), 10)
       : null
     const rawQ = String(req.query.q ?? '').trim()
+    // Filtro por vendor exacto (2026-07-12): agregado tras feedback del user
+    // — prefiere elegir vendor de la lista del proyecto en vez de escribir.
+    // Cuando llega, se aplica como m.vendor = $X (case-insensitive).
+    const rawVendor = String(req.query.vendor ?? '').trim()
     const limit = Math.min(50, Math.max(1, parseInt(String(req.query.limit ?? '20'), 10) || 20))
 
-    // Si no hay proyecto ni q, devolver vacío (evita full-scan por accidente)
-    if (!proyectoId && !rawQ) {
+    // Si no hay proyecto ni q ni vendor, devolver vacío (evita full-scan por accidente)
+    if (!proyectoId && !rawQ && !rawVendor) {
       return res.json({
         data: {
           proyecto: null,
@@ -106,6 +110,10 @@ export async function mobileSearch(req: Request, res: Response, next: NextFuncti
     if (proyectoId) {
       matVals.push(proyectoId)
       matConds.push(`m.proyecto_id = $${matVals.length}`)
+    }
+    if (rawVendor) {
+      matVals.push(rawVendor)
+      matConds.push(`LOWER(m.vendor) = LOWER($${matVals.length})`)
     }
     if (qLike) {
       matVals.push(qLike)
@@ -171,6 +179,10 @@ export async function mobileSearch(req: Request, res: Response, next: NextFuncti
     if (proyectoId) {
       ocVals.push(proyectoId)
       ocConds.push(`o.proyecto_id = $${ocVals.length}`)
+    }
+    if (rawVendor) {
+      ocVals.push(rawVendor)
+      ocConds.push(`LOWER(v.nombre) = LOWER($${ocVals.length})`)
     }
     if (qLike) {
       ocVals.push(qLike)
@@ -276,5 +288,35 @@ export async function mobileProyectos(_req: Request, res: Response, next: NextFu
         ORDER BY codigo`
     )
     res.json({ data: rows })
+  } catch (err) { next(err) }
+}
+
+/**
+ * GET /api/mobile/proyectos/:id/vendors
+ *
+ * Vendors únicos con material en el proyecto, ordenados por cantidad de
+ * items. Feedback del user (2026-07-12): en vez de escribir el nombre del
+ * vendor libremente, prefiere elegirlo de una lista. El count ayuda a
+ * priorizar vendors relevantes.
+ */
+export async function mobileProyectoVendors(req: Request, res: Response, next: NextFunction) {
+  try {
+    const proyectoId = parseInt(String(req.params.id), 10)
+    if (!Number.isFinite(proyectoId)) {
+      return res.status(400).json({ error: 'proyecto_id inválido' })
+    }
+    const { rows } = await pool.query<{ vendor: string; count: string }>(
+      `SELECT m.vendor, COUNT(*)::text AS count
+         FROM materiales_mto m
+        WHERE m.proyecto_id = $1
+          AND m.vendor IS NOT NULL
+          AND TRIM(m.vendor) <> ''
+        GROUP BY m.vendor
+        ORDER BY COUNT(*) DESC, m.vendor ASC`,
+      [proyectoId]
+    )
+    res.json({
+      data: rows.map((r) => ({ vendor: r.vendor, count: Number(r.count) })),
+    })
   } catch (err) { next(err) }
 }

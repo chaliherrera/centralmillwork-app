@@ -8,7 +8,7 @@ import {
   getDashboardResumenEstados, getDashboardProyectosRecientes,
   getDashboardDailyBriefing,
 } from '../controllers/dashboardController'
-import { mobileSearch, mobileProyectos } from '../controllers/mobileController'
+import { mobileSearch, mobileProyectos, mobileProyectoVendors } from '../controllers/mobileController'
 import {
   getProyectos, getProyecto, createProyecto, updateProyecto, deleteProyecto,
   getProyectoResumen, getProyectoActividad, getProyectoItemsReadiness,
@@ -95,6 +95,7 @@ router.get('/dashboard/daily-briefing',      requireRole('ADMIN', 'PROCUREMENT')
 // porque cualquier user auth puede consultar.
 router.get('/mobile/search',                 mobileSearch)
 router.get('/mobile/proyectos',              mobileProyectos)
+router.get('/mobile/proyectos/:id/vendors',  mobileProyectoVendors)
 
 // ─── Proyectos ────────────────────────────────────────────────────────────────
 router.get('/proyectos',                      getProyectos)

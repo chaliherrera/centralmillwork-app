@@ -46,16 +46,27 @@ export interface SearchResult {
   counts: { materiales: number; ocs: number }
 }
 
+export interface VendorLite {
+  vendor: string
+  count: number
+}
+
 export const mobileService = {
   proyectos: async (): Promise<ProyectoLite[]> => {
     const r = await api.get<{ data: ProyectoLite[] }>('/mobile/proyectos')
     return r.data.data
   },
 
-  search: async (opts: { proyecto_id?: number | null; q?: string; limit?: number }): Promise<SearchResult> => {
+  proyectoVendors: async (proyectoId: number): Promise<VendorLite[]> => {
+    const r = await api.get<{ data: VendorLite[] }>(`/mobile/proyectos/${proyectoId}/vendors`)
+    return r.data.data
+  },
+
+  search: async (opts: { proyecto_id?: number | null; vendor?: string | null; q?: string; limit?: number }): Promise<SearchResult> => {
     const r = await api.get<{ data: SearchResult }>('/mobile/search', {
       params: {
         proyecto_id: opts.proyecto_id ?? undefined,
+        vendor:      opts.vendor?.trim() || undefined,
         q:           opts.q?.trim() || undefined,
         limit:       opts.limit ?? 20,
       },
