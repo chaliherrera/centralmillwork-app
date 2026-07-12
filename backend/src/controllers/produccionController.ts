@@ -135,17 +135,34 @@ export async function getOrden(req: Request, res: Response, next: NextFunction) 
  *   asignaciones?: { [estacion]: personal_id }   // operador asignado por estación
  * }
  */
+/**
+ * Genera el próximo número de OP de producción usando la sequence Postgres.
+ * Formato: OP-{año}-{padStart(4,'0')}, ej. OP-2026-0001.
+ * Atómico (nextval) — sin race conditions con múltiples creaciones
+ * simultáneas. Consistente con OC/REC/COT que usan el mismo pattern.
+ *
+ * Muestras usan su propio formato OP-MS-{año}-{seq} (ver
+ * modules/muestras/domain/fabricacion.ts) para distinguir visualmente.
+ */
+export async function nextNumeroOPProduccion(client: import('pg').PoolClient): Promise<string> {
+  const year = new Date().getFullYear()
+  const { rows } = await client.query<{ seq: string }>(
+    `SELECT nextval('op_produccion_numero_seq')::text AS seq`
+  )
+  return `OP-${year}-${String(rows[0].seq).padStart(4, '0')}`
+}
+
 export async function createOrden(req: Request, res: Response, next: NextFunction) {
   const client = await pool.connect()
   try {
     const {
-      numero_orden, proyecto_id, numero_item, cantidad, unidad,
+      numero_orden: numeroOrdenBody, proyecto_id, numero_item, cantidad, unidad,
       especificaciones, material_requerido, prioridad, fecha_entrega,
       tiempo_estimado_horas, notas, procesos = [], asignaciones = {},
     } = req.body
 
-    if (!numero_orden || !numero_item || !cantidad) {
-      return next(createError('numero_orden, numero_item y cantidad son requeridos', 400))
+    if (!numero_item || !cantidad) {
+      return next(createError('numero_item y cantidad son requeridos', 400))
     }
     if (!Array.isArray(procesos) || procesos.length === 0) {
       return next(createError('Debe especificar al menos un proceso/estación', 400))
@@ -155,6 +172,13 @@ export async function createOrden(req: Request, res: Response, next: NextFunctio
     const primeraEstacion = procesosOrdenados[0]
 
     await client.query('BEGIN')
+
+    // Naming (2026-07-12): si el frontend no manda numero_orden, auto-generar
+    // con la sequence. Mantener backward compat: si viene desde un caller
+    // legacy (script, migración), respetar el valor pasado.
+    const numero_orden = (numeroOrdenBody && String(numeroOrdenBody).trim())
+      ? String(numeroOrdenBody).trim().toUpperCase()
+      : await nextNumeroOPProduccion(client)
 
     const { rows: [orden] } = await client.query(
       `INSERT INTO ordenes_produccion

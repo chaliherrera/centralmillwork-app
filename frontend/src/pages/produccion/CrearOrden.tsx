@@ -31,7 +31,6 @@ export default function CrearOrden() {
   const prefillNumeroItem = searchParams.get('numero_item')
 
   // Datos básicos
-  const [numeroOrden, setNumeroOrden] = useState('')
   const [proyectoId, setProyectoId]   = useState<number | null>(
     prefillProyectoId && /^\d+$/.test(prefillProyectoId) ? parseInt(prefillProyectoId) : null
   )
@@ -97,8 +96,10 @@ export default function CrearOrden() {
   }
 
   const crear = useMutation({
+    // numero_orden: NO se manda — el backend lo auto-genera con la sequence
+    // op_produccion_numero_seq (formato OP-{año}-{XXXX}). Ver
+    // produccionController.nextNumeroOPProduccion.
     mutationFn: () => produccionService.crearOrden({
-      numero_orden: numeroOrden.trim(),
       proyecto_id: proyectoId,
       numero_item: numeroItem.trim(),
       cantidad,
@@ -112,15 +113,15 @@ export default function CrearOrden() {
       asignaciones,
     }),
     onSuccess: (res) => {
-      toast.success(res.message)
+      toast.success(`OP ${res.data.numero_orden} creada`)
       nav(`/produccion/ordenes/${res.data.id}`)
     },
   })
 
   function submit(e: FormEvent) {
     e.preventDefault()
-    if (!numeroOrden.trim() || !numeroItem.trim() || procesos.length === 0) {
-      toast.error('Completá número de orden, número de item y al menos un proceso')
+    if (!numeroItem.trim() || procesos.length === 0) {
+      toast.error('Completá número de item y al menos un proceso')
       return
     }
     if (!/^\d+$/.test(numeroItem.trim())) {
@@ -153,32 +154,29 @@ export default function CrearOrden() {
           {/* Datos básicos */}
           <div className="card space-y-4">
             <h3>Datos del item</h3>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="label">N° de orden *</label>
-                <input
-                  type="text" value={numeroOrden}
-                  onChange={(e) => setNumeroOrden(e.target.value.toUpperCase())}
-                  required placeholder="OP-26-001" className="input w-full"
-                />
-              </div>
-              <div>
-                <label className="label">Proyecto</label>
-                <select
-                  value={proyectoId ?? ''}
-                  onChange={(e) => setProyectoId(e.target.value ? parseInt(e.target.value) : null)}
-                  className="input w-full"
-                >
-                  <option value="">— sin proyecto —</option>
-                  {proyectos.map((p) => (
-                    <option key={p.id} value={p.id}>{p.codigo} — {p.nombre}</option>
-                  ))}
-                </select>
-                <p className="text-xs text-gray-500 mt-1">
-                  Solo proyectos en estado <span className="font-medium">Activo</span>.
-                  Si no aparece, revisá su estado en Compras.
-                </p>
-              </div>
+            {/* Info: el N° de orden se genera automáticamente al guardar
+                (formato OP-2026-XXXX, consistente con OC/REC). El campo
+                manual se retiró 2026-07-12 porque generaba colisiones
+                cuando un proyecto necesitaba múltiples OPs. */}
+            <div className="text-xs text-gray-500 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2">
+              El N° de orden se asigna automáticamente al guardar (formato <span className="font-mono">OP-2026-XXXX</span>).
+            </div>
+            <div>
+              <label className="label">Proyecto</label>
+              <select
+                value={proyectoId ?? ''}
+                onChange={(e) => setProyectoId(e.target.value ? parseInt(e.target.value) : null)}
+                className="input w-full"
+              >
+                <option value="">— sin proyecto —</option>
+                {proyectos.map((p) => (
+                  <option key={p.id} value={p.id}>{p.codigo} — {p.nombre}</option>
+                ))}
+              </select>
+              <p className="text-xs text-gray-500 mt-1">
+                Solo proyectos en estado <span className="font-medium">Activo</span>.
+                Si no aparece, revisá su estado en Compras.
+              </p>
             </div>
 
             <div>

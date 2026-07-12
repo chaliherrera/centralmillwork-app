@@ -74,6 +74,24 @@ export default function Ordenes() {
       ),
     },
     {
+      // Nueva columna dedicada (2026-07-12): el número de OP dejó de embeber
+      // el código del proyecto, ahora se muestra explícito acá.
+      key: 'proyecto_codigo',
+      header: 'Proyecto',
+      render: (r) => r.proyecto_codigo ? (
+        <div>
+          <div className="font-mono text-xs font-semibold text-forest-700">{r.proyecto_codigo}</div>
+          {r.proyecto_nombre && (
+            <div className="text-xs text-gray-500 truncate max-w-[200px]" title={r.proyecto_nombre}>
+              {r.proyecto_nombre}
+            </div>
+          )}
+        </div>
+      ) : (
+        <span className="text-xs text-gray-400 italic">sin proyecto</span>
+      ),
+    },
+    {
       key: 'numero_item',
       header: 'Item',
       render: (r) => (
@@ -81,7 +99,6 @@ export default function Ordenes() {
           <div className="font-medium text-gray-900">{r.numero_item}</div>
           <div className="text-xs text-gray-500">
             {r.cantidad} {r.unidad}
-            {r.proyecto_codigo && <> · {r.proyecto_codigo}</>}
           </div>
         </div>
       ),

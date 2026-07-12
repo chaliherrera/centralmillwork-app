@@ -19,7 +19,10 @@ interface OrdenesFilters {
 }
 
 interface CrearOrdenInput {
-  numero_orden: string
+  /** Opcional desde 2026-07-12. Si se omite, el backend lo auto-genera
+   *  (OP-2026-XXXX vía op_produccion_numero_seq). Ver produccionController.
+   *  nextNumeroOPProduccion. */
+  numero_orden?: string
   proyecto_id: number | null
   numero_item: string
   cantidad: number
