@@ -2,7 +2,7 @@
   "expo": {
     "name": "Central Millwork",
     "slug": "centralmillwork",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
@@ -14,7 +14,14 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.centralmillwork.app"
+      "bundleIdentifier": "com.centralmillwork.app",
+      "buildNumber": "1",
+      "infoPlist": {
+        "NSCameraUsageDescription": "Central Millwork necesita acceso a la cámara para tomar fotos de los materiales recibidos durante el registro de recepciones.",
+        "NSPhotoLibraryUsageDescription": "Central Millwork necesita acceso a la librería de fotos para adjuntar imágenes de materiales recibidos.",
+        "NSPhotoLibraryAddUsageDescription": "Central Millwork puede guardar fotos tomadas con la cámara en tu librería para tu archivo personal.",
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
       "adaptiveIcon": {

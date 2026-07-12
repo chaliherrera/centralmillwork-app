@@ -11,9 +11,10 @@ import { EtaBadge } from '../components/EtaBadge'
 interface Props {
   onSelect: (oc: OrdenCompra) => void
   onLogout: () => void
+  onOpenSearch?: () => void
 }
 
-export default function OCsListScreen({ onSelect, onLogout }: Props) {
+export default function OCsListScreen({ onSelect, onLogout, onOpenSearch }: Props) {
   const { user } = useAuth()
   const [ocs, setOcs] = useState<OrdenCompra[]>([])
   const [loading, setLoading] = useState(true)
@@ -65,9 +66,16 @@ export default function OCsListScreen({ onSelect, onLogout }: Props) {
           <Text style={styles.brand}>CENTRAL MILLWORK</Text>
           <Text style={styles.userInfo}>{user?.nombre} · {user?.rol}</Text>
         </View>
-        <TouchableOpacity onPress={onLogout}>
-          <Text style={styles.logoutLink}>Salir</Text>
-        </TouchableOpacity>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 16 }}>
+          {onOpenSearch && (
+            <TouchableOpacity onPress={onOpenSearch}>
+              <Text style={{ color: '#C18A2D', fontSize: 14, fontWeight: '600' }}>🔍 Buscar</Text>
+            </TouchableOpacity>
+          )}
+          <TouchableOpacity onPress={onLogout}>
+            <Text style={styles.logoutLink}>Salir</Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
       {/* Title */}

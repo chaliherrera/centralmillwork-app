@@ -8,6 +8,7 @@ import {
   getDashboardResumenEstados, getDashboardProyectosRecientes,
   getDashboardDailyBriefing,
 } from '../controllers/dashboardController'
+import { mobileSearch, mobileProyectos } from '../controllers/mobileController'
 import {
   getProyectos, getProyecto, createProyecto, updateProyecto, deleteProyecto,
   getProyectoResumen, getProyectoActividad, getProyectoItemsReadiness,
@@ -88,6 +89,12 @@ router.get('/dashboard/charts',              getDashboardCharts)
 router.get('/dashboard/resumen-estados',     getDashboardResumenEstados)
 router.get('/dashboard/proyectos-recientes', getDashboardProyectosRecientes)
 router.get('/dashboard/daily-briefing',      requireRole('ADMIN', 'PROCUREMENT'), getDashboardDailyBriefing)
+
+// Endpoints móvil-específicos — feature "Buscar" (2026-07-12). Auth via
+// requireAuth global (montado antes de este router). Sin restricción de rol
+// porque cualquier user auth puede consultar.
+router.get('/mobile/search',                 mobileSearch)
+router.get('/mobile/proyectos',              mobileProyectos)
 
 // ─── Proyectos ────────────────────────────────────────────────────────────────
 router.get('/proyectos',                      getProyectos)
