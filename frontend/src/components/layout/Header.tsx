@@ -12,6 +12,7 @@ const ROL_LABEL: Record<UserRole, string> = {
   CONTABILIDAD:       'Accounting',
   SHOP_MANAGER:       'Shop Manager',
   ENGINEERING:        'Engineering',
+  VIEWER:             'Viewer',
 }
 
 interface HeaderProps { title: string; glass?: boolean }
