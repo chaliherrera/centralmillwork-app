@@ -175,6 +175,11 @@ function RecepcionPanel({
             </div>
             <p className="text-xs text-white/70 truncate">{oc.proyecto?.codigo} · {oc.proyecto?.nombre}</p>
             <p className="text-xs text-white/60 truncate">{oc.proveedor?.nombre ?? '—'}</p>
+            {oc.items_cubiertos && (
+              <p className="text-xs text-blue-200 mt-0.5 truncate" title={`Ítems del proyecto cubiertos: ${oc.items_cubiertos}`}>
+                Ítems: {oc.items_cubiertos}
+              </p>
+            )}
             <p className="text-lg font-bold text-gold-300 mt-0.5">{fmt(Number(oc.total))}</p>
           </div>
           <button onClick={onClose}
@@ -435,6 +440,11 @@ function HistorialPanel({ oc, onClose }: { oc: OrdenCompra; onClose: () => void 
               </span>
             </div>
             <p className="text-xs text-white/70 truncate">{oc.proyecto?.nombre} · {oc.proveedor?.nombre}</p>
+            {oc.items_cubiertos && (
+              <p className="text-xs text-blue-200 mt-0.5 truncate" title={`Ítems del proyecto cubiertos: ${oc.items_cubiertos}`}>
+                Ítems: {oc.items_cubiertos}
+              </p>
+            )}
             {oc.fecha_entrega_real && (
               <p className="text-xs text-green-200 mt-0.5">Recibido: {fmtDate(oc.fecha_entrega_real)}</p>
             )}
@@ -545,9 +555,19 @@ function OcCard({ oc, selected, onClick }: { oc: OrdenCompra; selected: boolean;
         <p className="text-xs font-semibold text-gray-700 truncate">{oc.proyecto?.nombre ?? '—'}</p>
         <p className="text-xs text-gray-400 truncate">{oc.proveedor?.nombre ?? '—'}</p>
       </div>
-      {oc.categoria && (
-        <span className="inline-block text-xs px-1.5 py-0.5 rounded bg-gray-100 text-gray-500">{oc.categoria}</span>
-      )}
+      <div className="flex items-center gap-1 flex-wrap">
+        {oc.categoria && (
+          <span className="inline-block text-xs px-1.5 py-0.5 rounded bg-gray-100 text-gray-500">{oc.categoria}</span>
+        )}
+        {oc.items_cubiertos && (
+          <span
+            className="inline-block text-xs px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 font-medium truncate max-w-[140px]"
+            title={`Ítems del proyecto cubiertos: ${oc.items_cubiertos}`}
+          >
+            ítems {oc.items_cubiertos}
+          </span>
+        )}
+      </div>
       <div className="flex items-center justify-between pt-1 border-t border-gray-50">
         <span className="text-sm font-bold text-gray-800">{fmt(Number(oc.total))}</span>
         <div className="flex items-center gap-1 text-xs text-gray-400">

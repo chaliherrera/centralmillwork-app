@@ -9,6 +9,10 @@ export interface OrdenCompra {
   fecha_entrega_estimada: string | null
   total: string
   notas: string | null
+  /** Items del proyecto cubiertos por esta OC (ej. "3, 5-6, 12"). Ayuda a
+   *  distinguir OCs al mismo vendor de batches MTO distintos. Puede venir
+   *  null si la OC no tiene items asociados (compra directa sin MTO). */
+  items_cubiertos?: string | null
   proyecto?: { id: number; codigo: string; nombre: string }
   proveedor?: { id: number; nombre: string }
 }

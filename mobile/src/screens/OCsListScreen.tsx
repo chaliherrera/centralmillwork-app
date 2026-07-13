@@ -142,6 +142,11 @@ function OCCard({ oc, onPress }: { oc: OrdenCompra; onPress: () => void }) {
       <Text style={styles.cardProyecto} numberOfLines={1}>
         {oc.proyecto?.codigo} · {oc.proyecto?.nombre}
       </Text>
+      {oc.items_cubiertos && (
+        <Text style={styles.cardItems} numberOfLines={1}>
+          Items: {oc.items_cubiertos}
+        </Text>
+      )}
       <View style={styles.cardFooter}>
         <EtaBadge eta={oc.fecha_entrega_estimada} /><Text style={[styles.cardFecha, { marginLeft: 8 }]}>
           {oc.fecha_entrega_estimada ? `ETA: ${formatDate(oc.fecha_entrega_estimada)}` : 'Sin ETA'}
@@ -193,6 +198,7 @@ const styles = StyleSheet.create({
   badgeText: { fontSize: 10, fontWeight: '700', letterSpacing: 0.5, color: '#2c3126' },
   cardProveedor: { fontSize: 14, fontWeight: '600', color: '#1F2419', marginTop: 2 },
   cardProyecto: { fontSize: 12, color: '#5A5F52', marginTop: 2 },
+  cardItems: { fontSize: 12, color: '#7d5c00', marginTop: 2, fontWeight: '500' },
   cardFooter: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 10, alignItems: 'center' },
   cardFecha: { fontSize: 12, color: '#5A5F52' },
   cardTotal: { fontSize: 15, fontWeight: '700', color: '#C18A2D' },
