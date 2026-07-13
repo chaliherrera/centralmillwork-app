@@ -197,16 +197,24 @@ export default function OCDetailScreen({ oc, onBack, onSaved }: Props) {
 
   if (loading) {
     return (
-      <SafeAreaView style={styles.container}>
-        <View style={styles.loadingBox}>
-          <ActivityIndicator size="large" color="#C18A2D" />
+      <SafeAreaView style={styles.safeAreaTop} edges={['top', 'bottom']}>
+        <View style={styles.container}>
+          <View style={styles.loadingBox}>
+            <ActivityIndicator size="large" color="#C18A2D" />
+          </View>
         </View>
       </SafeAreaView>
     )
   }
 
+  // Fix (2026-07-13): SafeAreaView con backgroundColor forest para que el
+  // área del notch/status bar quede pintada con el color del header. Sin
+  // esto, el botón "Volver" quedaba debajo del indicador de batería y era
+  // inaccesible. Mismo patrón aplicado en SearchScreen.
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.safeAreaTop} edges={['top', 'bottom']}>
+      {/* Body cream — envuelve todo debajo del status bar */}
+      <View style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity onPress={onBack} style={styles.backBtn}>
@@ -492,11 +500,16 @@ export default function OCDetailScreen({ oc, onBack, onSaved }: Props) {
           {previewPhoto && <Image source={{ uri: previewPhoto }} style={styles.previewImage} resizeMode="contain" />}
         </View>
       </Modal>
+      </View>
     </SafeAreaView>
   )
 }
 
 const styles = StyleSheet.create({
+  // Fondo forest para el área del notch/status bar (sino el botón "Volver"
+  // queda debajo del indicador de batería del iPhone). El body real usa
+  // container con backgroundColor cream/gris.
+  safeAreaTop: { flex: 1, backgroundColor: '#2c3126' },
   container: { flex: 1, backgroundColor: '#F4F5F2' },
   header: {
     backgroundColor: '#2c3126', paddingVertical: 14, paddingHorizontal: 14,
