@@ -182,7 +182,11 @@ router.delete('/cotizaciones/:id',            WRITE, deleteCotizacion)
 //   - UPDATE ADMIN, ENGINEERING, SHOP_MANAGER (mismos)
 //   - Transición de estado ADMIN, SHOP_MANAGER (ENGINEERING solo puede archivar/solicitar)
 //   - Registro de envío ADMIN, SHOP_MANAGER
-const MUESTRAS_READ  = requireRole('ADMIN', 'ENGINEERING', 'SHOP_MANAGER', 'PROCUREMENT')
+// VIEWER agregado 2026-07-12: rol de solo lectura, ve todo pero no
+// modifica nada. Se agrega a las listas de READ para que tenga acceso
+// a los módulos que están gated (Muestras). Los GET generales ya son
+// abiertos, no necesitan cambio.
+const MUESTRAS_READ  = requireRole('ADMIN', 'ENGINEERING', 'SHOP_MANAGER', 'PROCUREMENT', 'VIEWER')
 const MUESTRAS_WRITE = requireRole('ADMIN', 'ENGINEERING', 'SHOP_MANAGER')
 const MUESTRAS_FLOW  = requireRole('ADMIN', 'SHOP_MANAGER')
 // F5: logística de envío es responsabilidad de procurement (ya no shop_manager).

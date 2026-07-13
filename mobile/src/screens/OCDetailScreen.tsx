@@ -25,6 +25,10 @@ interface MaterialState extends MaterialLote {
 
 export default function OCDetailScreen({ oc, onBack, onSaved }: Props) {
   const { user } = useAuth()
+  // VIEWER (2026-07-12): rol de solo lectura, no puede registrar recepciones.
+  // Se esconde el botón guardar y el bloque de acción al final del scroll.
+  // El backend igual rechaza con 403 si intentara, pero mejor esconder UI.
+  const isReadOnly = user?.rol === 'VIEWER'
   const [materiales, setMateriales] = useState<MaterialState[]>([])
   const [historial, setHistorial] = useState<RecepcionHistorial[]>([])
   const [loading, setLoading] = useState(true)
@@ -408,64 +412,75 @@ export default function OCDetailScreen({ oc, onBack, onSaved }: Props) {
           numberOfLines={3}
         />
 
-        {/* Tipo de recepción */}
-        <Text style={styles.sectionTitle}>Tipo de recepción</Text>
-        <View style={styles.tipoRow}>
-          <TouchableOpacity
-            onPress={() => setTipo('total')}
-            style={[
-              styles.tipoBtn,
-              tipo === 'total' ? styles.tipoBtnActiveTotal : styles.tipoBtnInactive,
-            ]}
-            activeOpacity={0.7}
-          >
-            <Text style={[
-              styles.tipoBtnText,
-              { color: tipo === 'total' ? '#1B5E20' : '#9A9A9A' },
-            ]}>
-              ✓ TOTAL
+        {/* Tipo de recepción + botón guardar — ocultos para VIEWER */}
+        {!isReadOnly && (
+          <>
+            <Text style={styles.sectionTitle}>Tipo de recepción</Text>
+            <View style={styles.tipoRow}>
+              <TouchableOpacity
+                onPress={() => setTipo('total')}
+                style={[
+                  styles.tipoBtn,
+                  tipo === 'total' ? styles.tipoBtnActiveTotal : styles.tipoBtnInactive,
+                ]}
+                activeOpacity={0.7}
+              >
+                <Text style={[
+                  styles.tipoBtnText,
+                  { color: tipo === 'total' ? '#1B5E20' : '#9A9A9A' },
+                ]}>
+                  ✓ TOTAL
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={() => setTipo('parcial')}
+                style={[
+                  styles.tipoBtn,
+                  tipo === 'parcial' ? styles.tipoBtnActiveParcial : styles.tipoBtnInactive,
+                ]}
+                activeOpacity={0.7}
+              >
+                <Text style={[
+                  styles.tipoBtnText,
+                  { color: tipo === 'parcial' ? '#1E40AF' : '#9A9A9A' },
+                ]}>
+                  ⟳ PARCIAL
+                </Text>
+              </TouchableOpacity>
+            </View>
+            <Text style={styles.tipoHelp}>
+              {tipo === 'total'
+                ? 'OC pasa a EN EL TALLER — recepción completa.'
+                : 'OC pasa a EN TRÁNSITO — quedan materiales pendientes.'}
             </Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            onPress={() => setTipo('parcial')}
-            style={[
-              styles.tipoBtn,
-              tipo === 'parcial' ? styles.tipoBtnActiveParcial : styles.tipoBtnInactive,
-            ]}
-            activeOpacity={0.7}
-          >
-            <Text style={[
-              styles.tipoBtnText,
-              { color: tipo === 'parcial' ? '#1E40AF' : '#9A9A9A' },
-            ]}>
-              ⟳ PARCIAL
-            </Text>
-          </TouchableOpacity>
-        </View>
-        <Text style={styles.tipoHelp}>
-          {tipo === 'total'
-            ? 'OC pasa a EN EL TALLER — recepción completa.'
-            : 'OC pasa a EN TRÁNSITO — quedan materiales pendientes.'}
-        </Text>
 
-        {/* Botón guardar */}
-        <TouchableOpacity
-          onPress={handleGuardar}
-          disabled={saving}
-          style={[
-            styles.saveBtn,
-            tipo === 'total' ? styles.saveBtnTotal : styles.saveBtnParcial,
-            saving && styles.saveBtnDisabled,
-          ]}
-        >
-          {saving ? (
-            <ActivityIndicator color="#fff" />
-          ) : (
-            <Text style={styles.saveBtnText}>
-              {tipo === 'total' ? '✓ Registrar Recepción TOTAL' : '⟳ Registrar Recepción PARCIAL'}
+            <TouchableOpacity
+              onPress={handleGuardar}
+              disabled={saving}
+              style={[
+                styles.saveBtn,
+                tipo === 'total' ? styles.saveBtnTotal : styles.saveBtnParcial,
+                saving && styles.saveBtnDisabled,
+              ]}
+            >
+              {saving ? (
+                <ActivityIndicator color="#fff" />
+              ) : (
+                <Text style={styles.saveBtnText}>
+                  {tipo === 'total' ? '✓ Registrar Recepción TOTAL' : '⟳ Registrar Recepción PARCIAL'}
+                </Text>
+              )}
+            </TouchableOpacity>
+          </>
+        )}
+
+        {isReadOnly && (
+          <View style={styles.readOnlyBanner}>
+            <Text style={styles.readOnlyText}>
+              Modo solo lectura — no podés registrar recepciones con tu rol.
             </Text>
-          )}
-        </TouchableOpacity>
+          </View>
+        )}
       </ScrollView>
 
       {/* Preview de foto fullscreen */}
@@ -636,6 +651,11 @@ const styles = StyleSheet.create({
   saveBtnTotal: { backgroundColor: '#16A34A' },
   saveBtnParcial: { backgroundColor: '#2563EB' },
   saveBtnDisabled: { opacity: 0.6 },
+  readOnlyBanner: {
+    marginTop: 16, padding: 14, borderRadius: 8,
+    backgroundColor: '#f0ebe0', borderWidth: 1, borderColor: '#dcd4c0',
+  },
+  readOnlyText: { fontSize: 13, color: '#7a6e5f', textAlign: 'center', fontStyle: 'italic' },
   saveBtnText: { color: '#fff', fontWeight: '700', fontSize: 15, letterSpacing: 0.5 },
 
   previewBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.95)', justifyContent: 'center', alignItems: 'center' },
