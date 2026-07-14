@@ -8,9 +8,33 @@
 
 import { useQuery } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
-import { ExternalLink, CheckCircle2, Clock, DollarSign, ShoppingCart, Warehouse } from 'lucide-react'
+import { useMemo, useState } from 'react'
+import { ExternalLink, CheckCircle2, Clock, DollarSign, ShoppingCart, Warehouse, Search, X } from 'lucide-react'
 import clsx from 'clsx'
 import { mtosService, type MtoActivo, type EstadoCotizMto } from '@/services/mtos'
+
+// Categoría operativa de un MTO — usada para chips de filtro y alertas.
+// - sin_cotizar: 100% en PENDIENTE (aún no se ha cotizado nada)
+// - casi_terminado: >= 70% ya recibido (a punto de cerrarse)
+// - en_proceso: el resto (mix de estados con al menos algo COTIZADO/ORDENADO)
+type CategoriaMto = 'sin_cotizar' | 'en_proceso' | 'casi_terminado'
+
+function categoriaMto(mto: MtoActivo): CategoriaMto {
+  if (mto.total_materiales === 0) return 'en_proceso'
+  if (mto.counts.PENDIENTE === mto.total_materiales) return 'sin_cotizar'
+  const pctRecibido = mto.counts.RECIBIDO / mto.total_materiales
+  if (pctRecibido >= 0.7) return 'casi_terminado'
+  return 'en_proceso'
+}
+
+type FiltroEstado = 'todos' | CategoriaMto
+
+const CHIPS: { key: FiltroEstado; label: string; emoji: string; activeClass: string }[] = [
+  { key: 'todos',           label: 'Todos',           emoji: '📋', activeClass: 'bg-forest-700 text-white border-forest-700' },
+  { key: 'sin_cotizar',     label: 'Sin cotizar',     emoji: '⚠',  activeClass: 'bg-amber-500 text-white border-amber-500' },
+  { key: 'en_proceso',      label: 'En proceso',      emoji: '🔄', activeClass: 'bg-blue-500 text-white border-blue-500' },
+  { key: 'casi_terminado',  label: 'Casi terminados', emoji: '🏁', activeClass: 'bg-emerald-500 text-white border-emerald-500' },
+]
 
 const ESTADOS: {
   key: EstadoCotizMto
@@ -50,6 +74,39 @@ export default function Mtos() {
     refetchInterval: 60_000, // auto-refresh cada 1 min
   })
 
+  const [filtroEstado, setFiltroEstado] = useState<FiltroEstado>('todos')
+  const [search, setSearch] = useState('')
+
+  // Contadores globales por categoría — se computan sobre el total (no filtrado)
+  // para que los chips siempre muestren cuánto hay en cada bucket.
+  const conteos = useMemo(() => {
+    const c = { todos: 0, sin_cotizar: 0, en_proceso: 0, casi_terminado: 0 } as Record<FiltroEstado, number>
+    for (const mto of mtos) {
+      c.todos++
+      c[categoriaMto(mto)]++
+    }
+    return c
+  }, [mtos])
+
+  // Lista filtrada — aplica chip de estado + búsqueda por texto (proyecto o vendor)
+  const mtosFiltrados = useMemo(() => {
+    const q = search.trim().toLowerCase()
+    return mtos.filter((mto) => {
+      if (filtroEstado !== 'todos' && categoriaMto(mto) !== filtroEstado) return false
+      if (q) {
+        const matchProyecto =
+          mto.proyecto.codigo.toLowerCase().includes(q) ||
+          mto.proyecto.nombre.toLowerCase().includes(q)
+        const matchVendor = mto.vendors.some((v) => v.vendor.toLowerCase().includes(q))
+        if (!matchProyecto && !matchVendor) return false
+      }
+      return true
+    })
+  }, [mtos, filtroEstado, search])
+
+  const totalGlobal = conteos.todos
+  const hayFiltroActivo = filtroEstado !== 'todos' || search.trim().length > 0
+
   return (
     <div className="space-y-4">
       {/* Header */}
@@ -57,14 +114,95 @@ export default function Mtos() {
         <div>
           <h1 className="text-2xl font-bold text-forest-900">Control de MTOs</h1>
           <p className="text-sm text-gray-500 mt-1">
-            {isLoading ? 'Cargando...' : `${mtos.length} MTOs con materiales aún no recibidos`}
+            {isLoading ? (
+              'Cargando...'
+            ) : (
+              <span className="flex items-center gap-2 flex-wrap">
+                <span className="font-medium">{totalGlobal} MTOs activos</span>
+                {conteos.sin_cotizar > 0 && (
+                  <>
+                    <span className="text-gray-300">·</span>
+                    <span className="text-amber-700">⚠ {conteos.sin_cotizar} sin cotizar</span>
+                  </>
+                )}
+                {conteos.en_proceso > 0 && (
+                  <>
+                    <span className="text-gray-300">·</span>
+                    <span className="text-blue-700">🔄 {conteos.en_proceso} en proceso</span>
+                  </>
+                )}
+                {conteos.casi_terminado > 0 && (
+                  <>
+                    <span className="text-gray-300">·</span>
+                    <span className="text-emerald-700">🏁 {conteos.casi_terminado} casi terminado{conteos.casi_terminado > 1 ? 's' : ''}</span>
+                  </>
+                )}
+              </span>
+            )}
           </p>
         </div>
-        <span className="text-xs text-gray-400 italic">Actualiza automáticamente cada minuto</span>
+        <span className="text-xs text-gray-400 italic hidden sm:inline">Actualiza automáticamente cada minuto</span>
       </div>
 
-      {/* Empty state */}
-      {!isLoading && mtos.length === 0 && (
+      {/* Filtros: chips de estado + buscador */}
+      {!isLoading && totalGlobal > 0 && (
+        <div className="flex items-center gap-3 flex-wrap">
+          {/* Chips */}
+          <div className="flex items-center gap-1.5 flex-wrap">
+            {CHIPS.map((chip) => {
+              const count = conteos[chip.key]
+              const isActive = filtroEstado === chip.key
+              const isDisabled = count === 0 && chip.key !== 'todos'
+              return (
+                <button
+                  key={chip.key}
+                  onClick={() => setFiltroEstado(chip.key)}
+                  disabled={isDisabled}
+                  className={clsx(
+                    'inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border transition-colors',
+                    isActive
+                      ? chip.activeClass
+                      : isDisabled
+                        ? 'bg-gray-50 text-gray-300 border-gray-100 cursor-not-allowed'
+                        : 'bg-white text-gray-700 border-gray-200 hover:bg-gray-50',
+                  )}
+                >
+                  <span>{chip.emoji}</span>
+                  <span>{chip.label}</span>
+                  <span className={clsx(
+                    'inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full text-[10px] font-bold tabular-nums',
+                    isActive ? 'bg-white/25' : 'bg-gray-100 text-gray-600',
+                  )}>{count}</span>
+                </button>
+              )
+            })}
+          </div>
+
+          {/* Search */}
+          <div className="relative flex-1 min-w-[200px] max-w-md ml-auto">
+            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+            <input
+              type="search"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Buscar proyecto o vendor..."
+              className="input pl-9 pr-9 w-full text-sm"
+            />
+            {search && (
+              <button
+                onClick={() => setSearch('')}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                aria-label="Limpiar búsqueda"
+              >
+                <X size={14} />
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Empty state — no hay MTOs activos en absoluto */}
+      {!isLoading && totalGlobal === 0 && (
         <div className="card text-center py-16">
           <CheckCircle2 size={48} className="mx-auto text-emerald-400 mb-3" />
           <h2 className="text-lg font-semibold text-gray-700">No hay MTOs pendientes</h2>
@@ -84,9 +222,25 @@ export default function Mtos() {
         </div>
       )}
 
+      {/* Empty por filtro — hay MTOs pero el filtro los oculta */}
+      {!isLoading && totalGlobal > 0 && mtosFiltrados.length === 0 && (
+        <div className="card text-center py-12">
+          <Search size={32} className="mx-auto text-gray-300 mb-2" />
+          <p className="text-sm text-gray-500">Ningún MTO coincide con los filtros aplicados.</p>
+          {hayFiltroActivo && (
+            <button
+              onClick={() => { setFiltroEstado('todos'); setSearch('') }}
+              className="text-xs text-forest-600 hover:text-forest-800 underline mt-2"
+            >
+              Limpiar filtros
+            </button>
+          )}
+        </div>
+      )}
+
       {/* Cards de MTOs */}
       <div className="space-y-3">
-        {mtos.map((mto) => (
+        {mtosFiltrados.map((mto) => (
           <MtoCard key={mto.batch_key} mto={mto} />
         ))}
       </div>
