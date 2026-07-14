@@ -41,7 +41,7 @@ const fmtDateTime = (d: string | null | undefined) => {
   return dt.toLocaleString('es-MX', { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
 }
 
-type TabKey = 'materiales' | 'items' | 'ocs' | 'recepciones' | 'muestras' | 'actividad' | 'calendar' | 'graficas'
+type TabKey = 'materiales' | 'kanban' | 'items' | 'ocs' | 'recepciones' | 'muestras' | 'actividad' | 'calendar' | 'graficas'
 
 export default function ProyectoDetalle() {
   const { id } = useParams<{ id: string }>()
@@ -148,6 +148,7 @@ export default function ProyectoDetalle() {
       <div className="border-b border-gray-200 flex gap-1 overflow-x-auto">
         {([
           { key: 'materiales',  label: `Materiales (${mat.total})`,      icon: Package },
+          { key: 'kanban',      label: 'Vista Kanban',                    icon: Layers },
           { key: 'items',       label: 'Items',                           icon: Hammer },
           { key: 'ocs',         label: `Órdenes (${oc.total})`,           icon: ShoppingCart },
           { key: 'recepciones', label: `Recepciones (${kpis.recepciones.total})`, icon: Warehouse },
@@ -173,6 +174,7 @@ export default function ProyectoDetalle() {
 
       {/* ── Tab content ── */}
       {tab === 'materiales'  && <MaterialesTab  proyectoId={proyectoId} />}
+      {tab === 'kanban'      && <KanbanTab      proyectoId={proyectoId} />}
       {tab === 'items'       && <ItemsTab       proyectoId={proyectoId} />}
       {tab === 'ocs'         && <OcsTab         proyectoId={proyectoId} />}
       {tab === 'recepciones' && <RecepcionesTab proyectoId={proyectoId} />}
@@ -1584,4 +1586,151 @@ function getEstadoMeta(estado: EstadoItemReadiness) {
     case 'PENDIENTE': return { icon: Clock,        badgeColor: 'bg-red-100 text-red-700',
                               borderColor: 'border-red-200',    progressColor: 'bg-red-400' }
   }
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Tab: Vista Kanban (2026-07-13)
+// ──────────────────────────────────────────────────────────────────────────────
+// Vista de flujo del proyecto — 4 columnas por estado_cotiz (Cotización,
+// Con Precio, Ordenado, En el Taller), con cards agrupadas por vendor
+// dentro de cada columna. Un mismo vendor puede aparecer en múltiples
+// columnas si tiene materiales en diferentes estados.
+//
+// Excluye EN_STOCK (fuera del flujo de compras — stock interno CM).
+// Solo lectura: los materiales cambian de columna automáticamente
+// cuando avanza el proceso (COTIZADO al capturar precio, ORDENADO al
+// emitir OC, RECIBIDO al registrar recepción).
+
+type KanbanEstado = 'PENDIENTE' | 'COTIZADO' | 'ORDENADO' | 'RECIBIDO'
+
+const KANBAN_COLUMNS: {
+  key: KanbanEstado
+  label: string
+  headerBg: string
+  headerText: string
+  columnBg: string
+  cardBorder: string
+}[] = [
+  { key: 'PENDIENTE', label: 'Cotización',    headerBg: 'bg-amber-500',   headerText: 'text-white', columnBg: 'bg-amber-50/50',   cardBorder: 'border-amber-200' },
+  { key: 'COTIZADO',  label: 'Con Precio',    headerBg: 'bg-blue-500',    headerText: 'text-white', columnBg: 'bg-blue-50/50',    cardBorder: 'border-blue-200' },
+  { key: 'ORDENADO',  label: 'Ordenado',      headerBg: 'bg-purple-500',  headerText: 'text-white', columnBg: 'bg-purple-50/50',  cardBorder: 'border-purple-200' },
+  { key: 'RECIBIDO',  label: 'En el Taller',  headerBg: 'bg-emerald-600', headerText: 'text-white', columnBg: 'bg-emerald-50/50', cardBorder: 'border-emerald-200' },
+]
+
+function KanbanTab({ proyectoId }: { proyectoId: number }) {
+  // Traemos todos los materiales del proyecto en una sola query. limit 1000
+  // es suficiente (proyectos con >1000 materiales son raros; si aparecen se
+  // ajusta o se pagina).
+  const { data, isLoading } = useQuery({
+    queryKey: ['materiales', 'kanban', proyectoId],
+    queryFn: () => materialesService.getAll({ proyecto_id: proyectoId, limit: 1000 }),
+  })
+
+  const grouped = useMemo(() => {
+    const empty: Record<KanbanEstado, Map<string, Material[]>> = {
+      PENDIENTE: new Map(),
+      COTIZADO:  new Map(),
+      ORDENADO:  new Map(),
+      RECIBIDO:  new Map(),
+    }
+    const materiales = data?.data ?? []
+    for (const m of materiales) {
+      // Excluir stock interno CM del flujo de compras (Opción C del user)
+      if (m.cotizar === 'EN_STOCK' || m.estado_cotiz === 'EN_STOCK') continue
+      // Solo estados del flujo de compras
+      const estado = m.estado_cotiz as KanbanEstado
+      if (!(estado in empty)) continue
+      const vendor = (m.vendor ?? '').trim() || 'Sin vendor'
+      const list = empty[estado].get(vendor) ?? []
+      list.push(m)
+      empty[estado].set(vendor, list)
+    }
+    return empty
+  }, [data])
+
+  const totalPorColumna = useMemo(() => {
+    const counts: Record<KanbanEstado, number> = { PENDIENTE: 0, COTIZADO: 0, ORDENADO: 0, RECIBIDO: 0 }
+    for (const est of Object.keys(counts) as KanbanEstado[]) {
+      let n = 0
+      for (const list of grouped[est].values()) n += list.length
+      counts[est] = n
+    }
+    return counts
+  }, [grouped])
+
+  if (isLoading) {
+    return <div className="card text-center text-gray-500 py-12">Cargando materiales…</div>
+  }
+
+  const totalGeneral = totalPorColumna.PENDIENTE + totalPorColumna.COTIZADO + totalPorColumna.ORDENADO + totalPorColumna.RECIBIDO
+
+  if (totalGeneral === 0) {
+    return (
+      <div className="card text-center py-12">
+        <Layers size={40} className="mx-auto text-gray-300 mb-3" />
+        <p className="text-gray-500">Este proyecto no tiene materiales en el flujo de compras.</p>
+        <p className="text-xs text-gray-400 mt-1">Los materiales EN_STOCK (stock interno CM) no se muestran en el Kanban.</p>
+      </div>
+    )
+  }
+
+  return (
+    <div className="space-y-3">
+      {/* Header contador general */}
+      <div className="flex items-center justify-between text-sm text-gray-500">
+        <span>{totalGeneral} materiales en el flujo de compras · agrupados por vendor</span>
+        <span className="text-xs italic">Se actualiza automáticamente según el avance del proceso</span>
+      </div>
+
+      {/* Grid de 4 columnas — responsive: 1 col en mobile, 2 en tablet, 4 en desktop */}
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
+        {KANBAN_COLUMNS.map((col) => {
+          const vendorsMap = grouped[col.key]
+          // Ordenar vendors alfabéticamente para consistencia visual entre renders
+          const vendors = Array.from(vendorsMap.keys()).sort()
+          const totalCol = totalPorColumna[col.key]
+
+          return (
+            <div key={col.key} className={clsx('rounded-lg border border-gray-200 overflow-hidden flex flex-col', col.columnBg)}>
+              {/* Header de columna */}
+              <div className={clsx('px-3 py-2 flex items-center justify-between', col.headerBg, col.headerText)}>
+                <h3 className="text-sm font-bold tracking-wide">{col.label}</h3>
+                <span className="text-xs font-semibold bg-white/25 px-2 py-0.5 rounded-full">{totalCol}</span>
+              </div>
+
+              {/* Cards de vendors */}
+              <div className="p-2 space-y-2 flex-1 min-h-[120px]">
+                {vendors.length === 0 && (
+                  <p className="text-xs text-gray-400 italic text-center py-4">Sin materiales</p>
+                )}
+                {vendors.map((vendor) => {
+                  const mats = vendorsMap.get(vendor) ?? []
+                  return (
+                    <div key={vendor} className={clsx('bg-white rounded-md border p-2.5 shadow-sm', col.cardBorder)}>
+                      {/* Vendor header */}
+                      <div className="flex items-center justify-between mb-1.5">
+                        <span className="text-xs font-bold text-gray-800 truncate" title={vendor}>{vendor}</span>
+                        <span className="text-[10px] text-gray-500 tabular-nums flex-shrink-0 ml-1">
+                          {mats.length}
+                        </span>
+                      </div>
+                      {/* Lista de materiales */}
+                      <div className="space-y-1">
+                        {mats.map((m) => (
+                          <div key={m.id} className="text-xs leading-snug border-l-2 border-gray-100 pl-2 hover:border-forest-400 transition-colors">
+                            <span className="font-mono text-gray-700">{m.codigo}</span>
+                            <span className="text-gray-500"> · {m.descripcion}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
 }
