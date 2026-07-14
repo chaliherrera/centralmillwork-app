@@ -7,6 +7,7 @@ import Proyectos from '@/pages/Proyectos'
 import ProyectoDetalle from '@/pages/ProyectoDetalle'
 import OrdenesCompra from '@/pages/OrdenesCompra'
 import Materiales from '@/pages/Materiales'
+import Mtos from '@/pages/Mtos'
 import Recepciones from '@/pages/Recepciones'
 import Proveedores from '@/pages/Proveedores'
 import Tareas from '@/pages/Tareas'
@@ -63,6 +64,7 @@ export default function App() {
         <Route path="proyectos/:id"    element={<ProyectoDetalle />} />
         <Route path="ordenes-compra/*" element={<OrdenesCompra />} />
         <Route path="materiales/*"     element={<Materiales />} />
+        <Route path="mtos"             element={<Mtos />} />
         <Route path="recepciones/*"    element={<Recepciones />} />
         <Route path="proveedores/*"    element={<Proveedores />} />
         <Route path="produccion/*"     element={<ProduccionRoute><Produccion /></ProduccionRoute>} />

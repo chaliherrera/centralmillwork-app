@@ -9,6 +9,7 @@ import {
   getDashboardDailyBriefing,
 } from '../controllers/dashboardController'
 import { mobileSearch, mobileProyectos, mobileProyectoVendors } from '../controllers/mobileController'
+import { getMtosActivos } from '../controllers/mtosController'
 import {
   getProyectos, getProyecto, createProyecto, updateProyecto, deleteProyecto,
   getProyectoResumen, getProyectoActividad, getProyectoItemsReadiness,
@@ -96,6 +97,10 @@ router.get('/dashboard/daily-briefing',      requireRole('ADMIN', 'PROCUREMENT')
 router.get('/mobile/search',                 mobileSearch)
 router.get('/mobile/proyectos',              mobileProyectos)
 router.get('/mobile/proyectos/:id/vendors',  mobileProyectoVendors)
+
+// Panel operativo MTO-céntrico (2026-07-14) — vista cruzada de todos los
+// MTOs activos para PROCUREMENT. READ-ONLY, cero cambios de schema.
+router.get('/mtos/activos',                  getMtosActivos)
 
 // ─── Proyectos ────────────────────────────────────────────────────────────────
 router.get('/proyectos',                      getProyectos)
