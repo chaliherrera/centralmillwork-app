@@ -17,12 +17,9 @@ import authRouter from './routes/auth'
 import kioskRouter from './routes/kiosk'
 import webhooksRouter from './routes/webhooks'
 import teamsBotRouter from './routes/teamsBot'
-import { syncSystemTareas } from './jobs/tareasFromSystem'
 import { authenticate } from './middleware/auth'
 import { errorHandler, notFound } from './middleware/errorHandler'
 import { globalLimiter, loginLimiter, initRateLimitStore } from './middleware/rateLimit'
-import cron from 'node-cron'
-import pool from './db/pool'
 import { requestId } from './middleware/requestId'
 import { logger } from './utils/logger'
 import { initSentry } from './utils/sentry'
@@ -132,49 +129,18 @@ app.use(errorHandler)
   app.listen(PORT, () => {
     logger.info('server listening', { port: PORT, url: `http://localhost:${PORT}` })
 
-    // Sistema de tareas auto-generadas desde la DB (cotizaciones estancadas,
-    // ETAs, etc.). Corre dos veces al día: 07:00 y 14:00 hora local.
+    // ── FASE A del refactor Tareas (2026-07-12) ────────────────────────────
+    // Auto-sync DESACTIVADO. Ver decisión en project_tareas_fase_a_kill.md.
     //
-    // Antes corría cada 30 min (excesivo para el ritmo del taller). Cambio
-    // motivado por el bump a 2 réplicas del backend — con setInterval
-    // ambas réplicas dispararían el job en paralelo. Ahora:
-    //   1. Cron expresado en cron-syntax con timezone explícito
-    //   2. Advisory lock vía pg_try_advisory_lock antes de correr — solo
-    //      UNA réplica gana el lock por fire; las otras skippean limpio
-    //   3. Lock liberado en finally para evitar deadlocks si el job tira
+    // El endpoint POST /api/tareas/sync-system sigue existiendo — el usuario
+    // puede correr el sync manualmente vía UI si lo necesita. Pero el cron
+    // que lo disparaba dos veces al día está apagado hasta decidir qué
+    // reemplaza al módulo Tareas.
     //
-    // Si querés cambiar la zona horaria, settealo en la env var TZ del
-    // servicio en Railway. Por defecto usa America/Mexico_City.
-    const SYNC_TIMEZONE = process.env.SYSTEM_SYNC_TZ || 'America/Mexico_City'
-    const SYNC_CRON     = '0 7,13 * * *'   // minuto 0 de las horas 7 (AM) y 13 (1 PM)
-    const LEADER_LOCK_KEY = 4751923         // arbitrario, cualquier int único
-    const runSystemSync = async () => {
-      const client = await pool.connect()
-      let gotLock = false
-      try {
-        const { rows } = await client.query(
-          'SELECT pg_try_advisory_lock($1) AS got', [LEADER_LOCK_KEY]
-        )
-        gotLock = rows[0].got
-        if (!gotLock) {
-          logger.info('system tareas sync skipped (otra replica tiene el lock)')
-          return
-        }
-        const result = await syncSystemTareas()
-        logger.info('system tareas sync', result)
-      } catch (err) {
-        logger.error('system tareas sync failed', { err: String(err) })
-      } finally {
-        if (gotLock) {
-          try {
-            await client.query('SELECT pg_advisory_unlock($1)', [LEADER_LOCK_KEY])
-          } catch { /* ignore */ }
-        }
-        client.release()
-      }
-    }
-    cron.schedule(SYNC_CRON, runSystemSync, { timezone: SYNC_TIMEZONE })
-    logger.info('system tareas sync scheduled', { cron: SYNC_CRON, timezone: SYNC_TIMEZONE })
+    // Cuando decidamos Fase B (Panel del día en Dashboard vs digest matutino
+    // vs otra opción), este cron probablemente NO vuelva — el panel viviria
+    // consultando las reglas en tiempo real desde el frontend.
+    logger.info('system tareas sync DISABLED (Fase A del refactor)')
   })
 })()
 
