@@ -237,3 +237,247 @@ export async function compartirReporte(req: Request, res: Response, next: NextFu
     next(err)
   }
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Reporte HTML: Movimientos de compras JUN + JUL 2026 (2026-07-16)
+// ─────────────────────────────────────────────────────────────────────────────
+// Endpoint que devuelve HTML self-contained (no JSON, no template file).
+// User abre el URL en el navegador (logueado) y ve el reporte directo.
+// Sin dependencias externas: 6 queries en paralelo + template inline.
+
+function escapeHtmlInline(s: unknown): string {
+  return String(s ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;')
+}
+
+const fmtMoney = (n: number | string): string => {
+  const num = typeof n === 'string' ? parseFloat(n) : n
+  if (!Number.isFinite(num)) return '$0.00'
+  return new Intl.NumberFormat('en-US', {
+    style: 'currency', currency: 'USD',
+    minimumFractionDigits: 2, maximumFractionDigits: 2,
+  }).format(num)
+}
+
+const fmtDateInline = (d: string | Date | null | undefined): string => {
+  if (!d) return '—'
+  const str = typeof d === 'string' ? d : d.toISOString()
+  const [y, m, day] = str.slice(0, 10).split('-')
+  return `${m}/${day}/${y}`
+}
+
+export async function getReporteComprasJunJul(req: Request, res: Response, next: NextFunction) {
+  try {
+    const [resumen, ocsPorMes, topVendors, topProyectos, recepcionesPorMes, ocsVencidas] = await Promise.all([
+      pool.query(`
+        SELECT
+          COUNT(*)::int AS total_ocs,
+          COALESCE(SUM(total), 0)::text AS monto_total,
+          COALESCE(SUM(total) FILTER (WHERE estado != 'cancelada'), 0)::text AS monto_activo,
+          COUNT(*) FILTER (WHERE estado = 'recibida')::int AS ocs_recibidas,
+          COUNT(*) FILTER (WHERE estado NOT IN ('recibida','cancelada'))::int AS ocs_pendientes,
+          COUNT(*) FILTER (WHERE estado = 'cancelada')::int AS ocs_canceladas,
+          COUNT(DISTINCT proveedor_id) FILTER (WHERE estado != 'cancelada')::int AS vendors_distintos,
+          COUNT(DISTINCT proyecto_id) FILTER (WHERE estado != 'cancelada')::int AS proyectos_distintos
+        FROM ordenes_compra
+        WHERE fecha_emision >= '2026-06-01' AND fecha_emision < '2026-08-01'
+      `),
+      pool.query(`
+        SELECT TO_CHAR(fecha_emision, 'YYYY-MM') AS mes,
+          COUNT(*)::int AS total,
+          COALESCE(SUM(total), 0)::text AS monto,
+          COUNT(*) FILTER (WHERE estado = 'recibida')::int AS recibidas,
+          COUNT(*) FILTER (WHERE estado NOT IN ('recibida','cancelada'))::int AS pendientes,
+          COUNT(*) FILTER (WHERE estado = 'cancelada')::int AS canceladas
+        FROM ordenes_compra
+        WHERE fecha_emision >= '2026-06-01' AND fecha_emision < '2026-08-01'
+        GROUP BY mes ORDER BY mes
+      `),
+      pool.query(`
+        SELECT COALESCE(v.nombre, '(sin vendor)') AS vendor,
+          COUNT(o.id)::int AS ocs,
+          COALESCE(SUM(o.total), 0)::text AS monto
+        FROM ordenes_compra o
+        LEFT JOIN proveedores v ON v.id = o.proveedor_id
+        WHERE o.fecha_emision >= '2026-06-01' AND o.fecha_emision < '2026-08-01'
+          AND o.estado != 'cancelada'
+        GROUP BY v.nombre ORDER BY SUM(o.total) DESC NULLS LAST LIMIT 15
+      `),
+      pool.query(`
+        SELECT p.codigo, p.nombre,
+          COUNT(o.id)::int AS ocs,
+          COALESCE(SUM(o.total), 0)::text AS monto
+        FROM ordenes_compra o
+        LEFT JOIN proyectos p ON p.id = o.proyecto_id
+        WHERE o.fecha_emision >= '2026-06-01' AND o.fecha_emision < '2026-08-01'
+          AND o.estado != 'cancelada'
+        GROUP BY p.codigo, p.nombre ORDER BY SUM(o.total) DESC NULLS LAST LIMIT 15
+      `),
+      pool.query(`
+        SELECT TO_CHAR(fecha_recepcion, 'YYYY-MM') AS mes,
+          COUNT(*)::int AS total,
+          COUNT(*) FILTER (WHERE estado = 'completa')::int AS completas,
+          COUNT(*) FILTER (WHERE estado = 'con_diferencias')::int AS con_diferencias
+        FROM recepciones
+        WHERE fecha_recepcion >= '2026-06-01' AND fecha_recepcion < '2026-08-01'
+        GROUP BY mes ORDER BY mes
+      `),
+      pool.query(`
+        SELECT o.numero, COALESCE(v.nombre, '(sin vendor)') AS vendor,
+          p.codigo AS proyecto,
+          o.fecha_entrega_estimada::text AS eta,
+          o.total::text AS monto,
+          (CURRENT_DATE - o.fecha_entrega_estimada)::int AS dias_vencida
+        FROM ordenes_compra o
+        LEFT JOIN proveedores v ON v.id = o.proveedor_id
+        LEFT JOIN proyectos p ON p.id = o.proyecto_id
+        WHERE o.estado NOT IN ('recibida', 'cancelada')
+          AND o.fecha_entrega_estimada IS NOT NULL
+          AND o.fecha_entrega_estimada < CURRENT_DATE
+        ORDER BY o.fecha_entrega_estimada LIMIT 20
+      `),
+    ])
+
+    const r = resumen.rows[0] as any
+    const generatedAt = new Date().toLocaleString('es-MX', {
+      year: 'numeric', month: 'long', day: 'numeric',
+      hour: '2-digit', minute: '2-digit',
+    })
+    const maxMonto = ocsPorMes.rows.length > 0
+      ? Math.max(...ocsPorMes.rows.map((row: any) => parseFloat(row.monto)))
+      : 0
+
+    const html = `<!DOCTYPE html>
+<html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Reporte de Compras · Jun–Jul 2026 · Central Millwork</title>
+<style>
+:root { --cream:#faf7f0; --cream-2:#f0ebe0; --forest:#2c3126; --forest-2:#4A5240; --gold:#9B7200; --gold-2:#dea832; --text:#1f1b14; --text-soft:#6b6356; --border:#dcd4c0; }
+* { box-sizing: border-box; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: var(--cream); color: var(--text); margin: 0; padding: 24px; max-width: 1100px; margin-left: auto; margin-right: auto; line-height: 1.5; }
+header { border-bottom: 3px solid var(--gold); padding-bottom: 16px; margin-bottom: 24px; }
+h1 { color: var(--forest); margin: 0 0 4px; font-size: 28px; font-weight: 700; }
+.subtitle { color: var(--text-soft); font-size: 14px; }
+.meta { color: var(--text-soft); font-size: 12px; margin-top: 8px; font-style: italic; }
+section { background: white; border: 1px solid var(--border); border-radius: 10px; padding: 20px 24px; margin-bottom: 20px; }
+h2 { color: var(--forest); margin: 0 0 16px; font-size: 18px; border-left: 4px solid var(--gold); padding-left: 12px; }
+.kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; }
+.kpi { background: var(--cream-2); border: 1px solid var(--border); border-radius: 8px; padding: 12px 16px; }
+.kpi-label { font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: var(--text-soft); font-weight: 600; margin-bottom: 4px; }
+.kpi-value { font-size: 22px; font-weight: 700; color: var(--forest); font-variant-numeric: tabular-nums; }
+.kpi-value.gold { color: var(--gold); font-size: 16px; }
+.kpi-value.big { font-size: 28px; }
+.kpi-sub { font-size: 11px; color: var(--text-soft); margin-top: 4px; }
+.chart { display: flex; gap: 24px; align-items: flex-end; justify-content: center; height: 260px; padding: 20px; background: var(--cream-2); border-radius: 8px; }
+.bar-group { display: flex; flex-direction: column; align-items: center; gap: 8px; flex: 1; max-width: 220px; }
+.bar-wrap { width: 100%; display: flex; flex-direction: column; justify-content: flex-end; height: 160px; }
+.bar { background: linear-gradient(to top, var(--gold), var(--gold-2)); border-radius: 6px 6px 0 0; width: 100%; display: flex; align-items: flex-start; justify-content: center; color: white; font-weight: 700; font-size: 13px; padding-top: 8px; box-shadow: 0 2px 4px rgba(0,0,0,.08); }
+.bar-label { font-size: 11px; color: var(--text-soft); text-transform: uppercase; letter-spacing: 1px; font-weight: 600; }
+.bar-monto { font-size: 14px; color: var(--forest); font-weight: 700; font-variant-numeric: tabular-nums; }
+.bar-count { font-size: 10px; color: var(--text-soft); text-align: center; }
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+thead th { background: var(--cream-2); color: var(--text-soft); text-transform: uppercase; letter-spacing: 1px; font-size: 10px; font-weight: 700; padding: 8px 12px; text-align: left; border-bottom: 2px solid var(--border); }
+tbody td { padding: 8px 12px; border-bottom: 1px solid var(--cream-2); }
+tbody tr:hover { background: var(--cream); }
+.num { text-align: right; font-variant-numeric: tabular-nums; }
+.mono { font-family: 'SF Mono', Menlo, monospace; font-size: 12px; }
+.rank { display: inline-block; background: var(--forest); color: white; width: 22px; height: 22px; border-radius: 50%; text-align: center; line-height: 22px; font-size: 11px; font-weight: 700; }
+.alert-row td { background: #fff5f5; }
+.badge { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; }
+.badge-red { background: #FEE2E2; color: #991B1B; }
+.badge-amber { background: #FEF3C7; color: #92400E; }
+.badge-emerald { background: #D1FAE5; color: #065F46; }
+.empty { text-align: center; color: var(--text-soft); font-style: italic; padding: 24px; background: var(--cream-2); border-radius: 6px; }
+footer { text-align: center; color: var(--text-soft); font-size: 11px; margin-top: 32px; padding-top: 16px; border-top: 1px solid var(--border); }
+@media print { body { background: white; padding: 12px; } section { break-inside: avoid; page-break-inside: avoid; } }
+</style></head><body>
+<header>
+  <h1>Reporte de Compras</h1>
+  <div class="subtitle">Junio 2026 – 16 de Julio 2026 · Central Millwork</div>
+  <div class="meta">Generado ${escapeHtmlInline(generatedAt)}</div>
+</header>
+
+<section>
+  <h2>Resumen del período</h2>
+  <div class="kpi-grid">
+    <div class="kpi"><div class="kpi-label">OCs emitidas</div><div class="kpi-value big">${escapeHtmlInline(r.total_ocs)}</div><div class="kpi-sub">Total del período</div></div>
+    <div class="kpi"><div class="kpi-label">Monto activo</div><div class="kpi-value gold">${escapeHtmlInline(fmtMoney(r.monto_activo))}</div><div class="kpi-sub">Excluye canceladas</div></div>
+    <div class="kpi"><div class="kpi-label">Recibidas</div><div class="kpi-value">${escapeHtmlInline(r.ocs_recibidas)}</div><div class="kpi-sub"><span class="badge badge-emerald">En el taller</span></div></div>
+    <div class="kpi"><div class="kpi-label">Pendientes</div><div class="kpi-value">${escapeHtmlInline(r.ocs_pendientes)}</div><div class="kpi-sub"><span class="badge badge-amber">Aún no recibidas</span></div></div>
+    <div class="kpi"><div class="kpi-label">Canceladas</div><div class="kpi-value">${escapeHtmlInline(r.ocs_canceladas)}</div><div class="kpi-sub"><span class="badge badge-red">Excluidas</span></div></div>
+    <div class="kpi"><div class="kpi-label">Vendors únicos</div><div class="kpi-value">${escapeHtmlInline(r.vendors_distintos)}</div><div class="kpi-sub">Con OC activa</div></div>
+    <div class="kpi"><div class="kpi-label">Proyectos únicos</div><div class="kpi-value">${escapeHtmlInline(r.proyectos_distintos)}</div><div class="kpi-sub">Con OC activa</div></div>
+  </div>
+</section>
+
+<section>
+  <h2>OCs por mes</h2>
+  ${ocsPorMes.rows.length === 0 ? '<div class="empty">Sin datos en el período</div>' : `
+  <div class="chart">
+    ${ocsPorMes.rows.map((row: any) => {
+      const monto = parseFloat(row.monto)
+      const height = maxMonto > 0 ? Math.max(20, (monto / maxMonto) * 150) : 20
+      const mesLabel = row.mes === '2026-06' ? 'Junio 2026' : row.mes === '2026-07' ? 'Julio 2026' : row.mes
+      return `
+      <div class="bar-group">
+        <div class="bar-monto">${escapeHtmlInline(fmtMoney(monto))}</div>
+        <div class="bar-wrap"><div class="bar" style="height: ${height}px;">${row.total}</div></div>
+        <div class="bar-label">${escapeHtmlInline(mesLabel)}</div>
+        <div class="bar-count">${row.total} OCs · ${row.recibidas} recibidas · ${row.pendientes} pendientes${row.canceladas > 0 ? ` · ${row.canceladas} canceladas` : ''}</div>
+      </div>`
+    }).join('')}
+  </div>`}
+</section>
+
+<section>
+  <h2>Top vendors por monto</h2>
+  ${topVendors.rows.length === 0 ? '<div class="empty">Sin datos</div>' : `
+  <table><thead><tr><th>#</th><th>Vendor</th><th class="num">OCs</th><th class="num">Monto total</th></tr></thead><tbody>
+    ${topVendors.rows.map((row: any, i: number) => `
+    <tr><td><span class="rank">${i + 1}</span></td><td><strong>${escapeHtmlInline(row.vendor)}</strong></td><td class="num">${escapeHtmlInline(row.ocs)}</td><td class="num"><strong>${escapeHtmlInline(fmtMoney(row.monto))}</strong></td></tr>`).join('')}
+  </tbody></table>`}
+</section>
+
+<section>
+  <h2>Top proyectos por monto</h2>
+  ${topProyectos.rows.length === 0 ? '<div class="empty">Sin datos</div>' : `
+  <table><thead><tr><th>#</th><th>Código</th><th>Proyecto</th><th class="num">OCs</th><th class="num">Monto total</th></tr></thead><tbody>
+    ${topProyectos.rows.map((row: any, i: number) => `
+    <tr><td><span class="rank">${i + 1}</span></td><td class="mono">${escapeHtmlInline(row.codigo)}</td><td>${escapeHtmlInline(row.nombre)}</td><td class="num">${escapeHtmlInline(row.ocs)}</td><td class="num"><strong>${escapeHtmlInline(fmtMoney(row.monto))}</strong></td></tr>`).join('')}
+  </tbody></table>`}
+</section>
+
+<section>
+  <h2>Recepciones por mes</h2>
+  ${recepcionesPorMes.rows.length === 0 ? '<div class="empty">Sin recepciones registradas en el período</div>' : `
+  <table><thead><tr><th>Mes</th><th class="num">Total</th><th class="num">Completas</th><th class="num">Con diferencias</th></tr></thead><tbody>
+    ${recepcionesPorMes.rows.map((row: any) => {
+      const mesLabel = row.mes === '2026-06' ? 'Junio 2026' : row.mes === '2026-07' ? 'Julio 2026' : row.mes
+      return `
+      <tr><td><strong>${escapeHtmlInline(mesLabel)}</strong></td><td class="num">${escapeHtmlInline(row.total)}</td><td class="num"><span class="badge badge-emerald">${escapeHtmlInline(row.completas)}</span></td><td class="num">${row.con_diferencias > 0 ? `<span class="badge badge-amber">${escapeHtmlInline(row.con_diferencias)}</span>` : '—'}</td></tr>`
+    }).join('')}
+  </tbody></table>`}
+</section>
+
+<section>
+  <h2>⚠️ OCs vencidas actualmente <span style="font-size: 12px; color: var(--text-soft); font-weight: normal;">(ETA pasada, aún no recibida)</span></h2>
+  ${ocsVencidas.rows.length === 0 ? '<div class="empty">✅ Sin OCs vencidas al día de hoy</div>' : `
+  <table><thead><tr><th>OC</th><th>Vendor</th><th>Proyecto</th><th>ETA</th><th class="num">Días vencida</th><th class="num">Monto</th></tr></thead><tbody>
+    ${ocsVencidas.rows.map((row: any) => `
+    <tr class="alert-row"><td class="mono"><strong>${escapeHtmlInline(row.numero)}</strong></td><td>${escapeHtmlInline(row.vendor)}</td><td class="mono">${escapeHtmlInline(row.proyecto ?? '—')}</td><td>${escapeHtmlInline(fmtDateInline(row.eta))}</td><td class="num"><span class="badge ${row.dias_vencida > 7 ? 'badge-red' : 'badge-amber'}">${escapeHtmlInline(row.dias_vencida)} días</span></td><td class="num">${escapeHtmlInline(fmtMoney(row.monto))}</td></tr>`).join('')}
+  </tbody></table>`}
+</section>
+
+<footer>Central Millwork · Reporte generado automáticamente por el sistema</footer>
+</body></html>`
+
+    res.setHeader('Content-Type', 'text/html; charset=utf-8')
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate')
+    res.send(html)
+  } catch (err) {
+    next(err)
+  }
+}

@@ -42,7 +42,7 @@ import {
   updateCotizacion, aprobarCotizacion, deleteCotizacion,
   marcarCotizacionesEnviadas,
 } from '../controllers/cotizacionesController'
-import { getReporteCompras, getReporteProduccion, compartirReporte } from '../controllers/reportesController'
+import { getReporteCompras, getReporteProduccion, compartirReporte, getReporteComprasJunJul } from '../controllers/reportesController'
 import produccionRouter from './produccion'
 import {
   getTareas, getTarea, updateTarea, getTareasStats, syncSystemHandler,
@@ -163,6 +163,9 @@ router.put('/recepciones/:id',               REC_WRITE, updateRecepcion)
 router.get('/reportes/compras',      getReporteCompras)
 router.get('/reportes/produccion',   getReporteProduccion)
 router.post('/reportes/compartir',   WRITE, compartirReporte)
+// Reporte HTML self-contained del período jun–jul 2026 (2026-07-16). Devuelve
+// HTML directo (no JSON). Abrir en navegador logueado. ADMIN + PROCUREMENT.
+router.get('/reportes/compras-2026-06-07',  requireRole('ADMIN', 'PROCUREMENT'), getReporteComprasJunJul)
 
 // ─── Tareas (solo ADMIN) ─────────────────────────────────────────────────────
 router.get('/tareas',                ADMIN, getTareas)
