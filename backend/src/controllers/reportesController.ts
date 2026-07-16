@@ -272,12 +272,13 @@ const fmtDateInline = (d: string | Date | null | undefined): string => {
 
 export async function getReporteComprasJunJul(req: Request, res: Response, next: NextFunction) {
   try {
-    const [resumen, ocsPorMes, topVendors, topProyectos, recepcionesPorMes, ocsVencidas] = await Promise.all([
+    const [resumen, ocsPorMes, topVendors, topProyectos, recepcionesPorMes, ocsVencidas, porOrigen, freightSummary, topFreightVendors, topCategorias, insights] = await Promise.all([
       pool.query(`
         SELECT
           COUNT(*)::int AS total_ocs,
           COALESCE(SUM(total), 0)::text AS monto_total,
           COALESCE(SUM(total) FILTER (WHERE estado != 'cancelada'), 0)::text AS monto_activo,
+          COALESCE(SUM(freight) FILTER (WHERE estado != 'cancelada'), 0)::text AS freight_total,
           COUNT(*) FILTER (WHERE estado = 'recibida')::int AS ocs_recibidas,
           COUNT(*) FILTER (WHERE estado NOT IN ('recibida','cancelada'))::int AS ocs_pendientes,
           COUNT(*) FILTER (WHERE estado = 'cancelada')::int AS ocs_canceladas,
@@ -339,6 +340,74 @@ export async function getReporteComprasJunJul(req: Request, res: Response, next:
           AND o.fecha_entrega_estimada IS NOT NULL
           AND o.fecha_entrega_estimada < CURRENT_DATE
         ORDER BY o.fecha_entrega_estimada LIMIT 20
+      `),
+      // Desglose por tipo de orden (origen: MTO / DIRECTA / URGENTE / OPERATIVA)
+      pool.query(`
+        SELECT COALESCE(origen, 'MTO') AS origen,
+          COUNT(*)::int AS ocs,
+          COALESCE(SUM(total), 0)::text AS monto,
+          COALESCE(SUM(freight), 0)::text AS freight,
+          COUNT(*) FILTER (WHERE estado = 'recibida')::int AS recibidas
+        FROM ordenes_compra
+        WHERE fecha_emision >= '2026-06-01' AND fecha_emision < '2026-08-01'
+          AND estado != 'cancelada'
+        GROUP BY origen
+        ORDER BY SUM(total) DESC NULLS LAST
+      `),
+      // Freight breakdown: total + promedio por OC + % del monto total
+      pool.query(`
+        SELECT COALESCE(SUM(freight), 0)::text AS freight_total,
+          COALESCE(SUM(total), 0)::text AS monto_total,
+          COALESCE(AVG(freight) FILTER (WHERE freight > 0), 0)::text AS freight_promedio_ocs_con_freight,
+          COUNT(*) FILTER (WHERE freight > 0)::int AS ocs_con_freight,
+          COUNT(*)::int AS ocs_totales
+        FROM ordenes_compra
+        WHERE fecha_emision >= '2026-06-01' AND fecha_emision < '2026-08-01'
+          AND estado != 'cancelada'
+      `),
+      // Top 10 vendors por gasto en freight
+      pool.query(`
+        SELECT COALESCE(v.nombre, '(sin vendor)') AS vendor,
+          COUNT(o.id)::int AS ocs_con_freight,
+          COALESCE(SUM(o.freight), 0)::text AS freight_total,
+          COALESCE(SUM(o.total), 0)::text AS monto_ocs
+        FROM ordenes_compra o
+        LEFT JOIN proveedores v ON v.id = o.proveedor_id
+        WHERE o.fecha_emision >= '2026-06-01' AND o.fecha_emision < '2026-08-01'
+          AND o.estado != 'cancelada'
+          AND o.freight > 0
+        GROUP BY v.nombre
+        ORDER BY SUM(o.freight) DESC NULLS LAST
+        LIMIT 10
+      `),
+      // Top 10 categorías (si se usan)
+      pool.query(`
+        SELECT COALESCE(NULLIF(TRIM(categoria), ''), '(sin categoría)') AS categoria,
+          COUNT(*)::int AS ocs,
+          COALESCE(SUM(total), 0)::text AS monto
+        FROM ordenes_compra
+        WHERE fecha_emision >= '2026-06-01' AND fecha_emision < '2026-08-01'
+          AND estado != 'cancelada'
+        GROUP BY categoria
+        ORDER BY SUM(total) DESC NULLS LAST
+        LIMIT 10
+      `),
+      // Insights: días promedio ETA (fecha_entrega - fecha_emision),
+      // día de la semana con más compras, ratio recibidas/emitidas
+      pool.query(`
+        SELECT
+          ROUND(AVG(fecha_entrega_estimada - fecha_emision) FILTER (WHERE fecha_entrega_estimada IS NOT NULL), 1)::text AS eta_promedio_dias,
+          (SELECT TRIM(TO_CHAR(fecha_emision, 'Day'))
+             FROM ordenes_compra
+             WHERE fecha_emision >= '2026-06-01' AND fecha_emision < '2026-08-01' AND estado != 'cancelada'
+             GROUP BY TO_CHAR(fecha_emision, 'Day'), EXTRACT(DOW FROM fecha_emision)
+             ORDER BY COUNT(*) DESC LIMIT 1) AS dia_pico_compras,
+          COUNT(*) FILTER (WHERE fecha_entrega_real IS NOT NULL AND fecha_entrega_estimada IS NOT NULL AND fecha_entrega_real <= fecha_entrega_estimada)::int AS ocs_a_tiempo,
+          COUNT(*) FILTER (WHERE fecha_entrega_real IS NOT NULL AND fecha_entrega_estimada IS NOT NULL AND fecha_entrega_real > fecha_entrega_estimada)::int AS ocs_con_retraso,
+          COUNT(*) FILTER (WHERE estado = 'recibida')::int AS total_recibidas
+        FROM ordenes_compra
+        WHERE fecha_emision >= '2026-06-01' AND fecha_emision < '2026-08-01'
+          AND estado != 'cancelada'
       `),
     ])
 
@@ -405,6 +474,7 @@ footer { text-align: center; color: var(--text-soft); font-size: 11px; margin-to
   <div class="kpi-grid">
     <div class="kpi"><div class="kpi-label">OCs emitidas</div><div class="kpi-value big">${escapeHtmlInline(r.total_ocs)}</div><div class="kpi-sub">Total del período</div></div>
     <div class="kpi"><div class="kpi-label">Monto activo</div><div class="kpi-value gold">${escapeHtmlInline(fmtMoney(r.monto_activo))}</div><div class="kpi-sub">Excluye canceladas</div></div>
+    <div class="kpi"><div class="kpi-label">Freight total</div><div class="kpi-value gold">${escapeHtmlInline(fmtMoney(r.freight_total))}</div><div class="kpi-sub">Envíos del período</div></div>
     <div class="kpi"><div class="kpi-label">Recibidas</div><div class="kpi-value">${escapeHtmlInline(r.ocs_recibidas)}</div><div class="kpi-sub"><span class="badge badge-emerald">En el taller</span></div></div>
     <div class="kpi"><div class="kpi-label">Pendientes</div><div class="kpi-value">${escapeHtmlInline(r.ocs_pendientes)}</div><div class="kpi-sub"><span class="badge badge-amber">Aún no recibidas</span></div></div>
     <div class="kpi"><div class="kpi-label">Canceladas</div><div class="kpi-value">${escapeHtmlInline(r.ocs_canceladas)}</div><div class="kpi-sub"><span class="badge badge-red">Excluidas</span></div></div>
@@ -460,6 +530,71 @@ footer { text-align: center; color: var(--text-soft); font-size: 11px; margin-to
       <tr><td><strong>${escapeHtmlInline(mesLabel)}</strong></td><td class="num">${escapeHtmlInline(row.total)}</td><td class="num"><span class="badge badge-emerald">${escapeHtmlInline(row.completas)}</span></td><td class="num">${row.con_diferencias > 0 ? `<span class="badge badge-amber">${escapeHtmlInline(row.con_diferencias)}</span>` : '—'}</td></tr>`
     }).join('')}
   </tbody></table>`}
+</section>
+
+<section>
+  <h2>Desglose por tipo de orden <span style="font-size: 12px; color: var(--text-soft); font-weight: normal;">(según origen: MTO / DIRECTA / URGENTE / OPERATIVA)</span></h2>
+  ${porOrigen.rows.length === 0 ? '<div class="empty">Sin datos en el período</div>' : `
+  <table><thead><tr><th>Tipo</th><th class="num">OCs</th><th class="num">Monto</th><th class="num">Freight</th><th class="num">% del monto total</th><th class="num">Recibidas</th></tr></thead><tbody>
+    ${porOrigen.rows.map((row: any) => {
+      const monto = parseFloat(row.monto)
+      const total = parseFloat(r.monto_activo)
+      const pct = total > 0 ? Math.round((monto / total) * 100) : 0
+      const originBadge: Record<string, string> = {
+        MTO: 'badge-emerald', DIRECTA: 'badge-amber', URGENTE: 'badge-red', OPERATIVA: 'badge-amber',
+      }
+      const cls = originBadge[row.origen] || 'badge-amber'
+      return `
+      <tr><td><span class="badge ${cls}">${escapeHtmlInline(row.origen)}</span></td><td class="num">${escapeHtmlInline(row.ocs)}</td><td class="num"><strong>${escapeHtmlInline(fmtMoney(row.monto))}</strong></td><td class="num">${escapeHtmlInline(fmtMoney(row.freight))}</td><td class="num">${pct}%</td><td class="num">${escapeHtmlInline(row.recibidas)}</td></tr>`
+    }).join('')}
+  </tbody></table>`}
+</section>
+
+<section>
+  <h2>Freight — envíos y logística</h2>
+  <div class="kpi-grid" style="margin-bottom: 12px;">
+    <div class="kpi"><div class="kpi-label">Freight total gastado</div><div class="kpi-value gold big">${escapeHtmlInline(fmtMoney((freightSummary.rows[0] as any).freight_total))}</div><div class="kpi-sub">Del período</div></div>
+    <div class="kpi"><div class="kpi-label">Promedio por OC</div><div class="kpi-value">${escapeHtmlInline(fmtMoney((freightSummary.rows[0] as any).freight_promedio_ocs_con_freight))}</div><div class="kpi-sub">Solo OCs con freight</div></div>
+    <div class="kpi"><div class="kpi-label">OCs con freight cargado</div><div class="kpi-value">${escapeHtmlInline((freightSummary.rows[0] as any).ocs_con_freight)} <span style="font-size: 14px; color: var(--text-soft); font-weight: normal;">/ ${escapeHtmlInline((freightSummary.rows[0] as any).ocs_totales)}</span></div><div class="kpi-sub">Ratio de cobertura</div></div>
+    <div class="kpi"><div class="kpi-label">% del monto total</div><div class="kpi-value">${(() => { const f = parseFloat((freightSummary.rows[0] as any).freight_total); const t = parseFloat((freightSummary.rows[0] as any).monto_total); return t > 0 ? Math.round((f / t) * 100) : 0 })()}%</div><div class="kpi-sub">Peso del freight sobre total</div></div>
+  </div>
+  ${topFreightVendors.rows.length === 0 ? '<div class="empty">Ningún vendor con freight cargado en el período</div>' : `
+  <table><thead><tr><th>#</th><th>Vendor</th><th class="num">OCs</th><th class="num">Freight</th><th class="num">Monto OCs</th><th class="num">% freight/monto</th></tr></thead><tbody>
+    ${topFreightVendors.rows.map((row: any, i: number) => {
+      const freight = parseFloat(row.freight_total)
+      const monto = parseFloat(row.monto_ocs)
+      const pct = monto > 0 ? Math.round((freight / monto) * 100 * 10) / 10 : 0
+      return `
+      <tr><td><span class="rank">${i + 1}</span></td><td><strong>${escapeHtmlInline(row.vendor)}</strong></td><td class="num">${escapeHtmlInline(row.ocs_con_freight)}</td><td class="num"><strong>${escapeHtmlInline(fmtMoney(freight))}</strong></td><td class="num">${escapeHtmlInline(fmtMoney(monto))}</td><td class="num">${pct}%</td></tr>`
+    }).join('')}
+  </tbody></table>`}
+</section>
+
+<section>
+  <h2>Top categorías por monto</h2>
+  ${topCategorias.rows.length === 0 || (topCategorias.rows.length === 1 && (topCategorias.rows[0] as any).categoria === '(sin categoría)' && (topCategorias.rows[0] as any).ocs === (r.total_ocs - r.ocs_canceladas)) ? '<div class="empty">No hay categorías asignadas a las OCs del período</div>' : `
+  <table><thead><tr><th>#</th><th>Categoría</th><th class="num">OCs</th><th class="num">Monto</th></tr></thead><tbody>
+    ${topCategorias.rows.map((row: any, i: number) => `
+    <tr><td><span class="rank">${i + 1}</span></td><td>${escapeHtmlInline(row.categoria)}</td><td class="num">${escapeHtmlInline(row.ocs)}</td><td class="num"><strong>${escapeHtmlInline(fmtMoney(row.monto))}</strong></td></tr>`).join('')}
+  </tbody></table>`}
+</section>
+
+<section>
+  <h2>Insights del período</h2>
+  ${(() => {
+    const ins = insights.rows[0] as any
+    const aTiempo = ins.ocs_a_tiempo
+    const conRetraso = ins.ocs_con_retraso
+    const recibidas = aTiempo + conRetraso
+    const pctATiempo = recibidas > 0 ? Math.round((aTiempo / recibidas) * 100) : 0
+    return `
+    <div class="kpi-grid">
+      <div class="kpi"><div class="kpi-label">ETA promedio</div><div class="kpi-value">${escapeHtmlInline(ins.eta_promedio_dias ?? '—')} <span style="font-size: 12px; color: var(--text-soft); font-weight: normal;">días</span></div><div class="kpi-sub">Del emisor al deadline</div></div>
+      <div class="kpi"><div class="kpi-label">Día pico de compras</div><div class="kpi-value" style="font-size: 18px;">${escapeHtmlInline(ins.dia_pico_compras ?? '—')}</div><div class="kpi-sub">Día de la semana con más OCs</div></div>
+      <div class="kpi"><div class="kpi-label">OCs a tiempo</div><div class="kpi-value">${escapeHtmlInline(aTiempo)} <span style="font-size: 14px; color: var(--text-soft); font-weight: normal;">/ ${recibidas}</span></div><div class="kpi-sub"><span class="badge ${pctATiempo >= 80 ? 'badge-emerald' : pctATiempo >= 60 ? 'badge-amber' : 'badge-red'}">${pctATiempo}% cumplimiento</span></div></div>
+      <div class="kpi"><div class="kpi-label">OCs con retraso</div><div class="kpi-value">${escapeHtmlInline(conRetraso)}</div><div class="kpi-sub">Llegaron después del ETA</div></div>
+    </div>`
+  })()}
 </section>
 
 <section>
