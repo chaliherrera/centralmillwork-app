@@ -42,7 +42,7 @@ import {
   updateCotizacion, aprobarCotizacion, deleteCotizacion,
   marcarCotizacionesEnviadas,
 } from '../controllers/cotizacionesController'
-import { getReporteCompras, getReporteProduccion, compartirReporte, getReporteComprasJunJul } from '../controllers/reportesController'
+import { getReporteCompras, getReporteProduccion, compartirReporte, getReporteComprasJunJul, getReporteOP } from '../controllers/reportesController'
 import produccionRouter from './produccion'
 import {
   getTareas, getTarea, updateTarea, getTareasStats, syncSystemHandler,
@@ -166,6 +166,10 @@ router.post('/reportes/compartir',   WRITE, compartirReporte)
 // Reporte HTML self-contained del período jun–jul 2026 (2026-07-16). Devuelve
 // HTML directo (no JSON). Abrir en navegador logueado. ADMIN + PROCUREMENT.
 router.get('/reportes/compras-2026-06-07',  requireRole('ADMIN', 'PROCUREMENT'), getReporteComprasJunJul)
+// Reporte HTML self-contained de una OP de producción (2026-07-16). Timeline
+// + fotos + plazos. Para mostrar a la dirección/cliente. Fotos vía signed
+// URLs de Supabase (TTL 1h). ADMIN + PROCUREMENT + SHOP_MANAGER.
+router.get('/reportes/op/:numero',           requireRole('ADMIN', 'PROCUREMENT', 'SHOP_MANAGER'), getReporteOP)
 
 // ─── Tareas (solo ADMIN) ─────────────────────────────────────────────────────
 router.get('/tareas',                ADMIN, getTareas)
