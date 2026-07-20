@@ -17,16 +17,19 @@ interface NavItem {
   roles: UserRole[]
 }
 
+// VIEWER (agregado 2026-07-17): rol de solo lectura. Ve todos los módulos
+// operativos que representan el flujo del negocio, pero NO ve Tareas (inbox
+// personal de ADMIN, no aplica a observador) ni Usuarios (gestión sensible).
 const NAV_ITEMS: NavItem[] = [
-  { to: '/',               label: 'Dashboard',         icon: LayoutDashboard, roles: ['ADMIN','PROCUREMENT','PROJECT_MANAGEMENT','PRODUCTION','SHOP_MANAGER'] },
-  { to: '/proyectos',      label: 'Proyectos',          icon: FolderOpen,      roles: ['ADMIN','PROCUREMENT','PROJECT_MANAGEMENT','SHOP_MANAGER'] },
-  { to: '/ordenes-compra', label: 'Órdenes de Compra',  icon: ShoppingCart,    roles: ['ADMIN','PROCUREMENT','PROJECT_MANAGEMENT','PRODUCTION','CONTABILIDAD'] },
-  { to: '/materiales',     label: 'Materiales MTO',     icon: Package,         roles: ['ADMIN','PROCUREMENT','PROJECT_MANAGEMENT','PRODUCTION'] },
-  { to: '/mtos',           label: 'Control MTOs',       icon: Layers,          roles: ['ADMIN','PROCUREMENT'] },
-  { to: '/recepciones',    label: 'Recepciones',        icon: Truck,           roles: ['ADMIN','PROCUREMENT','PRODUCTION','SHOP_MANAGER'] },
-  { to: '/proveedores',    label: 'Proveedores',        icon: Users,           roles: ['ADMIN','PROCUREMENT'] },
-  { to: '/produccion',     label: 'Producción',         icon: Factory,         roles: ['ADMIN','SHOP_MANAGER'] },
-  { to: '/muestras',       label: 'Muestras',           icon: Beaker,          roles: ['ADMIN','ENGINEERING','SHOP_MANAGER','PROCUREMENT'] },
+  { to: '/',               label: 'Dashboard',         icon: LayoutDashboard, roles: ['ADMIN','PROCUREMENT','PROJECT_MANAGEMENT','PRODUCTION','SHOP_MANAGER','VIEWER'] },
+  { to: '/proyectos',      label: 'Proyectos',          icon: FolderOpen,      roles: ['ADMIN','PROCUREMENT','PROJECT_MANAGEMENT','SHOP_MANAGER','VIEWER'] },
+  { to: '/ordenes-compra', label: 'Órdenes de Compra',  icon: ShoppingCart,    roles: ['ADMIN','PROCUREMENT','PROJECT_MANAGEMENT','PRODUCTION','CONTABILIDAD','VIEWER'] },
+  { to: '/materiales',     label: 'Materiales MTO',     icon: Package,         roles: ['ADMIN','PROCUREMENT','PROJECT_MANAGEMENT','PRODUCTION','VIEWER'] },
+  { to: '/mtos',           label: 'Control MTOs',       icon: Layers,          roles: ['ADMIN','PROCUREMENT','VIEWER'] },
+  { to: '/recepciones',    label: 'Recepciones',        icon: Truck,           roles: ['ADMIN','PROCUREMENT','PRODUCTION','SHOP_MANAGER','VIEWER'] },
+  { to: '/proveedores',    label: 'Proveedores',        icon: Users,           roles: ['ADMIN','PROCUREMENT','VIEWER'] },
+  { to: '/produccion',     label: 'Producción',         icon: Factory,         roles: ['ADMIN','SHOP_MANAGER','VIEWER'] },
+  { to: '/muestras',       label: 'Muestras',           icon: Beaker,          roles: ['ADMIN','ENGINEERING','SHOP_MANAGER','PROCUREMENT','VIEWER'] },
   { to: '/tareas',         label: 'Tareas',             icon: Inbox,           roles: ['ADMIN'] },
   { to: '/usuarios',       label: 'Usuarios',           icon: ShieldCheck,     roles: ['ADMIN'] },
 ]

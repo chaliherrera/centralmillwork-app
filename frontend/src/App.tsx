@@ -38,15 +38,19 @@ function AdminRoute({ children }: { children: React.ReactNode }) {
   return <>{children}</>
 }
 
+// VIEWER (agregado 2026-07-17): incluido en Producción y Muestras para
+// tener acceso de lectura. Los endpoints WRITE del backend igual lo
+// rechazan con 403, así que ver está OK pero no puede modificar nada.
 function ProduccionRoute({ children }: { children: React.ReactNode }) {
   const { user } = useAuth()
-  if (user?.rol !== 'ADMIN' && user?.rol !== 'SHOP_MANAGER') return <Navigate to="/" replace />
+  const allowed = ['ADMIN', 'SHOP_MANAGER', 'VIEWER']
+  if (!user || !allowed.includes(user.rol)) return <Navigate to="/" replace />
   return <>{children}</>
 }
 
 function MuestrasRoute({ children }: { children: React.ReactNode }) {
   const { user } = useAuth()
-  const allowed = ['ADMIN', 'ENGINEERING', 'SHOP_MANAGER', 'PROCUREMENT']
+  const allowed = ['ADMIN', 'ENGINEERING', 'SHOP_MANAGER', 'PROCUREMENT', 'VIEWER']
   if (!user || !allowed.includes(user.rol)) return <Navigate to="/" replace />
   return <>{children}</>
 }
