@@ -43,7 +43,16 @@ export function errorHandler(err: AppError, req: Request, res: Response, _next: 
     })
   }
 
-  res.status(status).json({ message })
+  // Exponer detail solo en errores 500 — útil para debugging cuando el frontend
+  // reporta problemas y no hay acceso a Sentry/logs. No incluye stack trace (info
+  // sensible). El requestId permite cruzar con logs del backend si hace falta.
+  // 2026-07-17: agregado tras bug de import MTO donde solo veíamos "500" sin causa.
+  const body: { message: string; detail?: string; requestId?: string } = { message }
+  if (status === 500) {
+    body.detail = err?.message || String(err)
+    body.requestId = req.id
+  }
+  res.status(status).json(body)
 }
 
 export function notFound(_req: Request, res: Response) {
