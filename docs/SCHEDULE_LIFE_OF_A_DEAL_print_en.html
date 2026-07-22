@@ -1,0 +1,651 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Life of a Deal — Milestone Map Rev 0</title>
+<style>
+  @page { size: letter landscape; margin: 12mm 10mm 14mm 10mm; }
+
+  * { box-sizing: border-box; }
+  body {
+    font-family: "Segoe UI", Arial, Helvetica, sans-serif;
+    font-size: 10pt; line-height: 1.35; color: #1a1a1a; margin: 0; padding: 0 6mm;
+  }
+
+  /* ---------- Cover ---------- */
+  .cover { page-break-after: always; padding-top: 18mm; }
+  .cover h1 { font-size: 30pt; margin: 0 0 2mm; letter-spacing: -.5px; }
+  .cover .sub { font-size: 14pt; color: #444; margin-bottom: 12mm; }
+  .cover .meta { font-size: 10pt; color: #555; line-height: 1.9; }
+  .cover .meta b { color: #1a1a1a; display: inline-block; min-width: 46mm; }
+  .warn {
+    border-left: 4px solid #b45309; background: #fdf6ec;
+    padding: 4mm 5mm; margin: 10mm 0; font-size: 10.5pt;
+  }
+  .signbox { display: flex; gap: 8mm; margin-top: 16mm; }
+  .signbox div {
+    flex: 1; border-top: 1px solid #333; padding-top: 2mm;
+    font-size: 9pt; color: #555;
+  }
+
+  /* ---------- Sections ---------- */
+  h2 {
+    font-size: 15pt; margin: 0 0 3mm; padding-bottom: 1.5mm;
+    border-bottom: 2px solid #1a1a1a;
+  }
+  h3 { font-size: 11.5pt; margin: 6mm 0 2mm; }
+  .phase { page-break-before: always; }
+  .phase-head { display: flex; align-items: baseline; gap: 4mm; margin-bottom: 1mm; }
+  .phase-head .n { font-size: 20pt; font-weight: 700; color: #999; line-height: 1; }
+  .owner { font-size: 9.5pt; color: #555; margin: 0 0 3mm; }
+  .note {
+    border-left: 3px solid #666; background: #f4f4f4;
+    padding: 2.5mm 4mm; margin: 3mm 0; font-size: 9.5pt;
+  }
+
+  /* ---------- Tables ---------- */
+  table { width: 100%; border-collapse: collapse; margin: 2mm 0 4mm; }
+  th {
+    background: #1a1a1a; color: #fff; font-size: 8.5pt; font-weight: 600;
+    text-align: left; padding: 1.8mm 2mm; border: .4pt solid #1a1a1a;
+  }
+  td {
+    font-size: 9pt; padding: 1.8mm 2mm; border: .4pt solid #b0b0b0;
+    vertical-align: top;
+  }
+  tbody tr:nth-child(even) td { background: #f7f7f7; }
+  tr { page-break-inside: avoid; }
+
+  td.id { font-weight: 700; white-space: nowrap; font-size: 8.5pt; }
+  td.notes { background: #fff !important; }
+
+  .col-id    { width: 5%; }
+  .col-hito  { width: 17%; }
+  .col-resp  { width: 10%; }
+  .col-dur   { width: 6%; }
+  .col-dep   { width: 11%; }
+  .col-evi   { width: 25%; }
+  .col-hoy   { width: 6%; }
+  .col-notes { width: 20%; }
+
+  /* ---------- Badges ---------- */
+  .b { font-size: 7.5pt; font-weight: 700; padding: .6mm 1.4mm; border: .4pt solid; white-space: nowrap; }
+  .ya    { background: #dcfce7; border-color: #15803d; color: #14532d; }
+  .parc  { background: #fef3c7; border-color: #b45309; color: #713f12; }
+  .nuevo { background: #fee2e2; border-color: #b91c1c; color: #7f1d1d; }
+  .gate  { background: #1a1a1a; color: #fff; border-color: #1a1a1a; }
+  .cont  { background: #e5e7eb; border-color: #6b7280; color: #374151; }
+  .cond  { background: #fff; border-color: #6b7280; color: #374151; }
+
+  .key { font-size: 8.5pt; color: #555; margin: 2mm 0 3mm; }
+  .key .b { margin-right: 1mm; }
+
+  ul { margin: 1.5mm 0 3mm; padding-left: 6mm; }
+  li { margin-bottom: 1mm; }
+  .chk { list-style: none; padding-left: 0; }
+  .chk li:before { content: "\2610"; margin-right: 2.5mm; font-size: 12pt; vertical-align: -1px; }
+  .chk li { margin-bottom: 2.5mm; }
+
+  .two { display: flex; gap: 8mm; }
+  .two > div { flex: 1; }
+
+  @media print { body { padding: 0; } .noprint { display: none; } }
+  .noprint {
+    background: #1a1a1a; color: #fff; padding: 3mm 5mm; margin: 0 -6mm 6mm;
+    font-size: 9.5pt;
+  }
+</style>
+</head>
+<body>
+
+<div class="noprint">
+  To print: <b>Ctrl+P</b> → <b>Landscape</b> orientation → enable <b>“Background graphics”</b>.
+  This bar will not be printed.
+</div>
+
+<!-- ============ COVER ============ -->
+<section class="cover">
+  <h1>Life of a Deal</h1>
+  <div class="sub">Milestone Map — Intelligent Project Schedule</div>
+
+  <div class="meta">
+    <b>Revision:</b> Rev 0 — draft<br>
+    <b>Date:</b> July 21, 2026<br>
+    <b>Company:</b> Central Millwork<br>
+    <b>Sources:</b> <i>Life of a Deal 2026 Rev0</i> (41 pp.) + current system<br>
+    <b>Scope:</b> 64 milestones · 9 phases · 8 hard gates<br>
+    <b>For review by:</b> CEO · PM · Chali Herrera
+  </div>
+
+  <div class="warn">
+    <b>This is not a software plan. It is Central Millwork’s own process, written as a chain
+    of milestones.</b><br><br>
+    What this review needs is specific: correct the <b>durations</b> (the ones in this document
+    are estimates), confirm the <b>owner</b> of each milestone, and flag the milestones that are
+    <b>missing, unnecessary, or that don’t actually work this way in practice</b>.
+    Every table has a blank column on the right for handwritten notes.
+    <br><br>
+    With poorly calibrated durations, the system will lie with great precision.
+  </div>
+
+  <div class="signbox">
+    <div>CEO — name, signature and date</div>
+    <div>PM — name, signature and date</div>
+    <div>Chali Herrera — date</div>
+  </div>
+</section>
+
+<!-- ============ PRINCIPLES ============ -->
+<section class="phase">
+  <h2>Design principles</h2>
+  <p class="owner">The seven rules that govern the entire system. If any one of them is rejected, the design changes.</p>
+
+  <table>
+    <thead><tr><th style="width:4%">#</th><th style="width:24%">Principle</th><th style="width:52%">What it means</th><th class="col-notes">Notes / objections</th></tr></thead>
+    <tbody>
+      <tr><td class="id">P1</td><td><b>The target date is sacred</b></td>
+        <td>The delivery date committed to the client is <b>never recalculated automatically</b>. Internal dates and the projection are recalculated. When the projection passes the target date, the project turns red — the date does not move. Moving it is a <b>recorded human decision</b>: who, when, why, how many days.</td><td class="notes"></td></tr>
+      <tr><td class="id">P2</td><td><b>No milestone closes on a claim — it closes on evidence</b></td>
+        <td>There is no “it’s done” checkbox. Every milestone closes because the artifact that proves it appeared (a file, a submittal, a client click, a station move), and <b>the system sets the date</b>, not the person.</td><td class="notes"></td></tr>
+      <tr><td class="id">P3</td><td><b>The record is a by-product of the work</b></td>
+        <td>The drawing submittal goes out <i>from the system</i>, so the date records itself. If someone has to perform an extra task just to report, that design is wrong and will be abandoned within three weeks.</td><td class="notes"></td></tr>
+      <tr><td class="id">P4</td><td><b>Progress is counted, not estimated</b></td>
+        <td>No human-typed “% complete”. Progress is evidenced sub-milestones completed over total. If it cannot be counted, it is not displayed.</td><td class="notes"></td></tr>
+      <tr><td class="id">P5</td><td><b>Two clocks</b></td>
+        <td>Backward from the delivery date: the deadline for each milestone. Forward from actual events: where we are going to land. The gap between them is <b>float</b>. Negative float = risk of missing the date.</td><td class="notes"></td></tr>
+      <tr><td class="id">P6</td><td><b>The system pushes early, it does not explain late</b></td>
+        <td>A schedule that only absorbs delays is a scoreboard of losses. Every milestone approaching its deadline alerts its owner <b>beforehand</b>, and automatically reminds the client when the ball is in their court.</td><td class="notes"></td></tr>
+      <tr><td class="id">P7</td><td><b>Whoever arrives last holds the ball</b></td>
+        <td>When a milestone has several predecessors, its actual start is <b>the latest of them</b>. The system names which one it was and how many days it cost. No argument.</td><td class="notes"></td></tr>
+    </tbody>
+  </table>
+
+  <h3>The journey</h3>
+  <p style="font-size:12pt; letter-spacing:.5px; margin:3mm 0 4mm;">
+    <b>QUOTE → CONTRACT → ENGINEERING → MATERIALS → PRODUCTION → QC → SHIPPING → INSTALL → COMPLETED</b>
+  </p>
+  <div class="note">
+    <b>Assembly is not a phase.</b> In the official document it appears only as a shop stage inside
+    <i>Manufacture</i> (p.33) and <i>Quality Control</i> (p.34), alongside CNC, laminate, finishing,
+    final and packaging. Station-level detail is already tracked by the Production module to the
+    minute; duplicating it as a schedule phase would only add noise.
+  </div>
+
+  <div class="key">
+    <b>Legend used in the tables —</b>
+    <span class="b ya">HAVE</span> the data already exists in the system ·
+    <span class="b parc">PART</span> partially exists, the formal dated event is missing ·
+    <span class="b nuevo">NEW</span> must be built &nbsp;&nbsp;|&nbsp;&nbsp;
+    <span class="b gate">GATE</span> blocks the start of another phase ·
+    <span class="b cont">CONT</span> continuous or recurring ·
+    <span class="b cond">COND</span> conditional
+  </div>
+</section>
+
+<!-- ============ PHASE 1 ============ -->
+<section class="phase">
+  <div class="phase-head"><span class="n">1</span><h2 style="flex:1">QUOTE</h2></div>
+  <p class="owner">Phase owner: <b>Estimator</b></p>
+
+  <table>
+    <thead><tr>
+      <th class="col-id">#</th><th class="col-hito">Milestone</th><th class="col-resp">Owner</th>
+      <th class="col-dur">Dur.</th><th class="col-dep">Depends on</th>
+      <th class="col-evi">Evidence that closes it</th><th class="col-hoy">Today</th>
+      <th class="col-notes">Notes / correction</th>
+    </tr></thead>
+    <tbody>
+      <tr><td class="id">Q-01</td><td>Bid identified and qualified</td><td>Estimator</td><td>1 d</td><td>—</td><td>Deal created in the system with client, type and A/B criteria <i>(p.41)</i></td><td><span class="b nuevo">NEW</span></td><td class="notes"></td></tr>
+      <tr><td class="id">Q-02</td><td>T&amp;C reviewed and documented</td><td>Estimator</td><td>2 d</td><td>Q-01</td><td>T&amp;C PDF attached + pursue/decline decision recorded + exceptions listed <i>(p.2, p.3)</i></td><td><span class="b nuevo">NEW</span></td><td class="notes"></td></tr>
+      <tr><td class="id">Q-03</td><td>Estimate prepared</td><td>Estimator</td><td>5-15 d</td><td>Q-02</td><td>Amount recorded + highlighted scope plans attached <i>(p.4)</i></td><td><span class="b nuevo">NEW</span></td><td class="notes"></td></tr>
+      <tr><td class="id">Q-04</td><td>Estimate peer review</td><td>Estimating Director</td><td>1-2 d</td><td>Q-03</td><td>Director approval recorded in the system <i>(p.4)</i></td><td><span class="b nuevo">NEW</span></td><td class="notes"></td></tr>
+      <tr><td class="id">Q-05</td><td>Proposal submitted to client</td><td>Estimator</td><td>1 d</td><td>Q-04</td><td>Submittal triggered from the system <i>(p.4)</i></td><td><span class="b nuevo">NEW</span></td><td class="notes"></td></tr>
+      <tr><td class="id">Q-06</td><td><b>Required completion date confirmed</b></td><td>Estimator</td><td>—</td><td>Q-05</td><td>GC bid schedule date loaded, or client response through the portal <i>(p.5)</i></td><td><span class="b nuevo">NEW</span></td><td class="notes"></td></tr>
+      <tr><td class="id">Q-07</td><td>Preliminary schedule created and shared</td><td>Estimator + PM</td><td>1 d</td><td>Q-06</td><td>Schedule generated by the system and sent to the client, noting that missed milestones may impact the completion date <i>(p.5)</i></td><td><span class="b nuevo">NEW</span></td><td class="notes"></td></tr>
+    </tbody>
+  </table>
+
+  <div class="note">
+    <b>Q-06 is the anchor of the entire project.</b> Q-07 is where the system answers the key
+    question: <i>is this date achievable?</i> — by calculating backward and returning the deadline
+    for award.
+    <br><br>
+    This is already official Central Millwork process: page 5 calls for
+    “<i>a Gantt schedule working back from completion to determine the required start date</i>”.
+    Today it lives in Smartsheets and Excel, disconnected from reality.
+  </div>
+</section>
+
+<!-- ============ PHASE 2 ============ -->
+<section class="phase">
+  <div class="phase-head"><span class="n">2</span><h2 style="flex:1">CONTRACT</h2></div>
+  <p class="owner">Phase owner: <b>Estimator</b> → handoff to <b>PM / Engineer</b></p>
+
+  <table>
+    <thead><tr>
+      <th class="col-id">#</th><th class="col-hito">Milestone</th><th class="col-resp">Owner</th>
+      <th class="col-dur">Dur.</th><th class="col-dep">Depends on</th>
+      <th class="col-evi">Evidence that closes it</th><th class="col-hoy">Today</th>
+      <th class="col-notes">Notes / correction</th>
+    </tr></thead>
+    <tbody>
+      <tr><td class="id">C-01</td><td>Project in negotiation</td><td>Estimator</td><td>—</td><td>Q-07</td><td>Stage change in the pipeline <i>(p.6)</i></td><td><span class="b nuevo">NEW</span></td><td class="notes"></td></tr>
+      <tr><td class="id">C-02</td><td>Contract reviewed / addendum issued</td><td>Estimator</td><td>3-10 d</td><td>C-01</td><td>Reviewed contract PDF + addendum attached <i>(p.6)</i></td><td><span class="b nuevo">NEW</span></td><td class="notes"></td></tr>
+      <tr><td class="id">C-03</td><td><b>CONTRACT EXECUTED — day zero</b></td><td>Estimator + CFO</td><td>—</td><td>C-02</td><td>Signed PDF uploaded to the project <i>(p.6)</i></td><td><span class="b nuevo">NEW</span></td><td class="notes"></td></tr>
+      <tr><td class="id">C-04</td><td>Material deposit received</td><td>Office Manager</td><td>5-15 d</td><td>C-03</td><td>Payment recorded with amount and date <i>(p.18)</i></td><td><span class="b nuevo">NEW</span></td><td class="notes"></td></tr>
+      <tr><td class="id">C-05</td><td>Preliminary MTO created</td><td>Estimator</td><td>1-2 d</td><td>C-03</td><td>Preliminary MTO file imported into the project <i>(p.7)</i></td><td><span class="b parc">PART</span></td><td class="notes"></td></tr>
+      <tr><td class="id">C-06</td><td>Project budget created</td><td>Estimator</td><td>1 d</td><td>C-03</td><td>Budget loaded by area <i>(p.8)</i></td><td><span class="b nuevo">NEW</span></td><td class="notes"></td></tr>
+      <tr><td class="id">C-07</td><td>Project announcement sent</td><td>Estimator</td><td>1 d</td><td>C-05, C-06</td><td>Email triggered from the system + project folder created with all documents <i>(p.9)</i></td><td><span class="b nuevo">NEW</span></td><td class="notes"></td></tr>
+      <tr><td class="id">C-08</td><td>Kickoff call with GC and designer</td><td>Estimator + Eng + PM</td><td>1 d</td><td>C-07</td><td>Meeting recorded + notes distributed from the system <i>(p.10)</i></td><td><span class="b nuevo">NEW</span></td><td class="notes"></td></tr>
+      <tr><td class="id">C-09</td><td>POC transferred to Engineer / PM</td><td>Estimator</td><td>—</td><td>C-08</td><td>Handoff email triggered from the system <i>(p.11)</i></td><td><span class="b nuevo">NEW</span></td><td class="notes"></td></tr>
+    </tbody>
+  </table>
+
+  <div class="note">
+    <b>C-03 is operational day zero.</b> The whole plan anchors there. The days between Q-05 and C-03
+    are recorded as <i>client decision time</i> and deducted from the buffer — with internal alerts
+    and automatic client reminders starting on day 5.
+    <br><br>
+    The underlying principle: if the contract is signed three weeks late, everything shifts three weeks.
+    But <b>the real failure is having let three weeks pass without it being signed</b>. That is why the
+    milestone alerts before, not only records after.
+  </div>
+</section>
+
+<!-- ============ PHASE 3 ============ -->
+<section class="phase">
+  <div class="phase-head"><span class="n">3</span><h2 style="flex:1">ENGINEERING</h2></div>
+  <p class="owner">Phase owner: <b>Engineer</b> (PM support) — the largest phase, and the one that exposes the most delay</p>
+
+  <table>
+    <thead><tr>
+      <th class="col-id">#</th><th class="col-hito">Milestone</th><th style="width:5%">Type</th><th style="width:9%">Owner</th>
+      <th class="col-dur">Dur.</th><th style="width:10%">Depends on</th>
+      <th style="width:23%">Evidence that closes it</th><th class="col-hoy">Today</th>
+      <th style="width:17%">Notes / correction</th>
+    </tr></thead>
+    <tbody>
+      <tr><td class="id">E-01</td><td>Long lead times identified</td><td><span class="b gate">GATE</span></td><td>Engineer + PM</td><td>2-3 d</td><td>C-07</td><td>Materials flagged as long-lead with lead time reconfirmed by the vendor <i>(p.12)</i></td><td><span class="b parc">PART</span></td><td class="notes"></td></tr>
+      <tr><td class="id">E-02</td><td>Early procurement approved by client</td><td><span class="b gate">GATE</span></td><td>PM</td><td>3-10 d</td><td>E-01</td><td>Client approval through the portal <i>(p.12)</i></td><td><span class="b nuevo">NEW</span></td><td class="notes"></td></tr>
+      <tr><td class="id">E-03</td><td>Design call with designer and GC</td><td></td><td>Engineer</td><td>1 d</td><td>C-08</td><td>Meeting notes distributed from the system <i>(p.13)</i></td><td><span class="b nuevo">NEW</span></td><td class="notes"></td></tr>
+      <tr><td class="id">E-04</td><td>V/E options proposed to client</td><td><span class="b cond">COND</span></td><td>Engineer + PM</td><td>3-5 d</td><td>E-03</td><td>Options sent + client response recorded <i>(p.14)</i></td><td><span class="b nuevo">NEW</span></td><td class="notes"></td></tr>
+      <tr><td class="id">E-05</td><td>VIF / field measurements</td><td><span class="b cond">COND</span></td><td>Field Specialist</td><td>1-2 d</td><td>C-08</td><td>Measurements and photos uploaded from the mobile app with date and location <i>(p.21)</i></td><td><span class="b nuevo">NEW</span></td><td class="notes"></td></tr>
+      <tr><td class="id">E-06</td><td>Finish samples requested from client</td><td></td><td>Engineer</td><td>1 d</td><td>E-03</td><td>Sample created with committed date <i>(p.17)</i></td><td><span class="b ya">HAVE</span></td><td class="notes"></td></tr>
+      <tr><td class="id">E-07</td><td>Samples fabricated and shipped</td><td></td><td>Shop Manager</td><td>10-14 d</td><td>E-06</td><td>Shipment recorded with photo of the package <i>(p.17)</i></td><td><span class="b ya">HAVE</span></td><td class="notes"></td></tr>
+      <tr><td class="id">E-08</td><td><b>Samples approved by client</b></td><td><span class="b gate">GATE</span></td><td>Engineer</td><td>5-15 d</td><td>E-07</td><td>Client approval through the portal <i>(p.17)</i></td><td><span class="b parc">PART</span></td><td class="notes"></td></tr>
+      <tr><td class="id">E-09</td><td>Shop drawings submitted to client</td><td></td><td>Engineer</td><td>10-25 d</td><td>E-03, E-05</td><td>Submittal generated and sent from the system with PDF attached <i>(p.19)</i></td><td><span class="b nuevo">NEW</span></td><td class="notes"></td></tr>
+      <tr><td class="id">E-10</td><td><b>Shop drawings approved by client</b></td><td><span class="b gate">GATE</span></td><td>Engineer</td><td>10-20 d</td><td>E-09</td><td>Approve / Approve as noted / Reject in the portal, with date and identity <i>(p.19, p.20)</i></td><td><span class="b nuevo">NEW</span></td><td class="notes"></td></tr>
+      <tr><td class="id">E-11</td><td>Comments incorporated and resubmitted</td><td><span class="b cond">COND</span></td><td>Engineer</td><td>3-10 d</td><td>E-10</td><td>New revision issued from the system <i>(p.20)</i></td><td><span class="b nuevo">NEW</span></td><td class="notes"></td></tr>
+      <tr><td class="id">E-12</td><td><b>Final MTO released to purchasing</b></td><td><span class="b gate">GATE</span></td><td>Engineer</td><td>2-5 d</td><td>E-10, C-04</td><td>MTO flagged as released + deposit confirmation <i>(p.18)</i></td><td><span class="b parc">PART</span></td><td class="notes"></td></tr>
+      <tr><td class="id">E-13</td><td><b>Release to Production</b></td><td><span class="b gate">GATE</span></td><td>Engineer</td><td>1 d</td><td>E-10</td><td>“Approved”-stamped drawings attached + release email triggered from the system <i>(p.22)</i></td><td><span class="b nuevo">NEW</span></td><td class="notes"></td></tr>
+      <tr><td class="id">E-14</td><td><b>CNC files delivered</b></td><td><span class="b gate">GATE</span></td><td>Engineer</td><td>2-5 d</td><td>E-13</td><td>CNC files uploaded and linked to the production order <i>(p.29)</i></td><td><span class="b nuevo">NEW</span></td><td class="notes"></td></tr>
+      <tr><td class="id">E-15</td><td>Change orders communicated</td><td><span class="b cont">CONT</span></td><td>Engineer + PM</td><td>—</td><td>—</td><td>CO created, validated by Estimator and sent to the client <i>(p.16)</i></td><td><span class="b nuevo">NEW</span></td><td class="notes"></td></tr>
+      <tr><td class="id">E-16</td><td>Engineering schedule review</td><td><span class="b cont">CONT</span></td><td>Engineer + PM</td><td>weekly</td><td>—</td><td>Review recorded with risks flagged and communicated to the client <i>(p.15)</i></td><td><span class="b nuevo">NEW</span></td><td class="notes"></td></tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- ============ PHASE 4 ============ -->
+<section class="phase">
+  <div class="phase-head"><span class="n">4</span><h2 style="flex:1">MATERIALS</h2></div>
+  <p class="owner">Phase owner: <b>Procurement Manager</b> — the best instrumented phase today</p>
+
+  <table>
+    <thead><tr>
+      <th class="col-id">#</th><th class="col-hito">Milestone</th><th style="width:5%">Type</th><th style="width:9%">Owner</th>
+      <th class="col-dur">Dur.</th><th style="width:10%">Depends on</th>
+      <th style="width:23%">Evidence that closes it</th><th class="col-hoy">Today</th>
+      <th style="width:17%">Notes / correction</th>
+    </tr></thead>
+    <tbody>
+      <tr><td class="id">M-01</td><td>Procurement schedule review</td><td><span class="b cont">CONT</span></td><td>Procurement Mgr</td><td>weekly</td><td>C-07</td><td>Review recorded with at-risk materials flagged and communicated to PM and Production <i>(p.23)</i></td><td><span class="b nuevo">NEW</span></td><td class="notes"></td></tr>
+      <tr><td class="id">M-02</td><td>Material budget validated</td><td></td><td>Procurement Mgr</td><td>2-3 d</td><td>E-12</td><td>Validation against the estimate recorded, with discrepancies resolved <i>(p.24)</i></td><td><span class="b nuevo">NEW</span></td><td class="notes"></td></tr>
+      <tr><td class="id">M-03</td><td>Long-lead items ordered</td><td><span class="b gate">GATE</span></td><td>Procurement Mgr</td><td>1-3 d</td><td>E-02</td><td>PO issued <i>(p.25)</i></td><td><span class="b ya">HAVE</span></td><td class="notes"></td></tr>
+      <tr><td class="id">M-04</td><td>MTO quoted</td><td></td><td>Procurement Mgr</td><td>5-10 d</td><td>E-12</td><td>Quotes received by vendor <i>(p.26)</i></td><td><span class="b ya">HAVE</span></td><td class="notes"></td></tr>
+      <tr><td class="id">M-05</td><td>POs issued</td><td></td><td>Procurement Mgr</td><td>2-3 d</td><td>M-04, M-02</td><td>POs generated with ETA per vendor <i>(p.26)</i></td><td><span class="b ya">HAVE</span></td><td class="notes"></td></tr>
+      <tr><td class="id">M-06</td><td>POs to subcontractors</td><td><span class="b cond">COND</span></td><td>PM + CFO</td><td>5-10 d</td><td>E-13</td><td>PO signed by the subcontractor <i>(p.27)</i></td><td><span class="b nuevo">NEW</span></td><td class="notes"></td></tr>
+      <tr><td class="id">M-07</td><td><b>Material received and stocked 100%</b></td><td><span class="b gate">GATE</span></td><td>Procurement Mgr</td><td>lead time</td><td>M-05</td><td>All receipts closed, no open shortages <i>(p.28)</i></td><td><span class="b ya">HAVE</span></td><td class="notes"></td></tr>
+    </tbody>
+  </table>
+
+  <div class="note">
+    <b>M-07 is usually the critical path milestone.</b> The slowest vendor’s lead time drives the
+    entire delivery date. This is precisely why the schedule is calculated backward: to know
+    <i>when the PO must be issued</i>, not <i>how long until it arrives</i>.
+  </div>
+</section>
+
+<!-- ============ PHASE 5 ============ -->
+<section class="phase">
+  <div class="phase-head"><span class="n">5</span><h2 style="flex:1">PRODUCTION</h2></div>
+  <p class="owner">Phase owner: <b>Production Manager</b></p>
+
+  <table>
+    <thead><tr>
+      <th class="col-id">#</th><th class="col-hito">Milestone</th><th style="width:5%">Type</th><th style="width:9%">Owner</th>
+      <th class="col-dur">Dur.</th><th style="width:12%">Depends on</th>
+      <th style="width:21%">Evidence that closes it</th><th class="col-hoy">Today</th>
+      <th style="width:17%">Notes / correction</th>
+    </tr></thead>
+    <tbody>
+      <tr><td class="id">P-01</td><td><b>PRODUCTION INTAKE</b><br>compound gate</td><td><span class="b gate">GATE</span></td><td>Production Mgr</td><td>1 d</td><td><b>E-08 + E-10 + E-13 + E-14 + M-07</b></td><td>All 5 requirements verified green. The system will not allow production to open without them <i>(p.30)</i></td><td><span class="b nuevo">NEW</span></td><td class="notes"></td></tr>
+      <tr><td class="id">P-02</td><td>Distribute to production</td><td></td><td>Production Controller</td><td>1 d</td><td>P-01</td><td>Production orders created with drawings and MTO linked, CNC delivered to the operator <i>(p.29)</i></td><td><span class="b parc">PART</span></td><td class="notes"></td></tr>
+      <tr><td class="id">P-03</td><td>Labor budget validated</td><td></td><td>Production Mgr</td><td>1 d</td><td>P-01</td><td>Budgeted vs. planned hours, risks reported to PM <i>(p.32)</i></td><td><span class="b nuevo">NEW</span></td><td class="notes"></td></tr>
+      <tr><td class="id">P-04</td><td>3-Week Lookahead published</td><td><span class="b cont">CONT</span></td><td>PM + Production Mgr</td><td>weekly</td><td>P-01</td><td>3WLA generated by the system and shared company-wide <i>(p.31)</i></td><td><span class="b nuevo">NEW</span></td><td class="notes"></td></tr>
+      <tr><td class="id">P-05</td><td>Fabrication in progress</td><td><span class="b cont">CONT</span></td><td>Production Team</td><td>10-30 d</td><td>P-02</td><td>Actual progress by station and by item — already tracked by the shop kiosk <i>(p.33)</i></td><td><span class="b ya">HAVE</span></td><td class="notes"></td></tr>
+      <tr><td class="id">P-06</td><td>Fabrication complete</td><td></td><td>Production Mgr</td><td>—</td><td>P-05</td><td>All project items at final station <i>(p.33)</i></td><td><span class="b ya">HAVE</span></td><td class="notes"></td></tr>
+    </tbody>
+  </table>
+
+  <div class="note">
+    <b>P-01 is the heart of the dependency engine.</b> It is the <i>Production Intake</i> rule from
+    page 30 — “<i>approved shop drawings, CNC files, materials, and approved samples</i>” — turned
+    into a hard gate.
+    <br><br>
+    Its actual date is <b>the latest of its 5 predecessors</b>, and the system names which one it was.
+    Today, when production can’t start, the argument is “I sent the drawings” versus “the material
+    never arrived”. With this, there is data instead.
+  </div>
+</section>
+
+<!-- ============ PHASES 6 & 7 ============ -->
+<section class="phase">
+  <div class="phase-head"><span class="n">6</span><h2 style="flex:1">QC</h2></div>
+  <p class="owner">Phase owner: <b>Production Assistant</b></p>
+
+  <table>
+    <thead><tr>
+      <th class="col-id">#</th><th class="col-hito">Milestone</th><th style="width:5%">Type</th><th style="width:9%">Owner</th>
+      <th class="col-dur">Dur.</th><th style="width:10%">Depends on</th>
+      <th style="width:23%">Evidence that closes it</th><th class="col-hoy">Today</th>
+      <th style="width:17%">Notes / correction</th>
+    </tr></thead>
+    <tbody>
+      <tr><td class="id">QC-01</td><td>In-process quality checks</td><td><span class="b cont">CONT</span></td><td>Production Assistant</td><td>—</td><td>P-05</td><td>Inspections recorded at assembly, laminate and paint stages <i>(p.34)</i></td><td><span class="b ya">HAVE</span></td><td class="notes"></td></tr>
+      <tr><td class="id">QC-02</td><td><b>Final QC approved</b></td><td><span class="b gate">GATE</span></td><td>Production Assistant</td><td>1-3 d</td><td>P-06</td><td>Final inspection with photos of every item <i>(p.34)</i></td><td><span class="b ya">HAVE</span></td><td class="notes"></td></tr>
+      <tr><td class="id">QC-03</td><td>Rework on defect</td><td><span class="b cond">COND</span></td><td>Production Mgr</td><td>variable</td><td>QC-01/02</td><td>Rework decision recorded with target station and days lost <i>(p.34)</i></td><td><span class="b ya">HAVE</span></td><td class="notes"></td></tr>
+    </tbody>
+  </table>
+
+  <div class="phase-head" style="margin-top:8mm"><span class="n">7</span><h2 style="flex:1">SHIPPING</h2></div>
+  <p class="owner">Phase owner: <b>Logistics Manager</b></p>
+
+  <table>
+    <thead><tr>
+      <th class="col-id">#</th><th class="col-hito">Milestone</th><th style="width:5%">Type</th><th style="width:9%">Owner</th>
+      <th class="col-dur">Dur.</th><th style="width:10%">Depends on</th>
+      <th style="width:23%">Evidence that closes it</th><th class="col-hoy">Today</th>
+      <th style="width:17%">Notes / correction</th>
+    </tr></thead>
+    <tbody>
+      <tr><td class="id">S-01</td><td>Packaging complete</td><td></td><td>Production Team</td><td>1-3 d</td><td>QC-02</td><td>Items tagged with project / item / sequence, matched against the shipping list <i>(p.35)</i></td><td><span class="b parc">PART</span></td><td class="notes"></td></tr>
+      <tr><td class="id">S-02</td><td>Delivery request issued (48 h)</td><td><span class="b gate">GATE</span></td><td>PM</td><td>—</td><td>S-01</td><td>Request sent to Logistics and Production with at least 48 hours’ notice <i>(p.38)</i></td><td><span class="b nuevo">NEW</span></td><td class="notes"></td></tr>
+      <tr><td class="id">S-03</td><td>Transportation confirmed + BOL</td><td></td><td>Logistics Mgr</td><td>1-2 d</td><td>S-02</td><td>Truck confirmed and BOL issued <i>(p.36)</i></td><td><span class="b nuevo">NEW</span></td><td class="notes"></td></tr>
+      <tr><td class="id">S-04</td><td><b>Shipped</b></td><td></td><td>Logistics Mgr</td><td>1 d</td><td>S-03</td><td>Load photos, seal number and signed BOL uploaded <i>(p.36)</i></td><td><span class="b nuevo">NEW</span></td><td class="notes"></td></tr>
+      <tr><td class="id">S-05</td><td>Site receiving coordinated</td><td><span class="b cond">COND</span></td><td>Field Specialist</td><td>—</td><td>S-04</td><td>Coordination with the installer recorded. Not applicable on projects without installation <i>(p.37)</i></td><td><span class="b nuevo">NEW</span></td><td class="notes"></td></tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- ============ PHASES 8 & 9 ============ -->
+<section class="phase">
+  <div class="phase-head"><span class="n">8</span><h2 style="flex:1">INSTALL</h2></div>
+  <p class="owner">Phase owner: <b>Field Specialist</b> (PM support)</p>
+
+  <table>
+    <thead><tr>
+      <th class="col-id">#</th><th class="col-hito">Milestone</th><th style="width:5%">Type</th><th style="width:9%">Owner</th>
+      <th class="col-dur">Dur.</th><th style="width:10%">Depends on</th>
+      <th style="width:23%">Evidence that closes it</th><th class="col-hoy">Today</th>
+      <th style="width:17%">Notes / correction</th>
+    </tr></thead>
+    <tbody>
+      <tr><td class="id">I-01</td><td>Installation dates coordinated</td><td><span class="b gate">GATE</span></td><td>PM</td><td>3-5 d</td><td>QC-02</td><td>Dates agreed with the installer and communicated to the client <i>(p.38)</i></td><td><span class="b nuevo">NEW</span></td><td class="notes"></td></tr>
+      <tr><td class="id">I-02</td><td>Installation materials purchased</td><td><span class="b gate">GATE</span></td><td>Procurement Mgr</td><td>2-5 d</td><td>I-01</td><td>Installer list received and PO issued, 48 h in advance <i>(p.38)</i></td><td><span class="b parc">PART</span></td><td class="notes"></td></tr>
+      <tr><td class="id">I-03</td><td><b>Site ready for installation</b></td><td><span class="b gate">GATE</span></td><td>PM</td><td>—</td><td>—</td><td>GC confirmation. <b>External dependency — outside our control</b></td><td><span class="b nuevo">NEW</span></td><td class="notes"></td></tr>
+      <tr><td class="id">I-04</td><td>Installation started</td><td></td><td>Field Specialist</td><td>—</td><td>S-05, I-02, I-03</td><td>On-site check-in from the mobile app <i>(p.40)</i></td><td><span class="b nuevo">NEW</span></td><td class="notes"></td></tr>
+      <tr><td class="id">I-05</td><td>Installation in progress</td><td><span class="b cont">CONT</span></td><td>Field Specialist</td><td>5-20 d</td><td>I-04</td><td>Daily progress by area from the mobile app <i>(p.40)</i></td><td><span class="b nuevo">NEW</span></td><td class="notes"></td></tr>
+      <tr><td class="id">I-06</td><td>Punch list closed</td><td><span class="b gate">GATE</span></td><td>Field Specialist</td><td>3-10 d</td><td>I-05</td><td>Every punch list item with a photo of the resolution <i>(p.40)</i></td><td><span class="b nuevo">NEW</span></td><td class="notes"></td></tr>
+      <tr><td class="id">I-07</td><td><b>Client sign-off</b></td><td></td><td>PM</td><td>—</td><td>I-06</td><td>Final client approval through the portal</td><td><span class="b nuevo">NEW</span></td><td class="notes"></td></tr>
+    </tbody>
+  </table>
+
+  <div class="note">
+    <b>I-03 is the GC’s external dependency.</b> When the site is not ready, the delay
+    <b>does not belong to Central Millwork</b>, and the system must record it with that attribution.
+    That builds the documented record for GC conversations — today that argument is made from memory.
+  </div>
+
+  <div class="phase-head" style="margin-top:8mm"><span class="n">9</span><h2 style="flex:1">COMPLETED</h2></div>
+  <p class="owner">Phase owner: <b>PM + CFO</b></p>
+
+  <table>
+    <thead><tr>
+      <th class="col-id">#</th><th class="col-hito">Milestone</th><th class="col-resp">Owner</th>
+      <th class="col-dur">Dur.</th><th class="col-dep">Depends on</th>
+      <th class="col-evi">Evidence that closes it</th><th class="col-hoy">Today</th>
+      <th class="col-notes">Notes / correction</th>
+    </tr></thead>
+    <tbody>
+      <tr><td class="id">X-01</td><td>Internal closeout report</td><td>PM</td><td>2-3 d</td><td>I-07</td><td>Report with feedback and photos uploaded <i>(p.39)</i></td><td><span class="b nuevo">NEW</span></td><td class="notes"></td></tr>
+      <tr><td class="id">X-02</td><td>Project folder archived</td><td>PM</td><td>1 d</td><td>X-01</td><td>Project file marked as closed <i>(p.39)</i></td><td><span class="b nuevo">NEW</span></td><td class="notes"></td></tr>
+      <tr><td class="id">X-03</td><td><b>FINAL PAYMENT RECEIVED</b></td><td>Financial Mgr</td><td>30-90 d</td><td>I-07</td><td>Payment recorded with invoice number and amount <i>(p.39)</i></td><td><span class="b nuevo">NEW</span></td><td class="notes"></td></tr>
+      <tr><td class="id">X-04</td><td>Final P&amp;L issued</td><td>CFO</td><td>5 d</td><td>X-03</td><td>Project P&amp;L report <i>(p.39)</i></td><td><span class="b nuevo">NEW</span></td><td class="notes"></td></tr>
+    </tbody>
+  </table>
+
+  <div class="note">
+    <b>X-03 formally closes the project.</b> It is the only milestone after physical delivery and
+    runs on its own clock: measured against the contract payment terms, with collection alerts once
+    it is overdue. Central Millwork is one company, not just purchasing and production.
+  </div>
+</section>
+
+<!-- ============ GATES + RISK ============ -->
+<section class="phase">
+  <h2>The 8 hard gates</h2>
+  <p class="owner">The points where the system <b>blocks</b> progress until its requirements are met. This is where the real control lives — not in the reports.</p>
+
+  <table>
+    <thead><tr><th style="width:10%">Gate</th><th style="width:30%">Requires</th><th style="width:40%">Consequence if unmet</th><th style="width:20%">Notes / correction</th></tr></thead>
+    <tbody>
+      <tr><td class="id">C-03 · Contract executed</td><td>Q-07</td><td>The clock does not start. Daily alert from day 5</td><td class="notes"></td></tr>
+      <tr><td class="id">E-12 · MTO released</td><td>Shop drawings approved + deposit received</td><td>Purchasing cannot quote</td><td class="notes"></td></tr>
+      <tr><td class="id">E-13 · Release to Production</td><td>Approved and stamped drawings</td><td>Production cannot open</td><td class="notes"></td></tr>
+      <tr><td class="id">P-01 · Production Intake</td><td>Samples approved + drawings approved + release + CNC + material 100%</td><td><b>Production does not start</b></td><td class="notes"></td></tr>
+      <tr><td class="id">QC-02 · Final QC</td><td>Fabrication complete</td><td>Cannot package</td><td class="notes"></td></tr>
+      <tr><td class="id">S-02 · Delivery request</td><td>48 hours’ notice</td><td>Logistics cannot confirm a truck</td><td class="notes"></td></tr>
+      <tr><td class="id">I-03 · Site ready</td><td>GC confirmation</td><td>Installation does not start — delay attributed to the GC</td><td class="notes"></td></tr>
+      <tr><td class="id">I-06 · Punch list</td><td>Every item photographed</td><td>No sign-off and no final payment</td><td class="notes"></td></tr>
+    </tbody>
+  </table>
+
+  <div class="two" style="margin-top:6mm">
+    <div>
+      <h3>Risk model</h3>
+      <p style="font-size:9.5pt">Per milestone, based on float:</p>
+      <table>
+        <thead><tr><th style="width:25%">Status</th><th>Meaning</th></tr></thead>
+        <tbody>
+          <tr><td class="id">GREEN</td><td>Float ≥ 3 working days</td></tr>
+          <tr><td class="id">YELLOW</td><td>Float between 0 and 3 days</td></tr>
+          <tr><td class="id">RED</td><td>Negative float: already eating into the delivery date</td></tr>
+          <tr><td class="id">GRAY</td><td>Not yet applicable (predecessors unmet)</td></tr>
+        </tbody>
+      </table>
+      <p style="font-size:9.5pt">Per project: the worst status on the critical chain, plus accumulated
+      days of delay and their attribution.</p>
+    </div>
+    <div>
+      <h3>Attribution of lost days</h3>
+      <p style="font-size:9.5pt">Every milestone that closes late records who the delay belongs to:</p>
+      <p style="font-size:10pt; line-height:2">
+        Client · GC · Vendor · Estimating · Engineering · Procurement ·
+        Production · Logistics · Field · Finance
+      </p>
+      <div class="note" style="margin-top:4mm">
+        That running total is the report that answers <b>“why do we deliver late?”</b> at year end
+        with numbers instead of opinions — and it is the documented argument in front of GCs and clients.
+        <br><br>
+        <b>Warning:</b> the first report will be uncomfortable. It is a diagnosis of the process,
+        not a control on people.
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ STATUS + PORTAL ============ -->
+<section class="phase">
+  <h2>Current instrumentation status</h2>
+  <p class="owner">How much of the journey the system can measure today, without building anything new.</p>
+
+  <table style="width:70%">
+    <thead><tr><th style="width:30%">Phase</th><th style="width:14%">Milestones</th><th style="width:18%">Have</th><th style="width:18%">Partial</th><th style="width:20%">To build</th></tr></thead>
+    <tbody>
+      <tr><td>1 · Quote</td><td>7</td><td>0</td><td>0</td><td>7</td></tr>
+      <tr><td>2 · Contract</td><td>9</td><td>0</td><td>1</td><td>8</td></tr>
+      <tr><td>3 · Engineering</td><td>16</td><td>2</td><td>3</td><td>11</td></tr>
+      <tr><td>4 · Materials</td><td>7</td><td>4</td><td>0</td><td>3</td></tr>
+      <tr><td>5 · Production</td><td>6</td><td>2</td><td>1</td><td>3</td></tr>
+      <tr><td>6 · QC</td><td>3</td><td>3</td><td>0</td><td>0</td></tr>
+      <tr><td>7 · Shipping</td><td>5</td><td>0</td><td>1</td><td>4</td></tr>
+      <tr><td>8 · Install</td><td>7</td><td>0</td><td>1</td><td>6</td></tr>
+      <tr><td>9 · Completed</td><td>4</td><td>0</td><td>0</td><td>4</td></tr>
+      <tr style="font-weight:700"><td>TOTAL</td><td>64</td><td>11</td><td>7</td><td>46</td></tr>
+    </tbody>
+  </table>
+
+  <div class="note">
+    <b>The honest read: 17% of the journey is instrumented today</b>, and all of it sits in the middle
+    — Materials, Production and QC. Both ends, which is where the weeks are lost, are new ground.
+    <br><br>
+    <b>The underlying implication:</b> the system can only measure what happens inside the system.
+    Estimating, Engineering, Logistics and Field work entirely outside it today — Excel, Pytha,
+    Bluebeam, Smartsheets, Pipedrive, OneDrive, email and phone. If they keep working outside,
+    the schedule will know everything about the shop and nothing about the office.
+    <b>The core decision is not technical: it is whether that work moves into the system.</b>
+  </div>
+
+  <h2 style="margin-top:8mm">Client portal</h2>
+  <p class="owner">Tokenized link access, one per contact — no accounts to create. Every action is attributed to a specific person.</p>
+
+  <div class="two">
+    <div>
+      <h3>The client can</h3>
+      <ul>
+        <li>See their project timeline by milestone, with status and dates</li>
+        <li>See what the project is waiting on <b>and who holds the ball</b> — including when it is them</li>
+        <li><b>Approve / approve as noted / reject</b>: shop drawings, samples, V/E options, change orders</li>
+        <li>Give the <b>final sign-off</b></li>
+        <li>See fabrication and installation progress photos</li>
+        <li>Download contract, approved drawings, BOL and shipping list</li>
+      </ul>
+      <h3>The client cannot see</h3>
+      <ul>
+        <li>Costs, margins, budgets</li>
+        <li>Vendors or pricing</li>
+        <li>Any internal information</li>
+      </ul>
+    </div>
+    <div>
+      <h3>Automatic to the client</h3>
+      <p style="font-size:9.5pt">A reminder when a milestone they own is approaching or past due, with the
+      explicit impact on the delivery date:</p>
+      <div class="note" style="font-style:italic">
+        “Shop drawings have been under review for 12 days. Each additional day pushes the
+        October 15 delivery.”
+      </div>
+      <h3>Why it is the highest-impact piece</h3>
+      <p style="font-size:9.5pt">It turns the <i>“waiting on the client”</i> black hole into a data point
+      with a date, a time and an owner. It accounts for a large share of current delays, and it is
+      <b>the cheapest thing to instrument</b>.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ============ ROADMAP ============ -->
+<section class="phase">
+  <h2>Build roadmap</h2>
+  <p class="owner">Six stages. Each one stands on its own and delivers value even if the project pauses.
+  Estimated at the current working pace, with no dedicated development team.</p>
+
+  <table>
+    <thead><tr>
+      <th style="width:4%">#</th><th style="width:16%">Stage</th><th style="width:34%">What it includes</th>
+      <th style="width:9%">Duration</th><th style="width:25%">What it delivers</th><th style="width:12%">Notes</th>
+    </tr></thead>
+    <tbody>
+      <tr><td class="id">1</td><td><b>Schedule engine</b></td><td>Working calendar, milestone template, backward calculation, dependencies, float, status, delay attribution, timeline in the project detail view</td><td>3-4 wks</td><td>The schedule exists and is live, fed by Materials + Production + QC. Half the journey, real, from day one</td><td class="notes"></td></tr>
+      <tr><td class="id">2</td><td><b>Client portal</b></td><td>Tokenized links, public timeline, dated approvals, automatic reminders, progress photos</td><td>3-4 wks</td><td>Closes the approvals black hole. E-08, E-10 and I-07 become hard data</td><td class="notes"></td></tr>
+      <tr><td class="id">3</td><td><b>Engineering</b></td><td>Submittals, shop drawing versions and revisions, CNC files, release to production, MTO release, change orders, VIF</td><td>6-8 wks</td><td>The largest phase, and the one that exposes the most delay. Closes the full P-01 gate</td><td class="notes"></td></tr>
+      <tr><td class="id">4</td><td><b>Field, Shipping &amp; Install</b></td><td>BOL, load photos and seal, delivery request, on-site check-in, installation progress, punch list — all on mobile</td><td>4-6 wks</td><td>The journey is closed end to end, through to sign-off</td><td class="notes"></td></tr>
+      <tr><td class="id">5</td><td><b>Deals &amp; Estimating</b></td><td>Bid pipeline, T&amp;C, estimate, peer review, proposal, contract, deposit, announcement, kickoff</td><td>5-7 wks</td><td>Feasibility check at bid time. The target date is born inside the system</td><td class="notes"></td></tr>
+      <tr><td class="id">6</td><td><b>Financial closeout</b></td><td>Budget by area, milestone billing, collections, final payment, P&amp;L. QuickBooks integration</td><td>4-6 wks</td><td>The project closes formally where it should close</td><td class="notes"></td></tr>
+      <tr style="font-weight:700"><td></td><td>TOTAL</td><td></td><td>25-35 wks</td><td>Between 7 and 9 months of effective work</td><td class="notes"></td></tr>
+    </tbody>
+  </table>
+
+  <div class="two">
+    <div>
+      <h3>Why this order</h3>
+      <ul>
+        <li>Stage 1 starts <b>where the data already exists</b>: the engine is proven against reality, not against invented data</li>
+        <li>Stage 2 comes second because it is <b>the largest gain for the least code</b></li>
+        <li>Stage 3 is the biggest, and it lands once the engine is proven and the habit of using it exists</li>
+        <li>Stages 5 and 6 come last because they block the least: the schedule already works without them,
+            starting at contract instead of at bid</li>
+      </ul>
+      <div class="note">
+        <b>Honest warning:</b> the estimate assumes consistency. If the work is interrupted for weeks
+        to handle production, it stretches proportionally. And it does not include <b>adoption</b> time,
+        which in the areas working outside the system today may weigh more than the development itself.
+      </div>
+    </div>
+    <div>
+      <h3>Project risks</h3>
+      <table>
+        <thead><tr><th style="width:34%">Risk</th><th style="width:16%">Impact</th><th>Mitigation</th></tr></thead>
+        <tbody>
+          <tr><td>Adoption by the office areas</td><td><b>Critical</b></td><td>Every capture must be a by-product of the work. Explicit backing from leadership. Without it the project dies at stage 3</td></tr>
+          <tr><td>Resistance to being measured</td><td>High</td><td>Present attribution as a diagnosis of the process, not a control on people</td></tr>
+          <tr><td>Eight months without visible value</td><td>High</td><td>This is why stage 1 delivers a live schedule in 3-4 weeks</td></tr>
+          <tr><td>Building a document management system</td><td>Medium</td><td>It is not one. File + date + version. Bluebeam and Pytha remain the working tools</td></tr>
+          <tr><td>Poorly calibrated durations</td><td>Medium</td><td>Correct them in this review. Recalibrate against history from month six</td></tr>
+          <tr><td>The system becomes heavy to use</td><td>Medium</td><td>No milestone may require more than one action. If it requires two, the design is wrong</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<!-- ============ OPEN ITEMS ============ -->
+<section class="phase">
+  <h2>What this review needs to produce</h2>
+
+  <ul class="chk" style="font-size:11pt; margin-top:6mm">
+    <li><b>Durations.</b> The ones in this document are estimates. Correct them with each area’s owner.</li>
+    <li><b>Owners.</b> The official document names 13 roles (Estimator, Estimating Director, Engineer, PM, Procurement Manager, Production Manager, Production Assistant, Production Controller, Logistics Manager, Field Specialist, Office Manager, Financial Manager, CFO). The system today has 9 roles and they do not match. They need to be mapped.</li>
+    <li><b>Milestones that are missing, unnecessary, or that don’t work this way in practice.</b></li>
+    <li><b>Granularity.</b> One schedule per project, or per item / area with rollup to the project?</li>
+    <li><b>Working calendar.</b> Working days, Central Millwork holidays, shutdown weeks.</li>
+    <li><b>Phased delivery.</b> Projects delivered by floor or by area with separate dates.</li>
+    <li><b>Projects without installation.</b> The document contemplates them (p.37). The chain would close at S-04.</li>
+    <li><b>Change orders.</b> Do they shift the target date automatically, or does that require a decision?</li>
+    <li><b>Confirmation of the evidence-required principle</b>, understanding that it means moving Engineering and Field work into the system.</li>
+  </ul>
+
+  <div class="warn" style="margin-top:14mm">
+    <b>Closing note.</b> This map does not invent a process: it transcribes the one Central Millwork
+    already has written down, and turns it into something the system can calculate. Page 5 of the
+    official document already calls for a schedule built backward from the completion date. What is
+    missing is not the idea — it is that this schedule stops living in a spreadsheet nobody updates
+    and starts finding out what is actually happening.
+  </div>
+
+  <div style="margin-top:16mm; font-size:9pt; color:#666; border-top:1px solid #ccc; padding-top:3mm">
+    Life of a Deal — Milestone Map · Rev 0 · July 21, 2026 · Central Millwork · Internal document
+  </div>
+</section>
+
+</body>
+</html>
