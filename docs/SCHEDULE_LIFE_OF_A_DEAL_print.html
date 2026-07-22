@@ -1,0 +1,652 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Life of a Deal — Mapa de Hitos Rev 0</title>
+<style>
+  @page { size: letter landscape; margin: 12mm 10mm 14mm 10mm; }
+
+  * { box-sizing: border-box; }
+  body {
+    font-family: "Segoe UI", Arial, Helvetica, sans-serif;
+    font-size: 10pt; line-height: 1.35; color: #1a1a1a; margin: 0; padding: 0 6mm;
+  }
+
+  /* ---------- Portada ---------- */
+  .cover { page-break-after: always; padding-top: 18mm; }
+  .cover h1 { font-size: 30pt; margin: 0 0 2mm; letter-spacing: -.5px; }
+  .cover .sub { font-size: 14pt; color: #444; margin-bottom: 12mm; }
+  .cover .meta { font-size: 10pt; color: #555; line-height: 1.9; }
+  .cover .meta b { color: #1a1a1a; display: inline-block; min-width: 42mm; }
+  .warn {
+    border-left: 4px solid #b45309; background: #fdf6ec;
+    padding: 4mm 5mm; margin: 10mm 0; font-size: 10.5pt;
+  }
+  .signbox { display: flex; gap: 8mm; margin-top: 16mm; }
+  .signbox div {
+    flex: 1; border-top: 1px solid #333; padding-top: 2mm;
+    font-size: 9pt; color: #555;
+  }
+
+  /* ---------- Secciones ---------- */
+  h2 {
+    font-size: 15pt; margin: 0 0 3mm; padding-bottom: 1.5mm;
+    border-bottom: 2px solid #1a1a1a;
+  }
+  h3 { font-size: 11.5pt; margin: 6mm 0 2mm; }
+  .phase { page-break-before: always; }
+  .phase-head { display: flex; align-items: baseline; gap: 4mm; margin-bottom: 1mm; }
+  .phase-head .n {
+    font-size: 20pt; font-weight: 700; color: #999; line-height: 1;
+  }
+  .owner { font-size: 9.5pt; color: #555; margin: 0 0 3mm; }
+  .note {
+    border-left: 3px solid #666; background: #f4f4f4;
+    padding: 2.5mm 4mm; margin: 3mm 0; font-size: 9.5pt;
+  }
+
+  /* ---------- Tablas ---------- */
+  table { width: 100%; border-collapse: collapse; margin: 2mm 0 4mm; }
+  th {
+    background: #1a1a1a; color: #fff; font-size: 8.5pt; font-weight: 600;
+    text-align: left; padding: 1.8mm 2mm; border: .4pt solid #1a1a1a;
+  }
+  td {
+    font-size: 9pt; padding: 1.8mm 2mm; border: .4pt solid #b0b0b0;
+    vertical-align: top;
+  }
+  tbody tr:nth-child(even) td { background: #f7f7f7; }
+  tr { page-break-inside: avoid; }
+
+  td.id { font-weight: 700; white-space: nowrap; font-size: 8.5pt; }
+  td.notes { background: #fff !important; }
+
+  .col-id    { width: 5%; }
+  .col-hito  { width: 17%; }
+  .col-resp  { width: 10%; }
+  .col-dur   { width: 6%; }
+  .col-dep   { width: 11%; }
+  .col-evi   { width: 25%; }
+  .col-hoy   { width: 6%; }
+  .col-notes { width: 20%; }
+
+  /* ---------- Badges ---------- */
+  .b { font-size: 7.5pt; font-weight: 700; padding: .6mm 1.4mm; border: .4pt solid; white-space: nowrap; }
+  .ya    { background: #dcfce7; border-color: #15803d; color: #14532d; }
+  .parc  { background: #fef3c7; border-color: #b45309; color: #713f12; }
+  .nuevo { background: #fee2e2; border-color: #b91c1c; color: #7f1d1d; }
+  .gate  { background: #1a1a1a; color: #fff; border-color: #1a1a1a; }
+  .cont  { background: #e5e7eb; border-color: #6b7280; color: #374151; }
+  .cond  { background: #fff; border-color: #6b7280; color: #374151; }
+
+  .key { font-size: 8.5pt; color: #555; margin: 2mm 0 3mm; }
+  .key .b { margin-right: 1mm; }
+
+  ul { margin: 1.5mm 0 3mm; padding-left: 6mm; }
+  li { margin-bottom: 1mm; }
+  .chk { list-style: none; padding-left: 0; }
+  .chk li:before { content: "\2610"; margin-right: 2.5mm; font-size: 12pt; vertical-align: -1px; }
+  .chk li { margin-bottom: 2.5mm; }
+
+  .two { display: flex; gap: 8mm; }
+  .two > div { flex: 1; }
+
+  @media print { body { padding: 0; } .noprint { display: none; } }
+  .noprint {
+    background: #1a1a1a; color: #fff; padding: 3mm 5mm; margin: 0 -6mm 6mm;
+    font-size: 9.5pt;
+  }
+</style>
+</head>
+<body>
+
+<div class="noprint">
+  Para imprimir: <b>Ctrl+P</b> → orientación <b>horizontal</b> → activar <b>«Gráficos de fondo»</b>.
+  Esta barra no sale impresa.
+</div>
+
+<!-- ============ PORTADA ============ -->
+<section class="cover">
+  <h1>Life of a Deal</h1>
+  <div class="sub">Mapa de Hitos — Schedule inteligente de proyectos</div>
+
+  <div class="meta">
+    <b>Revisión:</b> Rev 0 — borrador<br>
+    <b>Fecha:</b> 21 de julio de 2026<br>
+    <b>Empresa:</b> Central Millwork<br>
+    <b>Fuentes:</b> <i>Life of a Deal 2026 Rev0</i> (41 pp.) + sistema actual<br>
+    <b>Alcance:</b> 64 hitos · 9 fases · 8 gates duros<br>
+    <b>Para revisión de:</b> CEO · PM · Chali Herrera
+  </div>
+
+  <div class="warn">
+    <b>Este documento no es un plan de software. Es el proceso de Central Millwork
+    escrito como cadena de hitos.</b><br><br>
+    Lo que se necesita de esta revisión es concreto: corregir las <b>duraciones</b>
+    (las de este documento son estimaciones), confirmar los <b>responsables</b> de cada hito,
+    y marcar los hitos que <b>sobran, faltan o en la práctica no funcionan así</b>.
+    Cada tabla tiene una columna en blanco a la derecha para anotar.
+    <br><br>
+    Con duraciones mal calibradas, el sistema va a mentir con mucha precisión.
+  </div>
+
+  <div class="signbox">
+    <div>CEO — nombre, firma y fecha</div>
+    <div>PM — nombre, firma y fecha</div>
+    <div>Chali Herrera — fecha</div>
+  </div>
+</section>
+
+<!-- ============ PRINCIPIOS ============ -->
+<section class="phase">
+  <h2>Principios de diseño</h2>
+  <p class="owner">Las siete reglas que gobiernan todo el sistema. Si alguna no se acepta, el diseño cambia.</p>
+
+  <table>
+    <thead><tr><th style="width:4%">#</th><th style="width:24%">Principio</th><th style="width:52%">Qué significa</th><th class="col-notes">Notas / objeciones</th></tr></thead>
+    <tbody>
+      <tr><td class="id">P1</td><td><b>La fecha objetivo es sagrada</b></td>
+        <td>La fecha comprometida con el cliente <b>nunca se recalcula sola</b>. Se recalculan las fechas internas y la proyección. Cuando la proyección pasa la fecha objetivo, el proyecto se pone en rojo — no se corre la fecha. Moverla es una decisión humana registrada: quién, cuándo, por qué, cuántos días.</td><td class="notes"></td></tr>
+      <tr><td class="id">P2</td><td><b>Ningún hito se cierra por declaración, se cierra por evidencia</b></td>
+        <td>No existe el checkbox «ya está». Cada hito se cierra porque apareció el artefacto que lo prueba (un archivo, un envío, un click del cliente, un movimiento de estación) y <b>la fecha la pone el sistema</b>, no la persona.</td><td class="notes"></td></tr>
+      <tr><td class="id">P3</td><td><b>El registro es subproducto del trabajo</b></td>
+        <td>El submittal de planos sale desde el sistema, entonces la fecha queda sola. Si alguien tiene que hacer una tarea adicional solo para informar, ese diseño está mal y se abandona a las tres semanas.</td><td class="notes"></td></tr>
+      <tr><td class="id">P4</td><td><b>El avance se cuenta, no se estima</b></td>
+        <td>Prohibido el «% de avance» tipeado por una persona. El avance es sub-hitos con evidencia cumplidos sobre el total. Si no se puede contar, no se muestra.</td><td class="notes"></td></tr>
+      <tr><td class="id">P5</td><td><b>Dos relojes</b></td>
+        <td>Hacia atrás desde la entrega: la fecha límite de cada hito. Hacia adelante desde los hechos reales: dónde vamos a caer. La diferencia es la <b>holgura</b>. Holgura negativa = riesgo de incumplimiento.</td><td class="notes"></td></tr>
+      <tr><td class="id">P6</td><td><b>El sistema empuja antes, no explica después</b></td>
+        <td>Un schedule que solo absorbe atrasos es un contador de derrotas. Cada hito próximo a vencer alerta al responsable <b>antes</b>, y le recuerda automáticamente al cliente cuando la pelota es de él.</td><td class="notes"></td></tr>
+      <tr><td class="id">P7</td><td><b>El que llega último tiene la pelota</b></td>
+        <td>Cuando un hito depende de varios predecesores, su inicio real es <b>el más tardío</b> de ellos. El sistema nombra cuál fue y cuántos días costó. Sin discusión.</td><td class="notes"></td></tr>
+    </tbody>
+  </table>
+
+  <h3>El recorrido</h3>
+  <p style="font-size:12pt; letter-spacing:.5px; margin:3mm 0 4mm;">
+    <b>QUOTE → CONTRACT → ENGINEERING → MATERIALS → PRODUCTION → QC → SHIPPING → INSTALL → COMPLETED</b>
+  </p>
+  <div class="note">
+    <b>Assembly no es una fase.</b> En el documento oficial aparece solo como etapa de taller
+    dentro de <i>Manufacture</i> (p.33) y <i>Quality Control</i> (p.34), junto a CNC, laminate,
+    finishing, final y packaging. El detalle por estación ya lo maneja el módulo de Producción
+    con precisión de minutos; duplicarlo como fase del schedule sería ruido.
+  </div>
+
+  <div class="key">
+    <b>Referencias usadas en las tablas —</b>
+    <span class="b ya">YA</span> el dato ya existe en el sistema ·
+    <span class="b parc">PARC</span> existe parcialmente, falta el acto formal con fecha ·
+    <span class="b nuevo">NUEVO</span> hay que construirlo &nbsp;&nbsp;|&nbsp;&nbsp;
+    <span class="b gate">GATE</span> bloquea el arranque de otra fase ·
+    <span class="b cont">CONT</span> continuo o recurrente ·
+    <span class="b cond">COND</span> condicional
+  </div>
+</section>
+
+<!-- ============ FASE 1 ============ -->
+<section class="phase">
+  <div class="phase-head"><span class="n">1</span><h2 style="flex:1">QUOTE</h2></div>
+  <p class="owner">Owner de fase: <b>Estimator</b></p>
+
+  <table>
+    <thead><tr>
+      <th class="col-id">#</th><th class="col-hito">Hito</th><th class="col-resp">Responsable</th>
+      <th class="col-dur">Dura</th><th class="col-dep">Depende de</th>
+      <th class="col-evi">Evidencia que lo cierra</th><th class="col-hoy">Hoy</th>
+      <th class="col-notes">Notas / corrección</th>
+    </tr></thead>
+    <tbody>
+      <tr><td class="id">Q-01</td><td>Bid identificado y calificado</td><td>Estimator</td><td>1 d</td><td>—</td><td>Alta del deal en el sistema con cliente, tipo y criterio A/B <i>(p.41)</i></td><td><span class="b nuevo">NUEVO</span></td><td class="notes"></td></tr>
+      <tr><td class="id">Q-02</td><td>T&amp;C revisados y documentados</td><td>Estimator</td><td>2 d</td><td>Q-01</td><td>PDF de T&amp;C adjunto + decisión pursue/decline registrada + excepciones listadas <i>(p.2, p.3)</i></td><td><span class="b nuevo">NUEVO</span></td><td class="notes"></td></tr>
+      <tr><td class="id">Q-03</td><td>Estimado elaborado</td><td>Estimator</td><td>5-15 d</td><td>Q-02</td><td>Monto cargado + scope plans adjuntos <i>(p.4)</i></td><td><span class="b nuevo">NUEVO</span></td><td class="notes"></td></tr>
+      <tr><td class="id">Q-04</td><td>Peer review del estimado</td><td>Estimating Director</td><td>1-2 d</td><td>Q-03</td><td>Aprobación del Director registrada en el sistema <i>(p.4)</i></td><td><span class="b nuevo">NUEVO</span></td><td class="notes"></td></tr>
+      <tr><td class="id">Q-05</td><td>Propuesta enviada al cliente</td><td>Estimator</td><td>1 d</td><td>Q-04</td><td>Envío disparado desde el sistema <i>(p.4)</i></td><td><span class="b nuevo">NUEVO</span></td><td class="notes"></td></tr>
+      <tr><td class="id">Q-06</td><td><b>Fecha de entrega requerida confirmada</b></td><td>Estimator</td><td>—</td><td>Q-05</td><td>Fecha del bid schedule del GC cargada, o respuesta del cliente en el portal <i>(p.5)</i></td><td><span class="b nuevo">NUEVO</span></td><td class="notes"></td></tr>
+      <tr><td class="id">Q-07</td><td>Schedule preliminar creado y compartido</td><td>Estimator + PM</td><td>1 d</td><td>Q-06</td><td>Schedule generado por el sistema y enviado al cliente con la nota de que los hitos incumplidos afectan la fecha final <i>(p.5)</i></td><td><span class="b nuevo">NUEVO</span></td><td class="notes"></td></tr>
+    </tbody>
+  </table>
+
+  <div class="note">
+    <b>Q-06 es el ancla de todo el proyecto.</b> Q-07 es donde el sistema contesta la pregunta clave:
+    <i>¿esta fecha es alcanzable?</i> — calculando hacia atrás y devolviendo la fecha límite de adjudicación.
+    Esto ya es proceso oficial de Central Millwork: la página 5 del documento pide
+    «<i>create a Gantt schedule working back from completion to determine the required start date</i>».
+    Hoy vive en Smartsheets y Excel, desconectado de la realidad.
+  </div>
+</section>
+
+<!-- ============ FASE 2 ============ -->
+<section class="phase">
+  <div class="phase-head"><span class="n">2</span><h2 style="flex:1">CONTRACT</h2></div>
+  <p class="owner">Owner de fase: <b>Estimator</b> → handoff a <b>PM / Engineer</b></p>
+
+  <table>
+    <thead><tr>
+      <th class="col-id">#</th><th class="col-hito">Hito</th><th class="col-resp">Responsable</th>
+      <th class="col-dur">Dura</th><th class="col-dep">Depende de</th>
+      <th class="col-evi">Evidencia que lo cierra</th><th class="col-hoy">Hoy</th>
+      <th class="col-notes">Notas / corrección</th>
+    </tr></thead>
+    <tbody>
+      <tr><td class="id">C-01</td><td>Proyecto en negociación</td><td>Estimator</td><td>—</td><td>Q-07</td><td>Cambio de etapa en el pipeline <i>(p.6)</i></td><td><span class="b nuevo">NUEVO</span></td><td class="notes"></td></tr>
+      <tr><td class="id">C-02</td><td>Contrato revisado / addendum emitido</td><td>Estimator</td><td>3-10 d</td><td>C-01</td><td>PDF del contrato revisado + addendum adjunto <i>(p.6)</i></td><td><span class="b nuevo">NUEVO</span></td><td class="notes"></td></tr>
+      <tr><td class="id">C-03</td><td><b>CONTRATO FIRMADO — día cero</b></td><td>Estimator + CFO</td><td>—</td><td>C-02</td><td>PDF firmado subido al proyecto <i>(p.6)</i></td><td><span class="b nuevo">NUEVO</span></td><td class="notes"></td></tr>
+      <tr><td class="id">C-04</td><td>Depósito de materiales recibido</td><td>Office Manager</td><td>5-15 d</td><td>C-03</td><td>Registro de cobro con importe y fecha <i>(p.18)</i></td><td><span class="b nuevo">NUEVO</span></td><td class="notes"></td></tr>
+      <tr><td class="id">C-05</td><td>MTO preliminar creado</td><td>Estimator</td><td>1-2 d</td><td>C-03</td><td>Archivo MTO preliminar importado al proyecto <i>(p.7)</i></td><td><span class="b parc">PARC</span></td><td class="notes"></td></tr>
+      <tr><td class="id">C-06</td><td>Budget del proyecto creado</td><td>Estimator</td><td>1 d</td><td>C-03</td><td>Budget cargado por área <i>(p.8)</i></td><td><span class="b nuevo">NUEVO</span></td><td class="notes"></td></tr>
+      <tr><td class="id">C-07</td><td>Project announcement enviado</td><td>Estimator</td><td>1 d</td><td>C-05, C-06</td><td>Email disparado desde el sistema + carpeta del proyecto creada con documentos <i>(p.9)</i></td><td><span class="b nuevo">NUEVO</span></td><td class="notes"></td></tr>
+      <tr><td class="id">C-08</td><td>Kickoff call con GC y designer</td><td>Estimator + Eng + PM</td><td>1 d</td><td>C-07</td><td>Reunión registrada + notas distribuidas desde el sistema <i>(p.10)</i></td><td><span class="b nuevo">NUEVO</span></td><td class="notes"></td></tr>
+      <tr><td class="id">C-09</td><td>POC transferido a Engineer / PM</td><td>Estimator</td><td>—</td><td>C-08</td><td>Email de handoff disparado desde el sistema <i>(p.11)</i></td><td><span class="b nuevo">NUEVO</span></td><td class="notes"></td></tr>
+    </tbody>
+  </table>
+
+  <div class="note">
+    <b>C-03 es el día cero operativo.</b> Todo el plan se ancla ahí. Los días entre Q-05 y C-03 se
+    registran como <i>tiempo de decisión del cliente</i> y se descuentan del colchón — con alerta interna
+    y recordatorio automático al cliente desde el día 5.
+    <br><br>
+    El criterio de fondo: si el contrato se firma tres semanas tarde, todo corre tres semanas.
+    Pero <b>el error real es haber dejado pasar tres semanas sin que se firme</b>. Por eso el hito
+    tiene alerta antes, no solo registro después.
+  </div>
+</section>
+
+<!-- ============ FASE 3 ============ -->
+<section class="phase">
+  <div class="phase-head"><span class="n">3</span><h2 style="flex:1">ENGINEERING</h2></div>
+  <p class="owner">Owner de fase: <b>Engineer</b> (apoyo PM) — la fase más grande y la que más atrasos destapa</p>
+
+  <table>
+    <thead><tr>
+      <th class="col-id">#</th><th class="col-hito">Hito</th><th style="width:5%">Tipo</th><th style="width:9%">Responsable</th>
+      <th class="col-dur">Dura</th><th style="width:10%">Depende de</th>
+      <th style="width:23%">Evidencia que lo cierra</th><th class="col-hoy">Hoy</th>
+      <th style="width:17%">Notas / corrección</th>
+    </tr></thead>
+    <tbody>
+      <tr><td class="id">E-01</td><td>Long lead times identificados</td><td><span class="b gate">GATE</span></td><td>Engineer + PM</td><td>2-3 d</td><td>C-07</td><td>Materiales marcados como long-lead con lead time reconfirmado por el vendor <i>(p.12)</i></td><td><span class="b parc">PARC</span></td><td class="notes"></td></tr>
+      <tr><td class="id">E-02</td><td>Compra anticipada aprobada por cliente</td><td><span class="b gate">GATE</span></td><td>PM</td><td>3-10 d</td><td>E-01</td><td>Aprobación del cliente en el portal <i>(p.12)</i></td><td><span class="b nuevo">NUEVO</span></td><td class="notes"></td></tr>
+      <tr><td class="id">E-03</td><td>Design call con designer y GC</td><td></td><td>Engineer</td><td>1 d</td><td>C-08</td><td>Notas de reunión distribuidas desde el sistema <i>(p.13)</i></td><td><span class="b nuevo">NUEVO</span></td><td class="notes"></td></tr>
+      <tr><td class="id">E-04</td><td>V/E propuesto al cliente</td><td><span class="b cond">COND</span></td><td>Engineer + PM</td><td>3-5 d</td><td>E-03</td><td>Opciones enviadas + respuesta del cliente registrada <i>(p.14)</i></td><td><span class="b nuevo">NUEVO</span></td><td class="notes"></td></tr>
+      <tr><td class="id">E-05</td><td>VIF / medición en obra</td><td><span class="b cond">COND</span></td><td>Field Specialist</td><td>1-2 d</td><td>C-08</td><td>Medidas y fotos subidas desde la app móvil con fecha y ubicación <i>(p.21)</i></td><td><span class="b nuevo">NUEVO</span></td><td class="notes"></td></tr>
+      <tr><td class="id">E-06</td><td>Muestras solicitadas al cliente</td><td></td><td>Engineer</td><td>1 d</td><td>E-03</td><td>Muestra creada con fecha de compromiso <i>(p.17)</i></td><td><span class="b ya">YA</span></td><td class="notes"></td></tr>
+      <tr><td class="id">E-07</td><td>Muestras fabricadas y enviadas</td><td></td><td>Shop Manager</td><td>10-14 d</td><td>E-06</td><td>Envío registrado con foto del paquete <i>(p.17)</i></td><td><span class="b ya">YA</span></td><td class="notes"></td></tr>
+      <tr><td class="id">E-08</td><td><b>Muestras aprobadas por el cliente</b></td><td><span class="b gate">GATE</span></td><td>Engineer</td><td>5-15 d</td><td>E-07</td><td>Aprobación del cliente en el portal <i>(p.17)</i></td><td><span class="b parc">PARC</span></td><td class="notes"></td></tr>
+      <tr><td class="id">E-09</td><td>Shop drawings emitidos al cliente</td><td></td><td>Engineer</td><td>10-25 d</td><td>E-03, E-05</td><td>Submittal generado y enviado desde el sistema con PDF adjunto <i>(p.19)</i></td><td><span class="b nuevo">NUEVO</span></td><td class="notes"></td></tr>
+      <tr><td class="id">E-10</td><td><b>Shop drawings aprobados por el cliente</b></td><td><span class="b gate">GATE</span></td><td>Engineer</td><td>10-20 d</td><td>E-09</td><td>Aprobar / Aprobar con comentarios / Rechazar en el portal, con fecha y quién <i>(p.19, p.20)</i></td><td><span class="b nuevo">NUEVO</span></td><td class="notes"></td></tr>
+      <tr><td class="id">E-11</td><td>Revisiones incorporadas y resubmittal</td><td><span class="b cond">COND</span></td><td>Engineer</td><td>3-10 d</td><td>E-10</td><td>Nueva versión emitida desde el sistema <i>(p.20)</i></td><td><span class="b nuevo">NUEVO</span></td><td class="notes"></td></tr>
+      <tr><td class="id">E-12</td><td><b>MTO final liberado a compras</b></td><td><span class="b gate">GATE</span></td><td>Engineer</td><td>2-5 d</td><td>E-10, C-04</td><td>MTO marcado como liberado + confirmación del depósito <i>(p.18)</i></td><td><span class="b parc">PARC</span></td><td class="notes"></td></tr>
+      <tr><td class="id">E-13</td><td><b>Release to Production</b></td><td><span class="b gate">GATE</span></td><td>Engineer</td><td>1 d</td><td>E-10</td><td>Planos con sello «Approved» adjuntos + email de release disparado desde el sistema <i>(p.22)</i></td><td><span class="b nuevo">NUEVO</span></td><td class="notes"></td></tr>
+      <tr><td class="id">E-14</td><td><b>Archivos CNC entregados</b></td><td><span class="b gate">GATE</span></td><td>Engineer</td><td>2-5 d</td><td>E-13</td><td>Archivos CNC subidos y asociados a la OP <i>(p.29)</i></td><td><span class="b nuevo">NUEVO</span></td><td class="notes"></td></tr>
+      <tr><td class="id">E-15</td><td>Change orders comunicados</td><td><span class="b cont">CONT</span></td><td>Engineer + PM</td><td>—</td><td>—</td><td>CO creado, validado por Estimator y enviado al cliente <i>(p.16)</i></td><td><span class="b nuevo">NUEVO</span></td><td class="notes"></td></tr>
+      <tr><td class="id">E-16</td><td>Revisión de schedule de Ingeniería</td><td><span class="b cont">CONT</span></td><td>Engineer + PM</td><td>semanal</td><td>—</td><td>Revisión registrada con riesgos marcados y comunicados al cliente <i>(p.15)</i></td><td><span class="b nuevo">NUEVO</span></td><td class="notes"></td></tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- ============ FASE 4 ============ -->
+<section class="phase">
+  <div class="phase-head"><span class="n">4</span><h2 style="flex:1">MATERIALS</h2></div>
+  <p class="owner">Owner de fase: <b>Procurement Manager</b> — la fase mejor instrumentada hoy</p>
+
+  <table>
+    <thead><tr>
+      <th class="col-id">#</th><th class="col-hito">Hito</th><th style="width:5%">Tipo</th><th style="width:9%">Responsable</th>
+      <th class="col-dur">Dura</th><th style="width:10%">Depende de</th>
+      <th style="width:23%">Evidencia que lo cierra</th><th class="col-hoy">Hoy</th>
+      <th style="width:17%">Notas / corrección</th>
+    </tr></thead>
+    <tbody>
+      <tr><td class="id">M-01</td><td>Revisión de schedule de Compras</td><td><span class="b cont">CONT</span></td><td>Procurement Mgr</td><td>semanal</td><td>C-07</td><td>Revisión registrada con materiales de riesgo marcados y comunicados a PM y Producción <i>(p.23)</i></td><td><span class="b nuevo">NUEVO</span></td><td class="notes"></td></tr>
+      <tr><td class="id">M-02</td><td>Budget de materiales validado</td><td></td><td>Procurement Mgr</td><td>2-3 d</td><td>E-12</td><td>Validación contra estimado registrada, con discrepancias resueltas <i>(p.24)</i></td><td><span class="b nuevo">NUEVO</span></td><td class="notes"></td></tr>
+      <tr><td class="id">M-03</td><td>Long-lead ordenados</td><td><span class="b gate">GATE</span></td><td>Procurement Mgr</td><td>1-3 d</td><td>E-02</td><td>OC emitida <i>(p.25)</i></td><td><span class="b ya">YA</span></td><td class="notes"></td></tr>
+      <tr><td class="id">M-04</td><td>MTO cotizado</td><td></td><td>Procurement Mgr</td><td>5-10 d</td><td>E-12</td><td>Cotizaciones recibidas por vendor <i>(p.26)</i></td><td><span class="b ya">YA</span></td><td class="notes"></td></tr>
+      <tr><td class="id">M-05</td><td>OCs emitidas</td><td></td><td>Procurement Mgr</td><td>2-3 d</td><td>M-04, M-02</td><td>OCs generadas con ETA por vendor <i>(p.26)</i></td><td><span class="b ya">YA</span></td><td class="notes"></td></tr>
+      <tr><td class="id">M-06</td><td>POs a subcontratistas</td><td><span class="b cond">COND</span></td><td>PM + CFO</td><td>5-10 d</td><td>E-13</td><td>PO firmada por el subcontratista <i>(p.27)</i></td><td><span class="b nuevo">NUEVO</span></td><td class="notes"></td></tr>
+      <tr><td class="id">M-07</td><td><b>Material recibido y stockeado 100%</b></td><td><span class="b gate">GATE</span></td><td>Procurement Mgr</td><td>lead time</td><td>M-05</td><td>Todas las recepciones cerradas, sin faltantes abiertos <i>(p.28)</i></td><td><span class="b ya">YA</span></td><td class="notes"></td></tr>
+    </tbody>
+  </table>
+
+  <div class="note">
+    <b>M-07 es normalmente el hito del camino crítico.</b> El lead time del vendor más lento manda
+    sobre toda la fecha de entrega. Es la razón por la que el schedule se calcula hacia atrás:
+    para saber <i>cuándo</i> hay que emitir la OC, no <i>cuánto falta</i> para que llegue.
+  </div>
+</section>
+
+<!-- ============ FASE 5 ============ -->
+<section class="phase">
+  <div class="phase-head"><span class="n">5</span><h2 style="flex:1">PRODUCTION</h2></div>
+  <p class="owner">Owner de fase: <b>Production Manager</b></p>
+
+  <table>
+    <thead><tr>
+      <th class="col-id">#</th><th class="col-hito">Hito</th><th style="width:5%">Tipo</th><th style="width:9%">Responsable</th>
+      <th class="col-dur">Dura</th><th style="width:12%">Depende de</th>
+      <th style="width:21%">Evidencia que lo cierra</th><th class="col-hoy">Hoy</th>
+      <th style="width:17%">Notas / corrección</th>
+    </tr></thead>
+    <tbody>
+      <tr><td class="id">P-01</td><td><b>PRODUCTION INTAKE</b><br>gate compuesto</td><td><span class="b gate">GATE</span></td><td>Production Mgr</td><td>1 d</td><td><b>E-08 + E-10 + E-13 + E-14 + M-07</b></td><td>Los 5 requisitos verificados en verde. El sistema no deja abrir producción sin ellos <i>(p.30)</i></td><td><span class="b nuevo">NUEVO</span></td><td class="notes"></td></tr>
+      <tr><td class="id">P-02</td><td>Distribución a producción</td><td></td><td>Production Controller</td><td>1 d</td><td>P-01</td><td>OPs creadas con planos y MTO asociados, CNC entregado al operador <i>(p.29)</i></td><td><span class="b parc">PARC</span></td><td class="notes"></td></tr>
+      <tr><td class="id">P-03</td><td>Budget de labor validado</td><td></td><td>Production Mgr</td><td>1 d</td><td>P-01</td><td>Horas presupuestadas vs. planificadas, riesgos informados a PM <i>(p.32)</i></td><td><span class="b nuevo">NUEVO</span></td><td class="notes"></td></tr>
+      <tr><td class="id">P-04</td><td>3-Week Lookahead publicado</td><td><span class="b cont">CONT</span></td><td>PM + Production Mgr</td><td>semanal</td><td>P-01</td><td>3WLA generado por el sistema y compartido a la empresa <i>(p.31)</i></td><td><span class="b nuevo">NUEVO</span></td><td class="notes"></td></tr>
+      <tr><td class="id">P-05</td><td>Fabricación en curso</td><td><span class="b cont">CONT</span></td><td>Production Team</td><td>10-30 d</td><td>P-02</td><td>Avance real por estación y por item — ya lo mide el kiosko <i>(p.33)</i></td><td><span class="b ya">YA</span></td><td class="notes"></td></tr>
+      <tr><td class="id">P-06</td><td>Fabricación completa</td><td></td><td>Production Mgr</td><td>—</td><td>P-05</td><td>Todos los items del proyecto en estación final <i>(p.33)</i></td><td><span class="b ya">YA</span></td><td class="notes"></td></tr>
+    </tbody>
+  </table>
+
+  <div class="note">
+    <b>P-01 es el corazón del motor de dependencias.</b> Es la regla del <i>Production Intake</i>
+    de la página 30 —«<i>approved shop drawings, CNC files, materials, and approved samples</i>»—
+    convertida en gate duro.
+    <br><br>
+    Su fecha real es <b>la más tardía de sus 5 predecesores</b>, y el sistema nombra cuál fue.
+    Hoy, cuando producción no arranca, la discusión es «yo mandé los planos» contra «a mí no me
+    llegó el material». Con esto, hay un dato.
+  </div>
+</section>
+
+<!-- ============ FASES 6 y 7 ============ -->
+<section class="phase">
+  <div class="phase-head"><span class="n">6</span><h2 style="flex:1">QC</h2></div>
+  <p class="owner">Owner de fase: <b>Production Assistant</b></p>
+
+  <table>
+    <thead><tr>
+      <th class="col-id">#</th><th class="col-hito">Hito</th><th style="width:5%">Tipo</th><th style="width:9%">Responsable</th>
+      <th class="col-dur">Dura</th><th style="width:10%">Depende de</th>
+      <th style="width:23%">Evidencia que lo cierra</th><th class="col-hoy">Hoy</th>
+      <th style="width:17%">Notas / corrección</th>
+    </tr></thead>
+    <tbody>
+      <tr><td class="id">QC-01</td><td>Controles por etapa</td><td><span class="b cont">CONT</span></td><td>Production Assistant</td><td>—</td><td>P-05</td><td>Inspecciones registradas en assembly, laminate y pintura <i>(p.34)</i></td><td><span class="b ya">YA</span></td><td class="notes"></td></tr>
+      <tr><td class="id">QC-02</td><td><b>QC final aprobado</b></td><td><span class="b gate">GATE</span></td><td>Production Assistant</td><td>1-3 d</td><td>P-06</td><td>Inspección final con fotos de todos los items <i>(p.34)</i></td><td><span class="b ya">YA</span></td><td class="notes"></td></tr>
+      <tr><td class="id">QC-03</td><td>Reproceso por defecto</td><td><span class="b cond">COND</span></td><td>Production Mgr</td><td>variable</td><td>QC-01/02</td><td>Decisión de reproceso registrada con estación destino y días perdidos <i>(p.34)</i></td><td><span class="b ya">YA</span></td><td class="notes"></td></tr>
+    </tbody>
+  </table>
+
+  <div class="phase-head" style="margin-top:8mm"><span class="n">7</span><h2 style="flex:1">SHIPPING</h2></div>
+  <p class="owner">Owner de fase: <b>Logistics Manager</b></p>
+
+  <table>
+    <thead><tr>
+      <th class="col-id">#</th><th class="col-hito">Hito</th><th style="width:5%">Tipo</th><th style="width:9%">Responsable</th>
+      <th class="col-dur">Dura</th><th style="width:10%">Depende de</th>
+      <th style="width:23%">Evidencia que lo cierra</th><th class="col-hoy">Hoy</th>
+      <th style="width:17%">Notas / corrección</th>
+    </tr></thead>
+    <tbody>
+      <tr><td class="id">S-01</td><td>Packaging completo</td><td></td><td>Production Team</td><td>1-3 d</td><td>QC-02</td><td>Items etiquetados con proyecto / item / secuencia, contra shipping list <i>(p.35)</i></td><td><span class="b parc">PARC</span></td><td class="notes"></td></tr>
+      <tr><td class="id">S-02</td><td>Delivery request emitido (48 h)</td><td><span class="b gate">GATE</span></td><td>PM</td><td>—</td><td>S-01</td><td>Solicitud enviada a Logística y Producción con 48 h de anticipación <i>(p.38)</i></td><td><span class="b nuevo">NUEVO</span></td><td class="notes"></td></tr>
+      <tr><td class="id">S-03</td><td>Transporte confirmado + BOL</td><td></td><td>Logistics Mgr</td><td>1-2 d</td><td>S-02</td><td>Camión confirmado y BOL emitido <i>(p.36)</i></td><td><span class="b nuevo">NUEVO</span></td><td class="notes"></td></tr>
+      <tr><td class="id">S-04</td><td><b>Despachado</b></td><td></td><td>Logistics Mgr</td><td>1 d</td><td>S-03</td><td>Fotos de carga, número de precinto y BOL firmado subidos <i>(p.36)</i></td><td><span class="b nuevo">NUEVO</span></td><td class="notes"></td></tr>
+      <tr><td class="id">S-05</td><td>Recepción en obra coordinada</td><td><span class="b cond">COND</span></td><td>Field Specialist</td><td>—</td><td>S-04</td><td>Coordinación con el instalador registrada. Sin instalación, no aplica <i>(p.37)</i></td><td><span class="b nuevo">NUEVO</span></td><td class="notes"></td></tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- ============ FASES 8 y 9 ============ -->
+<section class="phase">
+  <div class="phase-head"><span class="n">8</span><h2 style="flex:1">INSTALL</h2></div>
+  <p class="owner">Owner de fase: <b>Field Specialist</b> (apoyo PM)</p>
+
+  <table>
+    <thead><tr>
+      <th class="col-id">#</th><th class="col-hito">Hito</th><th style="width:5%">Tipo</th><th style="width:9%">Responsable</th>
+      <th class="col-dur">Dura</th><th style="width:10%">Depende de</th>
+      <th style="width:23%">Evidencia que lo cierra</th><th class="col-hoy">Hoy</th>
+      <th style="width:17%">Notas / corrección</th>
+    </tr></thead>
+    <tbody>
+      <tr><td class="id">I-01</td><td>Fechas de instalación coordinadas</td><td><span class="b gate">GATE</span></td><td>PM</td><td>3-5 d</td><td>QC-02</td><td>Fechas acordadas con el instalador e informadas al cliente <i>(p.38)</i></td><td><span class="b nuevo">NUEVO</span></td><td class="notes"></td></tr>
+      <tr><td class="id">I-02</td><td>Materiales de instalación comprados</td><td><span class="b gate">GATE</span></td><td>Procurement Mgr</td><td>2-5 d</td><td>I-01</td><td>Lista del instalador recibida y OC emitida, 48 h antes <i>(p.38)</i></td><td><span class="b parc">PARC</span></td><td class="notes"></td></tr>
+      <tr><td class="id">I-03</td><td><b>Obra lista para instalar</b></td><td><span class="b gate">GATE</span></td><td>PM</td><td>—</td><td>—</td><td>Confirmación del GC. <b>Dependencia externa — fuera de nuestro control</b></td><td><span class="b nuevo">NUEVO</span></td><td class="notes"></td></tr>
+      <tr><td class="id">I-04</td><td>Instalación iniciada</td><td></td><td>Field Specialist</td><td>—</td><td>S-05, I-02, I-03</td><td>Check-in en obra desde la app móvil <i>(p.40)</i></td><td><span class="b nuevo">NUEVO</span></td><td class="notes"></td></tr>
+      <tr><td class="id">I-05</td><td>Instalación en curso</td><td><span class="b cont">CONT</span></td><td>Field Specialist</td><td>5-20 d</td><td>I-04</td><td>Avance diario por área desde la app móvil <i>(p.40)</i></td><td><span class="b nuevo">NUEVO</span></td><td class="notes"></td></tr>
+      <tr><td class="id">I-06</td><td>Punch list cerrado</td><td><span class="b gate">GATE</span></td><td>Field Specialist</td><td>3-10 d</td><td>I-05</td><td>Todos los items del punch list con foto de resuelto <i>(p.40)</i></td><td><span class="b nuevo">NUEVO</span></td><td class="notes"></td></tr>
+      <tr><td class="id">I-07</td><td><b>Sign-off del cliente</b></td><td></td><td>PM</td><td>—</td><td>I-06</td><td>Aprobación final del cliente en el portal</td><td><span class="b nuevo">NUEVO</span></td><td class="notes"></td></tr>
+    </tbody>
+  </table>
+
+  <div class="note">
+    <b>I-03 es la dependencia externa del GC.</b> Cuando la obra no está lista, el atraso
+    <b>no es de Central Millwork</b>, y el sistema tiene que dejarlo asentado con esa atribución.
+    Eso construye el respaldo documental frente al GC — hoy esa discusión se da de memoria.
+  </div>
+
+  <div class="phase-head" style="margin-top:8mm"><span class="n">9</span><h2 style="flex:1">COMPLETED</h2></div>
+  <p class="owner">Owner de fase: <b>PM + CFO</b></p>
+
+  <table>
+    <thead><tr>
+      <th class="col-id">#</th><th class="col-hito">Hito</th><th class="col-resp">Responsable</th>
+      <th class="col-dur">Dura</th><th class="col-dep">Depende de</th>
+      <th class="col-evi">Evidencia que lo cierra</th><th class="col-hoy">Hoy</th>
+      <th class="col-notes">Notas / corrección</th>
+    </tr></thead>
+    <tbody>
+      <tr><td class="id">X-01</td><td>Closeout report interno</td><td>PM</td><td>2-3 d</td><td>I-07</td><td>Reporte con feedback y fotos cargado <i>(p.39)</i></td><td><span class="b nuevo">NUEVO</span></td><td class="notes"></td></tr>
+      <tr><td class="id">X-02</td><td>Carpeta del proyecto archivada</td><td>PM</td><td>1 d</td><td>X-01</td><td>Archivo del proyecto marcado como cerrado <i>(p.39)</i></td><td><span class="b nuevo">NUEVO</span></td><td class="notes"></td></tr>
+      <tr><td class="id">X-03</td><td><b>PAGO FINAL RECIBIDO</b></td><td>Financial Mgr</td><td>30-90 d</td><td>I-07</td><td>Cobro registrado con número de factura e importe <i>(p.39)</i></td><td><span class="b nuevo">NUEVO</span></td><td class="notes"></td></tr>
+      <tr><td class="id">X-04</td><td>P&amp;L final emitido</td><td>CFO</td><td>5 d</td><td>X-03</td><td>Reporte de P&amp;L del proyecto <i>(p.39)</i></td><td><span class="b nuevo">NUEVO</span></td><td class="notes"></td></tr>
+    </tbody>
+  </table>
+
+  <div class="note">
+    <b>X-03 cierra formalmente el proyecto.</b> Es el único hito posterior a la entrega física y
+    tiene su propio reloj: se mide contra los términos de pago del contrato, con alertas de
+    cobranza cuando se pasa. Central Millwork es un todo, no solo compras y producción.
+  </div>
+</section>
+
+<!-- ============ GATES + RIESGO ============ -->
+<section class="phase">
+  <h2>Los 8 gates duros</h2>
+  <p class="owner">Puntos donde el sistema <b>bloquea</b> el avance hasta que se cumplan los requisitos. Acá está el control real, no en los reportes.</p>
+
+  <table>
+    <thead><tr><th style="width:10%">Gate</th><th style="width:30%">Requiere</th><th style="width:40%">Consecuencia si falla</th><th style="width:20%">Notas / corrección</th></tr></thead>
+    <tbody>
+      <tr><td class="id">C-03 · Contrato firmado</td><td>Q-07</td><td>El reloj no arranca. Alerta diaria desde el día 5</td><td class="notes"></td></tr>
+      <tr><td class="id">E-12 · MTO liberado</td><td>Shop drawings aprobados + depósito recibido</td><td>Compras no puede cotizar</td><td class="notes"></td></tr>
+      <tr><td class="id">E-13 · Release to Production</td><td>Planos aprobados y sellados</td><td>Producción no puede abrir</td><td class="notes"></td></tr>
+      <tr><td class="id">P-01 · Production Intake</td><td>Muestras aprobadas + planos aprobados + release + CNC + material 100 %</td><td><b>Producción no arranca</b></td><td class="notes"></td></tr>
+      <tr><td class="id">QC-02 · QC final</td><td>Fabricación completa</td><td>No se puede empaquetar</td><td class="notes"></td></tr>
+      <tr><td class="id">S-02 · Delivery request</td><td>48 h de anticipación</td><td>Logística no puede confirmar camión</td><td class="notes"></td></tr>
+      <tr><td class="id">I-03 · Obra lista</td><td>Confirmación del GC</td><td>Instalación no arranca — atraso atribuido al GC</td><td class="notes"></td></tr>
+      <tr><td class="id">I-06 · Punch list</td><td>Todos los items con foto</td><td>No hay sign-off ni pago final</td><td class="notes"></td></tr>
+    </tbody>
+  </table>
+
+  <div class="two" style="margin-top:6mm">
+    <div>
+      <h3>Modelo de riesgo</h3>
+      <p style="font-size:9.5pt">Por hito, según la holgura:</p>
+      <table>
+        <thead><tr><th style="width:25%">Estado</th><th>Significado</th></tr></thead>
+        <tbody>
+          <tr><td class="id">VERDE</td><td>Holgura ≥ 3 días hábiles</td></tr>
+          <tr><td class="id">AMARILLO</td><td>Holgura entre 0 y 3 días</td></tr>
+          <tr><td class="id">ROJO</td><td>Holgura negativa: ya está comiendo la fecha de entrega</td></tr>
+          <tr><td class="id">GRIS</td><td>Todavía no aplica (predecesores sin cumplir)</td></tr>
+        </tbody>
+      </table>
+      <p style="font-size:9.5pt">Por proyecto: el peor semáforo de la cadena crítica, más los días
+      acumulados de atraso y su atribución.</p>
+    </div>
+    <div>
+      <h3>Atribución de días perdidos</h3>
+      <p style="font-size:9.5pt">Cada hito que cierra tarde registra a quién corresponde el atraso:</p>
+      <p style="font-size:10pt; line-height:2">
+        Cliente · GC · Vendor · Estimating · Engineering · Procurement ·
+        Production · Logistics · Field · Finanzas
+      </p>
+      <div class="note" style="margin-top:4mm">
+        Ese acumulado es el reporte que a fin de año contesta <b>«¿por qué entregamos tarde?»</b>
+        con números en vez de opiniones — y es el argumento documentado frente a GCs y clientes.
+        <br><br>
+        <b>Advertencia:</b> el primer reporte va a incomodar. Es diagnóstico del proceso,
+        no control de personas.
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ ESTADO + PORTAL ============ -->
+<section class="phase">
+  <h2>Estado actual de instrumentación</h2>
+  <p class="owner">Cuánto del recorrido puede medir hoy el sistema, sin construir nada nuevo.</p>
+
+  <table style="width:70%">
+    <thead><tr><th style="width:30%">Fase</th><th style="width:14%">Hitos</th><th style="width:18%">Ya existe</th><th style="width:18%">Parcial</th><th style="width:20%">A construir</th></tr></thead>
+    <tbody>
+      <tr><td>1 · Quote</td><td>7</td><td>0</td><td>0</td><td>7</td></tr>
+      <tr><td>2 · Contract</td><td>9</td><td>0</td><td>1</td><td>8</td></tr>
+      <tr><td>3 · Engineering</td><td>16</td><td>2</td><td>3</td><td>11</td></tr>
+      <tr><td>4 · Materials</td><td>7</td><td>4</td><td>0</td><td>3</td></tr>
+      <tr><td>5 · Production</td><td>6</td><td>2</td><td>1</td><td>3</td></tr>
+      <tr><td>6 · QC</td><td>3</td><td>3</td><td>0</td><td>0</td></tr>
+      <tr><td>7 · Shipping</td><td>5</td><td>0</td><td>1</td><td>4</td></tr>
+      <tr><td>8 · Install</td><td>7</td><td>0</td><td>1</td><td>6</td></tr>
+      <tr><td>9 · Completed</td><td>4</td><td>0</td><td>0</td><td>4</td></tr>
+      <tr style="font-weight:700"><td>TOTAL</td><td>64</td><td>11</td><td>7</td><td>46</td></tr>
+    </tbody>
+  </table>
+
+  <div class="note">
+    <b>Lectura honesta: el 17 % del recorrido está instrumentado hoy</b>, y está todo concentrado
+    en el centro — Materials, Production y QC. Los dos extremos, que es donde se pierden las semanas,
+    son terreno nuevo.
+    <br><br>
+    <b>La consecuencia de fondo:</b> el sistema solo puede medir lo que pasa adentro del sistema.
+    Estimados, Ingeniería, Logística y Field trabajan hoy enteramente afuera — Excel, Pytha,
+    Bluebeam, Smartsheets, Pipedrive, OneDrive, email y teléfono. Si siguen trabajando afuera,
+    el schedule va a saber todo del taller y nada de la oficina.
+    <b>La decisión de fondo no es técnica: es si se mete ese trabajo adentro de la app.</b>
+  </div>
+
+  <h2 style="margin-top:8mm">Portal de cliente</h2>
+  <p class="owner">Acceso por link con token, uno por contacto — sin crear cuentas. Cada acción queda atribuida a una persona concreta.</p>
+
+  <div class="two">
+    <div>
+      <h3>El cliente puede</h3>
+      <ul>
+        <li>Ver el timeline de su proyecto por hitos, con estado y fechas</li>
+        <li>Ver de qué está esperando el proyecto <b>y de quién es la pelota</b> — incluido cuando es de él</li>
+        <li><b>Aprobar / aprobar con comentarios / rechazar</b>: shop drawings, muestras, V/E, change orders</li>
+        <li>Dar el <b>sign-off final</b></li>
+        <li>Ver fotos de avance de fabricación e instalación</li>
+        <li>Descargar contrato, planos aprobados, BOL y shipping list</li>
+      </ul>
+      <h3>El cliente NO puede ver</h3>
+      <ul>
+        <li>Costos, márgenes, budgets</li>
+        <li>Vendors ni precios</li>
+        <li>Cualquier información interna</li>
+      </ul>
+    </div>
+    <div>
+      <h3>Automático hacia el cliente</h3>
+      <p style="font-size:9.5pt">Recordatorio cuando un hito suyo está por vencer o ya venció,
+      con el impacto explícito sobre la fecha de entrega:</p>
+      <div class="note" style="font-style:italic">
+        «Los shop drawings llevan 12 días en revisión. Cada día adicional corre la entrega
+        del 15 de octubre.»
+      </div>
+      <h3>Por qué es la pieza de mayor impacto</h3>
+      <p style="font-size:9.5pt">Convierte el agujero negro <i>«esperando al cliente»</i> en un dato
+      con fecha, hora y responsable. Es una porción grande de los atrasos actuales, y es
+      <b>lo que más barato se instrumenta</b>.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ============ CRONOGRAMA ============ -->
+<section class="phase">
+  <h2>Cronograma de construcción</h2>
+  <p class="owner">Seis etapas. Cada una funciona sola y entrega valor aunque se pause.
+  Estimado al ritmo actual de trabajo, sin equipo de desarrollo dedicado.</p>
+
+  <table>
+    <thead><tr>
+      <th style="width:4%">#</th><th style="width:16%">Etapa</th><th style="width:34%">Qué incluye</th>
+      <th style="width:9%">Duración</th><th style="width:25%">Qué se gana al terminar</th><th style="width:12%">Notas</th>
+    </tr></thead>
+    <tbody>
+      <tr><td class="id">1</td><td><b>Motor de schedule</b></td><td>Calendario laboral, plantilla de hitos, cálculo hacia atrás, dependencias, holgura, semáforo, atribución de atrasos, timeline en el detalle de proyecto</td><td>3-4 sem</td><td>El schedule existe y vive, alimentado por Materials + Production + QC. La mitad del recorrido, real, desde el día uno</td><td class="notes"></td></tr>
+      <tr><td class="id">2</td><td><b>Portal de cliente</b></td><td>Links tokenizados, timeline público, aprobaciones con fecha, recordatorios automáticos, fotos de avance</td><td>3-4 sem</td><td>Se cierra el agujero negro de las aprobaciones. E-08, E-10 e I-07 pasan a ser datos duros</td><td class="notes"></td></tr>
+      <tr><td class="id">3</td><td><b>Ingeniería</b></td><td>Submittals, versiones y revisiones de shop drawings, archivos CNC, release to production, MTO liberado, change orders, VIF</td><td>6-8 sem</td><td>La fase más grande y la que más atrasos destapa. Cierra el gate P-01 completo</td><td class="notes"></td></tr>
+      <tr><td class="id">4</td><td><b>Field, Shipping e Install</b></td><td>BOL, foto de carga y precinto, delivery request, check-in en obra, avance de instalación, punch list — todo en móvil</td><td>4-6 sem</td><td>El recorrido queda cerrado punta a punta hasta el sign-off</td><td class="notes"></td></tr>
+      <tr><td class="id">5</td><td><b>Deals y Estimados</b></td><td>Pipeline de bids, T&amp;C, estimado, peer review, propuesta, contrato, depósito, announcement, kickoff</td><td>5-7 sem</td><td>El chequeo de factibilidad al cotizar. La fecha objetivo nace en el sistema</td><td class="notes"></td></tr>
+      <tr><td class="id">6</td><td><b>Cierre financiero</b></td><td>Budget por área, facturación por hito, cobranza, pago final, P&amp;L. Integración con QuickBooks</td><td>4-6 sem</td><td>El proyecto cierra formalmente donde debe cerrar</td><td class="notes"></td></tr>
+      <tr style="font-weight:700"><td></td><td>TOTAL</td><td></td><td>25-35 sem</td><td>Entre 7 y 9 meses de trabajo efectivo</td><td class="notes"></td></tr>
+    </tbody>
+  </table>
+
+  <div class="two">
+    <div>
+      <h3>Por qué este orden</h3>
+      <ul>
+        <li>La etapa 1 arranca <b>donde ya hay datos</b>: el motor se prueba con la realidad, no con datos inventados</li>
+        <li>La etapa 2 va segunda porque es <b>la mayor ganancia por el menor código</b></li>
+        <li>La etapa 3 es la más grande, y va cuando el motor ya está probado y hay costumbre de usarlo</li>
+        <li>Las etapas 5 y 6 van al final porque son las que menos bloquean: el schedule ya funciona
+            sin ellas, arrancando desde el contrato en vez de desde el bid</li>
+      </ul>
+      <div class="note">
+        <b>Advertencia honesta:</b> la estimación asume constancia. Si se corta por semanas para
+        atender producción, se estira proporcionalmente. Y no incluye el tiempo de <b>adopción</b>,
+        que en las áreas que hoy trabajan fuera del sistema puede pesar más que el desarrollo.
+      </div>
+    </div>
+    <div>
+      <h3>Riesgos del proyecto</h3>
+      <table>
+        <thead><tr><th style="width:34%">Riesgo</th><th style="width:16%">Impacto</th><th>Mitigación</th></tr></thead>
+        <tbody>
+          <tr><td>Adopción de las áreas de oficina</td><td><b>Crítico</b></td><td>Cada captura debe ser subproducto del trabajo. Respaldo explícito de la dirección. Sin esto el proyecto muere en la etapa 3</td></tr>
+          <tr><td>Resistencia a ser medido</td><td>Alto</td><td>Presentar la atribución como diagnóstico del proceso, no control de personas</td></tr>
+          <tr><td>Durar 8 meses sin ver valor</td><td>Alto</td><td>Por eso la etapa 1 entrega un schedule vivo en 3-4 semanas</td></tr>
+          <tr><td>Construir un gestor documental</td><td>Medio</td><td>No lo es. Archivo + fecha + versión. Bluebeam y Pytha siguen siendo las herramientas de trabajo</td></tr>
+          <tr><td>Duraciones mal calibradas</td><td>Medio</td><td>Corregirlas en esta revisión. Recalibrar con histórico desde el sexto mes</td></tr>
+          <tr><td>El sistema se vuelve pesado de usar</td><td>Medio</td><td>Ningún hito puede requerir más de un acto. Si requiere dos, está mal diseñado</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<!-- ============ PENDIENTES ============ -->
+<section class="phase">
+  <h2>Qué se necesita de esta revisión</h2>
+
+  <ul class="chk" style="font-size:11pt; margin-top:6mm">
+    <li><b>Duraciones.</b> Las de este documento son estimaciones. Corregirlas con los owners de cada área.</li>
+    <li><b>Responsables.</b> El documento oficial nombra 13 roles (Estimator, Estimating Director, Engineer, PM, Procurement Manager, Production Manager, Production Assistant, Production Controller, Logistics Manager, Field Specialist, Office Manager, Financial Manager, CFO). El sistema hoy tiene 9 roles y no coinciden. Hay que mapearlos.</li>
+    <li><b>Hitos que sobran, faltan o en la práctica no funcionan así.</b></li>
+    <li><b>Granularidad.</b> ¿Un schedule por proyecto, o por item / área con rollup al proyecto?</li>
+    <li><b>Calendario laboral.</b> Días hábiles, feriados de Central Millwork, semanas de cierre.</li>
+    <li><b>Fases parciales.</b> Proyectos que entregan por piso o por área con fechas distintas.</li>
+    <li><b>Proyectos sin instalación.</b> El documento los contempla (p.37). La cadena cerraría en S-04.</li>
+    <li><b>Change orders.</b> ¿Corren la fecha objetivo automáticamente, o requieren decisión?</li>
+    <li><b>Confirmación del principio de evidencia obligatoria</b>, sabiendo que implica meter el trabajo de Ingeniería y Field adentro del sistema.</li>
+  </ul>
+
+  <div class="warn" style="margin-top:14mm">
+    <b>Nota final.</b> Este mapa no inventa un proceso: transcribe el que Central Millwork ya tiene
+    escrito, y lo convierte en algo que el sistema pueda calcular. La página 5 del documento oficial
+    ya pide un schedule construido hacia atrás desde la fecha de entrega. Lo que falta no es la idea
+    — es que ese schedule deje de vivir en un Excel que nadie actualiza y empiece a enterarse
+    de lo que realmente pasa.
+  </div>
+
+  <div style="margin-top:16mm; font-size:9pt; color:#666; border-top:1px solid #ccc; padding-top:3mm">
+    Life of a Deal — Mapa de Hitos · Rev 0 · 21 de julio de 2026 · Central Millwork · Documento interno
+  </div>
+</section>
+
+</body>
+</html>
