@@ -1,11 +1,13 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import {
   Loader2, Activity, CheckCircle2, Circle, PauseCircle, PlayCircle,
   Plus, ArrowRight, UserCheck, Coffee, Flag, ChevronDown, ChevronUp,
+  FileText, X, ExternalLink,
 } from 'lucide-react'
 import clsx from 'clsx'
 import { produccionService } from '@/services/produccion'
+import api from '@/services/api'
 import { useAuth } from '@/context/AuthContext'
 import type {
   EvolucionProceso, EvolucionEvento, EvolucionEventoTipo, OrdenEvolucionResp,
@@ -24,6 +26,7 @@ import EvolucionCalendar from './EvolucionCalendar'
 export default function OrdenEvolucion({ ordenId }: { ordenId: number }) {
   const { user } = useAuth()
   const puedeVer = user && (user.rol === 'ADMIN' || user.rol === 'SHOP_MANAGER')
+  const [reporteOpen, setReporteOpen] = useState(false)
 
   const { data, isLoading } = useQuery({
     queryKey: ['orden-evolucion', ordenId],
@@ -51,10 +54,22 @@ export default function OrdenEvolucion({ ordenId }: { ordenId: number }) {
   if (!data) return null
 
   return (
+    <>
     <div className="card p-0 overflow-hidden">
-      <header className="px-5 py-4 border-b border-gray-100 flex items-center gap-2">
-        <Activity size={18} className="text-forest-700" />
-        <h2 className="text-base font-semibold text-forest-700">Evolución</h2>
+      <header className="px-5 py-4 border-b border-gray-100 flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <Activity size={18} className="text-forest-700" />
+          <h2 className="text-base font-semibold text-forest-700">Evolución</h2>
+        </div>
+        {/* Reporte HTML — solicitud shop manager 2026-07-17. Abre en drawer
+            lateral, se refetchea cada vez que se abre (siempre actualizado). */}
+        <button
+          onClick={() => setReporteOpen(true)}
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-forest-700 hover:bg-forest-800 text-white text-xs font-medium transition-colors"
+          title="Ver reporte visual para dirección (con timeline + fotos + plazos)"
+        >
+          <FileText size={13} /> Ver reporte
+        </button>
       </header>
 
       <div className="p-5 space-y-5">
@@ -70,6 +85,123 @@ export default function OrdenEvolucion({ ordenId }: { ordenId: number }) {
         />
       </div>
     </div>
+    {/* Drawer lateral con el reporte HTML — mount cuando se abre para
+        garantizar que se refetchea (endpoint hace queries live cada vez). */}
+    {reporteOpen && (
+      <ReporteDrawer
+        numeroOrden={data.orden.numero_orden}
+        onClose={() => setReporteOpen(false)}
+      />
+    )}
+    </>
+  )
+}
+
+// ────────────────────────────────────────────────────────────────────────
+// Reporte drawer lateral (2026-07-17)
+// ────────────────────────────────────────────────────────────────────────
+// Fetch del HTML del reporte (endpoint /api/reportes/op/:numero) con auth
+// automática vía interceptor de axios. Renderiza en iframe (srcDoc) para
+// aislar los estilos del reporte de la app.
+// Se remontea cada vez que se abre el drawer → siempre datos frescos.
+function ReporteDrawer({ numeroOrden, onClose }: { numeroOrden: string; onClose: () => void }) {
+  const [html, setHtml] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    let mounted = true
+    api.get<string>(`/reportes/op/${encodeURIComponent(numeroOrden)}`, {
+      responseType: 'text',
+      transformResponse: [(data) => data],
+    })
+      .then((resp) => { if (mounted) setHtml(resp.data) })
+      .catch((err) => {
+        if (!mounted) return
+        setError(err?.response?.data?.detail || err?.response?.data?.message || err?.message || 'Error al cargar')
+      })
+      .finally(() => { if (mounted) setLoading(false) })
+    return () => { mounted = false }
+  }, [numeroOrden])
+
+  // ESC cierra el drawer
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [onClose])
+
+  const abrirNuevaVentana = () => {
+    if (!html) return
+    const win = window.open('', '_blank')
+    if (win) { win.document.write(html); win.document.close() }
+  }
+
+  return (
+    <>
+      {/* Backdrop */}
+      <div
+        className="fixed inset-0 bg-black/40 z-40"
+        onClick={onClose}
+        aria-hidden="true"
+      />
+      {/* Drawer — 60% ancho en desktop, full en mobile */}
+      <div className="fixed inset-y-0 right-0 z-50 w-full lg:w-[60vw] xl:w-[900px] bg-white shadow-2xl flex flex-col">
+        <header className="px-5 py-3 border-b border-gray-200 flex items-center justify-between gap-3 flex-shrink-0">
+          <div className="flex items-center gap-2 min-w-0">
+            <FileText size={16} className="text-forest-700 flex-shrink-0" />
+            <h3 className="text-sm font-semibold text-forest-900 truncate">
+              Reporte de {numeroOrden}
+            </h3>
+          </div>
+          <div className="flex items-center gap-2 flex-shrink-0">
+            {html && (
+              <button
+                onClick={abrirNuevaVentana}
+                className="inline-flex items-center gap-1 px-2.5 py-1 rounded text-xs font-medium bg-gray-100 hover:bg-gray-200 text-gray-700"
+                title="Abrir en pestaña nueva"
+              >
+                <ExternalLink size={11} /> Nueva pestaña
+              </button>
+            )}
+            <button
+              onClick={onClose}
+              className="p-1.5 rounded hover:bg-gray-100 text-gray-500"
+              aria-label="Cerrar"
+            >
+              <X size={16} />
+            </button>
+          </div>
+        </header>
+
+        <div className="flex-1 overflow-hidden">
+          {loading && (
+            <div className="flex items-center justify-center h-full">
+              <div className="text-center">
+                <Loader2 size={28} className="mx-auto animate-spin text-forest-500 mb-2" />
+                <p className="text-sm text-gray-500">Generando reporte…</p>
+              </div>
+            </div>
+          )}
+          {error && (
+            <div className="p-6">
+              <div className="bg-red-50 border border-red-200 rounded p-4 text-sm text-red-700">
+                <div className="font-semibold">Error al cargar el reporte</div>
+                <div className="mt-1">{error}</div>
+              </div>
+            </div>
+          )}
+          {html && (
+            <iframe
+              srcDoc={html}
+              className="w-full h-full border-0"
+              title={`Reporte OP ${numeroOrden}`}
+              sandbox="allow-same-origin allow-popups"
+            />
+          )}
+        </div>
+      </div>
+    </>
   )
 }
 

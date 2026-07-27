@@ -7,6 +7,7 @@ import clsx from 'clsx'
 import { produccionService } from '@/services/produccion'
 import { proyectosService } from '@/services/proyectos'
 import MaterialesItem from '@/components/produccion/MaterialesItem'
+import PlanosItemCard from '@/components/produccion/PlanosItemCard'
 import type { Prioridad, RutaCalculada } from '@/types/produccion'
 
 const ESTACIONES_DISPONIBLES = [
@@ -358,6 +359,9 @@ export default function CrearOrden() {
               </p>
             </div>
           )}
+          {/* Planos del ítem — solicitud shop manager 2026-07-17. Se ven
+              ANTES de definir la ruta, ayuda a diseñar el flujo correcto. */}
+          <PlanosItemCard proyectoId={proyectoId} numeroItem={numeroItem} />
           <RutaPreview ruta={ruta} procesos={procesos} />
         </div>
       </form>

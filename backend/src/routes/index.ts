@@ -10,6 +10,7 @@ import {
 } from '../controllers/dashboardController'
 import { mobileSearch, mobileProyectos, mobileProyectoVendors } from '../controllers/mobileController'
 import { getMtosActivos } from '../controllers/mtosController'
+import { getPlanosItem, uploadPlanoItem, uploadPlano } from '../controllers/planosController'
 import {
   getProyectos, getProyecto, createProyecto, updateProyecto, deleteProyecto,
   getProyectoResumen, getProyectoActividad, getProyectoItemsReadiness,
@@ -107,6 +108,10 @@ router.get('/proyectos',                      getProyectos)
 router.get('/proyectos/:id/resumen',          getProyectoResumen)
 router.get('/proyectos/:id/actividad',        getProyectoActividad)
 router.get('/proyectos/:id/items-readiness',  getProyectoItemsReadiness)
+// Planos por (proyecto, item) — solicitud shop manager 2026-07-17. Ver
+// planos PDF ANTES de definir la ruta de la OP. Compartidos entre OPs.
+router.get('/proyectos/:id/items/:numero/planos',  requireRole('ADMIN', 'SHOP_MANAGER', 'PROCUREMENT', 'ENGINEERING'), getPlanosItem)
+router.post('/proyectos/:id/items/:numero/planos', requireRole('ADMIN', 'SHOP_MANAGER', 'PROCUREMENT', 'ENGINEERING'), uploadPlano.single('plano'), uploadPlanoItem)
 router.get('/proyectos/:id/muestras-aprobadas', getProyectoMuestrasAprobadas)
 router.get('/proyectos/:id',                  getProyecto)
 router.post('/proyectos',                     WRITE, validateBody(createProyectoSchema), createProyecto)
