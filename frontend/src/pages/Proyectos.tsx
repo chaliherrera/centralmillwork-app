@@ -87,10 +87,10 @@ function ProyectoCard({ p, selected, onSelect, onEdit, onDelete, canWrite = true
           )}
         </div>
 
-        {/* Project name */}
+        {/* Project code (prominent) + name */}
         <div>
-          <h3 className="font-semibold text-gray-900 text-sm leading-snug line-clamp-2">{p.nombre}</h3>
-          <span className="font-mono text-xs text-gray-400 mt-0.5 block">{p.codigo}</span>
+          <h3 className="font-mono font-bold text-gray-900 text-lg leading-tight">{p.codigo}</h3>
+          <span className="text-xs text-gray-500 mt-1 block line-clamp-2 leading-snug">{p.nombre}</span>
         </div>
 
         {/* Meta */}
