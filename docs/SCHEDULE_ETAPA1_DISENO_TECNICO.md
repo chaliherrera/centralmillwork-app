@@ -62,9 +62,11 @@ Principio P2. Su fecha real llega cuando se construya la etapa que la instrument
 - **Holgura = fecha planeada − fecha proyectada.** Negativa = riesgo.
 
 ### El ancla
-La **fecha objetivo** del plan sale de `proyectos.fecha_fin_estimada` (ya existe). El plan guarda su
-propia copia (`fecha_objetivo`) para que, si alguien cambia la del proyecto, quede registrado como
-decisión (Principio P1) y no se pierda la original.
+La **fecha objetivo** del plan es un **campo propio del plan**, obligatorio. Se pre-llena desde
+`proyectos.fecha_fin_estimada` si esa fecha existe (hoy es un campo opcional rotulado "ETA", cargado
+a mano y a veces vacío), pero se **confirma aparte** y es la fecha sagrada del schedule (Principio P1).
+El plan guarda además `fecha_objetivo_original` (la primera confirmada, que nunca cambia) para medir
+cualquier corrimiento. *(Decisión confirmada 2026-08-10: campo dedicado, no colgar del ETA.)*
 
 ---
 
@@ -136,8 +138,8 @@ NOT EXISTS`, cada migración en su transacción, tracked en `schema_migrations`)
 | plantilla_id | int FK | |
 | scope | varchar | 'proyecto' (Etapa 1) / 'item' (futuro) |
 | item_ref | varchar null | número de item, solo si scope='item' |
-| fecha_objetivo | date | copia de proyectos.fecha_fin_estimada al crear |
-| fecha_objetivo_original | date | la primera; nunca cambia (P1) |
+| fecha_objetivo | date | campo propio, obligatorio; pre-llenado desde ETA si existe |
+| fecha_objetivo_original | date | la primera confirmada; nunca cambia (P1) |
 | semaforo | varchar | peor semáforo de la cadena crítica |
 | holgura_dias | int | del proyecto |
 | created_at / updated_at | timestamptz | |
@@ -341,22 +343,28 @@ en local con vos y, si querés, en staging.
 
 ---
 
-## 11. Lo que necesito de vos antes de codear
+## 11. Decisiones — RESUELTAS (2026-08-10)
 
-Tres definiciones cortas:
+1. **Granularidad Etapa 1** ✅ **Nivel proyecto**, con el modelo ya preparado para bajar a item
+   después (campo `scope` en `schedule_planes`).
 
-1. **Granularidad Etapa 1** (sección 3): ¿confirmás arrancar a nivel **proyecto**, con el modelo ya
-   listo para item después? *(Mi recomendación: sí.)*
+2. **Fecha objetivo** ✅ **Campo dedicado del plan**, obligatorio, pre-llenado desde el ETA
+   (`proyectos.fecha_fin_estimada`) si existe pero confirmado aparte. No se cuelga del ETA porque ese
+   campo hoy es opcional y de semántica floja. Ver sección 2 "El ancla".
 
-2. **Fecha objetivo**: el plan la toma de `proyectos.fecha_fin_estimada`. ¿Está bien esa fecha como
-   "entrega comprometida", o esa columna hoy significa otra cosa y conviene un campo dedicado?
+3. **Calendario laboral** ✅ **Lunes a viernes**. Feriados y semanas de cierre se cargan en
+   `schedule_feriados` cuando Chali pase la lista; el motor arranca con lun-vie.
 
-3. **Calendario laboral**: ¿trabajan de lunes a viernes? ¿Qué feriados y semanas de cierre cargo para
-   este año? (Podés pasarme la lista después; con lun-vie arranco.)
+Pendiente **no bloqueante**: las **duraciones** y el **mapeo de responsables** (roles del PDF → roles
+de la app) los necesito para el *seed* de la plantilla, pero arranco con las estimaciones del Mapa y
+se van corrigiendo. No frenan el inicio de la construcción.
 
-Las **duraciones** y el **mapeo de responsables** (roles del PDF → roles de la app) los necesito para
-el *seed* de la plantilla (punto 1 del orden interno), pero puedo arrancar con las estimaciones del
-Mapa y vos las vas corrigiendo — no bloquean el inicio.
+---
+
+## 12. Estado
+
+Diseño técnico **aprobado** con las 3 decisiones resueltas. Listo para construir la Etapa 1 en rama
+`feat/schedule`, en el orden interno de la sección 10. Commits locales; nada a producción sin validar.
 
 ---
 
