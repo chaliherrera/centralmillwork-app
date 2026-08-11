@@ -4,6 +4,7 @@ import { parsePagination, paginatedResponse } from '../utils/pagination'
 import { createError } from '../middleware/errorHandler'
 import { logger } from '../utils/logger'
 import { recomputeMaterialesEstadoForOC } from '../utils/materialesEstado'
+import { recomputeScheduleForOCSafe } from '../modules/schedule'
 import { nextRecepcionFolio } from '../utils/numeradorAtomico'
 import { onOCRecibidaParaMuestras } from '../modules/muestras'
 
@@ -136,6 +137,8 @@ export async function createRecepcion(req: Request, res: Response, next: NextFun
     }
 
     await client.query('COMMIT')
+    // Life of a Deal: recalcular el schedule del proyecto (post-commit, best-effort)
+    void recomputeScheduleForOCSafe(orden_compra_id, 'recepcion')
     res.status(201).json({ data: { ...recepcion, folio }, message: `Recepción ${folio} registrada` })
   } catch (err) {
     await client.query('ROLLBACK')
@@ -207,6 +210,8 @@ export async function createRecepcionCompleta(req: Request, res: Response, next:
     }
 
     await client.query('COMMIT')
+    // Life of a Deal: recalcular el schedule del proyecto (post-commit, best-effort)
+    void recomputeScheduleForOCSafe(orden_compra_id, 'recepcion')
     res.status(201).json({ data: { ...recepcion, folio }, message: `Recepción ${folio} registrada` })
   } catch (err: any) {
     await client.query('ROLLBACK')

@@ -3,6 +3,7 @@ import pool from '../db/pool'
 import { createError } from '../middleware/errorHandler'
 import { parsePagination, paginatedResponse } from '../utils/pagination'
 import { findAutoAssignableOperator } from '../utils/autoAsignarOperario'
+import { recomputeScheduleSafe } from '../modules/schedule'
 
 const ORDEN_BASE_SECUENCIA = [
   'cnc', 'edge_banding', 'assembly', 'lamina', 'pintura', 'final', 'registro', 'shipping',
@@ -371,7 +372,7 @@ export async function avanzarOrdenInterno(opts: {
     await client.query('BEGIN')
 
     const { rows: [orden] } = await client.query(
-      `SELECT id, estacion_actual, status FROM ordenes_produccion WHERE id = $1 FOR UPDATE`,
+      `SELECT id, estacion_actual, status, proyecto_id FROM ordenes_produccion WHERE id = $1 FOR UPDATE`,
       [opts.ordenId]
     )
     if (!orden) {
@@ -625,6 +626,10 @@ export async function avanzarOrdenInterno(opts: {
       // email; el helper captura sus propios errores y nunca tira.
       void notifyMuestraEnQC(emailMuestraEnQC)
     }
+
+    // Life of a Deal: recalcular el schedule del proyecto al avanzar/completar
+    // una OP (post-commit, best-effort). Proyectos sin plan salen barato.
+    if (orden.proyecto_id) void recomputeScheduleSafe(orden.proyecto_id, 'op')
 
     return { siguiente_estacion: estacionDestino, status: nuevoStatus }
   } catch (err) {

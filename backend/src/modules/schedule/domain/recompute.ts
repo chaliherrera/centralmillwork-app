@@ -15,8 +15,10 @@ import pool from '../../../db/pool'
 import { calcularPlaneadas, HitoDef, DepDef } from './motor'
 import { capturarFechasReales } from './captura'
 import { loadFeriados, businessDaysBetween, ISODate } from './calendario'
+import { logger } from '../../../utils/logger'
 
 type QueryRunner = PoolClient | typeof pool
+type Disparador = 'recepcion' | 'op' | 'oc' | 'manual' | 'cron'
 
 const HOLGURA_VERDE = 3 // días hábiles
 
@@ -203,4 +205,38 @@ export async function recomputeScheduleForProyecto(
     [plan.id, `Recálculo (${disparadoPor}). Semáforo ${peor}${minHolgura !== null ? `, holgura mín ${minHolgura}d` : ''}.`, disparadoPor])
 
   return { skipped: false, planId: plan.id, semaforo: peor, holguraDias: minHolgura }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Wrappers "safe" para llamar POST-COMMIT desde otros módulos (fire-and-forget).
+// Abren su propia conexión y transacción; si algo falla, loguean pero NO
+// propagan el error — el flujo principal (recepción/OP) ya commiteó y no debe
+// romperse por el schedule. Proyectos sin plan salen por el early-return barato.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Recalcula el schedule de un proyecto en su propia txn. Best-effort. */
+export async function recomputeScheduleSafe(proyectoId: number, disparadoPor: Disparador): Promise<void> {
+  const client = await pool.connect()
+  try {
+    await client.query('BEGIN')
+    await recomputeScheduleForProyecto(client, proyectoId, disparadoPor)
+    await client.query('COMMIT')
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => {})
+    logger.error('recomputeScheduleSafe error', { proyectoId, err })
+  } finally {
+    client.release()
+  }
+}
+
+/** Idem, resolviendo el proyecto desde una OC. Best-effort. */
+export async function recomputeScheduleForOCSafe(ocId: number, disparadoPor: Disparador): Promise<void> {
+  try {
+    const { rows } = await pool.query<{ proyecto_id: number | null }>(
+      `SELECT proyecto_id FROM ordenes_compra WHERE id = $1`, [ocId])
+    const pid = rows[0]?.proyecto_id
+    if (pid) await recomputeScheduleSafe(pid, disparadoPor)
+  } catch (err) {
+    logger.error('recomputeScheduleForOCSafe error', { ocId, err })
+  }
 }

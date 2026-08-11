@@ -3,4 +3,9 @@
 // (recepciones, producción, OC) llaman dentro de su transacción para mantener
 // el schedule al día ante cada hecho real.
 export { default as scheduleModuleRouter } from './routes'
-export { recomputeScheduleForProyecto, generarPlan } from './domain/recompute'
+export {
+  recomputeScheduleForProyecto,
+  recomputeScheduleSafe,
+  recomputeScheduleForOCSafe,
+  generarPlan,
+} from './domain/recompute'
