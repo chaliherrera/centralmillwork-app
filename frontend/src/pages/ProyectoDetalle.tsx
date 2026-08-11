@@ -20,6 +20,8 @@ import { materialesService } from '@/services/materiales'
 import { ordenesCompraService } from '@/services/ordenesCompra'
 import { recepcionesService } from '@/services/recepciones'
 import StatusBadge from '@/components/ui/StatusBadge'
+import ScheduleTab from '@/components/modules/schedule/ScheduleTab'
+import { GanttChartSquare } from 'lucide-react'
 import type { Material, OrdenCompra } from '@/types'
 import {
   PieChart, Pie, Cell, AreaChart, Area,
@@ -41,7 +43,7 @@ const fmtDateTime = (d: string | null | undefined) => {
   return dt.toLocaleString('es-MX', { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
 }
 
-type TabKey = 'materiales' | 'kanban' | 'items' | 'ocs' | 'recepciones' | 'muestras' | 'actividad' | 'calendar' | 'graficas'
+type TabKey = 'materiales' | 'kanban' | 'items' | 'ocs' | 'recepciones' | 'muestras' | 'actividad' | 'schedule' | 'calendar' | 'graficas'
 
 export default function ProyectoDetalle() {
   const { id } = useParams<{ id: string }>()
@@ -154,6 +156,7 @@ export default function ProyectoDetalle() {
           { key: 'recepciones', label: `Recepciones (${kpis.recepciones.total})`, icon: Warehouse },
           { key: 'muestras',    label: 'Muestras aprobadas',              icon: Beaker },
           { key: 'actividad',   label: 'Actividad',                       icon: Activity },
+          { key: 'schedule',    label: 'Schedule',                        icon: GanttChartSquare },
           { key: 'calendar',    label: 'Calendar',                        icon: CalendarDays },
           { key: 'graficas',    label: 'Gráficas',                        icon: BarChart3 },
         ] as { key: TabKey; label: string; icon: typeof Package }[]).map(({ key, label, icon: Icon }) => (
@@ -180,6 +183,7 @@ export default function ProyectoDetalle() {
       {tab === 'recepciones' && <RecepcionesTab proyectoId={proyectoId} />}
       {tab === 'muestras'    && <MuestrasAprobadasTab proyectoId={proyectoId} />}
       {tab === 'actividad'   && <ActividadTab   proyectoId={proyectoId} />}
+      {tab === 'schedule'    && <ScheduleTab    proyectoId={proyectoId} />}
       {tab === 'calendar'    && <CalendarTab    proyectoId={proyectoId} proyectoNombre={proyecto.nombre} />}
       {tab === 'graficas'    && <GraficasTab    kpis={kpis} presupuesto={Number(proyecto.presupuesto)} />}
     </div>
