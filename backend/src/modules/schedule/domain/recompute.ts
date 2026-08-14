@@ -47,6 +47,7 @@ interface PlantillaHito {
   dur_dias_default: number
   es_ancla: boolean
   rol_responsable: string | null
+  fuente_dato: string
 }
 
 /**
@@ -108,8 +109,16 @@ export async function recomputeScheduleForProyecto(
   if (!plan) return { skipped: true }
 
   const { rows: hitosRows } = await runner.query<PlantillaHito>(
-    `SELECT codigo, dur_dias_default, es_ancla, rol_responsable
+    `SELECT codigo, dur_dias_default, es_ancla, rol_responsable, fuente_dato
        FROM schedule_plantilla_hitos WHERE plantilla_id = $1`, [plan.plantilla_id])
+
+  // Fechas reales ya guardadas (ej. cargadas por el portal de cliente o a mano):
+  // para los hitos NO instrumentados hay que preservarlas — el recompute no las pisa.
+  const { rows: existentes } = await runner.query<{ codigo: string; fecha_real: string | null; evidencia_ref: unknown }>(
+    `SELECT codigo, to_char(fecha_real,'YYYY-MM-DD') AS fecha_real, evidencia_ref
+       FROM schedule_hitos WHERE plan_id = $1`, [plan.id])
+  const realExistente = new Map(existentes.map((e) => [e.codigo, e]))
+  const fuentePorCodigo = new Map(hitosRows.map((h) => [h.codigo, h.fuente_dato]))
   const { rows: depRows } = await runner.query<{ hito_codigo: string; depende_de_codigo: string }>(
     `SELECT hito_codigo, depende_de_codigo
        FROM schedule_plantilla_dependencias WHERE plantilla_id = $1`, [plan.plantilla_id])
@@ -137,7 +146,13 @@ export async function recomputeScheduleForProyecto(
   for (const h of hitos) {
     const planeada = planeadas.get(h.codigo) ?? null
     const cap = reales.get(h.codigo)
-    const fechaReal = cap?.fecha_real ?? null
+    let fechaReal = cap?.fecha_real ?? null
+    let evidencia: unknown = cap?.evidencia ?? null
+    // Hito no instrumentado con fecha ya cargada (portal/manual): preservarla.
+    if (fechaReal === null && fuentePorCodigo.get(h.codigo) === 'manual_futuro') {
+      const ex = realExistente.get(h.codigo)
+      if (ex?.fecha_real) { fechaReal = ex.fecha_real; evidencia = ex.evidencia_ref ?? null }
+    }
 
     let estado: string
     let semaforo: string
@@ -192,7 +207,7 @@ export async function recomputeScheduleForProyecto(
          evidencia_ref     = EXCLUDED.evidencia_ref,
          updated_at        = NOW()`,
       [plan.id, h.codigo, planeada, fechaReal ? `${fechaReal} 12:00:00` : null, proyectada,
-       estado, semaforo, holgura, atribucion, cap?.evidencia ? JSON.stringify(cap.evidencia) : null])
+       estado, semaforo, holgura, atribucion, evidencia ? JSON.stringify(evidencia) : null])
   }
 
   await runner.query(

@@ -13,6 +13,7 @@ import dotenv from 'dotenv'
 import path from 'path'
 import fs from 'fs'
 import router from './routes'
+import { portalPublicRouter } from './modules/schedule'
 import authRouter from './routes/auth'
 import kioskRouter from './routes/kiosk'
 import webhooksRouter from './routes/webhooks'
@@ -103,6 +104,10 @@ app.use('/api/webhooks', webhooksRouter)
 // firmado por Microsoft Bot Connector — NO el JWT de usuario del sistema).
 // Tiene su propia validación de firma adentro. /status es público a propósito.
 app.use('/api/teams-bot', teamsBotRouter)
+
+// Portal de cliente (público, autorizado por token en la URL — sin JWT de usuario).
+// Debe ir ANTES del authenticate global. La validación del token está adentro.
+app.use('/api/portal', portalPublicRouter)
 
 // All other API routes require a valid JWT
 app.use('/api', authenticate, router)

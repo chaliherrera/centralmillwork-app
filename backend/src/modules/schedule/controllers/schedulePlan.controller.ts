@@ -10,6 +10,7 @@ import { z } from 'zod'
 import pool from '../../../db/pool'
 import { createError } from '../../../middleware/errorHandler'
 import { generarPlan, recomputeScheduleForProyecto } from '../domain/recompute'
+import { crearToken } from '../domain/portal'
 
 function parseProyectoId(req: Request): number {
   const id = parseInt(String(req.params.id), 10)
@@ -76,6 +77,38 @@ export async function generarPlanHandler(req: Request, res: Response, next: Next
   } finally {
     client.release()
   }
+}
+
+// ── POST /api/schedule/proyecto/:id/portal-token ─────────────────────────────
+// Genera un link de portal para un contacto del cliente. Devuelve el token.
+const tokenSchema = z.object({
+  contacto_nombre: z.string().trim().max(150).optional(),
+  contacto_email: z.string().trim().email().max(200).optional().or(z.literal('')),
+})
+export async function crearPortalTokenHandler(req: Request, res: Response, next: NextFunction) {
+  try {
+    const proyectoId = parseProyectoId(req)
+    const { contacto_nombre, contacto_email } = tokenSchema.parse(req.body ?? {})
+    const userId = (req as any).user?.id ?? null
+    const { token } = await crearToken(pool, proyectoId, contacto_nombre ?? null, contacto_email || null, userId)
+    res.status(201).json({ data: { token } })
+  } catch (err: any) {
+    if (err?.issues) return next(createError('datos inválidos', 400))
+    next(err)
+  }
+}
+
+// ── GET /api/schedule/proyecto/:id/portal-tokens ─────────────────────────────
+export async function listPortalTokensHandler(req: Request, res: Response, next: NextFunction) {
+  try {
+    const proyectoId = parseProyectoId(req)
+    const { rows } = await pool.query(
+      `SELECT id, token, contacto_nombre, contacto_email, activo,
+              to_char(created_at,'YYYY-MM-DD') AS created_at,
+              to_char(last_access_at,'YYYY-MM-DD"T"HH24:MI') AS last_access_at
+         FROM schedule_portal_tokens WHERE proyecto_id = $1 ORDER BY created_at DESC`, [proyectoId])
+    res.json({ data: rows })
+  } catch (err) { next(err) }
 }
 
 // ── POST /api/schedule/proyecto/:id/recalcular ───────────────────────────────

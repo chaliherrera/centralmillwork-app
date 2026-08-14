@@ -3,6 +3,7 @@
 // (recepciones, producción, OC) llaman dentro de su transacción para mantener
 // el schedule al día ante cada hecho real.
 export { default as scheduleModuleRouter } from './routes'
+export { default as portalPublicRouter } from './portalRoutes'
 export {
   recomputeScheduleForProyecto,
   recomputeScheduleSafe,
