@@ -1,28 +1,47 @@
 import { useEffect, useMemo, useState } from 'react'
 import toast from 'react-hot-toast'
 import clsx from 'clsx'
-import { CalendarClock, Lock, RefreshCw, Flag, ChevronRight } from 'lucide-react'
+import {
+  CalendarClock, Lock, RefreshCw, Flag, Check, AlertTriangle,
+  FileSignature, Ruler, Package, Hammer, ShieldCheck, Truck, Wrench, PartyPopper,
+} from 'lucide-react'
 import { scheduleService, type ScheduleData, type ScheduleHito, type Semaforo } from '@/services/schedule'
 
-// ─── Estilos de semáforo ──────────────────────────────────────────────────────
-const SEM: Record<Semaforo, { dot: string; text: string; label: string; bg: string }> = {
-  verde:    { dot: 'bg-emerald-500', text: 'text-emerald-700', label: 'En fecha',   bg: 'bg-emerald-50 border-emerald-200' },
-  amarillo: { dot: 'bg-amber-500',   text: 'text-amber-700',   label: 'Ajustado',   bg: 'bg-amber-50 border-amber-200' },
-  rojo:     { dot: 'bg-red-500',     text: 'text-red-700',     label: 'En riesgo',  bg: 'bg-red-50 border-red-200' },
-  gris:     { dot: 'bg-gray-300',    text: 'text-gray-500',    label: 'En espera',  bg: 'bg-gray-50 border-gray-200' },
+// ─── Paleta de semáforo, armonizada con la estética cálida de la app ──────────
+const SEM: Record<Semaforo, {
+  dot: string; text: string; soft: string; ring: string; label: string; accent: string
+}> = {
+  verde:    { dot: 'bg-emerald-600', text: 'text-emerald-800', soft: 'bg-emerald-50', ring: 'ring-emerald-100', label: 'En fecha',  accent: 'border-l-emerald-500' },
+  amarillo: { dot: 'bg-amber-500',   text: 'text-amber-800',   soft: 'bg-amber-50',   ring: 'ring-amber-100',   label: 'Ajustado',  accent: 'border-l-amber-500' },
+  rojo:     { dot: 'bg-rose-600',    text: 'text-rose-800',    soft: 'bg-rose-50',    ring: 'ring-rose-100',    label: 'En riesgo', accent: 'border-l-rose-500' },
+  gris:     { dot: 'bg-stone-300',   text: 'text-stone-500',   soft: 'bg-stone-50',   ring: 'ring-stone-100',   label: 'En espera', accent: 'border-l-stone-300' },
 }
 
-const FASE_LABEL: Record<string, string> = {
-  CONTRACT: 'Contrato', ENGINEERING: 'Ingeniería', MATERIALS: 'Materiales',
-  PRODUCTION: 'Producción', QC: 'Control de calidad', SHIPPING: 'Despacho',
-  INSTALL: 'Instalación', COMPLETED: 'Cierre',
-}
+const FASES: { key: string; label: string; corto: string; icon: typeof Package }[] = [
+  { key: 'CONTRACT',    label: 'Contrato',   corto: 'Contrato',  icon: FileSignature },
+  { key: 'ENGINEERING', label: 'Ingeniería', corto: 'Ingen.',    icon: Ruler },
+  { key: 'MATERIALS',   label: 'Materiales', corto: 'Materiales', icon: Package },
+  { key: 'PRODUCTION',  label: 'Producción', corto: 'Producc.',  icon: Hammer },
+  { key: 'QC',          label: 'Control de calidad', corto: 'QC', icon: ShieldCheck },
+  { key: 'SHIPPING',    label: 'Despacho',   corto: 'Despacho',  icon: Truck },
+  { key: 'INSTALL',     label: 'Instalación', corto: 'Instal.',  icon: Wrench },
+  { key: 'COMPLETED',   label: 'Cierre',     corto: 'Cierre',    icon: PartyPopper },
+]
+const FASE_META = Object.fromEntries(FASES.map((f) => [f.key, f]))
 
 function fmt(d: string | null): string {
   if (!d) return '—'
   const [y, m, day] = d.split('-')
   return `${day}/${m}/${y.slice(2)}`
 }
+function diasHasta(d: string): number {
+  const [y, m, day] = d.split('-').map(Number)
+  const t = new Date(); t.setHours(0, 0, 0, 0)
+  const target = new Date(y, m - 1, day)
+  return Math.round((target.getTime() - t.getTime()) / 86400000)
+}
+
+interface FaseGroup { key: string; hitos: ScheduleHito[]; total: number; cumplidos: number; semaforo: Semaforo }
 
 export default function ScheduleTab({ proyectoId }: { proyectoId: number }) {
   const [data, setData] = useState<ScheduleData | null>(null)
@@ -32,60 +51,63 @@ export default function ScheduleTab({ proyectoId }: { proyectoId: number }) {
 
   async function load() {
     setLoading(true)
-    try {
-      const res = await scheduleService.getPlan(proyectoId)
-      setData(res.data)
-    } catch { /* toast global */ } finally { setLoading(false) }
+    try { setData((await scheduleService.getPlan(proyectoId)).data) }
+    catch { /* toast global */ } finally { setLoading(false) }
   }
   useEffect(() => { load() }, [proyectoId])
 
   async function generar() {
     if (!fechaObjetivo) { toast.error('Elegí la fecha de entrega objetivo'); return }
     setBusy(true)
-    try {
-      await scheduleService.generar(proyectoId, fechaObjetivo)
-      toast.success('Schedule generado')
-      await load()
-    } catch { /* toast global */ } finally { setBusy(false) }
+    try { await scheduleService.generar(proyectoId, fechaObjetivo); toast.success('Schedule generado'); await load() }
+    catch { /* toast */ } finally { setBusy(false) }
   }
   async function recalcular() {
     setBusy(true)
-    try {
-      await scheduleService.recalcular(proyectoId)
-      toast.success('Schedule recalculado')
-      await load()
-    } catch { /* toast global */ } finally { setBusy(false) }
+    try { await scheduleService.recalcular(proyectoId); toast.success('Schedule recalculado'); await load() }
+    catch { /* toast */ } finally { setBusy(false) }
   }
 
-  // Agrupar hitos por fase (respetando el orden)
-  const fases = useMemo(() => {
-    const out: { fase: string; hitos: ScheduleHito[] }[] = []
+  const { fases, totalHitos, totalCumplidos } = useMemo(() => {
+    const rank: Record<Semaforo, number> = { gris: 0, verde: 1, amarillo: 2, rojo: 3 }
+    const out: FaseGroup[] = []
+    let tot = 0, cum = 0
     for (const h of data?.hitos ?? []) {
-      let g = out[out.length - 1]
-      if (!g || g.fase !== h.fase) { g = { fase: h.fase, hitos: [] }; out.push(g) }
-      g.hitos.push(h)
+      if (h.parent_codigo) continue // los sub-hitos no cuentan para el progreso de fase
+      let g = out.find((x) => x.key === h.fase)
+      if (!g) { g = { key: h.fase, hitos: [], total: 0, cumplidos: 0, semaforo: 'gris' }; out.push(g) }
+      g.hitos.push(h); g.total++; tot++
+      if (h.estado === 'cumplido') { g.cumplidos++; cum++ }
+      if (h.estado !== 'cumplido' && h.semaforo !== 'gris' && rank[h.semaforo] > rank[g.semaforo]) g.semaforo = h.semaforo
     }
-    return out
+    // sub-hitos: adjuntarlos a su fase igual para mostrarlos
+    for (const h of data?.hitos ?? []) {
+      if (!h.parent_codigo) continue
+      const g = out.find((x) => x.key === h.fase); if (g) g.hitos.push(h)
+    }
+    // reordenar hitos de cada fase por orden original
+    for (const g of out) g.hitos.sort((a, b) => a.orden - b.orden)
+    return { fases: out, totalHitos: tot, totalCumplidos: cum }
   }, [data])
 
-  if (loading) return <div className="py-10 text-center text-gray-400 text-sm">Cargando schedule…</div>
+  if (loading) return <div className="py-16 text-center text-stone-400 text-sm">Cargando schedule…</div>
 
-  // ── Estado vacío: generar el plan ──────────────────────────────────────────
+  // ── Estado vacío ───────────────────────────────────────────────────────────
   if (!data?.plan) {
     return (
-      <div className="max-w-lg mx-auto py-10 text-center">
-        <CalendarClock className="mx-auto text-gray-300" size={40} />
-        <h3 className="mt-3 text-lg font-semibold text-gray-800">Este proyecto todavía no tiene schedule</h3>
-        <p className="mt-1 text-sm text-gray-500">
+      <div className="max-w-md mx-auto py-14 text-center">
+        <div className="w-16 h-16 rounded-2xl bg-forest-50 flex items-center justify-center mx-auto">
+          <CalendarClock className="text-forest-500" size={30} />
+        </div>
+        <h3 className="mt-4 text-lg font-semibold text-stone-800">Este proyecto todavía no tiene schedule</h3>
+        <p className="mt-1.5 text-sm text-stone-500 leading-relaxed">
           Elegí la fecha de entrega comprometida con el cliente. El sistema calcula hacia atrás
-          la fecha límite de cada hito.
+          la fecha límite de cada hito y lo mantiene vivo con lo que pasa en la operación.
         </p>
-        <div className="mt-5 flex items-center justify-center gap-2">
-          <input type="date" value={fechaObjetivo} onChange={(e) => setFechaObjetivo(e.target.value)}
-                 className="input w-44" />
-          <button onClick={generar} disabled={busy}
-                  className="btn-primary inline-flex items-center gap-2">
-            <CalendarClock size={15} /> Generar schedule
+        <div className="mt-6 flex items-center justify-center gap-2">
+          <input type="date" value={fechaObjetivo} onChange={(e) => setFechaObjetivo(e.target.value)} className="input w-44" />
+          <button onClick={generar} disabled={busy} className="btn-primary">
+            <CalendarClock size={16} /> Generar schedule
           </button>
         </div>
       </div>
@@ -94,88 +116,167 @@ export default function ScheduleTab({ proyectoId }: { proyectoId: number }) {
 
   const plan = data.plan
   const sem = SEM[plan.semaforo] ?? SEM.gris
+  const pct = totalHitos ? Math.round((totalCumplidos / totalHitos) * 100) : 0
+  const dias = diasHasta(plan.fecha_objetivo)
 
   return (
-    <div className="space-y-4">
-      {/* ── Cabecera del plan ── */}
-      <div className={clsx('rounded-xl border p-4 flex flex-wrap items-center gap-x-8 gap-y-3', sem.bg)}>
-        <div>
-          <div className="text-xs uppercase tracking-wide text-gray-500">Entrega objetivo</div>
-          <div className="text-2xl font-bold text-gray-900">{fmt(plan.fecha_objetivo)}</div>
-        </div>
-        <div>
-          <div className="text-xs uppercase tracking-wide text-gray-500">Estado del proyecto</div>
-          <div className={clsx('inline-flex items-center gap-2 text-lg font-semibold', sem.text)}>
-            <span className={clsx('w-3 h-3 rounded-full', sem.dot)} /> {sem.label}
-          </div>
-        </div>
-        {plan.holgura_dias !== null && (
-          <div>
-            <div className="text-xs uppercase tracking-wide text-gray-500">Holgura mínima</div>
-            <div className={clsx('text-lg font-semibold', plan.holgura_dias < 0 ? 'text-red-700' : 'text-gray-800')}>
-              {plan.holgura_dias} días hábiles
+    <div className="space-y-5">
+      {/* ── HERO ── */}
+      <div className="rounded-2xl border border-card-border bg-white overflow-hidden"
+           style={{ boxShadow: '0 1px 4px rgba(0,0,0,0.06), 0 8px 24px rgba(0,0,0,0.04)' }}>
+        <div className="flex flex-wrap items-stretch">
+          {/* Entrega */}
+          <div className="flex-1 min-w-[220px] p-5 border-r border-card-border">
+            <div className="text-[11px] uppercase tracking-wider text-stone-400 font-medium">Entrega objetivo</div>
+            <div className="mt-1 text-3xl font-bold text-stone-900 tabular-nums">{fmt(plan.fecha_objetivo)}</div>
+            <div className={clsx('mt-1 text-sm font-medium', dias < 0 ? 'text-rose-600' : 'text-stone-500')}>
+              {dias < 0 ? `${Math.abs(dias)} días atrasado` : dias === 0 ? 'Es hoy' : `Faltan ${dias} días`}
             </div>
           </div>
-        )}
-        <button onClick={recalcular} disabled={busy}
-                className="ml-auto btn-secondary inline-flex items-center gap-2 text-sm">
-          <RefreshCw size={14} className={busy ? 'animate-spin' : ''} /> Recalcular
-        </button>
+          {/* Estado */}
+          <div className={clsx('flex-1 min-w-[220px] p-5 border-r border-card-border', sem.soft)}>
+            <div className="text-[11px] uppercase tracking-wider text-stone-400 font-medium">Estado del proyecto</div>
+            <div className={clsx('mt-1.5 inline-flex items-center gap-2 text-xl font-bold', sem.text)}>
+              <span className={clsx('w-3.5 h-3.5 rounded-full ring-4', sem.dot, sem.ring)} />
+              {sem.label}
+            </div>
+            {plan.holgura_dias !== null && (
+              <div className={clsx('mt-1.5 text-sm', plan.holgura_dias < 0 ? 'text-rose-600 font-medium' : 'text-stone-500')}>
+                {plan.holgura_dias < 0
+                  ? <span className="inline-flex items-center gap-1"><AlertTriangle size={13} /> {Math.abs(plan.holgura_dias)} días comidos del margen</span>
+                  : `Holgura mínima: ${plan.holgura_dias} días hábiles`}
+              </div>
+            )}
+          </div>
+          {/* Progreso */}
+          <div className="flex-1 min-w-[220px] p-5 flex flex-col justify-center">
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] uppercase tracking-wider text-stone-400 font-medium">Avance</span>
+              <span className="text-sm font-semibold text-stone-700 tabular-nums">{totalCumplidos}/{totalHitos} hitos · {pct}%</span>
+            </div>
+            <div className="mt-2 h-2.5 rounded-full bg-stone-100 overflow-hidden">
+              <div className="h-full rounded-full bg-forest-500 transition-all" style={{ width: `${pct}%` }} />
+            </div>
+            <button onClick={recalcular} disabled={busy}
+                    className="mt-3 self-start inline-flex items-center gap-1.5 text-xs font-medium text-stone-500 hover:text-stone-800 transition-colors">
+              <RefreshCw size={13} className={busy ? 'animate-spin' : ''} /> Recalcular
+            </button>
+          </div>
+        </div>
       </div>
 
-      <p className="text-xs text-gray-400">
-        La fecha de entrega no se mueve sola: si un hito se atrasa, el proyecto se pone en rojo.
-        Los hitos en gris esperan a que se cumplan los anteriores.
+      {/* ── STEPPER de fases ── */}
+      <div className="flex gap-1.5 overflow-x-auto pb-1">
+        {fases.map((g) => {
+          const meta = FASE_META[g.key]; const s = SEM[g.semaforo] ?? SEM.gris
+          const Icon = meta?.icon ?? Package
+          const done = g.total > 0 && g.cumplidos === g.total
+          return (
+            <div key={g.key}
+                 className={clsx('flex-1 min-w-[92px] rounded-xl border px-2.5 py-2 bg-white',
+                                 done ? 'border-emerald-200' : 'border-card-border')}>
+              <div className="flex items-center gap-1.5">
+                <span className={clsx('w-2 h-2 rounded-full', done ? 'bg-emerald-500' : s.dot)} />
+                <Icon size={13} className="text-stone-400" />
+              </div>
+              <div className="mt-1 text-[11px] font-semibold text-stone-700 leading-tight">{meta?.corto ?? g.key}</div>
+              <div className="text-[10px] text-stone-400 tabular-nums">{g.cumplidos}/{g.total}</div>
+            </div>
+          )
+        })}
+      </div>
+
+      <p className="text-xs text-stone-400 flex items-center gap-1.5">
+        <Flag size={12} className="text-forest-500" />
+        La fecha de entrega no se mueve sola. Los hitos en verde ya ocurrieron; los grises esperan a los anteriores.
       </p>
 
-      {/* ── Fases e hitos ── */}
-      <div className="space-y-5">
-        {fases.map(({ fase, hitos }) => (
-          <div key={fase}>
-            <div className="flex items-center gap-2 mb-1.5">
-              <ChevronRight size={14} className="text-gray-400" />
-              <h4 className="text-sm font-bold text-gray-700 uppercase tracking-wide">{FASE_LABEL[fase] ?? fase}</h4>
-            </div>
-            <div className="rounded-lg border border-gray-200 divide-y divide-gray-100 overflow-hidden">
-              {hitos.map((h) => {
-                const s = SEM[h.semaforo] ?? SEM.gris
-                const isSub = !!h.parent_codigo
-                return (
-                  <div key={h.codigo}
-                       className={clsx('flex items-center gap-3 px-3 py-2 text-sm', isSub && 'pl-8 bg-gray-50/50')}>
-                    <span className={clsx('w-2.5 h-2.5 rounded-full shrink-0', s.dot)} />
-                    <span className="font-mono text-xs text-gray-400 w-12 shrink-0">{h.codigo}</span>
-                    <span className="flex-1 min-w-0 truncate text-gray-800">
-                      {h.nombre}
-                      {h.es_gate && <Lock size={11} className="inline ml-1.5 -mt-0.5 text-gray-400" />}
-                      {h.es_ancla && <Flag size={11} className="inline ml-1.5 -mt-0.5 text-forest-600" />}
-                    </span>
-                    <span className="text-xs text-gray-500 w-20 text-right shrink-0" title="Fecha límite">
-                      {fmt(h.fecha_planeada)}
-                    </span>
-                    <span className={clsx('text-xs w-20 text-right shrink-0',
-                                          h.fecha_real ? 'text-emerald-700 font-medium' : 'text-gray-300')}
-                          title="Fecha real">
-                      {h.fecha_real ? fmt(h.fecha_real) : '—'}
-                    </span>
-                    <span className={clsx('text-[11px] w-16 text-right shrink-0', s.text)}>
-                      {h.estado === 'cumplido' ? '✓' : h.holgura_dias !== null ? `${h.holgura_dias}d` : ''}
-                    </span>
+      {/* ── FASES ── */}
+      <div className="space-y-3.5">
+        {fases.map((g) => {
+          const meta = FASE_META[g.key]; const s = SEM[g.semaforo] ?? SEM.gris
+          const Icon = meta?.icon ?? Package
+          const done = g.total > 0 && g.cumplidos === g.total
+          const pctF = g.total ? Math.round((g.cumplidos / g.total) * 100) : 0
+          return (
+            <div key={g.key} className={clsx('rounded-xl border border-card-border bg-white border-l-4', done ? 'border-l-emerald-500' : s.accent)}
+                 style={{ boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}>
+              {/* header de fase */}
+              <div className="flex items-center gap-3 px-4 py-3 border-b border-stone-100">
+                <div className={clsx('w-8 h-8 rounded-lg flex items-center justify-center', done ? 'bg-emerald-50' : 'bg-stone-50')}>
+                  <Icon size={16} className={done ? 'text-emerald-600' : 'text-stone-500'} />
+                </div>
+                <h4 className="font-semibold text-stone-800">{meta?.label ?? g.key}</h4>
+                <div className="ml-auto flex items-center gap-2.5">
+                  <div className="w-24 h-1.5 rounded-full bg-stone-100 overflow-hidden hidden sm:block">
+                    <div className={clsx('h-full rounded-full', done ? 'bg-emerald-500' : 'bg-forest-400')} style={{ width: `${pctF}%` }} />
                   </div>
-                )
-              })}
+                  <span className="text-xs font-medium text-stone-400 tabular-nums">{g.cumplidos}/{g.total}</span>
+                </div>
+              </div>
+              {/* timeline de hitos */}
+              <ol className="relative ml-6 my-1 border-l border-stone-200">
+                {g.hitos.map((h) => {
+                  const hs = SEM[h.semaforo] ?? SEM.gris
+                  const isSub = !!h.parent_codigo
+                  const cumplido = h.estado === 'cumplido'
+                  return (
+                    <li key={h.codigo} className="relative py-2 pl-4 pr-4">
+                      <span className={clsx('absolute -left-[7px] top-3.5 rounded-full ring-2 ring-white',
+                                            isSub ? 'w-2 h-2' : 'w-3 h-3', hs.dot)} />
+                      <div className="flex items-center gap-2">
+                        <span className={clsx('font-mono text-[10px] shrink-0 w-11',
+                                              cumplido ? 'text-emerald-600' : 'text-stone-300')}>{h.codigo}</span>
+                        <span className={clsx('flex-1 min-w-0 truncate', isSub ? 'text-[13px] text-stone-500' : 'text-sm text-stone-800')}>
+                          {h.nombre}
+                          {h.es_gate && (
+                            <span className="inline-flex items-center gap-0.5 ml-1.5 align-middle text-[10px] font-medium text-stone-400 bg-stone-100 rounded px-1 py-px">
+                              <Lock size={9} /> gate
+                            </span>
+                          )}
+                          {h.es_ancla && (
+                            <span className="inline-flex items-center gap-0.5 ml-1.5 align-middle text-[10px] font-semibold text-forest-600 bg-forest-50 rounded px-1 py-px">
+                              <Flag size={9} /> entrega
+                            </span>
+                          )}
+                        </span>
+
+                        {/* fecha real / límite */}
+                        {cumplido ? (
+                          <span className="inline-flex items-center gap-1 text-[11px] font-medium text-emerald-700 bg-emerald-50 rounded-full px-2 py-0.5 shrink-0">
+                            <Check size={11} /> {fmt(h.fecha_real)}
+                          </span>
+                        ) : (
+                          <>
+                            <span className="text-[11px] text-stone-400 shrink-0 tabular-nums w-16 text-right" title="Fecha límite">
+                              {fmt(h.fecha_planeada)}
+                            </span>
+                            {h.semaforo !== 'gris' && h.holgura_dias !== null && (
+                              <span className={clsx('text-[10px] font-medium rounded-full px-1.5 py-0.5 shrink-0 tabular-nums', hs.soft, hs.text)}>
+                                {h.holgura_dias < 0 ? `${h.holgura_dias}d` : `+${h.holgura_dias}d`}
+                              </span>
+                            )}
+                          </>
+                        )}
+                      </div>
+                    </li>
+                  )
+                })}
+              </ol>
             </div>
-          </div>
-        ))}
+          )
+        })}
       </div>
 
-      <div className="flex items-center gap-4 text-[11px] text-gray-400 pt-1">
-        <span className="inline-flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-emerald-500" /> En fecha</span>
-        <span className="inline-flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-amber-500" /> Ajustado</span>
-        <span className="inline-flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-red-500" /> En riesgo</span>
-        <span className="inline-flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-gray-300" /> En espera</span>
-        <span className="inline-flex items-center gap-1"><Lock size={11} /> Gate</span>
-        <span className="inline-flex items-center gap-1"><Flag size={11} className="text-forest-600" /> Entrega</span>
+      {/* leyenda */}
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-stone-400 pt-1">
+        <span className="inline-flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-emerald-600" /> En fecha</span>
+        <span className="inline-flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-amber-500" /> Ajustado</span>
+        <span className="inline-flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-rose-600" /> En riesgo</span>
+        <span className="inline-flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-stone-300" /> En espera</span>
+        <span className="inline-flex items-center gap-1"><Lock size={11} /> Punto de bloqueo</span>
+        <span className="inline-flex items-center gap-1"><Flag size={11} className="text-forest-600" /> Entrega final</span>
+        <span className="ml-auto text-stone-300">columna derecha: fecha real (verde) o fecha límite + holgura</span>
       </div>
     </div>
   )
