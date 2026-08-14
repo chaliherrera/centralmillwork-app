@@ -17,6 +17,7 @@ import Usuarios from '@/pages/Usuarios'
 import Produccion from '@/pages/produccion/Produccion'
 import Muestras from '@/pages/Muestras'
 import KioskApp from '@/pages/kiosk/KioskApp'
+import ClientPortal from '@/pages/portal/ClientPortal'
 import { Loader2 } from 'lucide-react'
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
@@ -63,6 +64,10 @@ export default function App() {
       {/* Kiosko de producción — sub-app autónoma con su propio AuthContext.
           NO pasa por ProtectedRoute (auth del sistema) ni renderiza el sidebar. */}
       <Route path="/kiosk/*" element={<KioskApp />} />
+
+      {/* Portal de cliente — público, autorizado por token en la URL.
+          Sin ProtectedRoute ni sidebar. */}
+      <Route path="/portal/:token" element={<ClientPortal />} />
 
       <Route element={<ProtectedRoute><MainLayout /></ProtectedRoute>}>
         <Route index element={<Dashboard />} />

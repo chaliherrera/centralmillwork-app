@@ -3,7 +3,7 @@ import toast from 'react-hot-toast'
 import clsx from 'clsx'
 import {
   CalendarClock, Lock, RefreshCw, Flag, Check,
-  Target, User, Handshake, Activity, ChevronRight,
+  Target, User, Handshake, Activity, ChevronRight, Share2, Copy, X,
 } from 'lucide-react'
 import { scheduleService, type ScheduleData, type ScheduleHito, type Semaforo } from '@/services/schedule'
 
@@ -70,6 +70,7 @@ export default function ScheduleTab({ proyectoId }: { proyectoId: number }) {
   const [busy, setBusy] = useState(false)
   const [fechaObjetivo, setFechaObjetivo] = useState('')
   const [selected, setSelected] = useState<string | null>(null)
+  const [portal, setPortal] = useState<{ open: boolean; nombre: string; link: string | null }>({ open: false, nombre: '', link: null })
 
   async function load() {
     setLoading(true)
@@ -88,6 +89,13 @@ export default function ScheduleTab({ proyectoId }: { proyectoId: number }) {
     setBusy(true)
     try { await scheduleService.recalcular(proyectoId); toast.success('Schedule recalculado'); await load() }
     catch { /* toast */ } finally { setBusy(false) }
+  }
+  async function generarLink() {
+    setBusy(true)
+    try {
+      const r = await scheduleService.crearPortalToken(proyectoId, portal.nombre.trim() || undefined)
+      setPortal((p) => ({ ...p, link: `${window.location.origin}/portal/${r.data.token}` }))
+    } catch { /* toast */ } finally { setBusy(false) }
   }
 
   const { fases, totalHitos, totalCumplidos } = useMemo(() => {
@@ -193,11 +201,54 @@ export default function ScheduleTab({ proyectoId }: { proyectoId: number }) {
             {heroSem === 'rojo' ? 'En riesgo' : heroSem === 'amarillo' ? 'Ajustado' : heroSem === 'verde' ? 'En fecha' : 'En espera'}
           </div>
         </div>
-        <button onClick={recalcular} disabled={busy}
-                className="ml-auto inline-flex items-center gap-1.5 text-xs font-medium text-stone-500 hover:text-stone-800">
-          <RefreshCw size={14} className={busy ? 'animate-spin' : ''} /> Recalcular
-        </button>
+        <div className="ml-auto flex items-center gap-3">
+          <button onClick={() => setPortal({ open: true, nombre: '', link: null })}
+                  className="inline-flex items-center gap-1.5 text-xs font-medium text-forest-600 hover:text-forest-800">
+            <Share2 size={14} /> Compartir con cliente
+          </button>
+          <button onClick={recalcular} disabled={busy}
+                  className="inline-flex items-center gap-1.5 text-xs font-medium text-stone-500 hover:text-stone-800">
+            <RefreshCw size={14} className={busy ? 'animate-spin' : ''} /> Recalcular
+          </button>
+        </div>
       </div>
+
+      {/* modal compartir portal */}
+      {portal.open && (
+        <div className="fixed inset-0 bg-black/30 flex items-center justify-center p-4 z-50" onClick={() => setPortal({ open: false, nombre: '', link: null })}>
+          <div className="bg-white rounded-2xl max-w-md w-full p-5 shadow-xl" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center gap-2">
+              <Share2 size={18} className="text-forest-600" />
+              <h3 className="font-semibold text-stone-800">Compartir seguimiento con el cliente</h3>
+              <button onClick={() => setPortal({ open: false, nombre: '', link: null })} className="ml-auto text-stone-400 hover:text-stone-700"><X size={18} /></button>
+            </div>
+            {!portal.link ? (
+              <>
+                <p className="text-sm text-stone-500 mt-2">Se genera un link privado (sin cuenta) donde el cliente ve el estado de su proyecto y aprueba lo que depende de él. No ve costos ni información interna.</p>
+                <label className="block mt-3 text-xs font-medium text-stone-500">Nombre del contacto (opcional)</label>
+                <input value={portal.nombre} onChange={(e) => setPortal((p) => ({ ...p, nombre: e.target.value }))}
+                       placeholder="Ej: Ana, Rivera Hotels" className="input w-full mt-1" />
+                <div className="mt-4 flex justify-end gap-2">
+                  <button onClick={() => setPortal({ open: false, nombre: '', link: null })} className="px-3 py-2 text-sm text-stone-500">Cancelar</button>
+                  <button onClick={generarLink} disabled={busy} className="btn-primary"><Share2 size={15} /> Generar link</button>
+                </div>
+              </>
+            ) : (
+              <>
+                <p className="text-sm text-stone-500 mt-2">Link listo. Copialo y envialo al cliente:</p>
+                <div className="mt-3 flex gap-2">
+                  <input readOnly value={portal.link} className="input w-full text-xs" onFocus={(e) => e.target.select()} />
+                  <button onClick={() => { navigator.clipboard?.writeText(portal.link!); toast.success('Link copiado') }}
+                          className="btn-primary shrink-0"><Copy size={15} /> Copiar</button>
+                </div>
+                <div className="mt-4 flex justify-end">
+                  <button onClick={() => setPortal({ open: false, nombre: '', link: null })} className="px-3 py-2 text-sm font-medium text-stone-600">Listo</button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* ── JOURNEY MAP ── */}
       <div className="overflow-x-auto rounded-2xl border border-card-border bg-white"

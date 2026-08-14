@@ -51,4 +51,9 @@ export const scheduleService = {
     api
       .post<ApiResponse<{ semaforo: string; holguraDias: number | null }>>(`/schedule/proyecto/${proyectoId}/recalcular`)
       .then((r) => r.data),
+
+  crearPortalToken: (proyectoId: number, contacto_nombre?: string) =>
+    api
+      .post<ApiResponse<{ token: string }>>(`/schedule/proyecto/${proyectoId}/portal-token`, { contacto_nombre })
+      .then((r) => r.data),
 }
