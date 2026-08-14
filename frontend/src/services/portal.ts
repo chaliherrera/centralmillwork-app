@@ -3,15 +3,14 @@ import type { ApiResponse } from '@/types'
 
 export type Decision = 'aprobado' | 'aprobado_con_comentarios' | 'rechazado'
 
-export interface PortalHito {
-  codigo: string; nombre: string; estado: string; semaforo: string
-  fecha_real: string | null; es_ancla: boolean
+export interface PortalMomento {
+  codigo: string; label: string; tipo: 'accion' | 'estado'; estado: 'done' | 'now' | 'future'
 }
 export interface PortalVista {
   proyecto: { nombre: string; cliente: string; fecha_objetivo: string | null; semaforo: string }
   contacto: string | null
+  momentos: PortalMomento[]
   pendientes: Array<{ codigo: string; titulo: string; fecha_planeada: string | null }>
-  fases: Array<{ fase: string; hitos: PortalHito[] }>
 }
 
 export const portalService = {

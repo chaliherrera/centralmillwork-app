@@ -136,8 +136,17 @@ export async function recomputeScheduleForProyecto(
   const pred = new Map<string, string[]>()
   for (const h of hitos) pred.set(h.codigo, [])
   for (const d of deps) pred.get(d.hito)?.push(d.dependeDe)
+  // "Cumplidos" = hitos con fecha real REAL (capturada O preservada manual/portal).
+  // Debe incluir las manuales, si no un hito aprobado por el portal no destraba
+  // a su sucesor.
   const cumplidos = new Set<string>()
-  for (const [c, cap] of reales) if (cap.fecha_real) cumplidos.add(c)
+  for (const h of hitos) {
+    let fr = reales.get(h.codigo)?.fecha_real ?? null
+    if (fr === null && fuentePorCodigo.get(h.codigo) === 'manual_futuro') {
+      fr = realExistente.get(h.codigo)?.fecha_real ?? null
+    }
+    if (fr) cumplidos.add(h.codigo)
+  }
 
   let peor = 'gris'
   let minHolgura: number | null = null

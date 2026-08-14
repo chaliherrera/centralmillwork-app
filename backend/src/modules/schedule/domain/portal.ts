@@ -14,13 +14,24 @@ import { recomputeScheduleForProyecto } from './recompute'
 
 type QueryRunner = PoolClient | typeof pool
 
-// Hitos que el cliente puede aprobar desde el portal, con etiqueta amigable.
+// Hitos que el cliente puede APROBAR desde el portal (estaciones de acción).
 export const APROBABLES: Record<string, string> = {
-  'E-01b': 'Compra anticipada de materiales',
   'E-05': 'Muestras de terminación',
   'E-07': 'Planos de taller (shop drawings)',
   'I-07': 'Entrega final (sign-off)',
 }
+
+// El "recorrido del cliente": los momentos donde el cliente participa, en orden.
+// tipo 'accion'  → el cliente aprueba desde el portal (botón).
+// tipo 'estado'  → lo registra su dueño (DocuSign/Contabilidad); el cliente solo lo ve.
+export const CLIENT_MOMENTS: Array<{ codigo: string; label: string; tipo: 'accion' | 'estado' }> = [
+  { codigo: 'C-03', label: 'Firma de contrato', tipo: 'estado' },
+  { codigo: 'C-04', label: 'Down Payment',       tipo: 'estado' },
+  { codigo: 'E-05', label: 'Muestras',           tipo: 'accion' },
+  { codigo: 'E-07', label: 'Planos de taller',   tipo: 'accion' },
+  { codigo: 'I-07', label: 'Entrega (sign-off)', tipo: 'accion' },
+  { codigo: 'X-03', label: 'Pago final',         tipo: 'estado' },
+]
 
 export type Decision = 'aprobado' | 'aprobado_con_comentarios' | 'rechazado'
 
@@ -58,16 +69,16 @@ export async function resolverToken(runner: QueryRunner, token: string): Promise
 export interface VistaPublica {
   proyecto: { nombre: string; cliente: string; fecha_objetivo: string | null; semaforo: string }
   contacto: string | null
+  // El recorrido del cliente: sus momentos, con estado en el camino.
+  momentos: Array<{ codigo: string; label: string; tipo: 'accion' | 'estado'; estado: 'done' | 'now' | 'future' }>
+  // Solo las aprobaciones que YA corresponden (predecesores cumplidos, sin resolver).
   pendientes: Array<{ codigo: string; titulo: string; fecha_planeada: string | null }>
-  fases: Array<{
-    fase: string
-    hitos: Array<{ codigo: string; nombre: string; estado: string; semaforo: string; fecha_real: string | null; es_ancla: boolean }>
-  }>
 }
 
 /**
- * Vista de solo-lectura del proyecto para el cliente + acciones pendientes.
- * Curada: sin costos, sin vendors, sin holgura ni atribución internas.
+ * Vista de solo-lectura para el cliente: su recorrido (momentos) + las
+ * aprobaciones que le tocan ahora. Curada: sin costos, sin vendors, sin el
+ * recorrido interno de los 58 hitos.
  */
 export async function getVistaPublica(runner: QueryRunner, token: string): Promise<VistaPublica | null> {
   const info = await resolverToken(runner, token)
@@ -81,41 +92,40 @@ export async function getVistaPublica(runner: QueryRunner, token: string): Promi
       WHERE p.id = $1 LIMIT 1`, [info.proyectoId])
   if (!pr[0]) return null
 
-  const { rows: hitos } = await runner.query<{
-    codigo: string; fase: string; nombre: string; estado: string; semaforo: string
-    fecha_real: string | null; es_ancla: boolean; orden: number
-  }>(
-    `SELECT sh.codigo, ph.fase, ph.nombre, sh.estado, sh.semaforo, ph.es_ancla, ph.orden,
-            to_char(sh.fecha_real,'YYYY-MM-DD') AS fecha_real
-       FROM schedule_hitos sh
-       JOIN schedule_planes sp ON sp.id = sh.plan_id
-       JOIN schedule_plantilla_hitos ph ON ph.plantilla_id = sp.plantilla_id AND ph.codigo = sh.codigo
-      WHERE sp.proyecto_id = $1 AND sp.scope = 'proyecto' AND ph.parent_codigo IS NULL
-      ORDER BY ph.orden`, [info.proyectoId])
-
-  const fases: VistaPublica['fases'] = []
-  for (const h of hitos) {
-    let g = fases.find((x) => x.fase === h.fase)
-    if (!g) { g = { fase: h.fase, hitos: [] }; fases.push(g) }
-    g.hitos.push({ codigo: h.codigo, nombre: h.nombre, estado: h.estado, semaforo: h.semaforo, fecha_real: h.fecha_real, es_ancla: h.es_ancla })
-  }
-
-  // Pendientes: hitos aprobables que están activos (predecesor cumplido) y sin fecha real.
-  const { rows: pend } = await runner.query<{ codigo: string; fp: string | null; tiene_real: boolean }>(
-    `SELECT sh.codigo, to_char(sh.fecha_planeada,'YYYY-MM-DD') AS fp, (sh.fecha_real IS NOT NULL) AS tiene_real
+  // Estado de los hitos que son "momentos del cliente"
+  const codigos = CLIENT_MOMENTS.map((m) => m.codigo)
+  const { rows } = await runner.query<{ codigo: string; estado: string; fp: string | null; tiene_real: boolean }>(
+    `SELECT sh.codigo, sh.estado, to_char(sh.fecha_planeada,'YYYY-MM-DD') AS fp,
+            (sh.fecha_real IS NOT NULL) AS tiene_real
        FROM schedule_hitos sh
        JOIN schedule_planes sp ON sp.id = sh.plan_id
       WHERE sp.proyecto_id = $1 AND sp.scope = 'proyecto' AND sh.codigo = ANY($2)`,
-    [info.proyectoId, Object.keys(APROBABLES)])
-  const pendientes = pend
-    .filter((p) => !p.tiene_real)
-    .map((p) => ({ codigo: p.codigo, titulo: APROBABLES[p.codigo], fecha_planeada: p.fp }))
+    [info.proyectoId, codigos])
+  const st = new Map(rows.map((r) => [r.codigo, r]))
+
+  // Recorrido: el primer momento no cumplido es "now"; los siguientes "future".
+  let yaHuboNow = false
+  const momentos = CLIENT_MOMENTS.map((m) => {
+    const h = st.get(m.codigo)
+    let estado: 'done' | 'now' | 'future'
+    if (h?.tiene_real) estado = 'done'
+    else if (!yaHuboNow) { estado = 'now'; yaHuboNow = true }
+    else estado = 'future'
+    return { codigo: m.codigo, label: m.label, tipo: m.tipo, estado }
+  })
+
+  // Pendientes: aprobables ACTIVOS (no bloqueados por predecesores, sin resolver).
+  const pendientes = CLIENT_MOMENTS
+    .filter((m) => m.tipo === 'accion' && APROBABLES[m.codigo])
+    .map((m) => ({ m, h: st.get(m.codigo) }))
+    .filter(({ h }) => h && !h.tiene_real && h.estado !== 'no_aplica')
+    .map(({ m, h }) => ({ codigo: m.codigo, titulo: APROBABLES[m.codigo], fecha_planeada: h!.fp }))
 
   return {
     proyecto: { nombre: pr[0].nombre, cliente: pr[0].cliente, fecha_objetivo: pr[0].fo, semaforo: pr[0].semaforo },
     contacto: info.contactoNombre,
+    momentos,
     pendientes,
-    fases,
   }
 }
 
