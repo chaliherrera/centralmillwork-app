@@ -4,6 +4,7 @@ import clsx from 'clsx'
 import {
   CalendarClock, Lock, RefreshCw, Flag, Check,
   Target, User, Handshake, Activity, ChevronRight, Share2, Copy, X,
+  ClipboardCheck, AlertTriangle, Zap,
 } from 'lucide-react'
 import { scheduleService, type ScheduleData, type ScheduleHito, type Semaforo } from '@/services/schedule'
 
@@ -40,6 +41,16 @@ const ST_LABEL: Record<Estado, string> = {
 const ST_HEALTH: Record<Estado, number> = { done: 0.9, curso: 0.8, pend: 0.55, ajustado: 0.4, riesgo: 0.18 }
 const SEM_DOT: Record<Semaforo, string> = { verde: 'bg-emerald-600', amarillo: 'bg-amber-500', rojo: 'bg-rose-600', gris: 'bg-stone-300' }
 
+// Hitos que aprueba el cliente por el portal (no se registran a mano acá).
+const CLIENT_APROBABLES = ['E-05', 'E-07', 'I-07']
+const ATRIB_LABEL: Record<string, string> = {
+  estimating: 'Estimación', engineering: 'Ingeniería', procurement: 'Compras', production: 'Producción',
+  logistics: 'Logística', field: 'Field', finance: 'Finanzas', pm: 'PM', cliente: 'Cliente', gc: 'GC', vendor: 'Vendor',
+}
+const activoEstado = (e: string) => e === 'pendiente' || e === 'en_riesgo' || e === 'vencido'
+const esRegistrable = (h: ScheduleHito) => h.fuente_dato === 'manual_futuro' && !CLIENT_APROBABLES.includes(h.codigo)
+const esCliente = (h: ScheduleHito) => CLIENT_APROBABLES.includes(h.codigo)
+
 function fmt(d: string | null): string {
   if (!d) return '—'
   const [y, m, day] = d.split('-'); return `${day}/${m}/${y.slice(2)}`
@@ -71,6 +82,9 @@ export default function ScheduleTab({ proyectoId }: { proyectoId: number }) {
   const [fechaObjetivo, setFechaObjetivo] = useState('')
   const [selected, setSelected] = useState<string | null>(null)
   const [portal, setPortal] = useState<{ open: boolean; nombre: string; link: string | null }>({ open: false, nombre: '', link: null })
+  const [registro, setRegistro] = useState<{ codigo: string; nombre: string } | null>(null)
+  const [regFecha, setRegFecha] = useState('')
+  const [regNota, setRegNota] = useState('')
 
   async function load() {
     setLoading(true)
@@ -95,6 +109,18 @@ export default function ScheduleTab({ proyectoId }: { proyectoId: number }) {
     try {
       const r = await scheduleService.crearPortalToken(proyectoId, portal.nombre.trim() || undefined)
       setPortal((p) => ({ ...p, link: `${window.location.origin}/portal/${r.data.token}` }))
+    } catch { /* toast */ } finally { setBusy(false) }
+  }
+  function abrirRegistro(h: ScheduleHito) {
+    setRegistro({ codigo: h.codigo, nombre: h.nombre })
+    setRegFecha(new Date().toISOString().slice(0, 10)); setRegNota('')
+  }
+  async function confirmarRegistro() {
+    if (!registro || !regFecha) { toast.error('Elegí la fecha'); return }
+    setBusy(true)
+    try {
+      await scheduleService.registrarHito(proyectoId, registro.codigo, regFecha, regNota || undefined)
+      toast.success('Hito registrado'); setRegistro(null); await load()
     } catch { /* toast */ } finally { setBusy(false) }
   }
 
@@ -124,6 +150,15 @@ export default function ScheduleTab({ proyectoId }: { proyectoId: number }) {
       return { key: f.key, total: principales.length, cumplidos: c, worst, estado, keyHitos, clientTPs, hitos: all }
     })
     return { fases: out, byCodigo: byC, totalHitos: tot, totalCumplidos: cum }
+  }, [data])
+
+  // Frontera activa: qué le toca a cada uno ahora (predecesores cumplidos, sin completar)
+  const frontier = useMemo(() => {
+    const activos = (data?.hitos ?? []).filter((h) => !h.parent_codigo && activoEstado(h.estado))
+    return {
+      accionables: activos.filter(esRegistrable).sort((a, b) => a.orden - b.orden),
+      cliente: activos.filter(esCliente).sort((a, b) => a.orden - b.orden),
+    }
   }, [data])
 
   // fase seleccionada por defecto: la que está "en curso", o la primera no completada
@@ -246,6 +281,61 @@ export default function ScheduleTab({ proyectoId }: { proyectoId: number }) {
                 </div>
               </>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* ── QUÉ PASA AHORA (frontera activa) ── */}
+      {(frontier.accionables.length > 0 || frontier.cliente.length > 0) && (
+        <div className="rounded-2xl border border-card-border bg-white overflow-hidden"
+             style={{ boxShadow: '0 1px 4px rgba(0,0,0,0.05)' }}>
+          <div className="flex items-center gap-2 px-4 py-3 border-b border-stone-100 bg-forest-50/50">
+            <Zap size={16} className="text-forest-600" />
+            <h3 className="font-semibold text-forest-800 text-sm">Qué pasa ahora</h3>
+            <span className="ml-auto text-xs text-stone-400">lo que le toca a cada uno</span>
+          </div>
+          <div className="divide-y divide-stone-50">
+            {frontier.accionables.map((h) => {
+              const s = SEM_DOT[h.semaforo] ?? 'bg-stone-300'
+              return (
+                <div key={h.codigo} className="flex items-center gap-3 px-4 py-2.5">
+                  <span className={clsx('w-2.5 h-2.5 rounded-full shrink-0', s)} />
+                  <div className="flex-1 min-w-0">
+                    <div className="text-sm text-stone-800 truncate">
+                      {h.nombre}{h.es_gate && <Lock size={11} className="inline ml-1 -mt-0.5 text-stone-400" />}
+                    </div>
+                    <div className="text-[11px] text-stone-400">
+                      <span className="font-medium text-stone-500">{h.rol_responsable || '—'}</span> · límite {fmt(h.fecha_planeada)}
+                      {h.estado === 'vencido' && h.atribucion_atraso && (
+                        <span className="text-rose-600 font-medium"> · atraso {ATRIB_LABEL[h.atribucion_atraso] ?? h.atribucion_atraso}</span>
+                      )}
+                    </div>
+                  </div>
+                  {h.holgura_dias !== null && (
+                    <span className={clsx('text-[10px] font-medium rounded-full px-1.5 py-0.5 shrink-0 tabular-nums',
+                      h.holgura_dias < 0 ? 'bg-rose-50 text-rose-700' : 'bg-emerald-50 text-emerald-700')}>
+                      {h.holgura_dias < 0 ? '' : '+'}{h.holgura_dias}d
+                    </span>
+                  )}
+                  <button onClick={() => abrirRegistro(h)}
+                          className="shrink-0 inline-flex items-center gap-1.5 text-xs font-medium text-white bg-forest-600 hover:bg-forest-700 rounded-lg px-3 py-1.5">
+                    <ClipboardCheck size={14} /> Registrar
+                  </button>
+                </div>
+              )
+            })}
+            {frontier.cliente.map((h) => (
+              <div key={h.codigo} className="flex items-center gap-3 px-4 py-2.5 bg-stone-50/40">
+                <span className="w-2.5 h-2.5 rounded-full shrink-0 bg-blue-400" />
+                <div className="flex-1 min-w-0">
+                  <div className="text-sm text-stone-700 truncate">{h.nombre}</div>
+                  <div className="text-[11px] text-stone-400">Esperando aprobación del cliente · límite {fmt(h.fecha_planeada)}</div>
+                </div>
+                <span className="shrink-0 inline-flex items-center gap-1 text-[11px] font-medium text-blue-700 bg-blue-50 rounded-full px-2 py-1">
+                  <Handshake size={12} /> en el portal
+                </span>
+              </div>
+            ))}
           </div>
         </div>
       )}
@@ -373,12 +463,26 @@ export default function ScheduleTab({ proyectoId }: { proyectoId: number }) {
                       <span className="inline-flex items-center gap-1 text-[11px] font-medium text-emerald-700 bg-emerald-50 rounded-full px-2 py-0.5 shrink-0"><Check size={11} /> {fmt(h.fecha_real)}</span>
                     ) : (
                       <>
-                        <span className="text-[11px] text-stone-400 shrink-0 tabular-nums w-16 text-right">{fmt(h.fecha_planeada)}</span>
+                        {h.estado === 'vencido' && h.atribucion_atraso && (
+                          <span className="hidden sm:inline-flex items-center gap-0.5 text-[10px] font-medium text-rose-700 bg-rose-50 rounded px-1.5 py-0.5 shrink-0">
+                            <AlertTriangle size={9} /> {ATRIB_LABEL[h.atribucion_atraso] ?? h.atribucion_atraso}
+                          </span>
+                        )}
+                        <span className="text-[11px] text-stone-400 shrink-0 tabular-nums w-14 text-right">{fmt(h.fecha_planeada)}</span>
                         {h.semaforo !== 'gris' && h.holgura_dias !== null && (
                           <span className={clsx('text-[10px] font-medium rounded-full px-1.5 py-0.5 shrink-0 tabular-nums',
                             h.holgura_dias < 0 ? 'bg-rose-50 text-rose-700' : 'bg-emerald-50 text-emerald-700')}>
                             {h.holgura_dias < 0 ? '' : '+'}{h.holgura_dias}d
                           </span>
+                        )}
+                        {activoEstado(h.estado) && esRegistrable(h) && (
+                          <button onClick={() => abrirRegistro(h)}
+                                  className="shrink-0 inline-flex items-center gap-1 text-[11px] font-medium text-forest-700 hover:text-white hover:bg-forest-600 border border-forest-200 rounded-lg px-2 py-1 transition-colors">
+                            <ClipboardCheck size={12} /> Registrar
+                          </button>
+                        )}
+                        {activoEstado(h.estado) && esCliente(h) && (
+                          <span className="shrink-0 inline-flex items-center gap-1 text-[10px] font-medium text-blue-700 bg-blue-50 rounded px-1.5 py-0.5"><Handshake size={11} /> portal</span>
                         )}
                       </>
                     )}
@@ -387,6 +491,31 @@ export default function ScheduleTab({ proyectoId }: { proyectoId: number }) {
               )
             })}
           </ol>
+        </div>
+      )}
+
+      {/* modal registrar hito */}
+      {registro && (
+        <div className="fixed inset-0 bg-black/30 flex items-center justify-center p-4 z-50" onClick={() => !busy && setRegistro(null)}>
+          <div className="bg-white rounded-2xl max-w-md w-full p-5 shadow-xl" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center gap-2">
+              <ClipboardCheck size={18} className="text-forest-600" />
+              <h3 className="font-semibold text-stone-800">Registrar hito</h3>
+              <button onClick={() => setRegistro(null)} className="ml-auto text-stone-400 hover:text-stone-700"><X size={18} /></button>
+            </div>
+            <p className="text-sm text-stone-500 mt-1.5">
+              <b className="text-stone-700">{registro.nombre}</b>. Registrás que ocurrió de verdad — queda con tu nombre y la fecha.
+            </p>
+            <label className="block mt-3 text-xs font-medium text-stone-500">¿Cuándo ocurrió?</label>
+            <input type="date" value={regFecha} onChange={(e) => setRegFecha(e.target.value)} className="input w-full mt-1" />
+            <label className="block mt-3 text-xs font-medium text-stone-500">Nota (opcional)</label>
+            <textarea value={regNota} onChange={(e) => setRegNota(e.target.value)} rows={2}
+                      placeholder="Ej: submittal Rev A enviado, N° de factura…" className="input w-full mt-1 resize-none" />
+            <div className="mt-4 flex justify-end gap-2">
+              <button onClick={() => setRegistro(null)} disabled={busy} className="px-3 py-2 text-sm text-stone-500">Cancelar</button>
+              <button onClick={confirmarRegistro} disabled={busy} className="btn-primary"><ClipboardCheck size={15} /> Registrar</button>
+            </div>
+          </div>
         </div>
       )}
     </div>
