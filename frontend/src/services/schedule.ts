@@ -57,9 +57,9 @@ export const scheduleService = {
       .post<ApiResponse<{ token: string }>>(`/schedule/proyecto/${proyectoId}/portal-token`, { contacto_nombre })
       .then((r) => r.data),
 
-  registrarHito: (proyectoId: number, codigo: string, fecha: string | null, nota?: string) =>
+  registrarHito: (proyectoId: number, codigo: string, fecha: string | null, nota?: string, importe?: number) =>
     api
-      .post<ApiResponse<{ ok: boolean }>>(`/schedule/proyecto/${proyectoId}/hito/${codigo}/registrar`, { fecha, nota })
+      .post<ApiResponse<{ ok: boolean }>>(`/schedule/proyecto/${proyectoId}/hito/${codigo}/registrar`, { fecha, nota, importe })
       .then((r) => r.data),
 
   uploadSubmittal: (proyectoId: number, file: File) => {

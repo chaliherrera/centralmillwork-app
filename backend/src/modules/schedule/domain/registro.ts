@@ -29,7 +29,8 @@ export async function registrarHito(
   codigo: string,
   fecha: string | null,
   nota: string | null,
-  usuarioNombre: string | null
+  usuarioNombre: string | null,
+  importe?: number | null
 ): Promise<RegistroResult> {
   // El hito debe existir en el plan y ser manual (no instrumentado ni del cliente)
   const { rows } = await runner.query<{ id: number; fuente_dato: string }>(
@@ -52,7 +53,10 @@ export async function registrarHito(
       `UPDATE schedule_hitos SET fecha_real = NULL, evidencia_ref = NULL, updated_at = NOW() WHERE id = $1`,
       [h.id])
   } else {
-    const evidencia = JSON.stringify({ source: 'registro', usuario: usuarioNombre || undefined, nota: nota || undefined })
+    const evidencia = JSON.stringify(
+      importe != null
+        ? { source: 'pago', importe, usuario: usuarioNombre || undefined, nota: nota || undefined }
+        : { source: 'registro', usuario: usuarioNombre || undefined, nota: nota || undefined })
     await runner.query(
       `UPDATE schedule_hitos SET fecha_real = $2::timestamptz, evidencia_ref = $3::jsonb, updated_at = NOW() WHERE id = $1`,
       [h.id, `${fecha} 12:00:00`, evidencia])

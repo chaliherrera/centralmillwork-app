@@ -117,16 +117,17 @@ export async function listPortalTokensHandler(req: Request, res: Response, next:
 const registrarSchema = z.object({
   fecha: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable(),
   nota: z.string().trim().max(500).optional(),
+  importe: z.number().nonnegative().optional(),
 })
 export async function registrarHitoHandler(req: Request, res: Response, next: NextFunction) {
   const client = await pool.connect()
   try {
     const proyectoId = parseProyectoId(req)
     const codigo = String(req.params.codigo)
-    const { fecha, nota } = registrarSchema.parse(req.body ?? {})
+    const { fecha, nota, importe } = registrarSchema.parse(req.body ?? {})
     const usuarioNombre = (req as any).user?.email ?? null
     await client.query('BEGIN')
-    const r = await registrarHito(client, proyectoId, codigo, fecha, nota ?? null, usuarioNombre)
+    const r = await registrarHito(client, proyectoId, codigo, fecha, nota ?? null, usuarioNombre, importe ?? null)
     await client.query('COMMIT')
     if (!r.ok) return next(createError(r.error ?? 'no se pudo registrar', 400))
     res.json({ data: { ok: true } })

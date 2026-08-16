@@ -4,7 +4,7 @@ import clsx from 'clsx'
 import {
   CalendarClock, Lock, RefreshCw, Flag, Check,
   Target, User, Handshake, Activity, ChevronRight, Share2, Copy, X,
-  ClipboardCheck, AlertTriangle, Zap, Upload, FileText,
+  ClipboardCheck, AlertTriangle, Zap, Upload, FileText, DollarSign,
 } from 'lucide-react'
 import { scheduleService, type ScheduleData, type ScheduleHito, type Semaforo } from '@/services/schedule'
 
@@ -52,12 +52,18 @@ const esRegistrable = (h: ScheduleHito) => h.fuente_dato === 'manual_futuro' && 
 const esCliente = (h: ScheduleHito) => CLIENT_APROBABLES.includes(h.codigo)
 // Acción específica por hito de Ingeniería. submittal = sube PDF versionado;
 // archivo = sube archivo (CNC); registro = completa con fecha/nota (label propio).
-const ACCION_HITO: Record<string, { label: string; tipo: 'submittal' | 'archivo' }> = {
+const ACCION_HITO: Record<string, { label: string; tipo: 'submittal' | 'archivo' | 'pago' }> = {
+  'C-03': { label: 'Subir contrato firmado', tipo: 'archivo' },
+  'C-04': { label: 'Registrar pago', tipo: 'pago' },
   'E-06': { label: 'Subir planos', tipo: 'submittal' },
   'E-08': { label: 'Subir planos', tipo: 'submittal' },
   'E-11': { label: 'Subir archivos CNC', tipo: 'archivo' },
 }
-const REGISTRO_LABEL: Record<string, string> = { 'E-09': 'Liberar MTO', 'E-10': 'Release to Production' }
+const REGISTRO_LABEL: Record<string, string> = {
+  'C-05': 'Validar MTO', 'C-06': 'Validar budget', 'C-07': 'Enviar announcement',
+  'C-08': 'Registrar kickoff', 'C-09': 'Transferir POC',
+  'E-09': 'Liberar MTO', 'E-10': 'Release to Production',
+}
 
 function fmt(d: string | null): string {
   if (!d) return '—'
@@ -97,6 +103,9 @@ export default function ScheduleTab({ proyectoId }: { proyectoId: number }) {
   const [subFile, setSubFile] = useState<File | null>(null)
   const [archivoHito, setArchivoHito] = useState<{ codigo: string; nombre: string } | null>(null)
   const [arcFile, setArcFile] = useState<File | null>(null)
+  const [pago, setPago] = useState<{ codigo: string; nombre: string } | null>(null)
+  const [pagoImporte, setPagoImporte] = useState('')
+  const [pagoFecha, setPagoFecha] = useState('')
 
   async function load() {
     setLoading(true)
@@ -151,6 +160,15 @@ export default function ScheduleTab({ proyectoId }: { proyectoId: number }) {
       toast.success('Archivo adjuntado'); setArchivoHito(null); setArcFile(null); await load()
     } catch { /* toast */ } finally { setBusy(false) }
   }
+  async function confirmarPago() {
+    if (!pago || !pagoFecha) { toast.error('Elegí la fecha del pago'); return }
+    const importe = pagoImporte ? Number(pagoImporte) : undefined
+    setBusy(true)
+    try {
+      await scheduleService.registrarHito(proyectoId, pago.codigo, pagoFecha, undefined, importe)
+      toast.success('Pago registrado'); setPago(null); await load()
+    } catch { /* toast */ } finally { setBusy(false) }
+  }
   const accionHito = (h: ScheduleHito, small = false) => {
     const cls = clsx('shrink-0 inline-flex items-center gap-1.5 font-medium rounded-lg',
       small ? 'text-[11px] text-forest-700 hover:text-white hover:bg-forest-600 border border-forest-200 px-2 py-1 transition-colors'
@@ -165,6 +183,11 @@ export default function ScheduleTab({ proyectoId }: { proyectoId: number }) {
     if (cfg?.tipo === 'archivo') return (
       <button onClick={() => { setArchivoHito({ codigo: h.codigo, nombre: h.nombre }); setArcFile(null) }} className={cls}>
         <Upload size={ico} /> {cfg.label}
+      </button>
+    )
+    if (cfg?.tipo === 'pago') return (
+      <button onClick={() => { setPago({ codigo: h.codigo, nombre: h.nombre }); setPagoImporte(''); setPagoFecha(new Date().toISOString().slice(0, 10)) }} className={cls}>
+        <DollarSign size={ico} /> {cfg.label}
       </button>
     )
     return (
@@ -611,6 +634,29 @@ export default function ScheduleTab({ proyectoId }: { proyectoId: number }) {
               <button onClick={confirmarArchivo} disabled={busy || !arcFile} className="btn-primary">
                 <Upload size={15} /> {busy ? 'Subiendo…' : 'Subir archivo'}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* modal registrar pago */}
+      {pago && (
+        <div className="fixed inset-0 bg-black/30 flex items-center justify-center p-4 z-50" onClick={() => !busy && setPago(null)}>
+          <div className="bg-white rounded-2xl max-w-md w-full p-5 shadow-xl" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center gap-2">
+              <DollarSign size={18} className="text-forest-600" />
+              <h3 className="font-semibold text-stone-800">{pago.nombre}</h3>
+              <button onClick={() => setPago(null)} className="ml-auto text-stone-400 hover:text-stone-700"><X size={18} /></button>
+            </div>
+            <p className="text-sm text-stone-500 mt-1.5">Registrá el pago recibido. Queda con tu nombre y la fecha.</p>
+            <label className="block mt-3 text-xs font-medium text-stone-500">Importe recibido (USD)</label>
+            <input type="number" min="0" step="0.01" value={pagoImporte} onChange={(e) => setPagoImporte(e.target.value)}
+                   placeholder="Ej: 25000" className="input w-full mt-1" />
+            <label className="block mt-3 text-xs font-medium text-stone-500">¿Cuándo se recibió?</label>
+            <input type="date" value={pagoFecha} onChange={(e) => setPagoFecha(e.target.value)} className="input w-full mt-1" />
+            <div className="mt-4 flex justify-end gap-2">
+              <button onClick={() => setPago(null)} disabled={busy} className="px-3 py-2 text-sm text-stone-500">Cancelar</button>
+              <button onClick={confirmarPago} disabled={busy} className="btn-primary"><DollarSign size={15} /> Registrar pago</button>
             </div>
           </div>
         </div>
