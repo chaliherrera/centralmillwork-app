@@ -10,7 +10,7 @@ export interface PortalVista {
   proyecto: { nombre: string; cliente: string; fecha_objetivo: string | null; semaforo: string }
   contacto: string | null
   momentos: PortalMomento[]
-  pendientes: Array<{ codigo: string; titulo: string; fecha_planeada: string | null }>
+  pendientes: Array<{ codigo: string; titulo: string; fecha_planeada: string | null; documento_url?: string | null }>
 }
 
 export const portalService = {

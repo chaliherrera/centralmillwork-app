@@ -4,7 +4,7 @@ import clsx from 'clsx'
 import {
   CalendarClock, Lock, RefreshCw, Flag, Check,
   Target, User, Handshake, Activity, ChevronRight, Share2, Copy, X,
-  ClipboardCheck, AlertTriangle, Zap,
+  ClipboardCheck, AlertTriangle, Zap, Upload, FileText,
 } from 'lucide-react'
 import { scheduleService, type ScheduleData, type ScheduleHito, type Semaforo } from '@/services/schedule'
 
@@ -50,6 +50,8 @@ const ATRIB_LABEL: Record<string, string> = {
 const activoEstado = (e: string) => e === 'pendiente' || e === 'en_riesgo' || e === 'vencido'
 const esRegistrable = (h: ScheduleHito) => h.fuente_dato === 'manual_futuro' && !CLIENT_APROBABLES.includes(h.codigo)
 const esCliente = (h: ScheduleHito) => CLIENT_APROBABLES.includes(h.codigo)
+// Hitos de planos (shop drawings): el responsable sube el PDF (submittal).
+const esSubmittal = (h: ScheduleHito) => h.codigo === 'E-06' || h.codigo === 'E-08'
 
 function fmt(d: string | null): string {
   if (!d) return '—'
@@ -85,6 +87,8 @@ export default function ScheduleTab({ proyectoId }: { proyectoId: number }) {
   const [registro, setRegistro] = useState<{ codigo: string; nombre: string } | null>(null)
   const [regFecha, setRegFecha] = useState('')
   const [regNota, setRegNota] = useState('')
+  const [submittal, setSubmittal] = useState<{ codigo: string; nombre: string } | null>(null)
+  const [subFile, setSubFile] = useState<File | null>(null)
 
   async function load() {
     setLoading(true)
@@ -122,6 +126,32 @@ export default function ScheduleTab({ proyectoId }: { proyectoId: number }) {
       await scheduleService.registrarHito(proyectoId, registro.codigo, regFecha, regNota || undefined)
       toast.success('Hito registrado'); setRegistro(null); await load()
     } catch { /* toast */ } finally { setBusy(false) }
+  }
+  async function confirmarSubmittal() {
+    if (!subFile) { toast.error('Elegí el PDF de los planos'); return }
+    setBusy(true)
+    try {
+      const r = await scheduleService.uploadSubmittal(proyectoId, subFile)
+      toast.success(`Submittal ${r.data.version_label} emitido`); setSubmittal(null); setSubFile(null); await load()
+    } catch { /* toast */ } finally { setBusy(false) }
+  }
+  const accionHito = (h: ScheduleHito, small = false) => {
+    if (esSubmittal(h)) return (
+      <button onClick={() => { setSubmittal({ codigo: h.codigo, nombre: h.nombre }); setSubFile(null) }}
+              className={clsx('shrink-0 inline-flex items-center gap-1.5 font-medium rounded-lg',
+                small ? 'text-[11px] text-forest-700 hover:text-white hover:bg-forest-600 border border-forest-200 px-2 py-1 transition-colors'
+                      : 'text-xs text-white bg-forest-600 hover:bg-forest-700 px-3 py-1.5')}>
+        <Upload size={small ? 12 : 14} /> Subir planos
+      </button>
+    )
+    return (
+      <button onClick={() => abrirRegistro(h)}
+              className={clsx('shrink-0 inline-flex items-center gap-1.5 font-medium rounded-lg',
+                small ? 'text-[11px] text-forest-700 hover:text-white hover:bg-forest-600 border border-forest-200 px-2 py-1 transition-colors'
+                      : 'text-xs text-white bg-forest-600 hover:bg-forest-700 px-3 py-1.5')}>
+        <ClipboardCheck size={small ? 12 : 14} /> Registrar
+      </button>
+    )
   }
 
   const { fases, totalHitos, totalCumplidos } = useMemo(() => {
@@ -317,10 +347,7 @@ export default function ScheduleTab({ proyectoId }: { proyectoId: number }) {
                       {h.holgura_dias < 0 ? '' : '+'}{h.holgura_dias}d
                     </span>
                   )}
-                  <button onClick={() => abrirRegistro(h)}
-                          className="shrink-0 inline-flex items-center gap-1.5 text-xs font-medium text-white bg-forest-600 hover:bg-forest-700 rounded-lg px-3 py-1.5">
-                    <ClipboardCheck size={14} /> Registrar
-                  </button>
+                  {accionHito(h)}
                 </div>
               )
             })}
@@ -475,12 +502,7 @@ export default function ScheduleTab({ proyectoId }: { proyectoId: number }) {
                             {h.holgura_dias < 0 ? '' : '+'}{h.holgura_dias}d
                           </span>
                         )}
-                        {activoEstado(h.estado) && esRegistrable(h) && (
-                          <button onClick={() => abrirRegistro(h)}
-                                  className="shrink-0 inline-flex items-center gap-1 text-[11px] font-medium text-forest-700 hover:text-white hover:bg-forest-600 border border-forest-200 rounded-lg px-2 py-1 transition-colors">
-                            <ClipboardCheck size={12} /> Registrar
-                          </button>
-                        )}
+                        {activoEstado(h.estado) && esRegistrable(h) && accionHito(h, true)}
                         {activoEstado(h.estado) && esCliente(h) && (
                           <span className="shrink-0 inline-flex items-center gap-1 text-[10px] font-medium text-blue-700 bg-blue-50 rounded px-1.5 py-0.5"><Handshake size={11} /> portal</span>
                         )}
@@ -514,6 +536,34 @@ export default function ScheduleTab({ proyectoId }: { proyectoId: number }) {
             <div className="mt-4 flex justify-end gap-2">
               <button onClick={() => setRegistro(null)} disabled={busy} className="px-3 py-2 text-sm text-stone-500">Cancelar</button>
               <button onClick={confirmarRegistro} disabled={busy} className="btn-primary"><ClipboardCheck size={15} /> Registrar</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* modal subir submittal (planos) */}
+      {submittal && (
+        <div className="fixed inset-0 bg-black/30 flex items-center justify-center p-4 z-50" onClick={() => !busy && setSubmittal(null)}>
+          <div className="bg-white rounded-2xl max-w-md w-full p-5 shadow-xl" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center gap-2">
+              <Upload size={18} className="text-forest-600" />
+              <h3 className="font-semibold text-stone-800">Emitir planos al cliente</h3>
+              <button onClick={() => setSubmittal(null)} className="ml-auto text-stone-400 hover:text-stone-700"><X size={18} /></button>
+            </div>
+            <p className="text-sm text-stone-500 mt-1.5">
+              Subí el PDF de los shop drawings. Se registra como una nueva revisión y el cliente lo verá en su portal para aprobar.
+            </p>
+            <label className="mt-4 flex flex-col items-center justify-center gap-2 border-2 border-dashed border-stone-300 rounded-xl py-8 cursor-pointer hover:border-forest-400 transition-colors">
+              <FileText size={26} className="text-stone-300" />
+              <span className="text-sm text-stone-500">{subFile ? subFile.name : 'Elegí un archivo PDF'}</span>
+              <input type="file" accept="application/pdf" className="hidden"
+                     onChange={(e) => setSubFile(e.target.files?.[0] ?? null)} />
+            </label>
+            <div className="mt-4 flex justify-end gap-2">
+              <button onClick={() => setSubmittal(null)} disabled={busy} className="px-3 py-2 text-sm text-stone-500">Cancelar</button>
+              <button onClick={confirmarSubmittal} disabled={busy || !subFile} className="btn-primary">
+                <Upload size={15} /> {busy ? 'Subiendo…' : 'Emitir planos'}
+              </button>
             </div>
           </div>
         </div>

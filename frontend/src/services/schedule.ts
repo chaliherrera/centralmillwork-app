@@ -61,4 +61,14 @@ export const scheduleService = {
     api
       .post<ApiResponse<{ ok: boolean }>>(`/schedule/proyecto/${proyectoId}/hito/${codigo}/registrar`, { fecha, nota })
       .then((r) => r.data),
+
+  uploadSubmittal: (proyectoId: number, file: File) => {
+    const fd = new FormData()
+    fd.append('planos', file)
+    return api
+      .post<ApiResponse<{ version_label: string }>>(`/schedule/proyecto/${proyectoId}/submittals`, fd, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      })
+      .then((r) => r.data)
+  },
 }

@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import toast from 'react-hot-toast'
 import clsx from 'clsx'
-import { CalendarClock, Check, Clock, ThumbsUp, MessageSquare, X, ShieldCheck, Lock } from 'lucide-react'
+import { CalendarClock, Check, Clock, ThumbsUp, MessageSquare, X, ShieldCheck, Lock, FileText } from 'lucide-react'
 import { portalService, type PortalVista, type Decision } from '@/services/portal'
 
 function fmt(d: string | null): string {
@@ -132,6 +132,12 @@ export default function ClientPortal() {
                 <div key={p.codigo} className="px-4 py-3.5">
                   <div className="font-semibold text-stone-800">{p.titulo}</div>
                   {p.fecha_planeada && <div className="text-xs text-stone-400 mb-2.5">Sugerido antes del {fmt(p.fecha_planeada)}</div>}
+                  {p.documento_url && (
+                    <a href={p.documento_url} target="_blank" rel="noopener noreferrer"
+                       className="inline-flex items-center gap-1.5 text-sm font-medium text-forest-700 hover:text-forest-900 mb-2.5">
+                      <FileText size={15} /> Ver el documento
+                    </a>
+                  )}
                   <div className="flex items-center gap-2 flex-wrap">
                     <button onClick={() => { setAction({ codigo: p.codigo, titulo: p.titulo, decision: 'aprobado' }); setComentario('') }}
                             className="inline-flex items-center gap-1.5 text-sm font-medium text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg px-4 py-2">
