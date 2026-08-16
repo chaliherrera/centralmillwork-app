@@ -11,6 +11,7 @@ import crypto from 'crypto'
 import type { PoolClient } from 'pg'
 import pool from '../../../db/pool'
 import { recomputeScheduleForProyecto } from './recompute'
+import { latestSubmittalUrl, marcarRespuestaSubmittal } from './submittals'
 
 type QueryRunner = PoolClient | typeof pool
 
@@ -72,7 +73,7 @@ export interface VistaPublica {
   // El recorrido del cliente: sus momentos, con estado en el camino.
   momentos: Array<{ codigo: string; label: string; tipo: 'accion' | 'estado'; estado: 'done' | 'now' | 'future' }>
   // Solo las aprobaciones que YA corresponden (predecesores cumplidos, sin resolver).
-  pendientes: Array<{ codigo: string; titulo: string; fecha_planeada: string | null }>
+  pendientes: Array<{ codigo: string; titulo: string; fecha_planeada: string | null; documento_url?: string | null }>
 }
 
 /**
@@ -115,11 +116,15 @@ export async function getVistaPublica(runner: QueryRunner, token: string): Promi
   })
 
   // Pendientes: aprobables ACTIVOS (no bloqueados por predecesores, sin resolver).
-  const pendientes = CLIENT_MOMENTS
+  const pendientesBase = CLIENT_MOMENTS
     .filter((m) => m.tipo === 'accion' && APROBABLES[m.codigo])
     .map((m) => ({ m, h: st.get(m.codigo) }))
     .filter(({ h }) => h && !h.tiene_real && h.estado !== 'no_aplica')
     .map(({ m, h }) => ({ codigo: m.codigo, titulo: APROBABLES[m.codigo], fecha_planeada: h!.fp }))
+
+  // Para la aprobación de planos, adjuntar el PDF del último submittal.
+  const pendientes = await Promise.all(pendientesBase.map(async (p) =>
+    p.codigo === 'E-07' ? { ...p, documento_url: await latestSubmittalUrl(runner, info.proyectoId) } : p))
 
   return {
     proyecto: { nombre: pr[0].nombre, cliente: pr[0].cliente, fecha_objetivo: pr[0].fo, semaforo: pr[0].semaforo },
@@ -171,6 +176,11 @@ export async function aplicarAprobacion(
     [plan[0].id, codigo,
      `Cliente${info.contactoNombre ? ` (${info.contactoNombre})` : ''}: ${decision.replace(/_/g, ' ')} — ${APROBABLES[codigo]}`,
      evidencia])
+
+  // Si es la aprobación de planos, dejar registro en el submittal correspondiente.
+  if (codigo === 'E-07') {
+    await marcarRespuestaSubmittal(runner, info.proyectoId, decision, comentario).catch(() => {})
+  }
 
   await recomputeScheduleForProyecto(runner, info.proyectoId, 'manual')
   return { ok: true }

@@ -1,6 +1,7 @@
 import { Router } from 'express'
 import { requireRole } from '../../middleware/auth'
 import { getPlan, generarPlanHandler, recalcularHandler, crearPortalTokenHandler, listPortalTokensHandler, registrarHitoHandler } from './controllers/schedulePlan.controller'
+import { uploadSubmittal, uploadSubmittalHandler, listSubmittalsHandler } from './controllers/submittals.controller'
 
 const router = Router()
 
@@ -21,5 +22,9 @@ router.post('/proyecto/:id/recalcular', SCHEDULE_WRITE, recalcularHandler)
 router.post('/proyecto/:id/portal-token',  SCHEDULE_WRITE, crearPortalTokenHandler)
 router.get ('/proyecto/:id/portal-tokens', SCHEDULE_READ,  listPortalTokensHandler)
 router.post('/proyecto/:id/hito/:codigo/registrar', SCHEDULE_REGISTRAR, registrarHitoHandler)
+
+const SCHEDULE_ENGINEERING = requireRole('ADMIN', 'PROJECT_MANAGEMENT', 'ENGINEERING')
+router.get ('/proyecto/:id/submittals', SCHEDULE_READ, listSubmittalsHandler)
+router.post('/proyecto/:id/submittals', SCHEDULE_ENGINEERING, uploadSubmittal.single('planos'), uploadSubmittalHandler)
 
 export default router
