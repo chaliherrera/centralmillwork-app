@@ -11,6 +11,7 @@ import pool from '../../../db/pool'
 import { createError } from '../../../middleware/errorHandler'
 import { generarPlan, recomputeScheduleForProyecto } from '../domain/recompute'
 import { crearToken } from '../domain/portal'
+import { registrarHito } from '../domain/registro'
 
 function parseProyectoId(req: Request): number {
   const id = parseInt(String(req.params.id), 10)
@@ -109,6 +110,33 @@ export async function listPortalTokensHandler(req: Request, res: Response, next:
          FROM schedule_portal_tokens WHERE proyecto_id = $1 ORDER BY created_at DESC`, [proyectoId])
     res.json({ data: rows })
   } catch (err) { next(err) }
+}
+
+// ── POST /api/schedule/proyecto/:id/hito/:codigo/registrar ───────────────────
+// El responsable registra que un hito ocurrió (evidencia real: fecha + nota).
+const registrarSchema = z.object({
+  fecha: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable(),
+  nota: z.string().trim().max(500).optional(),
+})
+export async function registrarHitoHandler(req: Request, res: Response, next: NextFunction) {
+  const client = await pool.connect()
+  try {
+    const proyectoId = parseProyectoId(req)
+    const codigo = String(req.params.codigo)
+    const { fecha, nota } = registrarSchema.parse(req.body ?? {})
+    const usuarioNombre = (req as any).user?.email ?? null
+    await client.query('BEGIN')
+    const r = await registrarHito(client, proyectoId, codigo, fecha, nota ?? null, usuarioNombre)
+    await client.query('COMMIT')
+    if (!r.ok) return next(createError(r.error ?? 'no se pudo registrar', 400))
+    res.json({ data: { ok: true } })
+  } catch (err: any) {
+    await client.query('ROLLBACK').catch(() => {})
+    if (err?.issues) return next(createError('datos inválidos', 400))
+    next(err)
+  } finally {
+    client.release()
+  }
 }
 
 // ── POST /api/schedule/proyecto/:id/recalcular ───────────────────────────────
