@@ -1,7 +1,7 @@
 import { Router } from 'express'
 import { requireRole } from '../../middleware/auth'
 import { getPlan, generarPlanHandler, recalcularHandler, crearPortalTokenHandler, listPortalTokensHandler, registrarHitoHandler } from './controllers/schedulePlan.controller'
-import { uploadSubmittal, uploadSubmittalHandler, listSubmittalsHandler } from './controllers/submittals.controller'
+import { uploadSubmittal, uploadSubmittalHandler, listSubmittalsHandler, uploadArchivo, uploadArchivoHitoHandler, listArchivosHitoHandler } from './controllers/submittals.controller'
 
 const router = Router()
 
@@ -26,5 +26,7 @@ router.post('/proyecto/:id/hito/:codigo/registrar', SCHEDULE_REGISTRAR, registra
 const SCHEDULE_ENGINEERING = requireRole('ADMIN', 'PROJECT_MANAGEMENT', 'ENGINEERING')
 router.get ('/proyecto/:id/submittals', SCHEDULE_READ, listSubmittalsHandler)
 router.post('/proyecto/:id/submittals', SCHEDULE_ENGINEERING, uploadSubmittal.single('planos'), uploadSubmittalHandler)
+router.get ('/proyecto/:id/hito/:codigo/archivos', SCHEDULE_READ, listArchivosHitoHandler)
+router.post('/proyecto/:id/hito/:codigo/archivo', SCHEDULE_REGISTRAR, uploadArchivo.single('archivo'), uploadArchivoHitoHandler)
 
 export default router

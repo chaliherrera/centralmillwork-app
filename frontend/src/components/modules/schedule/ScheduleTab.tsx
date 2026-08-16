@@ -50,8 +50,14 @@ const ATRIB_LABEL: Record<string, string> = {
 const activoEstado = (e: string) => e === 'pendiente' || e === 'en_riesgo' || e === 'vencido'
 const esRegistrable = (h: ScheduleHito) => h.fuente_dato === 'manual_futuro' && !CLIENT_APROBABLES.includes(h.codigo)
 const esCliente = (h: ScheduleHito) => CLIENT_APROBABLES.includes(h.codigo)
-// Hitos de planos (shop drawings): el responsable sube el PDF (submittal).
-const esSubmittal = (h: ScheduleHito) => h.codigo === 'E-06' || h.codigo === 'E-08'
+// Acción específica por hito de Ingeniería. submittal = sube PDF versionado;
+// archivo = sube archivo (CNC); registro = completa con fecha/nota (label propio).
+const ACCION_HITO: Record<string, { label: string; tipo: 'submittal' | 'archivo' }> = {
+  'E-06': { label: 'Subir planos', tipo: 'submittal' },
+  'E-08': { label: 'Subir planos', tipo: 'submittal' },
+  'E-11': { label: 'Subir archivos CNC', tipo: 'archivo' },
+}
+const REGISTRO_LABEL: Record<string, string> = { 'E-09': 'Liberar MTO', 'E-10': 'Release to Production' }
 
 function fmt(d: string | null): string {
   if (!d) return '—'
@@ -89,6 +95,8 @@ export default function ScheduleTab({ proyectoId }: { proyectoId: number }) {
   const [regNota, setRegNota] = useState('')
   const [submittal, setSubmittal] = useState<{ codigo: string; nombre: string } | null>(null)
   const [subFile, setSubFile] = useState<File | null>(null)
+  const [archivoHito, setArchivoHito] = useState<{ codigo: string; nombre: string } | null>(null)
+  const [arcFile, setArcFile] = useState<File | null>(null)
 
   async function load() {
     setLoading(true)
@@ -135,21 +143,33 @@ export default function ScheduleTab({ proyectoId }: { proyectoId: number }) {
       toast.success(`Submittal ${r.data.version_label} emitido`); setSubmittal(null); setSubFile(null); await load()
     } catch { /* toast */ } finally { setBusy(false) }
   }
+  async function confirmarArchivo() {
+    if (!archivoHito || !arcFile) { toast.error('Elegí un archivo'); return }
+    setBusy(true)
+    try {
+      await scheduleService.uploadArchivoHito(proyectoId, archivoHito.codigo, arcFile)
+      toast.success('Archivo adjuntado'); setArchivoHito(null); setArcFile(null); await load()
+    } catch { /* toast */ } finally { setBusy(false) }
+  }
   const accionHito = (h: ScheduleHito, small = false) => {
-    if (esSubmittal(h)) return (
-      <button onClick={() => { setSubmittal({ codigo: h.codigo, nombre: h.nombre }); setSubFile(null) }}
-              className={clsx('shrink-0 inline-flex items-center gap-1.5 font-medium rounded-lg',
-                small ? 'text-[11px] text-forest-700 hover:text-white hover:bg-forest-600 border border-forest-200 px-2 py-1 transition-colors'
-                      : 'text-xs text-white bg-forest-600 hover:bg-forest-700 px-3 py-1.5')}>
-        <Upload size={small ? 12 : 14} /> Subir planos
+    const cls = clsx('shrink-0 inline-flex items-center gap-1.5 font-medium rounded-lg',
+      small ? 'text-[11px] text-forest-700 hover:text-white hover:bg-forest-600 border border-forest-200 px-2 py-1 transition-colors'
+            : 'text-xs text-white bg-forest-600 hover:bg-forest-700 px-3 py-1.5')
+    const ico = small ? 12 : 14
+    const cfg = ACCION_HITO[h.codigo]
+    if (cfg?.tipo === 'submittal') return (
+      <button onClick={() => { setSubmittal({ codigo: h.codigo, nombre: h.nombre }); setSubFile(null) }} className={cls}>
+        <Upload size={ico} /> {cfg.label}
+      </button>
+    )
+    if (cfg?.tipo === 'archivo') return (
+      <button onClick={() => { setArchivoHito({ codigo: h.codigo, nombre: h.nombre }); setArcFile(null) }} className={cls}>
+        <Upload size={ico} /> {cfg.label}
       </button>
     )
     return (
-      <button onClick={() => abrirRegistro(h)}
-              className={clsx('shrink-0 inline-flex items-center gap-1.5 font-medium rounded-lg',
-                small ? 'text-[11px] text-forest-700 hover:text-white hover:bg-forest-600 border border-forest-200 px-2 py-1 transition-colors'
-                      : 'text-xs text-white bg-forest-600 hover:bg-forest-700 px-3 py-1.5')}>
-        <ClipboardCheck size={small ? 12 : 14} /> Registrar
+      <button onClick={() => abrirRegistro(h)} className={cls}>
+        <ClipboardCheck size={ico} /> {REGISTRO_LABEL[h.codigo] ?? 'Registrar'}
       </button>
     )
   }
@@ -563,6 +583,33 @@ export default function ScheduleTab({ proyectoId }: { proyectoId: number }) {
               <button onClick={() => setSubmittal(null)} disabled={busy} className="px-3 py-2 text-sm text-stone-500">Cancelar</button>
               <button onClick={confirmarSubmittal} disabled={busy || !subFile} className="btn-primary">
                 <Upload size={15} /> {busy ? 'Subiendo…' : 'Emitir planos'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* modal subir archivo (CNC / entregable) */}
+      {archivoHito && (
+        <div className="fixed inset-0 bg-black/30 flex items-center justify-center p-4 z-50" onClick={() => !busy && setArchivoHito(null)}>
+          <div className="bg-white rounded-2xl max-w-md w-full p-5 shadow-xl" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center gap-2">
+              <Upload size={18} className="text-forest-600" />
+              <h3 className="font-semibold text-stone-800">{archivoHito.nombre}</h3>
+              <button onClick={() => setArchivoHito(null)} className="ml-auto text-stone-400 hover:text-stone-700"><X size={18} /></button>
+            </div>
+            <p className="text-sm text-stone-500 mt-1.5">
+              Subí el archivo. Queda adjunto al hito y lo completa (con tu nombre y la fecha).
+            </p>
+            <label className="mt-4 flex flex-col items-center justify-center gap-2 border-2 border-dashed border-stone-300 rounded-xl py-8 cursor-pointer hover:border-forest-400 transition-colors">
+              <FileText size={26} className="text-stone-300" />
+              <span className="text-sm text-stone-500">{arcFile ? arcFile.name : 'Elegí un archivo'}</span>
+              <input type="file" className="hidden" onChange={(e) => setArcFile(e.target.files?.[0] ?? null)} />
+            </label>
+            <div className="mt-4 flex justify-end gap-2">
+              <button onClick={() => setArchivoHito(null)} disabled={busy} className="px-3 py-2 text-sm text-stone-500">Cancelar</button>
+              <button onClick={confirmarArchivo} disabled={busy || !arcFile} className="btn-primary">
+                <Upload size={15} /> {busy ? 'Subiendo…' : 'Subir archivo'}
               </button>
             </div>
           </div>
