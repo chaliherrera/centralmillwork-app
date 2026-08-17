@@ -22,6 +22,15 @@ type Disparador = 'recepcion' | 'op' | 'oc' | 'manual' | 'cron'
 
 const HOLGURA_VERDE = 3 // días hábiles
 
+// Cierre hacia atrás (inferencia): si un hito está cumplido, sus predecesores
+// en la cadena ocurrieron sí o sí antes → los damos por cumplidos. PERO no se
+// infieren los que requieren prueba propia de un tercero o de plata: las
+// aprobaciones del cliente (APROBABLES en portal.ts: E-05/E-07/I-07) y los
+// pagos (C-04 down payment, X-03 pago final). Esos quedan visibles hasta que se
+// registre el hecho real. (Códigos hardcodeados a propósito para evitar un
+// import circular con portal.ts, que ya importa este módulo.)
+const NO_INFERIR = new Set<string>(['E-05', 'E-07', 'I-07', 'C-04', 'X-03'])
+
 function todayISO(): ISODate {
   const t = new Date()
   const p = (n: number) => String(n).padStart(2, '0')
@@ -148,6 +157,33 @@ export async function recomputeScheduleForProyecto(
     if (fr) cumplidos.add(h.codigo)
   }
 
+  // ── Cierre hacia atrás (inferencia) ─────────────────────────────────────────
+  // Subimos por la cadena desde cada hito cumplido: todos sus predecesores
+  // (menos los de NO_INFERIR) se dan por cumplidos "por inferencia". Así el
+  // tablero no se contradice (ej.: material comprado ⇒ MTO y budget validados;
+  // contrato firmado ⇒ contrato revisado). Un hito con hecho real captado más
+  // tarde igual gana: la inferencia solo rellena huecos.
+  const inferidos = new Set<string>()
+  {
+    const stack = [...cumplidos]
+    const visto = new Set<string>(cumplidos)
+    while (stack.length) {
+      const codigo = stack.pop()!
+      for (const p of pred.get(codigo) ?? []) {
+        if (visto.has(p)) continue
+        visto.add(p)
+        stack.push(p) // seguir subiendo, aun a través de un excluido
+        // Solo se infieren pasos administrativos (manual_futuro): nunca hitos
+        // instrumentados (producción/QC/material), que dependen de un hecho
+        // físico real — fabricarlos sería peor que dejarlos pendientes.
+        if (!cumplidos.has(p) && !NO_INFERIR.has(p) && fuentePorCodigo.get(p) === 'manual_futuro') {
+          inferidos.add(p)
+        }
+      }
+    }
+  }
+  for (const c of inferidos) cumplidos.add(c) // destraban a sus sucesores
+
   let peor = 'gris'
   let minHolgura: number | null = null
   const rank: Record<string, number> = { gris: 0, verde: 1, amarillo: 2, rojo: 3 }
@@ -161,6 +197,12 @@ export async function recomputeScheduleForProyecto(
     if (fechaReal === null && fuentePorCodigo.get(h.codigo) === 'manual_futuro') {
       const ex = realExistente.get(h.codigo)
       if (ex?.fecha_real) { fechaReal = ex.fecha_real; evidencia = ex.evidencia_ref ?? null }
+    }
+    // Cierre hacia atrás: si no tiene hecho real pero un paso posterior sí,
+    // se da por cumplido en su fecha planeada (holgura 0, sin atribución).
+    if (fechaReal === null && inferidos.has(h.codigo)) {
+      fechaReal = planeada ?? hoy
+      evidencia = { source: 'inferido', nota: 'implícito: un paso posterior ya está cumplido' }
     }
 
     let estado: string
