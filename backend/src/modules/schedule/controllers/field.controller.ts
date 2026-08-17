@@ -10,6 +10,7 @@ import { createError } from '../../../middleware/errorHandler'
 import { supabase, supabaseEnabled, SUPABASE_BUCKET } from '../../../utils/supabase'
 import { logger } from '../../../utils/logger'
 import { crearPunchItem, resolverPunchItem, listPunch, registrarSignoff, listInstallQueue } from '../domain/field'
+import { listInstallItems, marcarInstalado, desmarcarInstalado } from '../domain/installitems'
 
 // Fotos de punch list / firma — solo imágenes, hasta 15 MB.
 export const uploadFoto = multer({
@@ -27,12 +28,12 @@ function parseProyectoId(req: Request): number {
   return id
 }
 
-/** Sube el buffer de una imagen a Supabase bajo path 'punch/'. Devuelve el path o null. */
-async function subirFoto(file: Express.Multer.File | undefined): Promise<string | null> {
+/** Sube el buffer de una imagen a Supabase bajo el prefijo dado. Devuelve el path o null. */
+async function subirFoto(file: Express.Multer.File | undefined, prefix = 'punch'): Promise<string | null> {
   if (!file) return null
   if (!supabaseEnabled || !supabase) throw createError('Storage no está configurado en este entorno', 503)
   const ext = (file.originalname.split('.').pop() || 'jpg').toLowerCase().replace(/[^a-z0-9]/g, '')
-  const path = `punch/${randomUUID()}.${ext}`
+  const path = `${prefix}/${randomUUID()}.${ext}`
   const { error } = await supabase.storage
     .from(SUPABASE_BUCKET)
     .upload(path, file.buffer, { contentType: file.mimetype || 'image/jpeg', cacheControl: '3600', upsert: false })
@@ -49,6 +50,57 @@ export async function installQueueHandler(_req: Request, res: Response, next: Ne
     const rows = await listInstallQueue(pool)
     res.json({ data: rows })
   } catch (err) { next(err) }
+}
+
+// GET /api/schedule/proyecto/:id/items
+export async function listItemsHandler(req: Request, res: Response, next: NextFunction) {
+  try {
+    const proyectoId = parseProyectoId(req)
+    const items = await listInstallItems(pool, proyectoId)
+    res.json({ data: items })
+  } catch (err) { next(err) }
+}
+
+// POST /api/schedule/proyecto/:id/items/:opId/instalar  (field: 'foto', body: nota?)
+export async function marcarItemHandler(req: Request, res: Response, next: NextFunction) {
+  const client = await pool.connect()
+  try {
+    const proyectoId = parseProyectoId(req)
+    const opId = parseInt(String(req.params.opId), 10)
+    if (Number.isNaN(opId)) return next(createError('id de item inválido', 400))
+    const nota = typeof req.body?.nota === 'string' ? req.body.nota.slice(0, 300) : null
+    const foto = await subirFoto(req.file, 'install')
+
+    await client.query('BEGIN')
+    const r = await marcarInstalado(client, proyectoId, opId, foto, nota, (req as any).user?.id ?? null)
+    await client.query('COMMIT')
+    if (!r.ok) return next(createError(r.error ?? 'no se pudo marcar', 400))
+    res.status(201).json({ data: { ok: true }, message: 'Item instalado' })
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => {})
+    next(err)
+  } finally {
+    client.release()
+  }
+}
+
+// POST /api/schedule/proyecto/:id/items/:opId/desmarcar
+export async function desmarcarItemHandler(req: Request, res: Response, next: NextFunction) {
+  const client = await pool.connect()
+  try {
+    const proyectoId = parseProyectoId(req)
+    const opId = parseInt(String(req.params.opId), 10)
+    if (Number.isNaN(opId)) return next(createError('id de item inválido', 400))
+    await client.query('BEGIN')
+    await desmarcarInstalado(client, proyectoId, opId)
+    await client.query('COMMIT')
+    res.json({ data: { ok: true }, message: 'Instalación deshecha' })
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => {})
+    next(err)
+  } finally {
+    client.release()
+  }
 }
 
 // GET /api/schedule/proyecto/:id/punch

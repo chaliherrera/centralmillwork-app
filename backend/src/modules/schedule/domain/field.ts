@@ -40,7 +40,8 @@ async function completarHito(runner: QueryRunner, proyectoId: number, codigo: st
 export interface InstallHito { codigo: string; nombre: string; fecha_real: string | null; fecha_planeada: string | null }
 export interface InstallProyecto {
   proyecto_id: number; codigo: string; nombre: string; cliente: string | null
-  fecha_objetivo: string | null; punch_abiertos: number; hitos: InstallHito[]
+  fecha_objetivo: string | null; punch_abiertos: number
+  items_total: number; items_instalados: number; hitos: InstallHito[]
 }
 
 const INSTALL_CODES = ['I-04', 'I-05', 'I-06', 'I-07']
@@ -50,6 +51,7 @@ export async function listInstallQueue(runner: QueryRunner): Promise<InstallProy
     proyecto_id: number; codigo: string; nombre: string; cliente: string | null
     fecha_objetivo: string | null; hito_codigo: string; hito_nombre: string
     fecha_real: string | null; fecha_planeada: string | null; punch_abiertos: string
+    items_total: string; items_instalados: string
   }>(
     `SELECT sp.proyecto_id, p.codigo, p.nombre, p.cliente,
             to_char(sp.fecha_objetivo,'YYYY-MM-DD') AS fecha_objetivo,
@@ -57,7 +59,11 @@ export async function listInstallQueue(runner: QueryRunner): Promise<InstallProy
             to_char(sh.fecha_real,'YYYY-MM-DD') AS fecha_real,
             to_char(sh.fecha_planeada,'YYYY-MM-DD') AS fecha_planeada,
             (SELECT COUNT(*) FROM schedule_punch_items pi
-              WHERE pi.proyecto_id = sp.proyecto_id AND pi.estado = 'abierto')::text AS punch_abiertos
+              WHERE pi.proyecto_id = sp.proyecto_id AND pi.estado = 'abierto')::text AS punch_abiertos,
+            (SELECT COUNT(*) FROM ordenes_produccion op
+              WHERE op.proyecto_id = sp.proyecto_id)::text AS items_total,
+            (SELECT COUNT(*) FROM schedule_install_items si
+              WHERE si.proyecto_id = sp.proyecto_id)::text AS items_instalados
        FROM schedule_planes sp
        JOIN proyectos p ON p.id = sp.proyecto_id
        JOIN schedule_hitos sh ON sh.plan_id = sp.id
@@ -74,7 +80,8 @@ export async function listInstallQueue(runner: QueryRunner): Promise<InstallProy
     if (!p) {
       p = {
         proyecto_id: r.proyecto_id, codigo: r.codigo, nombre: r.nombre, cliente: r.cliente,
-        fecha_objetivo: r.fecha_objetivo, punch_abiertos: Number(r.punch_abiertos), hitos: [],
+        fecha_objetivo: r.fecha_objetivo, punch_abiertos: Number(r.punch_abiertos),
+        items_total: Number(r.items_total), items_instalados: Number(r.items_instalados), hitos: [],
       }
       porProyecto.set(r.proyecto_id, p)
     }
