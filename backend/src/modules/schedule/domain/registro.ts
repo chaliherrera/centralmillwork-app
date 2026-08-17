@@ -14,6 +14,7 @@ import type { PoolClient } from 'pg'
 import pool from '../../../db/pool'
 import { recomputeScheduleForProyecto } from './recompute'
 import { APROBABLES } from './portal'
+import { bloqueoPorPredecesores } from './gates'
 
 type QueryRunner = PoolClient | typeof pool
 
@@ -53,6 +54,9 @@ export async function registrarHito(
       `UPDATE schedule_hitos SET fecha_real = NULL, evidencia_ref = NULL, updated_at = NOW() WHERE id = $1`,
       [h.id])
   } else {
+    // Freno hacia adelante: no completar si faltan pasos previos.
+    const bloqueo = await bloqueoPorPredecesores(runner, proyectoId, codigo)
+    if (bloqueo) return { ok: false, error: bloqueo }
     const evidencia = JSON.stringify(
       importe != null
         ? { source: 'pago', importe, usuario: usuarioNombre || undefined, nota: nota || undefined }

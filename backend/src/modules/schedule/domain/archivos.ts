@@ -11,6 +11,7 @@ import pool from '../../../db/pool'
 import { supabase, supabaseEnabled, SUPABASE_BUCKET } from '../../../utils/supabase'
 import { recomputeScheduleForProyecto } from './recompute'
 import { APROBABLES } from './portal'
+import { bloqueoPorPredecesores } from './gates'
 
 type QueryRunner = PoolClient | typeof pool
 const SIGNED_TTL = 3600
@@ -46,6 +47,12 @@ export async function subirArchivoHito(
   if (!h) return { ok: false, error: 'hito no encontrado en el plan' }
   if (h.fuente_dato !== 'manual_futuro' || APROBABLES[codigo])
     return { ok: false, error: 'este hito no admite archivos por acá' }
+  // Freno hacia adelante: si este archivo completaría el hito, exigir que los
+  // pasos previos ya estén cumplidos (no adjuntar el archivo si no).
+  if (!h.fecha_real) {
+    const bloqueo = await bloqueoPorPredecesores(runner, proyectoId, codigo)
+    if (bloqueo) return { ok: false, error: bloqueo }
+  }
 
   const ins = await runner.query<{ id: number }>(
     `INSERT INTO schedule_hito_archivos (proyecto_id, hito_codigo, filename, original_name, size_bytes, subido_por)
