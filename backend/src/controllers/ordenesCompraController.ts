@@ -4,6 +4,7 @@ import { parsePagination, paginatedResponse } from '../utils/pagination'
 import { createError } from '../middleware/errorHandler'
 import { recomputeMaterialesEstadoByIds } from '../utils/materialesEstado'
 import { nextOcNumero } from '../utils/numeradorAtomico'
+import { recomputeScheduleForOCSafe, recomputeScheduleSafe } from '../modules/schedule'
 
 // ─── Shared FROM/JOIN block (table + lateral recepcion) ──────────────────────
 const OC_JOINS = `
@@ -290,6 +291,8 @@ export async function createOrdenCompra(req: Request, res: Response, next: NextF
     )
 
     await client.query('COMMIT')
+    // El schedule captura M-03/M-05 (OCs emitidas) — recalcular best-effort.
+    void recomputeScheduleForOCSafe(orden.id, 'oc')
     res.status(201).json({ data: { ...orden, numero, subtotal, iva: 0, total }, message: `Orden ${numero} creada` })
   } catch (err) {
     await client.query('ROLLBACK')
@@ -332,6 +335,8 @@ export async function updateOrdenCompra(req: Request, res: Response, next: NextF
     }
 
     await client.query('COMMIT')
+    // Emisión/cancelación de OC afecta hitos de materiales — recalcular best-effort.
+    void recomputeScheduleForOCSafe(Number(req.params.id), 'oc')
     res.json({ data: rows[0], message: 'Orden actualizada' })
   } catch (err) {
     await client.query('ROLLBACK').catch(() => {})
@@ -577,6 +582,7 @@ export async function generarOCs(req: Request, res: Response, next: NextFunction
     }
 
     await client.query('COMMIT')
+    void recomputeScheduleSafe(proyecto_id, 'oc') // OCs emitidas → hitos de materiales
     res.status(201).json({ data: results, message: `${results.length} OC(s) generada(s)` })
   } catch (err) {
     await client.query('ROLLBACK')
@@ -590,7 +596,7 @@ export async function deleteOrdenCompra(req: Request, res: Response, next: NextF
     await client.query('BEGIN')
 
     const { rows: [orden] } = await client.query(
-      `SELECT estado FROM ordenes_compra WHERE id = $1`, [req.params.id]
+      `SELECT estado, proyecto_id FROM ordenes_compra WHERE id = $1`, [req.params.id]
     )
     if (!orden) {
       await client.query('ROLLBACK')
@@ -615,6 +621,7 @@ export async function deleteOrdenCompra(req: Request, res: Response, next: NextF
     await recomputeMaterialesEstadoByIds(client, materialIds)
 
     await client.query('COMMIT')
+    if (orden.proyecto_id) void recomputeScheduleSafe(orden.proyecto_id, 'oc') // OC eliminada revierte materiales
     res.json({ message: 'Orden eliminada' })
   } catch (err) {
     await client.query('ROLLBACK').catch(() => {})
@@ -784,6 +791,7 @@ export async function crearOCNoMTO(req: Request, res: Response, next: NextFuncti
     await recomputeMaterialesEstadoByIds(client, materialIds)
 
     await client.query('COMMIT')
+    void recomputeScheduleForOCSafe(orden.id, 'oc') // OC no-MTO emitida → hitos de materiales
     res.status(201).json({
       data: { id: orden.id, numero, total, freight: freightNum, materiales_count: materialIds.length, origen },
       message: `Compra ${origen.toLowerCase()} ${numero} creada con ${materialIds.length} ítem(s)`,

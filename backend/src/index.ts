@@ -13,7 +13,7 @@ import dotenv from 'dotenv'
 import path from 'path'
 import fs from 'fs'
 import router from './routes'
-import { portalPublicRouter } from './modules/schedule'
+import { portalPublicRouter, startScheduleCron } from './modules/schedule'
 import authRouter from './routes/auth'
 import kioskRouter from './routes/kiosk'
 import webhooksRouter from './routes/webhooks'
@@ -146,6 +146,10 @@ app.use(errorHandler)
     // vs otra opción), este cron probablemente NO vuelva — el panel viviria
     // consultando las reglas en tiempo real desde el frontend.
     logger.info('system tareas sync DISABLED (Fase A del refactor)')
+
+    // Reloj del schedule (Life of a Deal): envejece el semáforo de los planes
+    // activos aunque no haya actividad. Lock entre réplicas adentro.
+    startScheduleCron(6)
   })
 })()
 

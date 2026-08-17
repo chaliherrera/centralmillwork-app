@@ -8,5 +8,7 @@ export {
   recomputeScheduleForProyecto,
   recomputeScheduleSafe,
   recomputeScheduleForOCSafe,
+  recomputeScheduleForOPSafe,
   generarPlan,
 } from './domain/recompute'
+export { startScheduleCron, recomputeAllActivePlans } from './domain/cron'

@@ -326,3 +326,15 @@ export async function recomputeScheduleForOCSafe(ocId: number, disparadoPor: Dis
     logger.error('recomputeScheduleForOCSafe error', { ocId, err })
   }
 }
+
+/** Idem, resolviendo el proyecto desde una OP (orden de producción). Best-effort. */
+export async function recomputeScheduleForOPSafe(ordenId: number, disparadoPor: Disparador): Promise<void> {
+  try {
+    const { rows } = await pool.query<{ proyecto_id: number | null }>(
+      `SELECT proyecto_id FROM ordenes_produccion WHERE id = $1`, [ordenId])
+    const pid = rows[0]?.proyecto_id
+    if (pid) await recomputeScheduleSafe(pid, disparadoPor)
+  } catch (err) {
+    logger.error('recomputeScheduleForOPSafe error', { ordenId, err })
+  }
+}

@@ -6,6 +6,7 @@ import pool from '../db/pool'
 import { createError } from '../middleware/errorHandler'
 import { supabase, supabaseEnabled, SUPABASE_BUCKET } from '../utils/supabase'
 import { logger } from '../utils/logger'
+import { recomputeScheduleForOPSafe } from '../modules/schedule'
 
 // Storage compartido con imagenesController, mismo patrón:
 // memoria si Supabase está activo, disco si no.
@@ -103,6 +104,7 @@ export async function createInspeccion(req: Request, res: Response, next: NextFu
     }
 
     await client.query('COMMIT')
+    void recomputeScheduleForOPSafe(orden_id, 'op') // QC afecta hitos QC-01/02/03
     res.status(201).json({ data: { ...insp, defectos: defectosInsertados }, message: 'Inspección registrada' })
   } catch (err) {
     await client.query('ROLLBACK')
