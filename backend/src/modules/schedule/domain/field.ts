@@ -62,7 +62,7 @@ export async function listInstallQueue(runner: QueryRunner): Promise<InstallProy
             (SELECT COUNT(*) FROM schedule_punch_items pi
               WHERE pi.proyecto_id = sp.proyecto_id AND pi.estado = 'abierto')::text AS punch_abiertos,
             (SELECT COUNT(*) FROM ordenes_produccion op
-              WHERE op.proyecto_id = sp.proyecto_id)::text AS items_total,
+              WHERE op.proyecto_id = sp.proyecto_id AND op.status <> 'Cancelada')::text AS items_total,
             (SELECT COUNT(*) FROM schedule_install_items si
               WHERE si.proyecto_id = sp.proyecto_id)::text AS items_instalados
        FROM schedule_planes sp

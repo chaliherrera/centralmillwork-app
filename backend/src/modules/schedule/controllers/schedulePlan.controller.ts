@@ -10,7 +10,7 @@ import { z } from 'zod'
 import pool from '../../../db/pool'
 import { createError } from '../../../middleware/errorHandler'
 import { generarPlan, recomputeScheduleForProyecto } from '../domain/recompute'
-import { crearToken } from '../domain/portal'
+import { crearToken, revocarToken } from '../domain/portal'
 import { registrarHito } from '../domain/registro'
 
 function parseProyectoId(req: Request): number {
@@ -109,6 +109,18 @@ export async function listPortalTokensHandler(req: Request, res: Response, next:
               to_char(last_access_at,'YYYY-MM-DD"T"HH24:MI') AS last_access_at
          FROM schedule_portal_tokens WHERE proyecto_id = $1 ORDER BY created_at DESC`, [proyectoId])
     res.json({ data: rows })
+  } catch (err) { next(err) }
+}
+
+// ── POST /api/schedule/proyecto/:id/portal-token/:tokenId/revocar ────────────
+export async function revocarPortalTokenHandler(req: Request, res: Response, next: NextFunction) {
+  try {
+    const proyectoId = parseProyectoId(req)
+    const tokenId = parseInt(String(req.params.tokenId), 10)
+    if (Number.isNaN(tokenId)) return next(createError('id de token inválido', 400))
+    const ok = await revocarToken(pool, proyectoId, tokenId)
+    if (!ok) return next(createError('token no encontrado o ya revocado', 404))
+    res.json({ data: { ok: true }, message: 'Link del portal revocado' })
   } catch (err) { next(err) }
 }
 

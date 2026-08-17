@@ -1,6 +1,6 @@
 import { Router } from 'express'
 import { requireRole } from '../../middleware/auth'
-import { getPlan, generarPlanHandler, recalcularHandler, crearPortalTokenHandler, listPortalTokensHandler, registrarHitoHandler } from './controllers/schedulePlan.controller'
+import { getPlan, generarPlanHandler, recalcularHandler, crearPortalTokenHandler, listPortalTokensHandler, revocarPortalTokenHandler, registrarHitoHandler } from './controllers/schedulePlan.controller'
 import { uploadSubmittal, uploadSubmittalHandler, listSubmittalsHandler, uploadArchivo, uploadArchivoHitoHandler, listArchivosHitoHandler } from './controllers/submittals.controller'
 import { uploadFoto, installQueueHandler, listItemsHandler, marcarItemHandler, desmarcarItemHandler, listPunchHandler, crearPunchHandler, resolverPunchHandler, signoffHandler } from './controllers/field.controller'
 
@@ -21,7 +21,10 @@ router.get ('/proyecto/:id',            SCHEDULE_READ,  getPlan)
 router.post('/proyecto/:id/generar',    SCHEDULE_WRITE, generarPlanHandler)
 router.post('/proyecto/:id/recalcular', SCHEDULE_WRITE, recalcularHandler)
 router.post('/proyecto/:id/portal-token',  SCHEDULE_WRITE, crearPortalTokenHandler)
-router.get ('/proyecto/:id/portal-tokens', SCHEDULE_READ,  listPortalTokensHandler)
+// Los tokens son "capabilities" para aprobar como cliente: solo ADMIN/PM los
+// listan (no VIEWER) y pueden revocarlos.
+router.get ('/proyecto/:id/portal-tokens', SCHEDULE_WRITE, listPortalTokensHandler)
+router.post('/proyecto/:id/portal-token/:tokenId/revocar', SCHEDULE_WRITE, revocarPortalTokenHandler)
 router.post('/proyecto/:id/hito/:codigo/registrar', SCHEDULE_REGISTRAR, registrarHitoHandler)
 
 const SCHEDULE_ENGINEERING = requireRole('ADMIN', 'PROJECT_MANAGEMENT', 'ENGINEERING')

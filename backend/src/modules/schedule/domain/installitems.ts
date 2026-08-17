@@ -47,7 +47,7 @@ export async function listInstallItems(runner: QueryRunner, proyectoId: number):
             to_char(ii.instalado_at,'YYYY-MM-DD') AS instalado_at
        FROM ordenes_produccion op
        LEFT JOIN schedule_install_items ii ON ii.op_id = op.id AND ii.proyecto_id = op.proyecto_id
-      WHERE op.proyecto_id = $1
+      WHERE op.proyecto_id = $1 AND op.status <> 'Cancelada'
       ORDER BY (ii.id IS NOT NULL), op.numero_item, op.id`, [proyectoId])
   return Promise.all(rows.map(async (r) => ({
     op_id: r.op_id, numero_orden: r.numero_orden, numero_item: r.numero_item,
@@ -64,7 +64,7 @@ export async function contarInstall(runner: QueryRunner, proyectoId: number): Pr
             COUNT(ii.id)::text AS instalados
        FROM ordenes_produccion op
        LEFT JOIN schedule_install_items ii ON ii.op_id = op.id AND ii.proyecto_id = op.proyecto_id
-      WHERE op.proyecto_id = $1`, [proyectoId])
+      WHERE op.proyecto_id = $1 AND op.status <> 'Cancelada'`, [proyectoId])
   return { total: Number(rows[0].total), instalados: Number(rows[0].instalados) }
 }
 

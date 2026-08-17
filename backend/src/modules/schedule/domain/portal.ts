@@ -58,6 +58,14 @@ export async function crearToken(
   return { id: rows[0].id, token }
 }
 
+/** Revoca (desactiva) un token del portal. Deja de funcionar de inmediato. */
+export async function revocarToken(runner: QueryRunner, proyectoId: number, tokenId: number): Promise<boolean> {
+  const { rowCount } = await runner.query(
+    `UPDATE schedule_portal_tokens SET activo = false WHERE id = $1 AND proyecto_id = $2 AND activo = true`,
+    [tokenId, proyectoId])
+  return (rowCount ?? 0) > 0
+}
+
 /** Valida un token activo y devuelve a qué proyecto/contacto corresponde. */
 export async function resolverToken(runner: QueryRunner, token: string): Promise<TokenInfo | null> {
   const { rows } = await runner.query<{ proyecto_id: number; contacto_nombre: string | null }>(
