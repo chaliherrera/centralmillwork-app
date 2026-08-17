@@ -31,6 +31,15 @@ const HOLGURA_VERDE = 3 // días hábiles
 // import circular con portal.ts, que ya importa este módulo.)
 const NO_INFERIR = new Set<string>(['E-05', 'E-07', 'I-07', 'C-04', 'X-03'])
 
+// La inferencia es un CÁLCULO, no un hecho: aunque se persiste (para que la UI
+// muestre el hito cumplido), NO debe tomarse como base en la próxima corrida —
+// si no, un cumplido inferido se volvería permanente aunque se deshaga el hecho
+// posterior que lo justificaba. Por eso ignoramos las fechas cuya evidencia es
+// 'inferido' al leer el estado previo; la inferencia se re-deriva cada vez.
+function esInferida(evidencia: unknown): boolean {
+  return !!evidencia && typeof evidencia === 'object' && (evidencia as { source?: string }).source === 'inferido'
+}
+
 function todayISO(): ISODate {
   const t = new Date()
   const p = (n: number) => String(n).padStart(2, '0')
@@ -57,6 +66,7 @@ interface PlantillaHito {
   es_ancla: boolean
   rol_responsable: string | null
   fuente_dato: string
+  tipo: string
 }
 
 /**
@@ -118,7 +128,7 @@ export async function recomputeScheduleForProyecto(
   if (!plan) return { skipped: true }
 
   const { rows: hitosRows } = await runner.query<PlantillaHito>(
-    `SELECT codigo, dur_dias_default, es_ancla, rol_responsable, fuente_dato
+    `SELECT codigo, dur_dias_default, es_ancla, rol_responsable, fuente_dato, tipo
        FROM schedule_plantilla_hitos WHERE plantilla_id = $1`, [plan.plantilla_id])
 
   // Fechas reales ya guardadas (ej. cargadas por el portal de cliente o a mano):
@@ -135,6 +145,7 @@ export async function recomputeScheduleForProyecto(
   const hitos: HitoDef[] = hitosRows.map((h) => ({ codigo: h.codigo, dur: h.dur_dias_default, es_ancla: h.es_ancla }))
   const deps: DepDef[] = depRows.map((d) => ({ hito: d.hito_codigo, dependeDe: d.depende_de_codigo }))
   const rolPorCodigo = new Map(hitosRows.map((h) => [h.codigo, h.rol_responsable]))
+  const tipoPorCodigo = new Map(hitosRows.map((h) => [h.codigo, h.tipo]))
 
   const feriados = await loadFeriados(runner)
   const { planeadas } = calcularPlaneadas(hitos, deps, plan.fecha_objetivo, feriados)
@@ -152,7 +163,8 @@ export async function recomputeScheduleForProyecto(
   for (const h of hitos) {
     let fr = reales.get(h.codigo)?.fecha_real ?? null
     if (fr === null && fuentePorCodigo.get(h.codigo) === 'manual_futuro') {
-      fr = realExistente.get(h.codigo)?.fecha_real ?? null
+      const ex = realExistente.get(h.codigo)
+      if (ex && !esInferida(ex.evidencia_ref)) fr = ex.fecha_real ?? null // no tomar inferidas como base
     }
     if (fr) cumplidos.add(h.codigo)
   }
@@ -194,9 +206,10 @@ export async function recomputeScheduleForProyecto(
     let fechaReal = cap?.fecha_real ?? null
     let evidencia: unknown = cap?.evidencia ?? null
     // Hito no instrumentado con fecha ya cargada (portal/manual): preservarla.
+    // Pero NO las inferidas: esas se re-derivan abajo, nunca se preservan.
     if (fechaReal === null && fuentePorCodigo.get(h.codigo) === 'manual_futuro') {
       const ex = realExistente.get(h.codigo)
-      if (ex?.fecha_real) { fechaReal = ex.fecha_real; evidencia = ex.evidencia_ref ?? null }
+      if (ex?.fecha_real && !esInferida(ex.evidencia_ref)) { fechaReal = ex.fecha_real; evidencia = ex.evidencia_ref ?? null }
     }
     // Cierre hacia atrás: si no tiene hecho real pero un paso posterior sí,
     // se da por cumplido en su fecha planeada (holgura 0, sin atribución).
@@ -219,9 +232,16 @@ export async function recomputeScheduleForProyecto(
         holgura = businessDaysBetween(fechaReal, planeada, feriados) // + = cumplido antes
         if (holgura < 0) atribucion = areaFromRol(rolPorCodigo.get(h.codigo) ?? null)
       }
+    } else if (tipoPorCodigo.get(h.codigo) === 'cond') {
+      // Hito condicional (solo ocurre si algo puntual pasa: reproceso, resubmittal…).
+      // Si no está cumplido, es neutro: ni rojo, ni cuenta para el semáforo global,
+      // ni aparece como pendiente. Se materializa recién si alguien lo registra.
+      estado = 'no_aplica'
+      semaforo = 'gris'
     } else {
       const preds = pred.get(h.codigo) ?? []
-      const listoParaActuar = preds.every((p) => cumplidos.has(p))
+      // Un predecesor condicional no bloquea (es opcional): cuenta como satisfecho.
+      const listoParaActuar = preds.every((p) => cumplidos.has(p) || tipoPorCodigo.get(p) === 'cond')
       if (!listoParaActuar) {
         estado = 'no_aplica'
         semaforo = 'gris'
