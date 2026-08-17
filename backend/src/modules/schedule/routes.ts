@@ -2,6 +2,7 @@ import { Router } from 'express'
 import { requireRole } from '../../middleware/auth'
 import { getPlan, generarPlanHandler, recalcularHandler, crearPortalTokenHandler, listPortalTokensHandler, registrarHitoHandler } from './controllers/schedulePlan.controller'
 import { uploadSubmittal, uploadSubmittalHandler, listSubmittalsHandler, uploadArchivo, uploadArchivoHitoHandler, listArchivosHitoHandler } from './controllers/submittals.controller'
+import { uploadFoto, listPunchHandler, crearPunchHandler, resolverPunchHandler, signoffHandler } from './controllers/field.controller'
 
 const router = Router()
 
@@ -28,5 +29,13 @@ router.get ('/proyecto/:id/submittals', SCHEDULE_READ, listSubmittalsHandler)
 router.post('/proyecto/:id/submittals', SCHEDULE_ENGINEERING, uploadSubmittal.single('planos'), uploadSubmittalHandler)
 router.get ('/proyecto/:id/hito/:codigo/archivos', SCHEDULE_READ, listArchivosHitoHandler)
 router.post('/proyecto/:id/hito/:codigo/archivo', SCHEDULE_REGISTRAR, uploadArchivo.single('archivo'), uploadArchivoHitoHandler)
+
+// Field / Install — punch list + sign-off en obra (desde el móvil).
+// El check-in (I-04) y el avance (I-05) reusan el endpoint de archivo de arriba.
+const SCHEDULE_FIELD = requireRole('ADMIN', 'PROJECT_MANAGEMENT', 'PRODUCTION', 'SHOP_MANAGER')
+router.get ('/proyecto/:id/punch',        SCHEDULE_READ,  listPunchHandler)
+router.post('/proyecto/:id/punch',        SCHEDULE_FIELD, uploadFoto.single('foto'), crearPunchHandler)
+router.post('/punch/:itemId/resolver',    SCHEDULE_FIELD, uploadFoto.single('foto'), resolverPunchHandler)
+router.post('/proyecto/:id/signoff',      SCHEDULE_FIELD, uploadFoto.single('firma'), signoffHandler)
 
 export default router
