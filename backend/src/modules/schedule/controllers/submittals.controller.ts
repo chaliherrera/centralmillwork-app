@@ -90,10 +90,11 @@ export async function uploadArchivoHitoHandler(req: Request, res: Response, next
       .upload(uniqueName, req.file.buffer, { contentType: req.file.mimetype || 'application/octet-stream', cacheControl: '3600', upsert: false })
     if (upErr) return next(createError(`Error subiendo el archivo: ${upErr.message}`, 500))
 
+    const nota = typeof req.body?.nota === 'string' ? req.body.nota.slice(0, 300) : null
     await client.query('BEGIN')
     const r = await subirArchivoHito(client, proyectoId, codigo,
       { filename: uniqueName, original_name: req.file.originalname, size: req.file.size },
-      (req as any).user?.id ?? null)
+      (req as any).user?.id ?? null, nota)
     await client.query('COMMIT')
     if (!r.ok) return next(createError(r.error ?? 'no se pudo adjuntar', 400))
     res.status(201).json({ data: { id: r.id }, message: 'Archivo adjuntado' })

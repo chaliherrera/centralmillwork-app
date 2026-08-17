@@ -72,9 +72,10 @@ export const scheduleService = {
       .then((r) => r.data)
   },
 
-  uploadArchivoHito: (proyectoId: number, codigo: string, file: File) => {
+  uploadArchivoHito: (proyectoId: number, codigo: string, file: File, nota?: string) => {
     const fd = new FormData()
     fd.append('archivo', file)
+    if (nota) fd.append('nota', nota)
     return api
       .post<ApiResponse<{ id: number }>>(`/schedule/proyecto/${proyectoId}/hito/${codigo}/archivo`, fd, {
         headers: { 'Content-Type': 'multipart/form-data' },

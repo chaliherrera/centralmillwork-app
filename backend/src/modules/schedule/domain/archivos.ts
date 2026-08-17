@@ -33,7 +33,8 @@ export async function subirArchivoHito(
   proyectoId: number,
   codigo: string,
   file: { filename: string; original_name: string; size: number },
-  usuarioId: string | null
+  usuarioId: string | null,
+  nota?: string | null
 ): Promise<SubirResult> {
   const { rows } = await runner.query<{ fuente_dato: string; fecha_real: string | null }>(
     `SELECT ph.fuente_dato, sh.fecha_real
@@ -53,7 +54,7 @@ export async function subirArchivoHito(
 
   // Completar el hito si aún no tenía fecha real (el primer archivo lo cierra).
   if (!h.fecha_real) {
-    const evidencia = JSON.stringify({ source: 'archivo', archivo: file.original_name })
+    const evidencia = JSON.stringify({ source: 'archivo', archivo: file.original_name, nota: nota || undefined })
     await runner.query(
       `UPDATE schedule_hitos sh SET fecha_real = NOW(), evidencia_ref = $3::jsonb, updated_at = NOW()
          FROM schedule_planes sp

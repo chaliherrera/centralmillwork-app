@@ -58,12 +58,18 @@ const ACCION_HITO: Record<string, { label: string; tipo: 'submittal' | 'archivo'
   'E-06': { label: 'Subir planos', tipo: 'submittal' },
   'E-08': { label: 'Subir planos', tipo: 'submittal' },
   'E-11': { label: 'Subir archivos CNC', tipo: 'archivo' },
+  'S-03': { label: 'Subir BOL', tipo: 'archivo' },
+  'S-04': { label: 'Registrar despacho', tipo: 'archivo' },
+  'X-03': { label: 'Registrar pago final', tipo: 'pago' },
 }
 const REGISTRO_LABEL: Record<string, string> = {
   'C-05': 'Validar MTO', 'C-06': 'Validar budget', 'C-07': 'Enviar announcement',
   'C-08': 'Registrar kickoff', 'C-09': 'Transferir POC',
   'E-09': 'Liberar MTO', 'E-10': 'Release to Production',
+  'S-01': 'Registrar packaging', 'S-02': 'Emitir delivery request', 'S-05': 'Coordinar recepción',
 }
+// Etiqueta del campo de dato opcional en la subida de archivo, por hito.
+const ARCHIVO_NOTA: Record<string, string> = { 'S-04': 'Número de precinto', 'S-03': 'N° de BOL' }
 
 function fmt(d: string | null): string {
   if (!d) return '—'
@@ -103,6 +109,7 @@ export default function ScheduleTab({ proyectoId }: { proyectoId: number }) {
   const [subFile, setSubFile] = useState<File | null>(null)
   const [archivoHito, setArchivoHito] = useState<{ codigo: string; nombre: string } | null>(null)
   const [arcFile, setArcFile] = useState<File | null>(null)
+  const [arcNota, setArcNota] = useState('')
   const [pago, setPago] = useState<{ codigo: string; nombre: string } | null>(null)
   const [pagoImporte, setPagoImporte] = useState('')
   const [pagoFecha, setPagoFecha] = useState('')
@@ -156,8 +163,8 @@ export default function ScheduleTab({ proyectoId }: { proyectoId: number }) {
     if (!archivoHito || !arcFile) { toast.error('Elegí un archivo'); return }
     setBusy(true)
     try {
-      await scheduleService.uploadArchivoHito(proyectoId, archivoHito.codigo, arcFile)
-      toast.success('Archivo adjuntado'); setArchivoHito(null); setArcFile(null); await load()
+      await scheduleService.uploadArchivoHito(proyectoId, archivoHito.codigo, arcFile, arcNota || undefined)
+      toast.success('Archivo adjuntado'); setArchivoHito(null); setArcFile(null); setArcNota(''); await load()
     } catch { /* toast */ } finally { setBusy(false) }
   }
   async function confirmarPago() {
@@ -181,7 +188,7 @@ export default function ScheduleTab({ proyectoId }: { proyectoId: number }) {
       </button>
     )
     if (cfg?.tipo === 'archivo') return (
-      <button onClick={() => { setArchivoHito({ codigo: h.codigo, nombre: h.nombre }); setArcFile(null) }} className={cls}>
+      <button onClick={() => { setArchivoHito({ codigo: h.codigo, nombre: h.nombre }); setArcFile(null); setArcNota('') }} className={cls}>
         <Upload size={ico} /> {cfg.label}
       </button>
     )
@@ -629,6 +636,12 @@ export default function ScheduleTab({ proyectoId }: { proyectoId: number }) {
               <span className="text-sm text-stone-500">{arcFile ? arcFile.name : 'Elegí un archivo'}</span>
               <input type="file" className="hidden" onChange={(e) => setArcFile(e.target.files?.[0] ?? null)} />
             </label>
+            {ARCHIVO_NOTA[archivoHito.codigo] && (
+              <>
+                <label className="block mt-3 text-xs font-medium text-stone-500">{ARCHIVO_NOTA[archivoHito.codigo]} (opcional)</label>
+                <input value={arcNota} onChange={(e) => setArcNota(e.target.value)} className="input w-full mt-1" />
+              </>
+            )}
             <div className="mt-4 flex justify-end gap-2">
               <button onClick={() => setArchivoHito(null)} disabled={busy} className="px-3 py-2 text-sm text-stone-500">Cancelar</button>
               <button onClick={confirmarArchivo} disabled={busy || !arcFile} className="btn-primary">
