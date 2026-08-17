@@ -14,6 +14,7 @@ import type { PoolClient } from 'pg'
 import pool from '../../../db/pool'
 import { supabase, supabaseEnabled, SUPABASE_BUCKET } from '../../../utils/supabase'
 import { recomputeScheduleForProyecto } from './recompute'
+import { bloqueoPorPredecesores } from './gates'
 
 type QueryRunner = PoolClient | typeof pool
 const SIGNED_TTL = 3600
@@ -152,8 +153,13 @@ export async function listPunch(runner: QueryRunner, proyectoId: number): Promis
 // ── SIGN-OFF DEL CLIENTE EN OBRA (completa I-07) ─────────────────────────────
 export async function registrarSignoff(
   runner: QueryRunner, proyectoId: number, nombreCliente: string | null, firma: string | null
-): Promise<void> {
+): Promise<{ ok: boolean; error?: string }> {
+  // Freno hacia adelante (server-side): no cerrar la entrega si faltan pasos
+  // previos (punch list, instalación…). Antes esto solo lo frenaba la UI móvil.
+  const bloqueo = await bloqueoPorPredecesores(runner, proyectoId, 'I-07')
+  if (bloqueo) return { ok: false, error: bloqueo }
   await completarHito(runner, proyectoId, 'I-07',
     { source: 'field_signoff', cliente: nombreCliente || undefined, firma: firma || undefined })
   await recomputeScheduleForProyecto(runner, proyectoId, 'op')
+  return { ok: true }
 }

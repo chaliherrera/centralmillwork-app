@@ -164,7 +164,8 @@ export async function signoffHandler(req: Request, res: Response, next: NextFunc
     const firma = await subirFoto(req.file)
 
     await client.query('BEGIN')
-    await registrarSignoff(client, proyectoId, cliente, firma)
+    const r = await registrarSignoff(client, proyectoId, cliente, firma)
+    if (!r.ok) { await client.query('ROLLBACK'); return next(createError(r.error ?? 'no se pudo registrar', 400)) }
     await client.query('COMMIT')
     res.status(201).json({ data: { ok: true }, message: 'Sign-off del cliente registrado — proyecto ENTREGADO' })
   } catch (err) {

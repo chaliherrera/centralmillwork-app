@@ -12,6 +12,7 @@ import type { PoolClient } from 'pg'
 import pool from '../../../db/pool'
 import { recomputeScheduleForProyecto } from './recompute'
 import { latestSubmittalUrl, marcarRespuestaSubmittal } from './submittals'
+import { bloqueoPorPredecesores } from './gates'
 
 type QueryRunner = PoolClient | typeof pool
 
@@ -157,6 +158,11 @@ export async function aplicarAprobacion(
     [info.proyectoId, codigo])
   if (!sh[0]) return { ok: false, error: 'hito no encontrado en el plan' }
   if (sh[0].fecha_real) return { ok: false, error: 'este hito ya fue resuelto' }
+  // Freno hacia adelante (server-side): no aprobar si faltan pasos previos.
+  if (decision === 'aprobado' || decision === 'aprobado_con_comentarios') {
+    const bloqueo = await bloqueoPorPredecesores(runner, info.proyectoId, codigo)
+    if (bloqueo) return { ok: false, error: bloqueo }
+  }
 
   const evidencia = JSON.stringify({
     source: 'portal', contacto: info.contactoNombre, decision, comentario: comentario || undefined,

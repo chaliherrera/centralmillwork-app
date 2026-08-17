@@ -50,6 +50,7 @@ export async function uploadSubmittalHandler(req: Request, res: Response, next: 
     const r = await crearSubmittal(client, proyectoId,
       { filename: uniqueName, original_name: req.file.originalname, size: req.file.size },
       (req as any).user?.id ?? null)
+    if (!r.ok) { await client.query('ROLLBACK'); return next(createError(r.error, 400)) }
     await client.query('COMMIT')
 
     res.status(201).json({ data: r, message: `Submittal ${r.version_label} emitido` })

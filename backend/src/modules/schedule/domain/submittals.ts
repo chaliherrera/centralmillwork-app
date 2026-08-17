@@ -12,6 +12,7 @@ import type { PoolClient } from 'pg'
 import pool from '../../../db/pool'
 import { supabase, supabaseEnabled, SUPABASE_BUCKET } from '../../../utils/supabase'
 import { recomputeScheduleForProyecto } from './recompute'
+import { bloqueoPorPredecesores } from './gates'
 
 type QueryRunner = PoolClient | typeof pool
 const SIGNED_TTL = 3600
@@ -39,15 +40,25 @@ async function signed(filename: string): Promise<string | null> {
  * Registra un submittal ya subido a storage y completa el hito que corresponde
  * (E-06 si es la Rev A, E-08 si es una revisión). Recalcula el schedule.
  */
+export type CrearSubmittalResult =
+  | { ok: true; id: number; version_numero: number; version_label: string }
+  | { ok: false; error: string }
+
 export async function crearSubmittal(
   runner: QueryRunner,
   proyectoId: number,
   file: { filename: string; original_name: string; size: number },
   usuarioId: string | null
-): Promise<{ id: number; version_numero: number; version_label: string }> {
+): Promise<CrearSubmittalResult> {
   const { rows: mx } = await runner.query<{ v: number }>(
     `SELECT COALESCE(MAX(version_numero), 0) AS v FROM schedule_submittals WHERE proyecto_id = $1`, [proyectoId])
   const version = Number(mx[0]?.v ?? 0) + 1
+
+  // Rev A → E-06 (planos emitidos); revisiones → E-08 (resubmittal).
+  const codigo = version === 1 ? 'E-06' : 'E-08'
+  // Freno hacia adelante: no emitir si faltan pasos previos (no crear el registro).
+  const bloqueo = await bloqueoPorPredecesores(runner, proyectoId, codigo)
+  if (bloqueo) return { ok: false, error: bloqueo }
 
   const { rows } = await runner.query<{ id: number }>(
     `INSERT INTO schedule_submittals (proyecto_id, version_numero, filename, original_name, size_bytes, emitido_por)
@@ -55,8 +66,6 @@ export async function crearSubmittal(
     [proyectoId, version, file.filename, file.original_name, file.size, usuarioId])
   const submittalId = rows[0].id
 
-  // Rev A → E-06 (planos emitidos); revisiones → E-08 (resubmittal).
-  const codigo = version === 1 ? 'E-06' : 'E-08'
   const evidencia = JSON.stringify({ source: 'submittal', version, submittal_id: submittalId, archivo: file.original_name })
   await runner.query(
     `UPDATE schedule_hitos sh SET fecha_real = NOW(), evidencia_ref = $3::jsonb, updated_at = NOW()
@@ -65,7 +74,7 @@ export async function crearSubmittal(
     [proyectoId, codigo, evidencia])
 
   await recomputeScheduleForProyecto(runner, proyectoId, 'manual')
-  return { id: submittalId, version_numero: version, version_label: revLabel(version) }
+  return { ok: true, id: submittalId, version_numero: version, version_label: revLabel(version) }
 }
 
 /** Lista los submittals del proyecto (más nuevo primero), con URL firmada. */
