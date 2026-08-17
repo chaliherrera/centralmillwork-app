@@ -119,6 +119,9 @@ function InstallCard({ p, onPress }: { p: InstallProyecto; onPress: () => void }
       </View>
 
       <View style={styles.cardFooter}>
+        {p.items_total > 0 && (
+          <Text style={styles.cardItems}>📦 {p.items_instalados}/{p.items_total} items instalados</Text>
+        )}
         <Text style={styles.cardObjetivo}>
           {p.fecha_objetivo ? `🎯 Entrega objetivo: ${p.fecha_objetivo}` : 'Sin fecha objetivo'}
         </Text>
@@ -164,6 +167,7 @@ const styles = StyleSheet.create({
   pasoConnDone: { backgroundColor: '#5A8A2E' },
   pasoLabel: { fontSize: 9, color: '#5A5F52', textAlign: 'center', fontWeight: '600' },
   cardFooter: { marginTop: 10 },
+  cardItems: { fontSize: 12, color: '#5A8A2E', fontWeight: '600', marginBottom: 2 },
   cardObjetivo: { fontSize: 12, color: '#5A5F52' },
   loadingBox: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   errorBox: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 30 },

@@ -5,7 +5,7 @@ import {
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import * as ImagePicker from 'expo-image-picker'
-import { scheduleService, InstallProyecto, PunchItem } from '../services/schedule'
+import { scheduleService, InstallProyecto, PunchItem, InstallItem } from '../services/schedule'
 
 interface Props {
   proyecto: InstallProyecto
@@ -29,6 +29,7 @@ async function tomarFoto(): Promise<string | null> {
 
 export default function InstallDetailScreen({ proyecto, onBack, onChanged }: Props) {
   const [hitos, setHitos] = useState<HitoEstado[]>(proyecto.hitos)
+  const [items, setItems] = useState<InstallItem[]>([])
   const [punch, setPunch] = useState<PunchItem[]>([])
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState<string | null>(null)
@@ -40,13 +41,15 @@ export default function InstallDetailScreen({ proyecto, onBack, onChanged }: Pro
 
   const recargar = useCallback(async () => {
     try {
-      const [plan, punchList] = await Promise.all([
+      const [plan, itemList, punchList] = await Promise.all([
         scheduleService.getPlan(proyecto.proyecto_id),
+        scheduleService.getItems(proyecto.proyecto_id),
         scheduleService.getPunch(proyecto.proyecto_id),
       ])
       if (plan?.hitos) {
         setHitos(plan.hitos.map((h: any) => ({ codigo: h.codigo, fecha_real: h.fecha_real })))
       }
+      setItems(itemList)
       setPunch(punchList)
     } catch (err: any) {
       Alert.alert('Error', err?.response?.data?.message || 'No se pudieron cargar los datos')
@@ -57,21 +60,69 @@ export default function InstallDetailScreen({ proyecto, onBack, onChanged }: Pro
 
   useEffect(() => { recargar() }, [recargar])
 
-  // ── Check-in (I-04) / Avance (I-05) ────────────────────────────────────────
-  const registrarFoto = async (codigo: 'I-04' | 'I-05', etiqueta: string) => {
+  // ── Check-in (I-04) ────────────────────────────────────────────────────────
+  const hacerCheckIn = async () => {
     const uri = await tomarFoto()
     if (!uri) return
-    setBusy(codigo)
+    setBusy('I-04')
     try {
-      await scheduleService.registrarConFoto(proyecto.proyecto_id, codigo, uri)
+      await scheduleService.registrarConFoto(proyecto.proyecto_id, 'I-04', uri)
       await recargar()
       onChanged()
-      Alert.alert('Listo', `${etiqueta} registrado con foto.`)
+      Alert.alert('Listo', 'Check-in registrado con foto.')
     } catch (err: any) {
-      Alert.alert('Error', err?.response?.data?.message || `No se pudo registrar ${etiqueta}`)
+      Alert.alert('Error', err?.response?.data?.message || 'No se pudo registrar el check-in')
     } finally {
       setBusy(null)
     }
+  }
+
+  // ── Items a instalar (I-05 se completa solo al instalar todos) ──────────────
+  const totalItems = items.length
+  const instaladosItems = items.filter((i) => i.instalado).length
+
+  const doInstalar = async (item: InstallItem, uri?: string) => {
+    setBusy(`item-${item.op_id}`)
+    try {
+      await scheduleService.marcarItem(proyecto.proyecto_id, item.op_id, uri)
+      await recargar()
+      onChanged()
+    } catch (err: any) {
+      Alert.alert('Error', err?.response?.data?.message || 'No se pudo marcar el item')
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  const instalarItem = async (item: InstallItem) => {
+    const uri = await tomarFoto()
+    if (uri) { await doInstalar(item, uri); return }
+    // Sin foto (canceló la cámara): confirmar que igual quiere marcarlo.
+    Alert.alert('Sin foto', `¿Marcar "${item.numero_item}" como instalado sin foto?`, [
+      { text: 'Cancelar', style: 'cancel' },
+      { text: 'Sí, marcar', onPress: () => doInstalar(item) },
+    ])
+  }
+
+  const desmarcarItem = (item: InstallItem) => {
+    Alert.alert('Deshacer', `¿Marcar "${item.numero_item}" como NO instalado?`, [
+      { text: 'Cancelar', style: 'cancel' },
+      {
+        text: 'Sí',
+        onPress: async () => {
+          setBusy(`item-${item.op_id}`)
+          try {
+            await scheduleService.desmarcarItem(proyecto.proyecto_id, item.op_id)
+            await recargar()
+            onChanged()
+          } catch (err: any) {
+            Alert.alert('Error', err?.response?.data?.message || 'No se pudo deshacer')
+          } finally {
+            setBusy(null)
+          }
+        },
+      },
+    ])
   }
 
   // ── Punch list ─────────────────────────────────────────────────────────────
@@ -168,18 +219,57 @@ export default function InstallDetailScreen({ proyecto, onBack, onChanged }: Pro
               <DoneRow fecha={done('I-04')!} />
             ) : (
               <ActionBtn label="📷 Tomar foto y hacer check-in" loading={busy === 'I-04'}
-                onPress={() => registrarFoto('I-04', 'Check-in')} />
+                onPress={hacerCheckIn} />
             )}
           </StepCard>
 
-          {/* 2. Avance */}
-          <StepCard n="2" titulo="Avance de instalación" hito="I-05"
-            hecho={done('I-05')} sub="Registrá el progreso con foto (podés hacerlo varias veces)">
-            {done('I-05') && <DoneRow fecha={done('I-05')!} extra="Último avance" />}
-            <ActionBtn label="📷 Registrar avance con foto" loading={busy === 'I-05'}
-              disabled={!done('I-04')}
-              onPress={() => registrarFoto('I-05', 'Avance')} />
+          {/* 2. Avance por item */}
+          <StepCard n="2" titulo="Instalación por item" hito="I-05"
+            hecho={done('I-05')} sub="Tildá cada item a medida que lo instalás. Se completa solo al instalar todos">
             {!done('I-04') && <Text style={styles.gateHint}>Primero hacé el check-in.</Text>}
+
+            {totalItems === 0 ? (
+              <Text style={styles.emptyPunch}>Este proyecto no tiene items de producción cargados.</Text>
+            ) : (
+              <>
+                {/* Progreso */}
+                <View style={styles.progHeader}>
+                  <Text style={styles.progText}>{instaladosItems} de {totalItems} instalados</Text>
+                  <Text style={styles.progPct}>{Math.round((instaladosItems / totalItems) * 100)}%</Text>
+                </View>
+                <View style={styles.progBarBg}>
+                  <View style={[styles.progBarFill, { width: `${(instaladosItems / totalItems) * 100}%` }]} />
+                </View>
+
+                {items.map((item) => {
+                  const cargando = busy === `item-${item.op_id}`
+                  return (
+                    <View key={item.op_id} style={[styles.itemRow, item.instalado && styles.itemRowDone]}>
+                      {item.foto_url ? <Image source={{ uri: item.foto_url }} style={styles.itemThumb} /> : null}
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.itemNombre}>{item.numero_item}</Text>
+                        <Text style={styles.itemMeta}>
+                          {item.cantidad} {item.unidad || 'u.'} · {item.numero_orden}
+                        </Text>
+                        {item.instalado && item.instalado_at ? (
+                          <Text style={styles.itemInstaladoAt}>✓ Instalado {item.instalado_at}</Text>
+                        ) : null}
+                      </View>
+                      {item.instalado ? (
+                        <TouchableOpacity onPress={() => desmarcarItem(item)} disabled={cargando} style={styles.undoBtn}>
+                          {cargando ? <ActivityIndicator color="#5A5F52" size="small" /> : <Text style={styles.undoText}>Deshacer</Text>}
+                        </TouchableOpacity>
+                      ) : (
+                        <TouchableOpacity onPress={() => instalarItem(item)} disabled={cargando || !done('I-04')}
+                          style={[styles.instalarBtn, !done('I-04') && styles.instalarBtnDisabled]}>
+                          {cargando ? <ActivityIndicator color="#fff" size="small" /> : <Text style={styles.instalarText}>Instalar</Text>}
+                        </TouchableOpacity>
+                      )}
+                    </View>
+                  )
+                })}
+              </>
+            )}
           </StepCard>
 
           {/* 3. Punch list */}
@@ -331,6 +421,26 @@ const styles = StyleSheet.create({
   gateHint: { fontSize: 12, color: '#B45309', marginTop: 8, fontStyle: 'italic' },
 
   emptyPunch: { fontSize: 13, color: '#5A5F52', fontStyle: 'italic', marginBottom: 8 },
+
+  progHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 },
+  progText: { fontSize: 13, fontWeight: '700', color: '#2c3126' },
+  progPct: { fontSize: 13, fontWeight: '700', color: '#5A8A2E' },
+  progBarBg: { height: 8, borderRadius: 4, backgroundColor: '#E0DFD9', overflow: 'hidden', marginBottom: 12 },
+  progBarFill: { height: 8, borderRadius: 4, backgroundColor: '#5A8A2E' },
+  itemRow: {
+    flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: '#fff',
+    borderRadius: 8, padding: 10, marginBottom: 8, borderWidth: 1, borderColor: '#E0DFD9',
+  },
+  itemRowDone: { backgroundColor: '#F0F7E8', borderColor: '#A8C97A' },
+  itemThumb: { width: 40, height: 40, borderRadius: 6 },
+  itemNombre: { fontSize: 14, fontWeight: '600', color: '#1F2419' },
+  itemMeta: { fontSize: 11, color: '#5A5F52', marginTop: 2, fontFamily: 'Courier' },
+  itemInstaladoAt: { fontSize: 11, color: '#1B5E20', fontWeight: '700', marginTop: 2 },
+  instalarBtn: { backgroundColor: '#C18A2D', borderRadius: 8, paddingVertical: 8, paddingHorizontal: 14 },
+  instalarBtnDisabled: { opacity: 0.4 },
+  instalarText: { color: '#fff', fontWeight: '700', fontSize: 13 },
+  undoBtn: { borderRadius: 8, paddingVertical: 8, paddingHorizontal: 12, borderWidth: 1, borderColor: '#C8C5BC' },
+  undoText: { color: '#5A5F52', fontWeight: '600', fontSize: 12 },
   punchItem: {
     flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: '#FFF7F7',
     borderRadius: 8, padding: 12, marginBottom: 8, borderWidth: 1, borderColor: '#FCA5A5',
