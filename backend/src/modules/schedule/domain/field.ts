@@ -33,6 +33,56 @@ async function completarHito(runner: QueryRunner, proyectoId: number, codigo: st
     [proyectoId, codigo, JSON.stringify(evidencia)])
 }
 
+// ── COLA DE INSTALACIÓN (para el móvil del Field Specialist) ─────────────────
+// Proyectos con plan cuya entrega (I-07) todavía no ocurrió. Cada uno trae el
+// estado de sus hitos de instalación (I-04..I-07) y cuántos ítems de punch list
+// quedan abiertos, para que el móvil arme la lista sin más llamadas.
+export interface InstallHito { codigo: string; nombre: string; fecha_real: string | null; fecha_planeada: string | null }
+export interface InstallProyecto {
+  proyecto_id: number; codigo: string; nombre: string; cliente: string | null
+  fecha_objetivo: string | null; punch_abiertos: number; hitos: InstallHito[]
+}
+
+const INSTALL_CODES = ['I-04', 'I-05', 'I-06', 'I-07']
+
+export async function listInstallQueue(runner: QueryRunner): Promise<InstallProyecto[]> {
+  const { rows } = await runner.query<{
+    proyecto_id: number; codigo: string; nombre: string; cliente: string | null
+    fecha_objetivo: string | null; hito_codigo: string; hito_nombre: string
+    fecha_real: string | null; fecha_planeada: string | null; punch_abiertos: string
+  }>(
+    `SELECT sp.proyecto_id, p.codigo, p.nombre, p.cliente,
+            to_char(sp.fecha_objetivo,'YYYY-MM-DD') AS fecha_objetivo,
+            sh.codigo AS hito_codigo, ph.nombre AS hito_nombre,
+            to_char(sh.fecha_real,'YYYY-MM-DD') AS fecha_real,
+            to_char(sh.fecha_planeada,'YYYY-MM-DD') AS fecha_planeada,
+            (SELECT COUNT(*) FROM schedule_punch_items pi
+              WHERE pi.proyecto_id = sp.proyecto_id AND pi.estado = 'abierto')::text AS punch_abiertos
+       FROM schedule_planes sp
+       JOIN proyectos p ON p.id = sp.proyecto_id
+       JOIN schedule_hitos sh ON sh.plan_id = sp.id
+       JOIN schedule_plantilla_hitos ph ON ph.plantilla_id = sp.plantilla_id AND ph.codigo = sh.codigo
+      WHERE sp.scope = 'proyecto' AND sh.codigo = ANY($1)
+        AND EXISTS (
+          SELECT 1 FROM schedule_hitos i7 WHERE i7.plan_id = sp.id
+            AND i7.codigo = 'I-07' AND i7.fecha_real IS NULL)
+      ORDER BY sp.fecha_objetivo NULLS LAST, sp.proyecto_id, ph.orden`, [INSTALL_CODES])
+
+  const porProyecto = new Map<number, InstallProyecto>()
+  for (const r of rows) {
+    let p = porProyecto.get(r.proyecto_id)
+    if (!p) {
+      p = {
+        proyecto_id: r.proyecto_id, codigo: r.codigo, nombre: r.nombre, cliente: r.cliente,
+        fecha_objetivo: r.fecha_objetivo, punch_abiertos: Number(r.punch_abiertos), hitos: [],
+      }
+      porProyecto.set(r.proyecto_id, p)
+    }
+    p.hitos.push({ codigo: r.hito_codigo, nombre: r.hito_nombre, fecha_real: r.fecha_real, fecha_planeada: r.fecha_planeada })
+  }
+  return [...porProyecto.values()]
+}
+
 // ── PUNCH LIST ───────────────────────────────────────────────────────────────
 export interface PunchItem {
   id: number; descripcion: string; area: string | null; estado: string

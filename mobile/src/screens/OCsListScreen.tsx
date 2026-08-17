@@ -12,9 +12,10 @@ interface Props {
   onSelect: (oc: OrdenCompra) => void
   onLogout: () => void
   onOpenSearch?: () => void
+  onOpenInstall?: () => void
 }
 
-export default function OCsListScreen({ onSelect, onLogout, onOpenSearch }: Props) {
+export default function OCsListScreen({ onSelect, onLogout, onOpenSearch, onOpenInstall }: Props) {
   const { user } = useAuth()
   const [ocs, setOcs] = useState<OrdenCompra[]>([])
   const [loading, setLoading] = useState(true)
@@ -67,6 +68,11 @@ export default function OCsListScreen({ onSelect, onLogout, onOpenSearch }: Prop
           <Text style={styles.userInfo}>{user?.nombre} · {user?.rol}</Text>
         </View>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 16 }}>
+          {onOpenInstall && (
+            <TouchableOpacity onPress={onOpenInstall}>
+              <Text style={{ color: '#C18A2D', fontSize: 14, fontWeight: '600' }}>🔧 Instalación</Text>
+            </TouchableOpacity>
+          )}
           {onOpenSearch && (
             <TouchableOpacity onPress={onOpenSearch}>
               <Text style={{ color: '#C18A2D', fontSize: 14, fontWeight: '600' }}>🔍 Buscar</Text>

@@ -9,7 +9,7 @@ import pool from '../../../db/pool'
 import { createError } from '../../../middleware/errorHandler'
 import { supabase, supabaseEnabled, SUPABASE_BUCKET } from '../../../utils/supabase'
 import { logger } from '../../../utils/logger'
-import { crearPunchItem, resolverPunchItem, listPunch, registrarSignoff } from '../domain/field'
+import { crearPunchItem, resolverPunchItem, listPunch, registrarSignoff, listInstallQueue } from '../domain/field'
 
 // Fotos de punch list / firma — solo imágenes, hasta 15 MB.
 export const uploadFoto = multer({
@@ -41,6 +41,14 @@ async function subirFoto(file: Express.Multer.File | undefined): Promise<string 
     throw createError(`Error subiendo la foto: ${error.message}`, 500)
   }
   return path
+}
+
+// GET /api/schedule/install-queue
+export async function installQueueHandler(_req: Request, res: Response, next: NextFunction) {
+  try {
+    const rows = await listInstallQueue(pool)
+    res.json({ data: rows })
+  } catch (err) { next(err) }
 }
 
 // GET /api/schedule/proyecto/:id/punch
