@@ -46,7 +46,7 @@ import {
 import { getReporteCompras, getReporteProduccion, compartirReporte, getReporteComprasJunJul, getReporteOP } from '../controllers/reportesController'
 import produccionRouter from './produccion'
 import {
-  getTareas, getTarea, updateTarea, getTareasStats, syncSystemHandler,
+  getTareas, getTarea, updateTarea, getTareasStats,
   updateTareaSchema,
 } from '../controllers/tareasController'
 import {
@@ -177,12 +177,14 @@ router.get('/reportes/compras-2026-06-07',  requireRole('ADMIN', 'PROCUREMENT'),
 // URLs de Supabase (TTL 1h). ADMIN + PROCUREMENT + SHOP_MANAGER.
 router.get('/reportes/op/:numero',           requireRole('ADMIN', 'PROCUREMENT', 'SHOP_MANAGER'), getReporteOP)
 
-// ─── Tareas (solo ADMIN) ─────────────────────────────────────────────────────
-router.get('/tareas',                ADMIN, getTareas)
-router.get('/tareas/stats',          ADMIN, getTareasStats)
-router.post('/tareas/sync-system',   ADMIN, syncSystemHandler)
-router.get('/tareas/:id',            ADMIN, getTarea)
-router.patch('/tareas/:id',          ADMIN, validateBody(updateTareaSchema), updateTarea)
+// ─── Tareas — buzón de Muestras por rol ──────────────────────────────────────
+// Dedicado a Muestras: cada rol ve/gestiona sus tareas (scoping en el controller).
+// El viejo motor de reglas (sync-system) fue retirado — Tareas es solo Muestras.
+const TAREAS_ROLES = requireRole('ADMIN', 'PROCUREMENT', 'SHOP_MANAGER', 'ENGINEERING', 'PROJECT_MANAGEMENT')
+router.get('/tareas',                TAREAS_ROLES, getTareas)
+router.get('/tareas/stats',          TAREAS_ROLES, getTareasStats)
+router.get('/tareas/:id',            TAREAS_ROLES, getTarea)
+router.patch('/tareas/:id',          TAREAS_ROLES, validateBody(updateTareaSchema), updateTarea)
 
 // ─── Cotizaciones ────────────────────────────────────────────────────────────
 router.get('/cotizaciones',                   WRITE, getCotizaciones)

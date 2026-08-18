@@ -73,6 +73,14 @@ function IngenieriaRoute({ children }: { children: React.ReactNode }) {
   return <>{children}</>
 }
 
+// Tareas = buzón de Muestras por rol. Cada rol ve sus tareas (scoping en el backend).
+function TareasRoute({ children }: { children: React.ReactNode }) {
+  const { user } = useAuth()
+  const allowed = ['ADMIN', 'PROCUREMENT', 'SHOP_MANAGER', 'ENGINEERING', 'PROJECT_MANAGEMENT']
+  if (!user || !allowed.includes(user.rol)) return <Navigate to="/" replace />
+  return <>{children}</>
+}
+
 export default function App() {
   return (
     <Routes>
@@ -101,7 +109,7 @@ export default function App() {
         <Route path="muestras"         element={<MuestrasRoute><Muestras /></MuestrasRoute>} />
         <Route path="estimados"        element={<EstimacionRoute><Estimacion /></EstimacionRoute>} />
         <Route path="ingenieria"       element={<IngenieriaRoute><Ingenieria /></IngenieriaRoute>} />
-        <Route path="tareas"           element={<AdminRoute><Tareas /></AdminRoute>} />
+        <Route path="tareas"           element={<TareasRoute><Tareas /></TareasRoute>} />
         <Route path="usuarios"         element={<AdminRoute><Usuarios /></AdminRoute>} />
       </Route>
 

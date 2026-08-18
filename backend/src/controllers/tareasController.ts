@@ -2,13 +2,27 @@ import { Request, Response, NextFunction } from 'express'
 import { z } from 'zod'
 import pool from '../db/pool'
 import { createError } from '../middleware/errorHandler'
-import { syncSystemTareas } from '../jobs/tareasFromSystem'
 
 // ─── Schemas ─────────────────────────────────────────────────────────────────
 
-const AREAS = ['procurement', 'despachos', 'recepcion', 'administracion', 'shop_manager'] as const
+const AREAS = ['procurement', 'despachos', 'recepcion', 'administracion', 'shop_manager', 'ingenieria', 'admin'] as const
 const PRIORITIES = ['low', 'medium', 'high'] as const
 const ESTADOS = ['pendiente', 'en_progreso', 'completada', 'descartada'] as const
+
+// Buzón por rol (Tareas dedicado a Muestras): cada rol ve las áreas de las que
+// es responsable. ADMIN ve todo. Un rol sin áreas mapeadas no ve nada.
+const ROLE_AREAS: Record<string, string[]> = {
+  PROCUREMENT: ['procurement', 'recepcion'],
+  SHOP_MANAGER: ['shop_manager'],
+  ENGINEERING: ['ingenieria'],
+  PROJECT_MANAGEMENT: ['administracion', 'admin'],
+}
+/** Áreas que puede ver el usuario, o null si ve todo (ADMIN). */
+function areasForUser(req: Request): string[] | null {
+  const rol = (req as any).user?.rol
+  if (rol === 'ADMIN') return null
+  return ROLE_AREAS[rol] ?? []
+}
 
 export const updateTareaSchema = z.object({
   area:        z.enum(AREAS).optional(),
@@ -63,6 +77,13 @@ export async function getTareas(req: Request, res: Response, next: NextFunction)
       conds.push(`subject ILIKE $${vals.length}`)
     }
 
+    // Scoping por rol: los no-ADMIN solo ven las áreas de las que son dueños.
+    const areas = areasForUser(req)
+    if (areas !== null) {
+      vals.push(areas)
+      conds.push(`area = ANY($${vals.length}::text[])`)
+    }
+
     const whereClause = conds.length ? `WHERE ${conds.join(' AND ')}` : ''
 
     // Orden: estados activos primero (pendiente, en_progreso), luego prioridad, luego fecha
@@ -96,6 +117,14 @@ export async function updateTarea(req: Request, res: Response, next: NextFunctio
   try {
     const id = req.params.id
     const body = req.body as z.infer<typeof updateTareaSchema>
+
+    // Scoping por rol: un no-ADMIN solo puede tocar tareas de sus áreas.
+    const areas = areasForUser(req)
+    if (areas !== null) {
+      const { rows } = await pool.query('SELECT area FROM tareas WHERE id = $1::int', [id])
+      if (!rows[0]) return next(createError('Tarea no encontrada', 404))
+      if (!areas.includes(rows[0].area)) return next(createError('Tarea no encontrada', 404))
+    }
     const updates: string[] = []
     const vals: any[] = []
 
@@ -146,23 +175,31 @@ export async function updateTarea(req: Request, res: Response, next: NextFunctio
 // ─── GET /api/tareas/stats ──────────────────────────────────────────────────
 // Devuelve: counts por area, por estado, por priority. Para el KPI strip.
 
-export async function getTareasStats(_req: Request, res: Response, next: NextFunction) {
+export async function getTareasStats(req: Request, res: Response, next: NextFunction) {
   try {
+    // Scoping por rol: un no-ADMIN ve stats solo de sus áreas.
+    const areas = areasForUser(req)
+    const areaVals: any[] = areas !== null ? [areas] : []
+    const areaWhere = areas !== null ? `area = ANY($1::text[])` : ''
+    const withArea = (extra: string) => {
+      const parts = [areaWhere, extra].filter(Boolean)
+      return parts.length ? `WHERE ${parts.join(' AND ')}` : ''
+    }
     const [byArea, byEstado, byPriority, totals] = await Promise.all([
       pool.query(
         `SELECT area, COUNT(*)::int AS n
          FROM tareas
-         WHERE estado IN ('pendiente', 'en_progreso')
-         GROUP BY area`,
+         ${withArea(`estado IN ('pendiente', 'en_progreso')`)}
+         GROUP BY area`, areaVals,
       ),
       pool.query(
-        `SELECT estado, COUNT(*)::int AS n FROM tareas GROUP BY estado`,
+        `SELECT estado, COUNT(*)::int AS n FROM tareas ${withArea('')} GROUP BY estado`, areaVals,
       ),
       pool.query(
         `SELECT priority, COUNT(*)::int AS n
          FROM tareas
-         WHERE estado IN ('pendiente', 'en_progreso')
-         GROUP BY priority`,
+         ${withArea(`estado IN ('pendiente', 'en_progreso')`)}
+         GROUP BY priority`, areaVals,
       ),
       pool.query(
         `SELECT
@@ -170,7 +207,7 @@ export async function getTareasStats(_req: Request, res: Response, next: NextFun
            COUNT(*) FILTER (WHERE estado IN ('pendiente', 'en_progreso'))::int AS activas,
            COUNT(*) FILTER (WHERE DATE(created_at) = CURRENT_DATE)::int AS hoy,
            COUNT(*) FILTER (WHERE estado = 'completada' AND DATE(completed_at) = CURRENT_DATE)::int AS completadas_hoy
-         FROM tareas`,
+         FROM tareas ${withArea('')}`, areaVals,
       ),
     ])
 
@@ -196,21 +233,12 @@ export async function getTarea(req: Request, res: Response, next: NextFunction) 
   try {
     const { rows } = await pool.query('SELECT * FROM tareas WHERE id = $1', [req.params.id])
     if (!rows[0]) return next(createError('Tarea no encontrada', 404))
+    // Scoping por rol: un no-ADMIN no puede leer tareas de otras áreas.
+    const areas = areasForUser(req)
+    if (areas !== null && !areas.includes(rows[0].area)) return next(createError('Tarea no encontrada', 404))
     res.json({ data: rows[0] })
   } catch (err) {
     next(err)
   }
 }
 
-// ─── POST /api/tareas/sync-system ────────────────────────────────────────────
-// Trigger manual del job que genera tareas desde la DB de Compras.
-// El job tambien corre automaticamente cada 30 min (ver index.ts).
-
-export async function syncSystemHandler(_req: Request, res: Response, next: NextFunction) {
-  try {
-    const result = await syncSystemTareas()
-    res.json({ data: result, message: 'Sync ejecutado' })
-  } catch (err) {
-    next(err)
-  }
-}

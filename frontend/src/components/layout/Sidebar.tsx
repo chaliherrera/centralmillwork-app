@@ -32,7 +32,7 @@ const NAV_ITEMS: NavItem[] = [
   { to: '/proveedores',    label: 'Proveedores',        icon: Users,           roles: ['ADMIN','PROCUREMENT','VIEWER'] },
   { to: '/produccion',     label: 'Producción',         icon: Factory,         roles: ['ADMIN','SHOP_MANAGER','VIEWER'] },
   { to: '/muestras',       label: 'Muestras',           icon: Beaker,          roles: ['ADMIN','ENGINEERING','SHOP_MANAGER','PROCUREMENT','VIEWER'] },
-  { to: '/tareas',         label: 'Tareas',             icon: Inbox,           roles: ['ADMIN'] },
+  { to: '/tareas',         label: 'Tareas',             icon: Inbox,           roles: ['ADMIN','PROCUREMENT','SHOP_MANAGER','ENGINEERING','PROJECT_MANAGEMENT'] },
   { to: '/usuarios',       label: 'Usuarios',           icon: ShieldCheck,     roles: ['ADMIN'] },
 ]
 
