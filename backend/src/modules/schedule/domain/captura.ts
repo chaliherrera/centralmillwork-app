@@ -100,12 +100,19 @@ export async function capturarFechasReales(
   const hasOP = await tableExists(runner, 'ordenes_produccion')
   const hasQC = hasOP && (await tableExists(runner, 'qc_inspecciones'))
   if (!hasOP) {
-    for (const c of ['P-05', 'P-06']) set(c, null, { source: 'op_estacion', motivo: 'tabla ausente' })
+    for (const c of ['P-01', 'P-05', 'P-06']) set(c, null, { source: 'op_estacion', motivo: 'tabla ausente' })
   }
   if (!hasQC) {
     for (const c of ['QC-01', 'QC-02', 'QC-03']) set(c, null, { source: 'qc', motivo: 'tabla ausente' })
   }
   if (!hasOP) return out
+
+  // ── P-01 · Producción iniciada = primera OP creada ─────────────────────────
+  const p01 = await scalarDate(runner,
+    `SELECT to_char(MIN(created_at),'YYYY-MM-DD') AS d
+       FROM ordenes_produccion
+      WHERE proyecto_id = $1 AND status <> 'Cancelada'`, [proyectoId])
+  set('P-01', p01, { source: 'op_creada' })
 
   // ── P-05 · Fabricación en curso = primera OP arrancada ─────────────────────
   const p05 = await scalarDate(runner,

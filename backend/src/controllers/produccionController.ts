@@ -233,6 +233,9 @@ export async function createOrden(req: Request, res: Response, next: NextFunctio
 
     await client.query('COMMIT')
 
+    // Crear la OP prende P-01 "Producción iniciada" en el schedule (best-effort).
+    if (orden.proyecto_id) void recomputeScheduleSafe(orden.proyecto_id, 'op')
+
     // Releer con joins para responder con la forma "rica"
     const { rows: [full] } = await pool.query(
       `SELECT o.*,
