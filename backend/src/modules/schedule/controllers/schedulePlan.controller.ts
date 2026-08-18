@@ -12,6 +12,7 @@ import { createError } from '../../../middleware/errorHandler'
 import { generarPlan, recomputeScheduleForProyecto } from '../domain/recompute'
 import { crearToken, revocarToken } from '../domain/portal'
 import { registrarHito } from '../domain/registro'
+import { getTrabajoPorArea } from '../domain/trabajo'
 
 function parseProyectoId(req: Request): number {
   const id = parseInt(String(req.params.id), 10)
@@ -97,6 +98,18 @@ export async function crearPortalTokenHandler(req: Request, res: Response, next:
     if (err?.issues) return next(createError('datos inválidos', 400))
     next(err)
   }
+}
+
+// ── GET /api/schedule/mi-trabajo?area=engineering ────────────────────────────
+// La frontera del área, en todos los proyectos (motor de los escritorios).
+const AREAS_VALIDAS = new Set(['engineering', 'estimating', 'pm', 'procurement', 'finance', 'production', 'logistics', 'field'])
+export async function trabajoPorAreaHandler(req: Request, res: Response, next: NextFunction) {
+  try {
+    const area = String(req.query.area ?? '')
+    if (!AREAS_VALIDAS.has(area)) return next(createError('area inválida', 400))
+    const data = await getTrabajoPorArea(pool, area)
+    res.json({ data })
+  } catch (err) { next(err) }
 }
 
 // ── GET /api/schedule/proyecto/:id/portal-tokens ─────────────────────────────

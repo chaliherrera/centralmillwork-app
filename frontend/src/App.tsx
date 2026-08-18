@@ -17,6 +17,7 @@ import Usuarios from '@/pages/Usuarios'
 import Produccion from '@/pages/produccion/Produccion'
 import Muestras from '@/pages/Muestras'
 import Estimacion from '@/pages/Estimacion'
+import Ingenieria from '@/pages/Ingenieria'
 import KioskApp from '@/pages/kiosk/KioskApp'
 import ClientPortal from '@/pages/portal/ClientPortal'
 import { Loader2 } from 'lucide-react'
@@ -65,6 +66,13 @@ function EstimacionRoute({ children }: { children: React.ReactNode }) {
   return <>{children}</>
 }
 
+function IngenieriaRoute({ children }: { children: React.ReactNode }) {
+  const { user } = useAuth()
+  const allowed = ['ADMIN', 'ENGINEERING', 'PROJECT_MANAGEMENT']
+  if (!user || !allowed.includes(user.rol)) return <Navigate to="/" replace />
+  return <>{children}</>
+}
+
 export default function App() {
   return (
     <Routes>
@@ -92,6 +100,7 @@ export default function App() {
         <Route path="produccion/*"     element={<ProduccionRoute><Produccion /></ProduccionRoute>} />
         <Route path="muestras"         element={<MuestrasRoute><Muestras /></MuestrasRoute>} />
         <Route path="estimados"        element={<EstimacionRoute><Estimacion /></EstimacionRoute>} />
+        <Route path="ingenieria"       element={<IngenieriaRoute><Ingenieria /></IngenieriaRoute>} />
         <Route path="tareas"           element={<AdminRoute><Tareas /></AdminRoute>} />
         <Route path="usuarios"         element={<AdminRoute><Usuarios /></AdminRoute>} />
       </Route>

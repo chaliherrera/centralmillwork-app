@@ -47,7 +47,7 @@ function todayISO(): ISODate {
 }
 
 /** Mapea el rol responsable del hito al área para atribución de atrasos. */
-function areaFromRol(rol: string | null): string {
+export function areaFromRol(rol: string | null): string {
   const r = (rol ?? '').toLowerCase()
   if (r.includes('estimat')) return 'estimating'
   if (r.includes('engineer')) return 'engineering'

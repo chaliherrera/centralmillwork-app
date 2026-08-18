@@ -38,9 +38,31 @@ export interface ScheduleData {
   hitos: ScheduleHito[]
 }
 
+export interface TrabajoHito {
+  codigo: string
+  nombre: string
+  rol_responsable: string | null
+  fecha_planeada: string | null
+  estado: string
+  semaforo: Semaforo
+  holgura_dias: number | null
+  atribucion_atraso: string | null
+}
+export interface TrabajoProyecto {
+  proyecto_id: number
+  proyecto_codigo: string
+  proyecto_nombre: string
+  fecha_objetivo: string | null
+  hitos: TrabajoHito[]
+}
+
 export const scheduleService = {
   getPlan: (proyectoId: number) =>
     api.get<ApiResponse<ScheduleData>>(`/schedule/proyecto/${proyectoId}`).then((r) => r.data),
+
+  // Escritorio por área: la frontera del equipo a través de todos los proyectos.
+  getMiTrabajo: (area: string) =>
+    api.get<ApiResponse<TrabajoProyecto[]>>(`/schedule/mi-trabajo`, { params: { area } }).then((r) => r.data),
 
   generar: (proyectoId: number, fecha_objetivo: string) =>
     api
