@@ -32,7 +32,7 @@ export default function InboxView({ tareas, projectLens, focusedId, onProjectLen
         <Inbox size={36} className="text-gray-300 mb-4" strokeWidth={1.5} />
         <p className="text-base font-medium text-gray-700">Tu inbox está despejado</p>
         <p className="text-sm text-gray-500 mt-1.5 max-w-sm">
-          Sin tareas que coincidan. Probá quitar filtros, o esperá: el agente sincroniza cada 30 minutos.
+          Sin tareas que coincidan. Acá caen las tareas de Muestras para tu equipo a medida que aparecen.
         </p>
       </div>
     )

@@ -34,7 +34,7 @@ export default function GlassInboxView({
         <Inbox size={36} className="mb-4" strokeWidth={1.5} style={{ color: 'rgba(255,255,250,0.35)' }} />
         <p className="text-base font-medium" style={{ color: '#FFFFFA' }}>Tu inbox está despejado</p>
         <p className="text-sm mt-1.5 max-w-sm" style={{ color: 'rgba(255,255,250,0.55)' }}>
-          Sin tareas que coincidan. Probá quitar filtros, o esperá: el agente sincroniza cada 30 minutos.
+          Sin tareas que coincidan. Acá caen las tareas de Muestras para tu equipo a medida que aparecen.
         </p>
       </div>
     )
