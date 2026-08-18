@@ -70,9 +70,18 @@ export default function Estimacion() {
           <FileSignature className="text-forest-600" size={22} />
         </div>
         <div>
-          <h1 className="text-xl font-bold text-stone-900">Estimación</h1>
+          <h1 className="text-xl font-bold text-stone-900">Estimados</h1>
           <p className="text-sm text-stone-500">Arrancá un proyecto en el schedule: contrato firmado + fecha de entrega.</p>
         </div>
+      </div>
+
+      {/* Paso previo: el proyecto debe existir. */}
+      <div className="rounded-xl border border-amber-200 bg-amber-50/70 px-4 py-3 text-sm text-amber-800 flex items-start gap-2">
+        <span className="font-semibold shrink-0">Paso previo:</span>
+        <span>
+          el proyecto tiene que estar creado. Si no lo ves en la lista, crealo primero en{' '}
+          <Link to="/proyectos" className="font-semibold underline hover:text-amber-900">Proyectos</Link>.
+        </span>
       </div>
 
       {/* Selector de proyecto */}

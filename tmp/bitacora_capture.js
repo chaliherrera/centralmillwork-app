@@ -19,12 +19,35 @@ const OUT = path.join(__dirname, '..', 'docs', 'bitacora-piloto')
 const CHROME = 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe'
 const CREDS = { email: 'chali@centralmillwork.com', password: 'demo1234' }
 
-// Pantallas a capturar: { name, url, caption, needsAuth, click? }
+// Estaciones del recorrido del piloto, EN ORDEN. Se capturan a medida que
+// probamos, con datos reales. `capture:true` marca las que se toman en esta
+// corrida (las demás quedan como pendientes en la bitácora). `url` puede faltar
+// en pasos que se capturan a mano.
 const SHOTS = [
-  { name: '01-estimacion', url: `${FRONT}/estimacion`, needsAuth: true,
-    caption: '1 · Estimación — la puerta de entrada: se elige el proyecto para arrancarlo en el schedule.' },
-  { name: '02-portal-cliente', url: `${FRONT}/portal/9075fecc21cd5b2e59daa075c01901329b8246cbc39df46d`, needsAuth: false,
-    caption: '2 · Portal del cliente — el cliente ve su recorrido y aprueba (sin usuario ni contraseña).' },
+  { name: '00-crear-proyecto', capture: false, needsAuth: true,
+    caption: '1 · Crear el proyecto — el estimador crea el proyecto en el menú Proyectos. Paso previo obligatorio.' },
+  { name: '01-estimados', capture: false, needsAuth: true, url: `${FRONT}/estimados`,
+    caption: '2 · Estimados — arrancar el proyecto en el schedule: fecha de entrega + contrato firmado (día cero).' },
+  { name: '02-schedule-nace', capture: false, needsAuth: true,
+    caption: '3 · El schedule nace — el journey map con la entrega objetivo y el primer hito cumplido.' },
+  { name: '03-ingenieria', capture: false, needsAuth: true,
+    caption: '4 · Ingeniería — submittals de planos, CNC, release a producción (por construir).' },
+  { name: '04-compras-oc', capture: false, needsAuth: true,
+    caption: '5 · Compras — emisión de OC; el schedule prende el hito de materiales solo.' },
+  { name: '05-recepcion', capture: false, needsAuth: true,
+    caption: '6 · Recepción — material recibido; avanza el schedule automáticamente.' },
+  { name: '06-produccion', capture: false, needsAuth: true,
+    caption: '7 · Producción — la OP avanza por las estaciones del taller.' },
+  { name: '07-qc', capture: false, needsAuth: true,
+    caption: '8 · QC — inspección de calidad.' },
+  { name: '08-despacho', capture: false, needsAuth: true,
+    caption: '9 · Despacho — BOL y número de precinto.' },
+  { name: '09-instalacion', capture: false, needsAuth: true,
+    caption: '10 · Instalación — desde el móvil: check-in, avance por item, punch list.' },
+  { name: '10-entrega', capture: false, needsAuth: true,
+    caption: '11 · Entrega — sign-off del cliente; proyecto ENTREGADO.' },
+  { name: '11-portal-cliente', capture: false, needsAuth: false,
+    caption: '12 · Portal del cliente — su recorrido en vivo, aprobaciones incluidas.' },
 ]
 
 const post = (url, body) => new Promise((res, rej) => {
@@ -58,6 +81,14 @@ function cdp(ws, method, params = {}) {
 
 async function main() {
   fs.mkdirSync(OUT, { recursive: true })
+  const aCapturar = SHOTS.filter((s) => s.capture && s.url)
+  if (aCapturar.length === 0) {
+    // Nada para capturar: solo (re)armar la bitácora con lo que ya hay.
+    buildHtml()
+    console.log('Bitácora armada (sin capturas nuevas):', path.join(OUT, 'BITACORA_PILOTO.html'))
+    return
+  }
+
   const { token } = await post(`${API}/auth/login`, CREDS)
   if (!token) throw new Error('login falló — ¿backend en :4000 y password demo1234?')
   console.log('JWT obtenido.')
@@ -77,7 +108,7 @@ async function main() {
     await cdp(ws, 'Page.enable'); await cdp(ws, 'Runtime.enable')
     await cdp(ws, 'Emulation.setDeviceMetricsOverride', { width: 1440, height: 900, deviceScaleFactor: 1, mobile: false })
 
-    for (const s of SHOTS) {
+    for (const s of aCapturar) {
       if (s.needsAuth) {
         // Cargar el origen y sembrar el token en localStorage, luego navegar.
         await cdp(ws, 'Page.navigate', { url: `${FRONT}/login` }); await sleep(1200)
@@ -100,24 +131,31 @@ async function main() {
 }
 
 function buildHtml() {
+  const capturadas = SHOTS.filter((s) => fs.existsSync(path.join(OUT, `${s.name}.png`))).length
   const entradas = SHOTS.map((s) => {
     const p = path.join(OUT, `${s.name}.png`)
-    if (!fs.existsSync(p)) return ''
-    const b64 = fs.readFileSync(p).toString('base64')
-    return `<figure class="entry">
-      <figcaption>${s.caption}</figcaption>
-      <img src="data:image/png;base64,${b64}" alt="${s.name}" />
-    </figure>`
+    if (fs.existsSync(p)) {
+      const b64 = fs.readFileSync(p).toString('base64')
+      return `<figure class="entry">
+        <figcaption>${s.caption}</figcaption>
+        <img src="data:image/png;base64,${b64}" alt="${s.name}" />
+      </figure>`
+    }
+    return `<div class="pending"><span class="dot"></span>${s.caption}</div>`
   }).join('\n')
+
+  const intro = capturadas === 0
+    ? '<p class="sub">Todavía no arrancamos las pruebas. Estas son las estaciones que vamos a capturar, en orden, con datos reales — cada una se convierte en una foto cuando la probemos.</p>'
+    : '<p class="sub">Life of a Deal — el recorrido de un proyecto real, paso a paso, en imágenes. Las capturadas se muestran; las que faltan quedan como pasos pendientes.</p>'
 
   const html = `<div class="wrap">
   <header>
     <div class="brand">CENTRAL MILLWORK</div>
     <h1>Bitácora del Piloto</h1>
-    <p class="sub">Life of a Deal — el recorrido de un proyecto real, paso a paso, en imágenes. Se va sumando a medida que avanzamos.</p>
+    ${intro}
   </header>
   ${entradas}
-  <footer>Documento vivo — generado automáticamente desde el sistema en funcionamiento.</footer>
+  <footer>Documento vivo — se genera desde el sistema en funcionamiento a medida que avanza el piloto.</footer>
 </div>
 <style>
   :root { --forest:#2c3126; --gold:#C18A2D; --cream:#F4F5F2; --ink:#1F2419; --stone:#5A5F52; --line:#e5e3dc; }
@@ -131,6 +169,8 @@ function buildHtml() {
   .entry { margin: 0 0 30px; background:#fff; border:1px solid var(--line); border-radius:16px; overflow:hidden; box-shadow:0 1px 3px rgba(0,0,0,.05), 0 12px 30px rgba(0,0,0,.04); }
   figcaption { padding:16px 20px; font-size:15px; font-weight:600; color:var(--forest); border-bottom:1px solid var(--line); background:#faf8f2; }
   .entry img { display:block; width:100%; height:auto; }
+  .pending { display:flex; align-items:center; gap:12px; padding:14px 18px; margin:0 0 10px; background:#fff; border:1px dashed var(--line); border-radius:12px; color:var(--stone); font-size:14px; }
+  .pending .dot { width:9px; height:9px; border-radius:50%; background:var(--line); flex-shrink:0; }
   footer { text-align:center; color:var(--stone); font-size:13px; font-style:italic; margin-top:30px; }
   @media (prefers-color-scheme: dark) {
     body { background:#1b1e17; color:#e8e6df; }

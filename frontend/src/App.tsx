@@ -91,7 +91,7 @@ export default function App() {
         <Route path="proveedores/*"    element={<Proveedores />} />
         <Route path="produccion/*"     element={<ProduccionRoute><Produccion /></ProduccionRoute>} />
         <Route path="muestras"         element={<MuestrasRoute><Muestras /></MuestrasRoute>} />
-        <Route path="estimacion"       element={<EstimacionRoute><Estimacion /></EstimacionRoute>} />
+        <Route path="estimados"        element={<EstimacionRoute><Estimacion /></EstimacionRoute>} />
         <Route path="tareas"           element={<AdminRoute><Tareas /></AdminRoute>} />
         <Route path="usuarios"         element={<AdminRoute><Usuarios /></AdminRoute>} />
       </Route>
