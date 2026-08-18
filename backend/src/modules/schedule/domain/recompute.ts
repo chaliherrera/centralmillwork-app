@@ -156,6 +156,15 @@ export async function recomputeScheduleForProyecto(
   const pred = new Map<string, string[]>()
   for (const h of hitos) pred.set(h.codigo, [])
   for (const d of deps) pred.get(d.hito)?.push(d.dependeDe)
+  // "Revisión suelta" = hito continuo (tipo='cont') del que NADIE depende (ej.
+  // E-12 gestión de riesgo, M-01 revisión de compras, P-04 3-Week Lookahead).
+  // Es una vigilancia recurrente, no una tarea con deadline que "vence": no debe
+  // pintarse de rojo ni ensuciar el semáforo. (Los 'cont' CON sucesores —P-05,
+  // QC-01, I-05— sí son progreso real y siguen su curso normal.)
+  const tieneDependientes = new Set<string>()
+  for (const d of deps) tieneDependientes.add(d.dependeDe)
+  const esRevisionSuelta = (codigo: string) =>
+    tipoPorCodigo.get(codigo) === 'cont' && !tieneDependientes.has(codigo)
   // "Cumplidos" = hitos con fecha real REAL (capturada O preservada manual/portal).
   // Debe incluir las manuales, si no un hito aprobado por el portal no destraba
   // a su sucesor.
@@ -238,6 +247,12 @@ export async function recomputeScheduleForProyecto(
       // ni aparece como pendiente. Se materializa recién si alguien lo registra.
       estado = 'no_aplica'
       semaforo = 'gris'
+    } else if (esRevisionSuelta(h.codigo)) {
+      // Revisión continua sin sucesores (E-12, M-01, P-04): chequeo recurrente,
+      // siempre disponible. Aparece en el escritorio como pendiente pero NUNCA
+      // vencido/rojo, sin margen ni atribución, y no ensucia el semáforo global.
+      estado = 'pendiente'
+      semaforo = 'verde'
     } else {
       const preds = pred.get(h.codigo) ?? []
       // Un predecesor condicional no bloquea (es opcional): cuenta como satisfecho.
@@ -256,7 +271,8 @@ export async function recomputeScheduleForProyecto(
       }
     }
 
-    if (estado !== 'cumplido' && semaforo !== 'gris') {
+    // Las revisiones sueltas (E-12, M-01, P-04) no cuentan para el semáforo global.
+    if (estado !== 'cumplido' && semaforo !== 'gris' && !esRevisionSuelta(h.codigo)) {
       if (rank[semaforo] > rank[peor]) peor = semaforo
       if (holgura !== null && (minHolgura === null || holgura < minHolgura)) minHolgura = holgura
     }
