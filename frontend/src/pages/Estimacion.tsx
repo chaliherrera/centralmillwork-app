@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { FileSignature, CalendarClock, Upload, CheckCircle2, ArrowRight, Loader2 } from 'lucide-react'
+import { FileSignature, CalendarClock, Upload, CheckCircle2, ArrowRight, Loader2, ClipboardList } from 'lucide-react'
 import { proyectosService } from '@/services/proyectos'
 import { scheduleService, type ScheduleData } from '@/services/schedule'
+import MiTrabajo from '@/components/modules/schedule/MiTrabajo'
 import type { Proyecto } from '@/types'
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -174,6 +175,19 @@ export default function Estimacion() {
           </div>
         )
       )}
+
+      {/* Mi trabajo — lo que Estimación debe registrar en todos los proyectos. */}
+      <div className="pt-4">
+        <div className="flex items-center gap-2 mb-1">
+          <ClipboardList size={17} className="text-forest-600" />
+          <h2 className="text-base font-bold text-stone-900">Mi trabajo</h2>
+        </div>
+        <p className="text-xs text-stone-500 mb-3">
+          Todo lo que Estimación tiene que resolver, en todos los proyectos a la vez. Aparece acá en cuanto
+          está habilitado (sus pasos previos cumplidos) y desaparece cuando lo registrás.
+        </p>
+        <MiTrabajo area="estimating" emptyMsg="Estimación no tiene nada pendiente ahora mismo. 🎉" />
+      </div>
     </div>
   )
 }
