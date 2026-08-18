@@ -658,6 +658,15 @@ export async function transicionarMuestra(req: Request, res: Response, next: Nex
       [id, nuevaVersion, tipoEvento[nuevo_estado] ?? 'comentario', detalle, req.user?.id ?? null]
     )
 
+    // Ingeniería decidió (aprobó/rechazó): cerrar su aviso in-app pendiente.
+    if (nuevo_estado === 'APROBADA' || nuevo_estado === 'RECHAZADA') {
+      await client.query(
+        `UPDATE tareas SET estado = 'completada', completed_at = NOW()
+          WHERE source_ref = $1 AND estado NOT IN ('completada','descartada')`,
+        [`muestra:${id}:aprobacion_ingenieria`]
+      )
+    }
+
     // ── F6 (2026-06-09): vincular formalmente muestra aprobada ↔ proyecto ──
     // Cuando se aprueba, generamos un row en proyectos_muestras_aprobadas
     // con snapshot de codigo/desc/tipo + ref al PDF sample_request más
@@ -979,6 +988,29 @@ export async function registrarEnvio(req: Request, res: Response, next: NextFunc
         WHERE source_ref = $1
           AND estado NOT IN ('completada', 'descartada')`,
       [`muestra:${id}:registrar_envio`]
+    )
+
+    // Aviso in-app a INGENIERÍA: la muestra fue enviada; cuando el cliente
+    // responda, ellos aprueban/rechazan desde el módulo Muestras. Antes esto era
+    // email puro (Tareas era solo-ADMIN); ahora el buzón es por rol y ENGINEERING
+    // ve sus tareas. El email (notifyMuestraEnviada) queda como refuerzo.
+    await client.query(
+      `INSERT INTO tareas (area, title, description, priority, from_email, subject, source_email_id, origen, source_ref)
+       VALUES ('ingenieria', $1, $2, 'medium', 'sistema@centralmillwork.com', $3, NULL, 'sistema', $4)
+       ON CONFLICT (source_ref) WHERE origen = 'sistema' AND source_ref IS NOT NULL
+       DO NOTHING`,
+      [
+        `Aprobar muestra: ${muestra.codigo}`,
+        [
+          `Muestra: ${muestra.codigo}`,
+          muestra.descripcion ?? '',
+          '',
+          'Enviada al cliente. Cuando tengas su respuesta, aprobá o rechazá desde el módulo Muestras.',
+          `Link: /muestras (abrir ${muestra.codigo})`,
+        ].filter(Boolean).join('\n'),
+        `Muestra enviada — ${muestra.codigo}`,
+        `muestra:${id}:aprobacion_ingenieria`,
+      ]
     )
 
     await client.query('COMMIT')
