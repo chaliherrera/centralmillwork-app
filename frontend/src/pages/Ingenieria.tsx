@@ -68,8 +68,8 @@ export default function Ingenieria() {
           <div key={g.proyecto_id} className="rounded-2xl border border-stone-200 bg-white overflow-hidden">
             <div className="flex items-center justify-between px-4 py-3 border-b border-stone-100 bg-[#faf8f2]">
               <div>
-                <div className="text-sm font-bold text-stone-800">{g.proyecto_nombre}</div>
-                <div className="text-[11px] text-stone-400 font-mono">{g.proyecto_codigo}{g.fecha_objetivo ? ` · entrega ${g.fecha_objetivo}` : ''}</div>
+                <div className="text-sm font-bold text-stone-900 font-mono tracking-tight">{g.proyecto_codigo}</div>
+                <div className="text-[12px] text-stone-500">{g.proyecto_nombre}{g.fecha_objetivo ? ` · entrega ${g.fecha_objetivo}` : ''}</div>
               </div>
               <Link to={`/proyectos/${g.proyecto_id}`} className="text-xs font-semibold text-forest-700 hover:text-forest-800 inline-flex items-center gap-1">
                 Ver schedule <ArrowRight size={13} />
