@@ -16,6 +16,7 @@ import Tareas from '@/pages/Tareas'
 import Usuarios from '@/pages/Usuarios'
 import Produccion from '@/pages/produccion/Produccion'
 import Muestras from '@/pages/Muestras'
+import Estimacion from '@/pages/Estimacion'
 import KioskApp from '@/pages/kiosk/KioskApp'
 import ClientPortal from '@/pages/portal/ClientPortal'
 import { Loader2 } from 'lucide-react'
@@ -56,6 +57,14 @@ function MuestrasRoute({ children }: { children: React.ReactNode }) {
   return <>{children}</>
 }
 
+// Estimación = puerta de entrada del schedule. La usa quien arranca los proyectos.
+function EstimacionRoute({ children }: { children: React.ReactNode }) {
+  const { user } = useAuth()
+  const allowed = ['ADMIN', 'PROJECT_MANAGEMENT']
+  if (!user || !allowed.includes(user.rol)) return <Navigate to="/" replace />
+  return <>{children}</>
+}
+
 export default function App() {
   return (
     <Routes>
@@ -82,6 +91,7 @@ export default function App() {
         <Route path="proveedores/*"    element={<Proveedores />} />
         <Route path="produccion/*"     element={<ProduccionRoute><Produccion /></ProduccionRoute>} />
         <Route path="muestras"         element={<MuestrasRoute><Muestras /></MuestrasRoute>} />
+        <Route path="estimacion"       element={<EstimacionRoute><Estimacion /></EstimacionRoute>} />
         <Route path="tareas"           element={<AdminRoute><Tareas /></AdminRoute>} />
         <Route path="usuarios"         element={<AdminRoute><Usuarios /></AdminRoute>} />
       </Route>

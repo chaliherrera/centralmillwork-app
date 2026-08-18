@@ -47,6 +47,19 @@ export const scheduleService = {
       .post<ApiResponse<{ plan_id: number }>>(`/schedule/proyecto/${proyectoId}/generar`, { fecha_objetivo })
       .then((r) => r.data),
 
+  // Intake de Estimación: fecha de entrega + contrato firmado (PDF opcional) →
+  // arranca el proyecto en el schedule y cierra C-03 (día cero).
+  intake: (proyectoId: number, fecha_objetivo: string, contrato?: File | null) => {
+    const fd = new FormData()
+    fd.append('fecha_objetivo', fecha_objetivo)
+    if (contrato) fd.append('contrato', contrato)
+    return api
+      .post<ApiResponse<{ ok: boolean; planNuevo: boolean }>>(`/schedule/proyecto/${proyectoId}/intake`, fd, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      })
+      .then((r) => r.data)
+  },
+
   recalcular: (proyectoId: number) =>
     api
       .post<ApiResponse<{ semaforo: string; holguraDias: number | null }>>(`/schedule/proyecto/${proyectoId}/recalcular`)
