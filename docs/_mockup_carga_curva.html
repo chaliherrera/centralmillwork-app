@@ -1,104 +1,91 @@
-<title>Carga del Taller — radar de capacidad</title>
+<title>Carga del Taller — proyectos en el tiempo</title>
 <style>
   *{margin:0;padding:0;box-sizing:border-box}
   body{background:#0a0c16;color:#e6e8f0;font-family:"Segoe UI",system-ui,Arial,sans-serif;padding:26px 30px;min-height:100vh}
-  #wrap{max-width:1080px;margin:0 auto}
-  .top{display:flex;flex-wrap:wrap;align-items:center;gap:20px 30px;margin-bottom:6px}
+  #wrap{max-width:1100px;margin:0 auto}
+  .top{display:flex;flex-wrap:wrap;align-items:flex-end;gap:14px 24px;margin-bottom:4px}
   .brand{font-size:11px;font-weight:800;letter-spacing:2px;color:#c9a94a}
   h1{font-size:21px;letter-spacing:-.3px;margin-top:2px;color:#f3f4fb}
-  .chips{margin-left:auto;display:flex;gap:22px}
-  .chip .n{font-size:22px;font-weight:800;line-height:1;font-variant-numeric:tabular-nums}
-  .chip .l{font-size:10px;text-transform:uppercase;letter-spacing:.6px;color:#8b90a8;margin-top:3px}
-  .legend{display:flex;gap:20px;align-items:center;margin:14px 2px 8px;font-size:12px;color:#aab0c6}
-  .legend .k{display:inline-flex;align-items:center;gap:7px}
-  .legend .sw{width:20px;height:8px;border-radius:4px;display:inline-block}
-  .legend .hoy{width:2px;height:14px;background:#2dd4bf;box-shadow:0 0 8px #2dd4bf;display:inline-block}
-  .panel{background:linear-gradient(180deg,#0e1122,#0a0c16);border:1px solid #1c2036;border-radius:18px;padding:14px 8px 6px;box-shadow:0 20px 60px rgba(0,0,0,.5)}
+  .sub{font-size:12.5px;color:#8b90a8;margin-left:auto}
+  .sub b{color:#e6e8f0}
+  .legend{display:flex;flex-wrap:wrap;gap:8px 16px;margin:14px 2px 10px;font-size:12px}
+  .legend .k{display:inline-flex;align-items:center;gap:7px;color:#c3c8dc}
+  .legend .k .cod{font-family:"Courier New",monospace;font-size:10.5px;color:#8b90a8}
+  .legend .sw{width:18px;height:8px;border-radius:4px;display:inline-block}
+  .legend .hoy{width:2px;height:14px;background:#5eead4;box-shadow:0 0 8px #2dd4bf;display:inline-block}
+  .panel{background:linear-gradient(180deg,#0e1122,#0a0c16);border:1px solid #1c2036;border-radius:18px;padding:12px 8px 4px;box-shadow:0 20px 60px rgba(0,0,0,.5)}
   .panel svg{width:100%;height:auto;display:block}
-  .verdict{margin-top:16px;background:#0e1122;border:1px solid #1c2036;border-left:4px solid #c9a94a;border-radius:14px;padding:15px 18px;display:flex;gap:13px;align-items:flex-start}
-  .verdict .ic{font-size:22px}
-  .verdict h3{font-size:15px;color:#f3f4fb;margin-bottom:3px}
-  .verdict p{color:#aab0c6;font-size:12.5px;line-height:1.55;max-width:74ch}
-  .verdict b{color:#e6e8f0}
-  .note{margin-top:12px;font-size:11px;color:#707691;font-style:italic;max-width:82ch}
+  .note{margin-top:14px;font-size:12px;color:#9096ad;line-height:1.55;max-width:88ch}
+  .note b{color:#d6d9e6}
 </style>
 
 <div id="wrap">
   <div class="top">
     <div>
       <div class="brand">CENTRAL MILLWORK</div>
-      <h1>Carga del Taller — radar de capacidad</h1>
+      <h1>Carga del Taller — proyectos en el tiempo</h1>
     </div>
-    <div class="chips">
-      <div class="chip"><div class="n" style="color:#c084fc">83%</div><div class="l">Pico actual</div></div>
-      <div class="chip"><div class="n" style="color:#38bdf8">100%</div><div class="l">Con el nuevo</div></div>
-      <div class="chip"><div class="n">5 / 6</div><div class="l">En taller</div></div>
-    </div>
+    <div class="sub">Cada curva = un proyecto y su ventana de producción · máximo <b>6 simultáneos</b></div>
   </div>
 
-  <div class="legend">
-    <span class="k"><span class="sw" style="background:#a855f7"></span> Carga actual</span>
-    <span class="k"><span class="sw" style="background:#38bdf8"></span> Con el proyecto nuevo (entrega 20/12)</span>
-    <span class="k"><span class="hoy"></span> Hoy</span>
-    <span style="margin-left:auto;color:#707691">100% = 6 proyectos (tope del taller)</span>
-  </div>
+  <div class="legend" id="legend"></div>
 
-  <div class="panel"><svg id="chart" viewBox="0 0 1000 340" preserveAspectRatio="none"></svg></div>
+  <div class="panel"><svg id="chart" viewBox="0 0 1000 320" preserveAspectRatio="none"></svg></div>
 
-  <div class="verdict">
-    <div class="ic">⚠️</div>
-    <div>
-      <h3>Entrega 20/12/2026 → factible, pero al límite</h3>
-      <p>La curva azul es la carga <b>si aceptás el proyecto nuevo</b>: entre <b>mediados de octubre y noviembre trepa al 100%</b> — el taller quedaría <b>lleno (6/6)</b> esas semanas. Hoy la carga (violeta) pica en 83%. <b>Se puede tomar</b>, pero sin margen: un atraso en otro proyecto lo compromete. Con entrega en <b>enero</b>, la curva azul no tocaría el tope.</p>
-    </div>
-  </div>
-  <div class="note">Mockup — datos de ejemplo. La curva sale de sumar las ventanas de producción de todos los proyectos (P-01→P-06); la exactitud depende de los plazos que estamos calibrando.</div>
+  <div class="note">Cada <b>curva es un proyecto</b>: nace cuando entra a producción, sube mientras se fabrica y baja al terminar. Donde varias curvas <b>se entrelazan</b>, el taller tiene varios proyectos a la vez — ahí se ve la <b>temporalidad</b> de un vistazo. La línea <b>“Hoy”</b> marca el presente. <span style="color:#707691;font-style:italic">Mockup con datos de ejemplo; las ventanas saldrán del schedule (P-01→P-06) una vez calibrados los plazos.</span></div>
 </div>
 
 <script>
   const MES=[['Septiembre',5],['Octubre',5],['Noviembre',5],['Diciembre',4]];
-  const cur=[30,36,42,46,44,41,48,55,52,48,54,63,58,50,53,58,50,45,48];
-  const neu=[38,45,52,58,55,52,64,76,73,68,80,100,90,78,80,86,78,70,64];
-  const N=cur.length;
-  const L=54,R=26,T=22,B=54, W=1000,H=340;
-  const px=(i)=>L+(i/(N-1))*(W-L-R);
-  const py=(v)=>T+(1-v/100)*(H-T-B);
-  const smooth=(a)=>{const p=a.map((v,i)=>[px(i),py(v)]);let d='M '+p[0][0]+' '+p[0][1];for(let i=1;i<p.length;i++){const cx=(p[i-1][0]+p[i][0])/2;d+=' C '+cx+' '+p[i-1][1]+' '+cx+' '+p[i][1]+' '+p[i][0]+' '+p[i][1];}return d;};
-  const base=H-B;
-  const HOY=10; // Noviembre S1
-  let s='';
-  s+=`<defs>
-    <linearGradient id="gP" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#a855f7" stop-opacity=".55"/><stop offset="1" stop-color="#a855f7" stop-opacity="0"/></linearGradient>
-    <linearGradient id="gB" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#38bdf8" stop-opacity=".40"/><stop offset="1" stop-color="#38bdf8" stop-opacity="0"/></linearGradient>
-    <filter id="glow" x="-20%" y="-40%" width="140%" height="180%"><feGaussianBlur stdDeviation="5" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
-  </defs>`;
-  // grid horizontal 0/25/50/75/100
-  [0,25,50,75,100].forEach(v=>{const y=py(v);s+=`<line x1="${L}" y1="${y}" x2="${W-R}" y2="${y}" stroke="#ffffff" stroke-opacity="${v===100?.16:.07}" stroke-width="1" ${v===100?'stroke-dasharray="4 5"':''}/>`;s+=`<text x="${L-8}" y="${y+4}" text-anchor="end" font-size="11" fill="#707691">${v}%</text>`;});
-  // areas (azul detras, violeta delante)
-  const areaB=smooth(neu)+` L ${px(N-1)} ${base} L ${px(0)} ${base} Z`;
-  const areaP=smooth(cur)+` L ${px(N-1)} ${base} L ${px(0)} ${base} Z`;
-  s+=`<path d="${areaB}" fill="url(#gB)"/>`;
-  s+=`<path d="${areaP}" fill="url(#gP)"/>`;
-  // lineas con glow
-  s+=`<path d="${smooth(neu)}" fill="none" stroke="#7dd3fc" stroke-width="2.4" filter="url(#glow)"/>`;
-  s+=`<path d="${smooth(neu)}" fill="none" stroke="#bae6fd" stroke-width="1.4"/>`;
-  s+=`<path d="${smooth(cur)}" fill="none" stroke="#c084fc" stroke-width="2.6" filter="url(#glow)"/>`;
-  s+=`<path d="${smooth(cur)}" fill="none" stroke="#e9d5ff" stroke-width="1.4"/>`;
-  // linea HOY
-  const xh=px(HOY);
-  s+=`<line x1="${xh}" y1="${T-4}" x2="${xh}" y2="${base}" stroke="#2dd4bf" stroke-width="1.6" filter="url(#glow)" opacity=".9"/>`;
-  s+=`<text x="${xh+6}" y="${T+8}" font-size="10.5" font-weight="700" fill="#5eead4">HOY</text>`;
-  // eje meses + semanas
+  const N=19;
+  const P=[
+    {cod:'PRY-2026-101',nm:'Hotel Rivera Lobby',   a:0, b:7, peak:.62,c:'#38bdf8'},
+    {cod:'PRY-2026-102',nm:'Office Tower Floor 12', a:2, b:10,peak:.80,c:'#a855f7'},
+    {cod:'PRY-2026-088',nm:'Boutique Retail Fit-out',a:5,b:12,peak:.55,c:'#f59e0b'},
+    {cod:'PRY-2026-099',nm:'Residencia Smith Kitchen',a:7,b:15,peak:.72,c:'#34d399'},
+    {cod:'PRY-2026-095',nm:'Restaurant Bar & Millwork',a:10,b:18,peak:.60,c:'#fb7185'},
+  ];
+  const HOY=10;
+  const W=1000,Hh=320,Lm=18,Rm=18,Tm=20,Bm=52, base=Hh-Bm;
+  const px=(i)=>Lm+(i/(N-1))*(W-Lm-Rm);
+  const py=(v)=>base-v*(base-Tm);
+  const smooth=(pts)=>{let d='M '+pts[0][0]+' '+pts[0][1];for(let i=1;i<pts.length;i++){const cx=(pts[i-1][0]+pts[i][0])/2;d+=' C '+cx+' '+pts[i-1][1]+' '+cx+' '+pts[i][1]+' '+pts[i][0]+' '+pts[i][1];}return d;};
+  const valOf=(p,i)=>{ if(i<p.a||i>p.b) return 0; const t=(i-p.a)/(p.b-p.a); return p.peak*Math.sin(Math.PI*t); };
+
+  let defs='<defs>';
+  defs+='<filter id="glow" x="-30%" y="-60%" width="160%" height="220%"><feGaussianBlur stdDeviation="4.5" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>';
+  P.forEach((p,k)=>{defs+=`<linearGradient id="g${k}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${p.c}" stop-opacity=".34"/><stop offset="1" stop-color="${p.c}" stop-opacity="0"/></linearGradient>`;});
+  defs+='</defs>';
+
+  let s=defs;
+  // linea base
+  s+=`<line x1="${Lm}" y1="${base}" x2="${W-Rm}" y2="${base}" stroke="#ffffff" stroke-opacity=".10"/>`;
+  // separadores de mes + eje
   let idx=0;
   for(const [nombre,cnt] of MES){
-    const x0=px(idx)-((idx>0)?(px(idx)-px(idx-1))/2:0);
-    const xEndIdx=idx+cnt-1;
-    const xMid=(px(idx)+px(xEndIdx))/2;
-    // separador de mes
-    if(idx>0){const sx=px(idx)-((px(idx)-px(idx-1))/2);s+=`<line x1="${sx}" y1="${T}" x2="${sx}" y2="${base}" stroke="#ffffff" stroke-opacity=".05"/>`;}
-    s+=`<text x="${xMid}" y="${H-24}" text-anchor="middle" font-size="11" font-weight="700" letter-spacing=".5" fill="#aab0c6">${nombre.toUpperCase()}</text>`;
-    for(let k=0;k<cnt;k++){s+=`<text x="${px(idx+k)}" y="${H-8}" text-anchor="middle" font-size="9.5" fill="#707691">S${k+1}</text>`;}
+    if(idx>0){const sx=(px(idx)+px(idx-1))/2;s+=`<line x1="${sx}" y1="${Tm}" x2="${sx}" y2="${base}" stroke="#ffffff" stroke-opacity=".05"/>`;}
+    const xMid=(px(idx)+px(idx+cnt-1))/2;
+    s+=`<text x="${xMid}" y="${Hh-22}" text-anchor="middle" font-size="11" font-weight="700" letter-spacing=".5" fill="#aab0c6">${nombre.toUpperCase()}</text>`;
+    for(let k=0;k<cnt;k++) s+=`<text x="${px(idx+k)}" y="${Hh-7}" text-anchor="middle" font-size="9.5" fill="#707691">S${k+1}</text>`;
     idx+=cnt;
   }
+  // areas (fills) de atras hacia adelante
+  P.forEach((p,k)=>{
+    const pts=[]; for(let i=0;i<N;i++) pts.push([px(i),py(valOf(p,i))]);
+    const area=smooth(pts)+` L ${px(N-1)} ${base} L ${px(0)} ${base} Z`;
+    s+=`<path d="${area}" fill="url(#g${k})"/>`;
+  });
+  // lineas glow por proyecto
+  P.forEach((p)=>{
+    const pts=[]; for(let i=0;i<N;i++) pts.push([px(i),py(valOf(p,i))]);
+    s+=`<path d="${smooth(pts)}" fill="none" stroke="${p.c}" stroke-width="2.4" filter="url(#glow)" stroke-linecap="round"/>`;
+  });
+  // linea HOY
+  const xh=px(HOY);
+  s+=`<line x1="${xh}" y1="${Tm-4}" x2="${xh}" y2="${base}" stroke="#2dd4bf" stroke-width="1.6" filter="url(#glow)" opacity=".9"/>`;
+  s+=`<text x="${xh+6}" y="${Tm+6}" font-size="10.5" font-weight="700" fill="#5eead4">HOY</text>`;
   document.getElementById('chart').innerHTML=s;
+
+  // legend
+  document.getElementById('legend').innerHTML = P.map(p=>`<span class="k"><span class="sw" style="background:${p.c};box-shadow:0 0 8px ${p.c}88"></span><span class="cod">${p.cod}</span> ${p.nm}</span>`).join('') + `<span class="k" style="margin-left:auto"><span class="hoy"></span> Hoy</span>`;
 </script>
