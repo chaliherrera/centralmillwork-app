@@ -2,67 +2,116 @@
 <style>
   *{margin:0;padding:0;box-sizing:border-box}
   :root{
-    --bg:#F6F4EE;--ink:#1c1917;--muted:#78716c;--line:#e7e3d8;
-    --forest:#3b4233;--gold:#9B7200;--emerald:#059669;--card:#fff;
-    --band:#fdecec;--track:#ddd8cc;--head:#faf8f2;--faint:#f0ede4;
-    --ok:#5A8A2E;--ok-bg:#eef5e4;--warn:#b8860b;--warn-bg:#faf3e2;--full:#c2410c;--full-bg:#fbe9e0;
+    --bg:#F1F2F4;--panel:#ffffff;--ink:#1d2230;--muted:#6b7280;--faint-ink:#9aa1ac;
+    --line:#e6e7ea;--faint:#f2f3f5;--head:#fafbfc;
+    --forest:#3b5137;--gold:#9B7200;
+    --rail:#e3e5e9;
+    --ok:#15803d;--ok-bg:#e7f4ea;--warn:#b45309;--warn-bg:#fbeee0;
+    --full:#c2410c;--full-bg:#fbe4da;--zero:#c7cbd2;
+    --ghost:#b8860b;
   }
-  @media (prefers-color-scheme:dark){:root{
-    --bg:#14160f;--ink:#efece2;--muted:#a8a29e;--line:#2c2f24;
-    --forest:#8ea06f;--gold:#d9a521;--emerald:#34d399;--card:#1b1e15;
-    --band:#3a1d1d;--track:#3a3f30;--head:#20241a;--faint:#191d12;
-    --ok:#7ba53c;--ok-bg:#1f2a12;--warn:#c69a2b;--warn-bg:#2a2410;--full:#e06a34;--full-bg:#2e1a12;}}
-  body{background:var(--bg);color:var(--ink);font-family:"Segoe UI",system-ui,Arial,sans-serif;padding:22px 26px;font-size:13px}
-  #wrap{max-width:1040px;margin:0 auto}
-  .hero{display:flex;flex-wrap:wrap;align-items:center;gap:26px 34px;padding:2px 4px 16px}
-  .hero .blk .k{font-size:11px;text-transform:uppercase;letter-spacing:1px;color:var(--muted);font-weight:600}
-  .hero .blk .v{font-size:26px;font-weight:800;color:var(--ink);letter-spacing:-.5px;font-variant-numeric:tabular-nums}
-  .hero .status{margin-left:auto;display:inline-flex;align-items:center;gap:8px;background:var(--full-bg);border:1px solid #e2b7a3;
-    color:var(--full);border-radius:12px;padding:8px 16px;font-weight:700;font-size:13px}
-  .hero .status i{width:9px;height:9px;border-radius:50%;background:var(--full);display:inline-block}
-  .brand{font-size:11px;font-weight:800;letter-spacing:2px;color:var(--gold)}
-  h1{font-size:20px;color:var(--forest);letter-spacing:-.3px;margin-top:1px}
-  .card{background:var(--card);border:1px solid var(--line);border-radius:18px;
-        box-shadow:0 1px 4px rgba(0,0,0,.05),0 10px 30px rgba(0,0,0,.04)}
-  .board{overflow:hidden}
-  .months{display:grid;grid-template-columns:158px repeat(16,1fr);background:var(--head);border-bottom:1px solid var(--line)}
-  .months .corner{padding:10px 12px;font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--muted);font-weight:800;display:flex;align-items:flex-end}
-  .months .mh{text-align:center;font-size:11.5px;font-weight:700;color:var(--forest);border-left:1px solid var(--line);padding:9px 0}
-  /* Fila de ocupación (compacta) */
-  .caprow{display:grid;grid-template-columns:158px repeat(16,1fr);align-items:center;height:30px;border-bottom:1px solid var(--line)}
-  .caprow .lbl{padding-left:14px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted)}
-  .cap{height:19px;margin:0 2px;border-radius:5px;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:800;font-variant-numeric:tabular-nums}
-  .cap.z{color:var(--muted);opacity:.35}
-  .cap.ok{background:var(--ok-bg);color:var(--ok)}
-  .cap.warn{background:var(--warn-bg);color:var(--warn)}
-  .cap.full{background:var(--full-bg);color:var(--full)}
-  /* Filas de proyecto */
-  .row{display:grid;grid-template-columns:158px repeat(16,1fr);align-items:center;height:42px;border-top:1px solid var(--faint)}
+  html,body{background:var(--bg)}
+  body{color:var(--ink);font-family:"Segoe UI",system-ui,-apple-system,Arial,sans-serif;
+       padding:24px 26px 34px;font-size:13px;-webkit-font-smoothing:antialiased}
+  #wrap{max-width:1060px;margin:0 auto}
+
+  /* ── Encabezado ── */
+  .hero{display:flex;flex-wrap:wrap;align-items:center;gap:16px 30px;padding:2px 4px 18px}
+  .brand{font-size:10.5px;font-weight:800;letter-spacing:2px;color:var(--gold)}
+  h1{font-size:21px;color:var(--forest);letter-spacing:-.4px;margin-top:1px;font-weight:800}
+  .kpi{display:flex;flex-direction:column;gap:1px}
+  .kpi .k{font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--muted);font-weight:700}
+  .kpi .v{font-size:24px;font-weight:800;letter-spacing:-.5px;font-variant-numeric:tabular-nums;line-height:1.05}
+  .kpi .v small{font-size:14px;color:var(--faint-ink);font-weight:700}
+  .status{margin-left:auto;display:inline-flex;align-items:center;gap:8px;background:var(--full-bg);
+    border:1px solid #eec4b2;color:var(--full);border-radius:999px;padding:8px 16px;font-weight:700;font-size:12.5px;
+    box-shadow:0 1px 2px rgba(0,0,0,.04)}
+  .status i{width:8px;height:8px;border-radius:50%;background:var(--full);display:inline-block;
+    box-shadow:0 0 0 3px rgba(194,65,12,.16)}
+
+  /* ── Tablero ── */
+  .board{background:var(--panel);border:1px solid var(--line);border-radius:16px;overflow:hidden;
+    box-shadow:0 1px 3px rgba(20,24,40,.05),0 14px 34px rgba(20,24,40,.05)}
+  .grid{display:grid;grid-template-columns:184px repeat(16,1fr)}
+
+  .months{background:var(--head);border-bottom:1px solid var(--line)}
+  .months .corner{grid-column:1;padding:12px 14px;font-size:10px;text-transform:uppercase;letter-spacing:1.2px;
+    color:var(--muted);font-weight:800;display:flex;align-items:flex-end}
+  .months .mh{text-align:center;font-size:12px;font-weight:800;color:var(--forest);
+    border-left:1px solid var(--line);padding:11px 0 5px}
+  .months .mh .wk{display:grid;grid-template-columns:repeat(var(--n),1fr);margin-top:6px}
+  .months .mh .wk span{font-size:8.5px;font-weight:600;color:var(--faint-ink);letter-spacing:.3px}
+
+  /* fila ocupación */
+  .cap-row{align-items:center;height:34px;border-bottom:1px solid var(--line);background:var(--faint)}
+  .cap-row .lbl{grid-column:1;padding-left:16px;font-size:9.5px;font-weight:800;text-transform:uppercase;
+    letter-spacing:.6px;color:var(--muted)}
+  .cell{height:22px;margin:0 3px;border-radius:6px;display:flex;align-items:center;justify-content:center;
+    font-size:10.5px;font-weight:800;font-variant-numeric:tabular-nums}
+  .cell.z{color:var(--zero)}
+  .cell.ok{background:var(--ok-bg);color:var(--ok)}
+  .cell.warn{background:var(--warn-bg);color:var(--warn)}
+  .cell.full{background:var(--full-bg);color:var(--full)}
+
+  /* zona de filas + linea HOY */
+  .rows{position:relative}
+  .hoy{position:absolute;top:0;bottom:0;width:2px;background:linear-gradient(180deg,#0d9488,#0d948833);
+    left:calc(184px + (100% - 184px) * 0.375);z-index:6;pointer-events:none}
+  .hoy::before{content:"HOY";position:absolute;top:4px;left:6px;font-size:9px;font-weight:800;
+    letter-spacing:.5px;color:#0d7d72;background:var(--panel);padding:1px 4px;border-radius:4px;
+    box-shadow:0 1px 2px rgba(0,0,0,.06)}
+
+  .row{align-items:center;min-height:54px;border-top:1px solid var(--faint)}
   .row.first{border-top:none}
-  .row .lbl{padding-left:14px;padding-right:8px;overflow:hidden}
-  .row .lbl .cod{font-family:"Courier New",monospace;font-weight:700;font-size:10.5px;color:var(--forest)}
-  .row .lbl .nm{font-size:10.5px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  /* Mini-recorrido de producción (estilo journey map) */
-  .track{position:relative;height:26px;display:flex;align-items:center;justify-content:space-between;padding:0 10px}
-  .track .rail{position:absolute;left:10px;right:10px;top:50%;height:3px;transform:translateY(-50%);background:var(--track);border-radius:3px}
-  .track .fill{position:absolute;left:10px;top:50%;height:3px;transform:translateY(-50%);background:var(--c);border-radius:3px}
-  .stn{position:relative;z-index:2;width:16px;height:16px;border-radius:50%;background:var(--card);border:2.5px solid var(--track);
-       display:flex;align-items:center;justify-content:center;font-size:9px;color:#fff;line-height:1}
-  .stn.done{background:var(--c);border-color:var(--c)}
-  .stn.active{border-color:var(--c);box-shadow:0 0 0 4px color-mix(in srgb,var(--c) 22%,transparent)}
-  .track.ghost .rail{background:transparent;border-top:2px dashed var(--gold)}
-  .track.ghost .stn{border-style:dashed;border-color:var(--gold);background:transparent;box-shadow:none}
-  .verdict{margin-top:16px;padding:15px 18px;display:flex;gap:13px;align-items:flex-start;border-left:4px solid var(--gold)}
-  .verdict .ic{font-size:22px;line-height:1.1}
-  .verdict h3{font-size:15px;color:var(--forest);margin-bottom:3px}
-  .verdict p{color:var(--muted);font-size:12.5px;line-height:1.5;max-width:72ch}
-  .verdict b{color:var(--ink)}
-  .legend{display:flex;gap:18px;flex-wrap:wrap;margin-top:14px;padding-left:4px;font-size:11px;color:var(--muted);align-items:center}
+  .row .lbl{grid-column:1;padding:6px 10px 6px 16px;overflow:hidden}
+  .row .lbl .cod{font-family:"Courier New",monospace;font-weight:700;font-size:11px;color:var(--ink);letter-spacing:-.2px}
+  .row .lbl .nm{font-size:10.5px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:1px}
+  .row .lbl.ghost .cod{color:var(--ghost)}
+
+  /* week gridlines detras de las capsulas */
+  .vlines{grid-column:2 / span 16;grid-row:1;display:grid;grid-template-columns:repeat(16,1fr);height:100%;align-self:stretch}
+  .vlines b{border-left:1px solid var(--faint)}
+
+  /* ── Cápsula journey (la barra) ── */
+  .cap-wrap{grid-row:1;align-self:center;position:relative;height:38px;margin:0 3px}
+  .cap{position:absolute;inset:0;border-radius:999px;border:1px solid var(--cap-bd);
+    background:var(--cap-bg);box-shadow:0 1px 2px rgba(0,0,0,.05),0 4px 12px var(--cap-sh)}
+  .cap.gh{background:transparent;border:1.6px dashed var(--ghost);box-shadow:none}
+  .rail{position:absolute;top:50%;left:8%;width:64%;height:3px;transform:translateY(-50%);
+    background:var(--rail);border-radius:3px}
+  .fill{position:absolute;top:50%;left:8%;height:3px;transform:translateY(-50%);
+    background:var(--c);border-radius:3px;box-shadow:0 0 6px var(--c)}
+  .node{position:absolute;top:50%;transform:translateY(-50%);display:flex;align-items:center;gap:6px;z-index:2}
+  .dot{width:19px;height:19px;border-radius:50%;background:var(--panel);border:2.4px solid var(--rail);
+    display:flex;align-items:center;justify-content:center;flex-shrink:0}
+  .dot svg{width:10px;height:10px;display:block}
+  .dot.done{background:var(--c);border-color:var(--c)}
+  .dot.done svg{stroke:#fff}
+  .dot.active{border-color:var(--c);box-shadow:0 0 0 4px var(--c-soft)}
+  .dot.active svg{stroke:var(--c)}
+  .dot.pend svg{stroke:var(--faint-ink)}
+  .node .t{font-size:9.5px;font-weight:700;white-space:nowrap;letter-spacing:-.1px}
+  .node.done .t,.node.active .t{color:var(--ink)}
+  .node.pend .t{color:var(--faint-ink)}
+  .cap.gh .node .t{color:var(--ghost)}
+  .endok{position:absolute;top:50%;right:9px;transform:translateY(-50%);width:17px;height:17px;border-radius:50%;
+    background:var(--c);display:flex;align-items:center;justify-content:center;z-index:3}
+  .endok svg{width:10px;height:10px;stroke:#fff}
+
+  /* ── Veredicto ── */
+  .verdict{margin-top:16px;background:var(--panel);border:1px solid var(--line);border-left:4px solid var(--gold);
+    border-radius:14px;padding:16px 18px;display:flex;gap:14px;align-items:flex-start;
+    box-shadow:0 1px 3px rgba(20,24,40,.05)}
+  .verdict .ic{font-size:20px;line-height:1}
+  .verdict h3{font-size:14.5px;color:var(--forest);margin-bottom:4px;font-weight:800}
+  .verdict p{color:var(--muted);font-size:12.5px;line-height:1.55;max-width:78ch}
+  .verdict b{color:var(--ink);font-weight:700}
+  .legend{display:flex;gap:8px 20px;flex-wrap:wrap;margin-top:14px;padding-left:4px;font-size:11px;color:var(--muted);align-items:center}
   .legend .k{display:inline-flex;align-items:center;gap:6px}
-  .nd{width:13px;height:13px;border-radius:50%;background:var(--card);border:2.5px solid var(--track);display:inline-block}
+  .nd{width:13px;height:13px;border-radius:50%;background:var(--panel);border:2.4px solid var(--rail);display:inline-block}
   .nd.d{background:var(--forest);border-color:var(--forest)}
-  .nd.a{border-color:var(--forest);box-shadow:0 0 0 3px color-mix(in srgb,var(--forest) 22%,transparent)}
-  .note{margin-top:12px;padding-left:4px;font-size:11px;color:var(--muted);font-style:italic;max-width:80ch}
+  .nd.a{border-color:var(--forest);box-shadow:0 0 0 3px rgba(59,81,55,.18)}
+  .note{margin-top:11px;padding-left:4px;font-size:11px;color:var(--faint-ink);font-style:italic;max-width:82ch;line-height:1.5}
 </style>
 
 <div id="wrap">
@@ -71,81 +120,109 @@
       <div class="brand">CENTRAL MILLWORK</div>
       <h1>Carga del Taller</h1>
     </div>
-    <div class="blk"><div class="k">Semana pico</div><div class="v" style="color:var(--gold)">5 <span style="font-size:15px;color:var(--muted);font-weight:600">/ 6</span></div></div>
-    <div class="blk"><div class="k">Lugar libre</div><div class="v">1</div></div>
-    <div class="blk"><div class="k">En taller</div><div class="v">5</div></div>
+    <div class="kpi"><span class="k">Semana pico</span><span class="v" style="color:var(--gold)">5 <small>/ 6</small></span></div>
+    <div class="kpi"><span class="k">Lugar libre</span><span class="v">1</span></div>
+    <div class="kpi"><span class="k">En taller</span><span class="v">5</span></div>
     <div class="status"><i></i> Al límite con el nuevo</div>
   </div>
 
-  <div class="card board">
-    <div class="months">
-      <div class="corner">Taller →</div>
-      <div class="mh" style="grid-column:2 / 6">Septiembre</div>
-      <div class="mh" style="grid-column:6 / 11">Octubre</div>
-      <div class="mh" style="grid-column:11 / 15">Noviembre</div>
-      <div class="mh" style="grid-column:15 / 18">Diciembre</div>
+  <div class="board">
+    <div class="grid months">
+      <div class="corner">Taller&nbsp;→</div>
+      <div class="mh" style="grid-column:2 / 6">Septiembre<div class="wk" style="--n:4"><span>S1</span><span>S2</span><span>S3</span><span>S4</span></div></div>
+      <div class="mh" style="grid-column:6 / 10">Octubre<div class="wk" style="--n:4"><span>S1</span><span>S2</span><span>S3</span><span>S4</span></div></div>
+      <div class="mh" style="grid-column:10 / 14">Noviembre<div class="wk" style="--n:4"><span>S1</span><span>S2</span><span>S3</span><span>S4</span></div></div>
+      <div class="mh" style="grid-column:14 / 18">Diciembre<div class="wk" style="--n:4"><span>S1</span><span>S2</span><span>S3</span><span>S4</span></div></div>
     </div>
 
-    <div class="caprow">
+    <div class="grid cap-row" id="caprow">
       <div class="lbl">Ocupación / 6</div>
-      <div class="cap z" style="grid-column:2">·</div>
-      <div class="cap ok" style="grid-column:3">1</div>
-      <div class="cap ok" style="grid-column:4">2</div>
-      <div class="cap ok" style="grid-column:5">3</div>
-      <div class="cap warn" style="grid-column:6">4</div>
-      <div class="cap warn" style="grid-column:7">5</div>
-      <div class="cap warn" style="grid-column:8">5</div>
-      <div class="cap warn" style="grid-column:9">4</div>
-      <div class="cap ok" style="grid-column:10">3</div>
-      <div class="cap ok" style="grid-column:11">2</div>
-      <div class="cap ok" style="grid-column:12">1</div>
-      <div class="cap z" style="grid-column:13">·</div>
-      <div class="cap z" style="grid-column:14">·</div>
-      <div class="cap z" style="grid-column:15">·</div>
-      <div class="cap z" style="grid-column:16">·</div>
-      <div class="cap z" style="grid-column:17">·</div>
     </div>
 
-    <div class="row first">
-      <div class="lbl"><div class="cod">PRY-2026-101</div><div class="nm">Hotel Rivera Lobby</div></div>
-      <div class="track" style="grid-column:3 / 9;--c:#3b82f6"><div class="rail"></div><div class="fill" style="width:calc(100% - 20px)"></div><span class="stn done">✓</span><span class="stn done">✓</span><span class="stn active"></span></div>
-    </div>
-    <div class="row">
-      <div class="lbl"><div class="cod">PRY-2026-102</div><div class="nm">Office Tower Floor 12</div></div>
-      <div class="track" style="grid-column:4 / 10;--c:#0d9488"><div class="rail"></div><div class="fill" style="width:50%"></div><span class="stn done">✓</span><span class="stn active"></span><span class="stn"></span></div>
-    </div>
-    <div class="row">
-      <div class="lbl"><div class="cod">PRY-2026-088</div><div class="nm">Boutique Retail Fit-out</div></div>
-      <div class="track" style="grid-column:5 / 11;--c:#b45309"><div class="rail"></div><div class="fill" style="width:50%"></div><span class="stn done">✓</span><span class="stn active"></span><span class="stn"></span></div>
-    </div>
-    <div class="row">
-      <div class="lbl"><div class="cod">PRY-2026-099</div><div class="nm">Residencia Smith Kitchen</div></div>
-      <div class="track" style="grid-column:6 / 12;--c:#7c3aed"><div class="rail"></div><div class="fill" style="width:12px"></div><span class="stn active"></span><span class="stn"></span><span class="stn"></span></div>
-    </div>
-    <div class="row">
-      <div class="lbl"><div class="cod">PRY-2026-095</div><div class="nm">Restaurant Bar &amp; Millwork</div></div>
-      <div class="track" style="grid-column:7 / 13;--c:#059669"><div class="rail"></div><div class="fill" style="width:0"></div><span class="stn"></span><span class="stn"></span><span class="stn"></span></div>
-    </div>
-    <div class="row" style="border-top:1.5px dashed var(--gold)">
-      <div class="lbl"><div class="cod" style="color:var(--gold)">NUEVO ▸ ¿aceptar?</div><div class="nm">Cliente nuevo · entrega 20/12</div></div>
-      <div class="track ghost" style="grid-column:6 / 11"><div class="rail"></div><span class="stn"></span><span class="stn"></span><span class="stn"></span></div>
+    <div class="rows" id="rows">
+      <div class="hoy"></div>
     </div>
   </div>
 
-  <div class="card verdict">
+  <div class="verdict">
     <div class="ic">⚠️</div>
     <div>
       <h3>Entrega 20/12/2026 → factible, pero al límite</h3>
-      <p>Calculando hacia atrás, la <b>producción</b> del proyecto nuevo (carril punteado) caería entre <b>mediados de octubre y mediados de noviembre</b>. Esas semanas el taller ya está en <b>5 / 6</b> — con este proyecto <b>toca el tope de 6 / 6</b>, sin margen para imprevistos. <b>Se puede aceptar</b>, pero un atraso en cualquier otro proyecto lo compromete. Si el cliente corriera la entrega a <b>enero</b>, entraría con holgura.</p>
+      <p>Calculando hacia atrás, la <b>producción</b> del proyecto nuevo (cápsula punteada) caería entre <b>principios y mediados de octubre</b>. En esas semanas el taller ya está en <b>5 / 6</b> — al sumar este proyecto <b>toca el tope de 6 / 6</b>, sin margen para imprevistos. <b>Se puede aceptar</b>, pero cualquier atraso en otro proyecto lo compromete. Si el cliente corriera la entrega a <b>enero</b>, entraría con holgura.</p>
     </div>
   </div>
 
   <div class="legend">
-    <span class="k">Cada carril = un proyecto en el taller</span>
+    <span class="k">Cada cápsula = un proyecto (Diseño → Producción → Instalación)</span>
     <span class="k"><span class="nd d"></span> etapa hecha</span>
     <span class="k"><span class="nd a"></span> en curso</span>
     <span class="k"><span class="nd"></span> pendiente</span>
-    <span class="k"><span style="color:var(--muted)">nodos =</span> intake · fabricación · completo</span>
   </div>
-  <div class="note">Mockup — datos de ejemplo. Cada carril usa el mismo lenguaje del journey map (estaciones sobre el riel). La ventana sale del schedule (P-01 → P-06); la exactitud depende de los plazos que estamos calibrando.</div>
+  <div class="note">Mockup con datos de ejemplo. Las ventanas de cada proyecto saldrán del schedule real (P-01 → P-06) una vez calibrados los plazos; la fila “Ocupación / 6” cuenta cuántos proyectos están en producción cada semana.</div>
 </div>
+
+<script>
+  // iconos por estación (ruler, factory, truck) — trazo, hereda color via stroke
+  const IC = {
+    dis:'<svg viewBox="0 0 24 24" fill="none" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17 17 3l4 4L7 21z"/><path d="M9 11l2 2"/><path d="M13 7l2 2"/></svg>',
+    pro:'<svg viewBox="0 0 24 24" fill="none" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21h18"/><path d="M4 21V9l6 4V9l6 4V6l4 2v13"/></svg>',
+    ins:'<svg viewBox="0 0 24 24" fill="none" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 7h11v9H2z"/><path d="M13 10h5l3 3v3h-8z"/><circle cx="6" cy="18" r="1.8"/><circle cx="17" cy="18" r="1.8"/></svg>'
+  };
+  const CHK = '<svg viewBox="0 0 24 24" fill="none" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12l5 5L20 6"/></svg>';
+  const soft = (hex)=>hex+'2b';
+
+  // proyectos: a,b = semana inicio/fin (1..16). st = estado de 3 estaciones.
+  const P=[
+    {cod:'PRY-2026-101',nm:'Hotel Rivera Lobby',      a:2,b:7,  c:'#2563eb', st:['done','done','active'], done:true},
+    {cod:'PRY-2026-102',nm:'Office Tower Floor 12',   a:3,b:8,  c:'#0d9488', st:['done','active','pend']},
+    {cod:'PRY-2026-088',nm:'Boutique Retail Fit-out', a:4,b:9,  c:'#ea580c', st:['done','active','pend']},
+    {cod:'PRY-2026-099',nm:'Residencia Smith Kitchen',a:5,b:10, c:'#7c3aed', st:['active','pend','pend']},
+    {cod:'PRY-2026-095',nm:'Restaurant Bar & Millwork',a:6,b:11,c:'#059669', st:['pend','pend','pend']},
+  ];
+  const NUEVO={cod:'NUEVO ▸ ¿aceptar?',nm:'Cliente nuevo · entrega 20/12',a:5,b:9,c:'#b8860b'};
+  const ETAP=['Diseño','Producción','Instalación'];
+  const ICKEY=['dis','pro','ins'];
+  const NPOS=[8,42,72];               // % de cada nodo dentro de la cápsula
+  const FILLW=[8,42,72];              // ancho de fill segun ultima etapa alcanzada
+
+  // ── fila ocupación ──
+  const counts=[0,1,2,3,4,5,5,4,3,2,1,0,0,0,0,0];
+  const cls=(v)=> v===0?'z': v<=3?'ok': v<=4?'warn':'full';
+  let caphtml='';
+  counts.forEach((v,i)=>{ caphtml+=`<div class="cell ${cls(v)}" style="grid-column:${i+2}">${v===0?'·':v}</div>`; });
+  document.getElementById('caprow').insertAdjacentHTML('beforeend',caphtml);
+
+  // ── capsula ──
+  function capsula(p,ghost){
+    let lastReached=0;
+    p.st && p.st.forEach((s,i)=>{ if(s!=='pend') lastReached=i; });
+    const fw = p.st ? (NPOS[lastReached]-8) : 0;
+    let nodes='';
+    (p.st||['pend','pend','pend']).forEach((s,i)=>{
+      const stateCls = ghost?'pend':s;
+      const inner = (s==='done' && !ghost) ? CHK : IC[ICKEY[i]];
+      nodes += `<div class="node ${stateCls}" style="left:${NPOS[i]}%">
+          <span class="dot ${ghost?'pend':s}">${inner}</span><span class="t">${ETAP[i]}</span></div>`;
+    });
+    const style=`--c:${p.c};--c-soft:${soft(p.c)};--cap-bg:${ghost?'transparent':p.c+'12'};--cap-bd:${ghost?'transparent':p.c+'3a'};--cap-sh:${p.c}1f`;
+    return `<div class="cap-wrap" style="grid-column:${p.a+1} / ${p.b+2};${style}">
+        <div class="cap ${ghost?'gh':''}"></div>
+        ${ghost?'':`<div class="rail"></div><div class="fill" style="width:${fw}%"></div>`}
+        ${nodes}
+      </div>`;
+  }
+
+  const vlines = '<div class="vlines">'+Array.from({length:16}).map(()=>'<b></b>').join('')+'</div>';
+  let rows='';
+  P.forEach((p,idx)=>{
+    rows += `<div class="grid row ${idx===0?'first':''}">
+        <div class="lbl"><div class="cod">${p.cod}</div><div class="nm">${p.nm}</div></div>
+        ${vlines}${capsula(p,false)}</div>`;
+  });
+  // fila NUEVO (fantasma)
+  rows += `<div class="grid row">
+      <div class="lbl ghost"><div class="cod">${NUEVO.cod}</div><div class="nm">${NUEVO.nm}</div></div>
+      ${vlines}${capsula(NUEVO,true)}</div>`;
+
+  document.getElementById('rows').insertAdjacentHTML('beforeend',rows);
+</script>
