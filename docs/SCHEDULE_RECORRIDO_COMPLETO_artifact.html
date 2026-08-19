@@ -1,0 +1,137 @@
+<title>Life of a Deal — El recorrido completo, en vivo</title>
+<style>
+  *{margin:0;padding:0;box-sizing:border-box}
+  :root{
+    --bg:#F6F4EE; --ink:#1c1917; --muted:#78716c; --line:#e7e3d8;
+    --forest:#3b4233; --gold:#9B7200; --emerald:#059669; --card:#ffffff;
+    --curve-band:#fdecec; --node-off:#d6d3d1; --node-off-ink:#a8a29e; --track:#ddd8cc;
+  }
+  @media (prefers-color-scheme:dark){
+    :root{--bg:#14160f; --ink:#efece2; --muted:#a8a29e; --line:#2c2f24;
+      --forest:#8ea06f; --gold:#d9a521; --emerald:#34d399; --card:#1c1f16;
+      --curve-band:#3a1d1d; --node-off:#3f4433; --node-off-ink:#7a7f6b; --track:#2c2f24;}
+  }
+  :root[data-theme="dark"]{--bg:#14160f;--ink:#efece2;--muted:#a8a29e;--line:#2c2f24;
+    --forest:#8ea06f;--gold:#d9a521;--emerald:#34d399;--card:#1c1f16;
+    --curve-band:#3a1d1d;--node-off:#3f4433;--node-off-ink:#7a7f6b;--track:#2c2f24;}
+  :root[data-theme="light"]{--bg:#F6F4EE;--ink:#1c1917;--muted:#78716c;--line:#e7e3d8;
+    --forest:#3b4233;--gold:#9B7200;--emerald:#059669;--card:#ffffff;
+    --curve-band:#fdecec;--node-off:#d6d3d1;--node-off-ink:#a8a29e;--track:#ddd8cc;}
+  body{background:var(--bg);font-family:"Segoe UI",system-ui,Arial,sans-serif;color:var(--ink);
+       min-height:100vh;display:grid;place-items:center;padding:16px}
+  #wrap{width:min(1040px,96vw)}
+  #stage{position:relative;background:var(--bg);display:flex;flex-direction:column;
+         aspect-ratio:1040/640;padding:clamp(14px,2.6vw,28px) clamp(16px,3.4vw,34px);
+         container-type:inline-size}
+  .top{display:flex;align-items:center;gap:10px;margin-bottom:2px}
+  .brand{font-weight:800;letter-spacing:-.3px;font-size:clamp(13px,1.6cqi,15px);color:var(--forest)}
+  .brand b{color:var(--gold)}
+  .sub{font-size:clamp(10px,1.3cqi,12px);color:var(--muted)}
+  .dots{margin-left:auto;display:flex;gap:4px;flex-wrap:wrap;max-width:44%;justify-content:flex-end}
+  .dots i{width:6px;height:6px;border-radius:50%;background:var(--node-off);transition:.3s}
+  .dots i.on{background:var(--forest);transform:scale(1.3)}
+  .road{position:relative;margin:clamp(18px,3cqi,30px) 6px 6px}
+  .line{position:absolute;left:5%;right:5%;top:26px;height:3px;background:var(--track);border-radius:3px}
+  .fill{position:absolute;left:5%;top:26px;height:3px;background:var(--forest);border-radius:3px;width:0;transition:width .8s ease}
+  .stations{position:relative;display:flex;justify-content:space-between}
+  .st{width:11%;display:flex;flex-direction:column;align-items:center;text-align:center;position:relative}
+  .node{width:clamp(36px,5cqi,50px);height:clamp(36px,5cqi,50px);border-radius:50%;background:var(--card);
+        border:2.5px solid var(--node-off);display:flex;align-items:center;justify-content:center;
+        font-size:clamp(14px,1.9cqi,18px);color:var(--node-off-ink);transition:.5s;z-index:2}
+  .st.done .node{background:var(--emerald);border-color:var(--emerald);color:#fff}
+  .st.active .node{border-color:var(--forest);color:var(--forest);box-shadow:0 0 0 7px rgba(59,66,51,.14)}
+  .st .lbl{font-size:clamp(9.5px,1.25cqi,11px);font-weight:600;color:var(--node-off-ink);margin-top:9px;transition:.4s}
+  .st.done .lbl{color:var(--emerald)} .st.active .lbl{color:var(--forest)}
+  .actor{position:absolute;top:-32px;left:50%;transform:translateX(-50%);white-space:nowrap;
+         font-size:clamp(9px,1.15cqi,11px);font-weight:700;color:#fff;border-radius:20px;padding:3px 10px;opacity:0;transition:.4s}
+  .st.active .actor{opacity:1}
+  .actor:after{content:"";position:absolute;left:50%;bottom:-4px;transform:translateX(-50%) rotate(45deg);width:8px;height:8px;background:inherit}
+  .curvewrap{margin:clamp(8px,1.8cqi,14px) 6px 0;height:clamp(42px,6.6cqi,62px)}
+  .curvewrap svg{width:100%;height:100%;display:block}
+  .cap{margin-top:auto;background:var(--card);border:1px solid var(--line);border-radius:16px;
+       padding:clamp(12px,2.2cqi,18px) clamp(14px,2.6vw,22px);
+       box-shadow:0 1px 4px rgba(0,0,0,.05),0 12px 30px rgba(0,0,0,.06);transition:.3s}
+  .cap .who{display:inline-flex;align-items:center;gap:7px;font-size:clamp(10px,1.4cqi,12px);font-weight:700;color:#fff;
+            border-radius:20px;padding:4px 12px;margin-bottom:8px}
+  .cap .ttl{font-size:clamp(17px,2.6cqi,21px);font-weight:800;letter-spacing:-.3px;line-height:1.2;text-wrap:balance}
+  .cap .det{font-size:clamp(12px,1.6cqi,14px);color:var(--muted);margin-top:5px;line-height:1.45;max-width:64ch}
+  .cap .hito{display:inline-flex;align-items:center;gap:5px;font-size:clamp(10px,1.3cqi,11px);font-weight:700;
+             background:color-mix(in srgb, var(--emerald) 16%, transparent);color:var(--emerald);border-radius:20px;padding:3px 10px;margin-top:9px}
+  .intro .ttl{font-size:clamp(20px,3.4cqi,27px)} .intro .det{font-size:clamp(13px,1.9cqi,15px)}
+  .controls{display:flex;gap:8px;justify-content:center;margin-top:14px}
+  .controls button{font-size:13px;border:1px solid var(--line);background:var(--card);border-radius:9px;padding:7px 14px;cursor:pointer;color:var(--forest);font-weight:600}
+  .controls button:hover{background:color-mix(in srgb, var(--forest) 7%, var(--card))}
+  .controls button:focus-visible{outline:2px solid var(--forest);outline-offset:2px}
+  @media (prefers-reduced-motion:reduce){ *{transition:none!important} }
+</style>
+
+<div id="wrap">
+  <div id="stage">
+    <div class="top">
+      <span class="brand">Life of a <b>Deal</b></span>
+      <span class="sub">— el recorrido completo de un proyecto, en vivo</span>
+      <span class="dots" id="dots"></span>
+    </div>
+    <div class="road">
+      <div class="line"></div><div class="fill" id="fill"></div>
+      <div class="stations" id="stations"></div>
+    </div>
+    <div class="curvewrap"><svg id="curve" viewBox="0 0 1000 62" preserveAspectRatio="none"></svg></div>
+    <div class="cap" id="cap"></div>
+  </div>
+  <div class="controls">
+    <button id="btnPlay" type="button">⏸ Pausa</button>
+    <button id="btnRestart" type="button">↻ Reiniciar</button>
+  </div>
+</div>
+
+<script>
+const FASES=[{k:'CONTRATO',lbl:'Contrato'},{k:'INGENIERIA',lbl:'Ingeniería'},{k:'MATERIALES',lbl:'Materiales'},{k:'PRODUCCION',lbl:'Producción'},{k:'QC',lbl:'QC'},{k:'DESPACHO',lbl:'Despacho'},{k:'INSTALACION',lbl:'Instalación'},{k:'CIERRE',lbl:'Cierre'}];
+const ACT={estimacion:{n:'Estimación',c:'#57534e'},contabilidad:{n:'Contabilidad',c:'#9B7200'},ingenieria:{n:'Ingeniería',c:'#4338ca'},cliente:{n:'Cliente',c:'#1d4ed8'},compras:{n:'Compras',c:'#b45309'},recepcion:{n:'Recepción',c:'#b45309'},taller:{n:'Taller',c:'#059669'},qc:{n:'Control de calidad',c:'#0d9488'},logistica:{n:'Logística',c:'#0e7490'},field:{n:'Instalación (obra)',c:'#7c3aed'},pm:{n:'PM',c:'#3f6212'},sistema:{n:'El sistema',c:'#3b4233'}};
+const STEPS=[
+ {intro:true,done:[],active:null,actor:null,ttl:'Un proyecto entra al sistema',det:'Entrega comprometida: 15 de diciembre. El sistema calcula hacia atrás la fecha límite de cada hito, y sigue el recorrido en vivo — de la firma del contrato hasta la entrega y el pago final.'},
+ {done:[],active:'CONTRATO',actor:'estimacion',hito:'C-03 · Contrato firmado',ttl:'Se firma el contrato',det:'Estimación sube el PDF firmado desde su escritorio. Es el día cero: a partir de acá, el reloj corre.'},
+ {done:[],active:'CONTRATO',actor:'contabilidad',hito:'C-04 · Down Payment',ttl:'Contabilidad registra el anticipo',det:'Se registra el pago recibido (USD 25.000), con importe y autor. Evidencia real, no un tilde.'},
+ {done:['CONTRATO'],active:'INGENIERIA',actor:'ingenieria',hito:'E-06 · Planos emitidos',ttl:'Ingeniería emite los shop drawings',det:'Sube los planos (Rev A). El hito se completa solo, y el cliente ya puede verlos en su portal.'},
+ {done:['CONTRATO'],active:'INGENIERIA',actor:'cliente',hito:'E-07 · Planos aprobados',ttl:'El cliente aprueba los planos',det:'Desde su portal, sobre el documento real. Su respuesta queda registrada con fecha y nombre.'},
+ {done:['CONTRATO'],active:'INGENIERIA',actor:'ingenieria',hito:'E-10 · Release · E-11 · CNC',ttl:'Release a producción y archivos CNC',det:'Ingeniería libera los planos aprobados y entrega los archivos CNC al taller.'},
+ {done:['CONTRATO','INGENIERIA'],active:'MATERIALES',actor:'compras',hito:'M-05 · OCs emitidas',ttl:'Compras emite las órdenes de compra',det:'El sistema lo capta solo, de las OCs que Compras ya carga en su día a día. Sin trabajo extra, sin escritorio.'},
+ {done:['CONTRATO','INGENIERIA'],active:'MATERIALES',actor:'recepcion',hito:'M-07 · Material 100%',ttl:'Llega el material al taller',det:'Se cierra la recepción y el hito se completa solo. El schedule se entera de lo que realmente pasa.'},
+ {done:['CONTRATO','INGENIERIA','MATERIALES'],active:'PRODUCCION',actor:'sistema',hito:'P-01 · Production Intake',gate:true,ttl:'Producción arranca al crear la OP',det:'La OP se crea solo cuando están las 5 condiciones: muestras, planos, release, CNC y material. Crear la OP prende producción — sin marcar nada a mano.'},
+ {done:['CONTRATO','INGENIERIA','MATERIALES'],active:'PRODUCCION',actor:'taller',hito:'P-05 · P-06 · Fabricación',ttl:'El taller fabrica, ítem por ítem',det:'Una OP por ítem. El kiosko registra el avance estación por estación. El proyecto está listo solo cuando TODAS las OP terminan — una lista no basta.'},
+ {done:['CONTRATO','INGENIERIA','MATERIALES','PRODUCCION'],active:'QC',actor:'qc',hito:'QC-02 · QC aprobado',ttl:'Control de calidad aprueba',det:'Inspección final con fotos de cada ítem. La fabricación queda validada antes de salir del taller.'},
+ {done:['CONTRATO','INGENIERIA','MATERIALES','PRODUCCION','QC'],active:'DESPACHO',actor:'logistica',hito:'S-03 · BOL · S-04 · Despachado',ttl:'Logística despacha',det:'Confirma el transporte, sube el BOL y registra el despacho con su número de precinto. Recién sale del taller cuando todo está fabricado y aprobado.'},
+ {done:['CONTRATO','INGENIERIA','MATERIALES','PRODUCCION','QC','DESPACHO'],active:'INSTALACION',actor:'field',hito:'I-04 · I-05 · Instalación',ttl:'Instalación en obra, desde el móvil',det:'El instalador hace el check-in en la obra y tilda cada ítem a medida que lo instala. El avance sube en vivo desde el teléfono.'},
+ {done:['CONTRATO','INGENIERIA','MATERIALES','PRODUCCION','QC','DESPACHO'],active:'INSTALACION',actor:'field',hito:'I-06 · Punch list cerrado',ttl:'Punch list resuelto',det:'Los pendientes de obra se cargan con foto y se cierran con foto de resuelto. Cuando no queda ninguno, la instalación queda completa.'},
+ {done:['CONTRATO','INGENIERIA','MATERIALES','PRODUCCION','QC','DESPACHO','INSTALACION'],active:'CIERRE',actor:'cliente',hito:'I-07 · Sign-off del cliente',ttl:'El cliente firma la entrega',det:'Sign-off en obra: el cliente acepta el trabajo. Ese es el hito ancla — la ENTREGA, el corazón de todo el recorrido.'},
+ {done:['CONTRATO','INGENIERIA','MATERIALES','PRODUCCION','QC','DESPACHO','INSTALACION'],active:'CIERRE',actor:'contabilidad',hito:'X-03 · Pago final recibido',ttl:'Se cierra el círculo: pago final',det:'Contabilidad registra el pago final con su importe. El proyecto queda entregado, cobrado y cerrado.'},
+ {done:['CONTRATO','INGENIERIA','MATERIALES','PRODUCCION','QC','DESPACHO','INSTALACION','CIERRE'],active:null,actor:null,closing:true,ttl:'De Contrato a Entrega, en vivo',det:'Todo el recorrido, de extremo a extremo. Cada hito con su dueño y su evidencia real. Cada equipo trabajando donde ya trabaja — y el journey map reflejándolo al instante.'}
+];
+function healthFor(s){return FASES.map(f=>s.done.includes(f.k)?0.9:(s.active===f.k?0.62:0.42));}
+function smooth(xs,ys){let d='M '+xs[0]+' '+ys[0];for(let i=1;i<xs.length;i++){const cx=(xs[i-1]+xs[i])/2;d+=' C '+cx+' '+ys[i-1]+' '+cx+' '+ys[i]+' '+xs[i]+' '+ys[i];}return d;}
+const stationsEl=document.getElementById('stations');
+FASES.forEach(f=>{const d=document.createElement('div');d.className='st';d.dataset.k=f.k;d.innerHTML='<div class="actor"></div><div class="node">●</div><div class="lbl">'+f.lbl+'</div>';stationsEl.appendChild(d);});
+const dotsEl=document.getElementById('dots');STEPS.forEach(()=>dotsEl.appendChild(document.createElement('i')));
+const N=FASES.length,W=1000,PAD=58,xs=FASES.map((_,i)=>PAD+(W-2*PAD)*i/(N-1));
+function css(v){return getComputedStyle(document.documentElement).getPropertyValue(v).trim();}
+function render(i){
+  const s=STEPS[i];
+  [...dotsEl.children].forEach((d,j)=>d.classList.toggle('on',j===i));
+  [...stationsEl.children].forEach(el=>{const k=el.dataset.k,done=s.done.includes(k),active=s.active===k;el.classList.toggle('done',done);el.classList.toggle('active',active);el.querySelector('.node').textContent=done?'✓':'●';const a=el.querySelector('.actor');if(active&&s.actor){a.textContent=ACT[s.actor].n;a.style.background=ACT[s.actor].c;}else a.textContent='';});
+  let lastDone=-1;FASES.forEach((f,j)=>{if(s.done.includes(f.k))lastDone=j;});
+  const activeIdx=s.active?FASES.findIndex(f=>f.k===s.active):lastDone;
+  document.getElementById('fill').style.width=(Math.max(0,activeIdx)/(N-1)*90)+'%';
+  const ys=healthFor(s).map(h=>56-(56-8)*h),path=smooth(xs,ys);
+  const cEm=css('--emerald')||'#059669',cFo=css('--forest')||'#3b4233',cOff=css('--node-off')||'#d6d3d1',cBand=css('--curve-band')||'#fdecec',cCard=css('--card')||'#fff';
+  document.getElementById('curve').innerHTML='<rect x="0" y="48" width="1000" height="14" fill="'+cBand+'"/><path d="'+path+' L '+xs[N-1]+' 62 L '+xs[0]+' 62 Z" fill="'+cFo+'1e"/><path d="'+path+'" fill="none" stroke="'+cFo+'" stroke-width="2"/>'+FASES.map((f,j)=>{const done=s.done.includes(f.k),active=s.active===f.k,c=done?cEm:active?cFo:cOff;return '<circle cx="'+xs[j]+'" cy="'+ys[j]+'" r="4.5" fill="'+cCard+'" stroke="'+c+'" stroke-width="2.5"/>';}).join('');
+  const cap=document.getElementById('cap');cap.className='cap'+(s.intro||s.closing?' intro':'');
+  const who=s.actor?'<span class="who" style="background:'+ACT[s.actor].c+'">'+ACT[s.actor].n+'</span>':'';
+  cap.innerHTML=who+'<div class="ttl">'+(s.gate?'🔒 ':'')+s.ttl+'</div><div class="det">'+s.det+'</div>'+(s.hito?'<div class="hito">✓ '+s.hito+'</div>':'');
+}
+let i=0,playing=true,timer=null;const STEP_MS=3600;
+function tick(){render(i);i=(i+1)%STEPS.length;}
+function play(){tick();timer=setInterval(tick,STEP_MS);}
+document.getElementById('btnPlay').onclick=function(){playing=!playing;if(playing){this.textContent='⏸ Pausa';play();}else{clearInterval(timer);this.textContent='▶ Reproducir';}};
+document.getElementById('btnRestart').onclick=function(){clearInterval(timer);i=0;render(0);this.blur();if(playing){i=1;timer=setInterval(tick,STEP_MS);}};
+render(0);i=1;play();
+</script>
