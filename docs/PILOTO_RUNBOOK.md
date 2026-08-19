@@ -3,6 +3,9 @@
 > Guía para correr TODO el proceso de punta a punta con el proyecto chico real.
 > Todo es **local** — no toca producción. Rama `feat/schedule`.
 
+> **Punto de partida acordado (2026-08-19):** el proyecto piloto se **crea junto con Chali** en vivo,
+> como primera estación de la bitácora — para probar cada etapa del proceso desde cero. NO está creado aún.
+
 ## 0. Arrancar el entorno local
 
 **Backend** (`:4000`, NO recarga solo — reiniciar a mano tras cambios):
