@@ -105,6 +105,35 @@ export async function generarPlan(
   return planId
 }
 
+/**
+ * Mueve la fecha de entrega comprometida (P1: es sagrada — moverla es una
+ * decisión humana que queda registrada). Preserva fecha_objetivo_original.
+ */
+export async function cambiarFechaObjetivo(
+  runner: QueryRunner,
+  proyectoId: number,
+  nuevaFecha: ISODate,
+  usuarioNombre: string | null
+): Promise<{ ok: boolean; error?: string; anterior?: string }> {
+  const { rows } = await runner.query<{ id: number; actual: string }>(
+    `SELECT id, to_char(fecha_objetivo,'YYYY-MM-DD') AS actual
+       FROM schedule_planes WHERE proyecto_id = $1 AND scope = 'proyecto'`, [proyectoId])
+  if (!rows[0]) return { ok: false, error: 'el proyecto no tiene plan de schedule' }
+  const anterior = rows[0].actual
+  if (anterior === nuevaFecha) return { ok: true, anterior }
+
+  await runner.query(
+    `UPDATE schedule_planes SET fecha_objetivo = $2, updated_at = NOW() WHERE id = $1`,
+    [rows[0].id, nuevaFecha])
+  await runner.query(
+    `INSERT INTO schedule_eventos (plan_id, tipo, descripcion, disparado_por)
+       VALUES ($1, 'fecha_objetivo', $2, 'manual')`,
+    [rows[0].id, `Fecha de entrega movida de ${anterior} a ${nuevaFecha}${usuarioNombre ? ` por ${usuarioNombre}` : ''}.`])
+
+  await recomputeScheduleForProyecto(runner, proyectoId, 'manual')
+  return { ok: true, anterior }
+}
+
 export interface RecomputeResult {
   skipped: boolean
   planId?: number

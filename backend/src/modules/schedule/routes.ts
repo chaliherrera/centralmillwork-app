@@ -1,6 +1,6 @@
 import { Router } from 'express'
 import { requireRole } from '../../middleware/auth'
-import { getPlan, generarPlanHandler, recalcularHandler, crearPortalTokenHandler, listPortalTokensHandler, revocarPortalTokenHandler, registrarHitoHandler, trabajoPorAreaHandler } from './controllers/schedulePlan.controller'
+import { getPlan, generarPlanHandler, recalcularHandler, crearPortalTokenHandler, listPortalTokensHandler, revocarPortalTokenHandler, registrarHitoHandler, trabajoPorAreaHandler, cambiarFechaObjetivoHandler } from './controllers/schedulePlan.controller'
 import { uploadSubmittal, uploadSubmittalHandler, listSubmittalsHandler, uploadArchivo, uploadArchivoHitoHandler, listArchivosHitoHandler } from './controllers/submittals.controller'
 import { uploadFoto, installQueueHandler, listItemsHandler, marcarItemHandler, desmarcarItemHandler, listPunchHandler, crearPunchHandler, resolverPunchHandler, signoffHandler } from './controllers/field.controller'
 import { uploadContrato, intakeHandler } from './controllers/intake.controller'
@@ -24,6 +24,7 @@ router.post('/proyecto/:id/generar',    SCHEDULE_WRITE, generarPlanHandler)
 // Intake de Estimación: fecha de entrega + contrato firmado → arranca el proyecto.
 router.post('/proyecto/:id/intake',     SCHEDULE_WRITE, uploadContrato.single('contrato'), intakeHandler)
 router.post('/proyecto/:id/recalcular', SCHEDULE_WRITE, recalcularHandler)
+router.post('/proyecto/:id/fecha-objetivo', SCHEDULE_WRITE, cambiarFechaObjetivoHandler)
 router.post('/proyecto/:id/portal-token',  SCHEDULE_WRITE, crearPortalTokenHandler)
 // Los tokens son "capabilities" para aprobar como cliente: solo ADMIN/PM los
 // listan (no VIEWER) y pueden revocarlos.

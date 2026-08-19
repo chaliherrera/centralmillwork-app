@@ -87,6 +87,12 @@ export const scheduleService = {
       .post<ApiResponse<{ semaforo: string; holguraDias: number | null }>>(`/schedule/proyecto/${proyectoId}/recalcular`)
       .then((r) => r.data),
 
+  // Mueve la fecha de entrega comprometida (decisión registrada).
+  cambiarFechaObjetivo: (proyectoId: number, fecha_objetivo: string) =>
+    api
+      .post<ApiResponse<{ ok: boolean; anterior: string }>>(`/schedule/proyecto/${proyectoId}/fecha-objetivo`, { fecha_objetivo })
+      .then((r) => r.data),
+
   crearPortalToken: (proyectoId: number, contacto_nombre?: string) =>
     api
       .post<ApiResponse<{ token: string }>>(`/schedule/proyecto/${proyectoId}/portal-token`, { contacto_nombre })

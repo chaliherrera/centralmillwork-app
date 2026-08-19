@@ -22,6 +22,8 @@ export default function Estimacion() {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [okMsg, setOkMsg] = useState<string | null>(null)
+  const [editFecha, setEditFecha] = useState(false)
+  const [nuevaFecha, setNuevaFecha] = useState('')
 
   useEffect(() => {
     proyectosService.getAll({ limit: 200 } as any).then((r) => setProyectos(r.data ?? [])).catch(() => {})
@@ -55,6 +57,21 @@ export default function Estimacion() {
       cargarPlan(selId)
     } catch (e: any) {
       setError(e?.response?.data?.message || 'No se pudo iniciar el proyecto')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const guardarFecha = async () => {
+    if (!selId || !nuevaFecha) return
+    setBusy(true); setError(null); setOkMsg(null)
+    try {
+      await scheduleService.cambiarFechaObjetivo(selId, nuevaFecha)
+      setEditFecha(false)
+      setOkMsg('Fecha de entrega actualizada — el schedule se recalculó.')
+      cargarPlan(selId)
+    } catch (e: any) {
+      setError(e?.response?.data?.message || 'No se pudo cambiar la fecha')
     } finally {
       setBusy(false)
     }
@@ -116,7 +133,23 @@ export default function Estimacion() {
             <div className="mt-3 grid grid-cols-2 gap-4 text-sm">
               <div>
                 <div className="text-[11px] uppercase tracking-wider text-stone-400 font-semibold">Entrega objetivo</div>
-                <div className="text-stone-900 font-bold tabular-nums">{plan?.plan?.fecha_objetivo ?? '—'}</div>
+                {editFecha ? (
+                  <div className="mt-1 flex items-center gap-1.5">
+                    <input type="date" value={nuevaFecha} onChange={(e) => setNuevaFecha(e.target.value)}
+                      className="rounded-lg border border-stone-300 px-2 py-1 text-sm text-stone-800 focus:outline-none focus:ring-2 focus:ring-forest-300" />
+                    <button onClick={guardarFecha} disabled={busy || !nuevaFecha}
+                      className="rounded-lg bg-forest-600 hover:bg-forest-700 disabled:opacity-50 text-white text-xs font-semibold px-2.5 py-1.5">
+                      {busy ? <Loader2 className="animate-spin" size={13} /> : 'Guardar'}
+                    </button>
+                    <button onClick={() => setEditFecha(false)} className="text-xs text-stone-500 px-1">Cancelar</button>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-2">
+                    <span className="text-stone-900 font-bold tabular-nums">{plan?.plan?.fecha_objetivo ?? '—'}</span>
+                    <button onClick={() => { setNuevaFecha(plan?.plan?.fecha_objetivo ?? ''); setEditFecha(true) }}
+                      className="text-[11px] font-semibold text-forest-700 hover:text-forest-800 underline">Cambiar</button>
+                  </div>
+                )}
               </div>
               <div>
                 <div className="text-[11px] uppercase tracking-wider text-stone-400 font-semibold">Contrato (día cero)</div>

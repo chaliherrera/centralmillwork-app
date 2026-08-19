@@ -9,7 +9,7 @@ import { Request, Response, NextFunction } from 'express'
 import { z } from 'zod'
 import pool from '../../../db/pool'
 import { createError } from '../../../middleware/errorHandler'
-import { generarPlan, recomputeScheduleForProyecto } from '../domain/recompute'
+import { generarPlan, recomputeScheduleForProyecto, cambiarFechaObjetivo } from '../domain/recompute'
 import { crearToken, revocarToken } from '../domain/portal'
 import { registrarHito } from '../domain/registro'
 import { getTrabajoPorArea } from '../domain/trabajo'
@@ -97,6 +97,28 @@ export async function crearPortalTokenHandler(req: Request, res: Response, next:
   } catch (err: any) {
     if (err?.issues) return next(createError('datos inválidos', 400))
     next(err)
+  }
+}
+
+// ── POST /api/schedule/proyecto/:id/fecha-objetivo ───────────────────────────
+// Mueve la fecha de entrega comprometida (decisión humana registrada).
+const fechaObjetivoSchema = z.object({ fecha_objetivo: z.string().regex(/^\d{4}-\d{2}-\d{2}$/) })
+export async function cambiarFechaObjetivoHandler(req: Request, res: Response, next: NextFunction) {
+  const client = await pool.connect()
+  try {
+    const proyectoId = parseProyectoId(req)
+    const { fecha_objetivo } = fechaObjetivoSchema.parse(req.body ?? {})
+    await client.query('BEGIN')
+    const r = await cambiarFechaObjetivo(client, proyectoId, fecha_objetivo, (req as any).user?.nombre ?? null)
+    if (!r.ok) { await client.query('ROLLBACK'); return next(createError(r.error ?? 'no se pudo cambiar', 400)) }
+    await client.query('COMMIT')
+    res.json({ data: { ok: true, anterior: r.anterior }, message: 'Fecha de entrega actualizada' })
+  } catch (err: any) {
+    await client.query('ROLLBACK').catch(() => {})
+    if (err?.issues) return next(createError('fecha inválida (YYYY-MM-DD)', 400))
+    next(err)
+  } finally {
+    client.release()
   }
 }
 
