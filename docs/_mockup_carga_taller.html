@@ -13,10 +13,10 @@
   html,body{background:var(--bg)}
   body{color:var(--ink);font-family:"Segoe UI",system-ui,-apple-system,Arial,sans-serif;
        padding:24px 26px 34px;font-size:13px;-webkit-font-smoothing:antialiased}
-  #wrap{max-width:1060px;margin:0 auto}
+  #wrap{max-width:1080px;margin:0 auto}
 
   /* ── Encabezado ── */
-  .hero{display:flex;flex-wrap:wrap;align-items:center;gap:16px 30px;padding:2px 4px 18px}
+  .hero{display:flex;flex-wrap:wrap;align-items:center;gap:16px 30px;padding:2px 4px 12px}
   .brand{font-size:10.5px;font-weight:800;letter-spacing:2px;color:var(--gold)}
   h1{font-size:21px;color:var(--forest);letter-spacing:-.4px;margin-top:1px;font-weight:800}
   .kpi{display:flex;flex-direction:column;gap:1px}
@@ -29,10 +29,19 @@
   .status i{width:8px;height:8px;border-radius:50%;background:var(--full);display:inline-block;
     box-shadow:0 0 0 3px rgba(194,65,12,.16)}
 
+  /* ── Clave de fases ── */
+  .phases{display:flex;flex-wrap:wrap;align-items:center;gap:6px 14px;padding:9px 12px;margin:0 4px 12px;
+    background:var(--panel);border:1px solid var(--line);border-radius:12px;box-shadow:0 1px 2px rgba(20,24,40,.04)}
+  .phases .lab{font-size:9.5px;font-weight:800;text-transform:uppercase;letter-spacing:.7px;color:var(--muted);margin-right:2px}
+  .phases .p{display:inline-flex;align-items:center;gap:6px;font-size:11.5px;color:var(--ink);font-weight:600}
+  .phases .p b{width:17px;height:17px;border-radius:50%;background:var(--forest);color:#fff;font-size:10px;font-weight:800;
+    display:inline-flex;align-items:center;justify-content:center}
+  .phases .arw{color:var(--faint-ink);font-size:11px}
+
   /* ── Tablero ── */
   .board{background:var(--panel);border:1px solid var(--line);border-radius:16px;overflow:hidden;
     box-shadow:0 1px 3px rgba(20,24,40,.05),0 14px 34px rgba(20,24,40,.05)}
-  .grid{display:grid;grid-template-columns:184px repeat(16,1fr)}
+  .grid{display:grid;grid-template-columns:190px repeat(16,1fr)}
 
   .months{background:var(--head);border-bottom:1px solid var(--line)}
   .months .corner{grid-column:1;padding:12px 14px;font-size:10px;text-transform:uppercase;letter-spacing:1.2px;
@@ -56,12 +65,12 @@
   /* zona de filas + linea HOY */
   .rows{position:relative}
   .hoy{position:absolute;top:0;bottom:0;width:2px;background:linear-gradient(180deg,#0d9488,#0d948833);
-    left:calc(184px + (100% - 184px) * 0.375);z-index:6;pointer-events:none}
-  .hoy::before{content:"HOY";position:absolute;top:4px;left:6px;font-size:9px;font-weight:800;
+    left:calc(190px + (100% - 190px) * 0.375);z-index:6;pointer-events:none}
+  .hoy::before{content:"HOY";position:absolute;bottom:5px;left:6px;font-size:9px;font-weight:800;
     letter-spacing:.5px;color:#0d7d72;background:var(--panel);padding:1px 4px;border-radius:4px;
     box-shadow:0 1px 2px rgba(0,0,0,.06)}
 
-  .row{align-items:center;min-height:54px;border-top:1px solid var(--faint)}
+  .row{align-items:center;min-height:64px;border-top:1px solid var(--faint)}
   .row.first{border-top:none}
   .row .lbl{grid-column:1;padding:6px 10px 6px 16px;overflow:hidden}
   .row .lbl .cod{font-family:"Courier New",monospace;font-weight:700;font-size:11px;color:var(--ink);letter-spacing:-.2px}
@@ -73,30 +82,26 @@
   .vlines b{border-left:1px solid var(--faint)}
 
   /* ── Cápsula journey (la barra) ── */
-  .cap-wrap{grid-row:1;align-self:center;position:relative;height:38px;margin:0 3px}
+  .cap-wrap{grid-row:1;align-self:center;position:relative;height:30px;margin:0 3px}
   .cap{position:absolute;inset:0;border-radius:999px;border:1px solid var(--cap-bd);
     background:var(--cap-bg);box-shadow:0 1px 2px rgba(0,0,0,.05),0 4px 12px var(--cap-sh)}
   .cap.gh{background:transparent;border:1.6px dashed var(--ghost);box-shadow:none}
-  .rail{position:absolute;top:50%;left:8%;width:64%;height:3px;transform:translateY(-50%);
+  .rail{position:absolute;top:50%;left:6%;width:88%;height:3px;transform:translateY(-50%);
     background:var(--rail);border-radius:3px}
-  .fill{position:absolute;top:50%;left:8%;height:3px;transform:translateY(-50%);
-    background:var(--c);border-radius:3px;box-shadow:0 0 6px var(--c)}
-  .node{position:absolute;top:50%;transform:translateY(-50%);display:flex;align-items:center;gap:6px;z-index:2}
-  .dot{width:19px;height:19px;border-radius:50%;background:var(--panel);border:2.4px solid var(--rail);
-    display:flex;align-items:center;justify-content:center;flex-shrink:0}
-  .dot svg{width:10px;height:10px;display:block}
-  .dot.done{background:var(--c);border-color:var(--c)}
-  .dot.done svg{stroke:#fff}
-  .dot.active{border-color:var(--c);box-shadow:0 0 0 4px var(--c-soft)}
-  .dot.active svg{stroke:var(--c)}
-  .dot.pend svg{stroke:var(--faint-ink)}
-  .node .t{font-size:9.5px;font-weight:700;white-space:nowrap;letter-spacing:-.1px}
-  .node.done .t,.node.active .t{color:var(--ink)}
-  .node.pend .t{color:var(--faint-ink)}
-  .cap.gh .node .t{color:var(--ghost)}
-  .endok{position:absolute;top:50%;right:9px;transform:translateY(-50%);width:17px;height:17px;border-radius:50%;
-    background:var(--c);display:flex;align-items:center;justify-content:center;z-index:3}
-  .endok svg{width:10px;height:10px;stroke:#fff}
+  .fill{position:absolute;top:50%;left:6%;height:3px;transform:translateY(-50%);
+    background:var(--c);border-radius:3px}
+  .node{position:absolute;top:50%;transform:translate(-50%,-50%);width:14px;height:14px;border-radius:50%;
+    background:var(--panel);border:2px solid var(--rail);z-index:2;
+    display:flex;align-items:center;justify-content:center;font-size:7.5px;font-weight:800;color:var(--faint-ink)}
+  .node.done{background:var(--c);border-color:var(--c);color:#fff}
+  .node.act{width:22px;height:22px;border:2.6px solid var(--c);color:var(--c);font-size:10px;
+    box-shadow:0 0 0 4px var(--c-soft),0 2px 6px var(--c-sh)}
+  .cap.gh .node{border-color:var(--ghost);color:var(--ghost)}
+  .tag{position:absolute;bottom:calc(100% + 5px);transform:translateX(-50%);white-space:nowrap;
+    font-size:9.5px;font-weight:800;color:var(--c);background:var(--panel);border:1px solid var(--cap-bd);
+    padding:1.5px 7px;border-radius:999px;z-index:4;box-shadow:0 2px 5px var(--cap-sh)}
+  .tag::after{content:"";position:absolute;top:100%;left:50%;transform:translateX(-50%);
+    border:4px solid transparent;border-top-color:var(--panel)}
 
   /* ── Veredicto ── */
   .verdict{margin-top:16px;background:var(--panel);border:1px solid var(--line);border-left:4px solid var(--gold);
@@ -104,14 +109,14 @@
     box-shadow:0 1px 3px rgba(20,24,40,.05)}
   .verdict .ic{font-size:20px;line-height:1}
   .verdict h3{font-size:14.5px;color:var(--forest);margin-bottom:4px;font-weight:800}
-  .verdict p{color:var(--muted);font-size:12.5px;line-height:1.55;max-width:78ch}
+  .verdict p{color:var(--muted);font-size:12.5px;line-height:1.55;max-width:80ch}
   .verdict b{color:var(--ink);font-weight:700}
   .legend{display:flex;gap:8px 20px;flex-wrap:wrap;margin-top:14px;padding-left:4px;font-size:11px;color:var(--muted);align-items:center}
   .legend .k{display:inline-flex;align-items:center;gap:6px}
-  .nd{width:13px;height:13px;border-radius:50%;background:var(--panel);border:2.4px solid var(--rail);display:inline-block}
+  .nd{width:13px;height:13px;border-radius:50%;background:var(--panel);border:2px solid var(--rail);display:inline-block}
   .nd.d{background:var(--forest);border-color:var(--forest)}
-  .nd.a{border-color:var(--forest);box-shadow:0 0 0 3px rgba(59,81,55,.18)}
-  .note{margin-top:11px;padding-left:4px;font-size:11px;color:var(--faint-ink);font-style:italic;max-width:82ch;line-height:1.5}
+  .nd.a{width:15px;height:15px;border-color:var(--forest);box-shadow:0 0 0 3px rgba(59,81,55,.18)}
+  .note{margin-top:11px;padding-left:4px;font-size:11px;color:var(--faint-ink);font-style:italic;max-width:86ch;line-height:1.5}
 </style>
 
 <div id="wrap">
@@ -122,9 +127,11 @@
     </div>
     <div class="kpi"><span class="k">Semana pico</span><span class="v" style="color:var(--gold)">5 <small>/ 6</small></span></div>
     <div class="kpi"><span class="k">Lugar libre</span><span class="v">1</span></div>
-    <div class="kpi"><span class="k">En taller</span><span class="v">5</span></div>
+    <div class="kpi"><span class="k">Proyectos activos</span><span class="v">5</span></div>
     <div class="status"><i></i> Al límite con el nuevo</div>
   </div>
+
+  <div class="phases" id="phasekey"><span class="lab">Fases</span></div>
 
   <div class="board">
     <div class="grid months">
@@ -136,7 +143,7 @@
     </div>
 
     <div class="grid cap-row" id="caprow">
-      <div class="lbl">Ocupación / 6</div>
+      <div class="lbl">Proyectos / 6</div>
     </div>
 
     <div class="rows" id="rows">
@@ -148,67 +155,64 @@
     <div class="ic">⚠️</div>
     <div>
       <h3>Entrega 20/12/2026 → factible, pero al límite</h3>
-      <p>Calculando hacia atrás, la <b>producción</b> del proyecto nuevo (cápsula punteada) caería entre <b>principios y mediados de octubre</b>. En esas semanas el taller ya está en <b>5 / 6</b> — al sumar este proyecto <b>toca el tope de 6 / 6</b>, sin margen para imprevistos. <b>Se puede aceptar</b>, pero cualquier atraso en otro proyecto lo compromete. Si el cliente corriera la entrega a <b>enero</b>, entraría con holgura.</p>
+      <p>Calculando hacia atrás, la <b>producción</b> del proyecto nuevo (cápsula punteada) caería entre <b>principios y mediados de octubre</b>. En esas semanas el taller ya tiene <b>5 proyectos activos de 6</b> — al sumar este <b>toca el tope de 6 / 6</b>, sin margen para imprevistos. <b>Se puede aceptar</b>, pero cualquier atraso en otro proyecto lo compromete. Si el cliente corriera la entrega a <b>enero</b>, entraría con holgura.</p>
     </div>
   </div>
 
   <div class="legend">
-    <span class="k">Cada cápsula = un proyecto (Diseño → Producción → Instalación)</span>
-    <span class="k"><span class="nd d"></span> etapa hecha</span>
-    <span class="k"><span class="nd a"></span> en curso</span>
+    <span class="k">Cada cápsula = un proyecto · las 8 fases de nuestro Life of a Deal</span>
+    <span class="k"><span class="nd d"></span> fase cumplida</span>
+    <span class="k"><span class="nd a"></span> fase actual</span>
     <span class="k"><span class="nd"></span> pendiente</span>
   </div>
-  <div class="note">Mockup con datos de ejemplo. Las ventanas de cada proyecto saldrán del schedule real (P-01 → P-06) una vez calibrados los plazos; la fila “Ocupación / 6” cuenta cuántos proyectos están en producción cada semana.</div>
+  <div class="note">Mockup con datos de ejemplo. Cada cápsula abarca la ventana activa del proyecto (del contrato a la entrega); el nodo grande marca en qué fase está hoy. La fila “Proyectos / 6” cuenta cuántos proyectos tiene el taller a la vez cada semana — su tope operativo es 6. Las ventanas reales saldrán del schedule una vez calibrados los plazos.</div>
 </div>
 
 <script>
-  // iconos por estación (ruler, factory, truck) — trazo, hereda color via stroke
-  const IC = {
-    dis:'<svg viewBox="0 0 24 24" fill="none" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17 17 3l4 4L7 21z"/><path d="M9 11l2 2"/><path d="M13 7l2 2"/></svg>',
-    pro:'<svg viewBox="0 0 24 24" fill="none" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21h18"/><path d="M4 21V9l6 4V9l6 4V6l4 2v13"/></svg>',
-    ins:'<svg viewBox="0 0 24 24" fill="none" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 7h11v9H2z"/><path d="M13 10h5l3 3v3h-8z"/><circle cx="6" cy="18" r="1.8"/><circle cx="17" cy="18" r="1.8"/></svg>'
-  };
-  const CHK = '<svg viewBox="0 0 24 24" fill="none" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12l5 5L20 6"/></svg>';
+  // ── Las 8 fases reales del Life of a Deal ──
+  const FASES = ['Contrato','Ingeniería','Compras','Producción','QC','Despacho','Instalación','Cierre'];
+  const NF = FASES.length;
   const soft = (hex)=>hex+'2b';
 
-  // proyectos: a,b = semana inicio/fin (1..16). st = estado de 3 estaciones.
-  const P=[
-    {cod:'PRY-2026-101',nm:'Hotel Rivera Lobby',      a:2,b:7,  c:'#2563eb', st:['done','done','active'], done:true},
-    {cod:'PRY-2026-102',nm:'Office Tower Floor 12',   a:3,b:8,  c:'#0d9488', st:['done','active','pend']},
-    {cod:'PRY-2026-088',nm:'Boutique Retail Fit-out', a:4,b:9,  c:'#ea580c', st:['done','active','pend']},
-    {cod:'PRY-2026-099',nm:'Residencia Smith Kitchen',a:5,b:10, c:'#7c3aed', st:['active','pend','pend']},
-    {cod:'PRY-2026-095',nm:'Restaurant Bar & Millwork',a:6,b:11,c:'#059669', st:['pend','pend','pend']},
-  ];
-  const NUEVO={cod:'NUEVO ▸ ¿aceptar?',nm:'Cliente nuevo · entrega 20/12',a:5,b:9,c:'#b8860b'};
-  const ETAP=['Diseño','Producción','Instalación'];
-  const ICKEY=['dis','pro','ins'];
-  const NPOS=[8,42,72];               // % de cada nodo dentro de la cápsula
-  const FILLW=[8,42,72];              // ancho de fill segun ultima etapa alcanzada
+  // clave de fases
+  document.getElementById('phasekey').insertAdjacentHTML('beforeend',
+    FASES.map((f,i)=>`<span class="p"><b>${i+1}</b>${f}</span>`).join('<span class="arw">→</span>'));
 
-  // ── fila ocupación ──
+  // proyectos: a,b = semana inicio/fin (1..16). act = fase actual (1..8).
+  const P=[
+    {cod:'PRY-2026-101',nm:'Hotel Rivera Lobby',       a:2,b:7,  c:'#2563eb', act:7},
+    {cod:'PRY-2026-102',nm:'Office Tower Floor 12',    a:3,b:8,  c:'#0d9488', act:4},
+    {cod:'PRY-2026-088',nm:'Boutique Retail Fit-out',  a:4,b:9,  c:'#ea580c', act:4},
+    {cod:'PRY-2026-099',nm:'Residencia Smith Kitchen', a:5,b:10, c:'#7c3aed', act:2},
+    {cod:'PRY-2026-095',nm:'Restaurant Bar & Millwork',a:6,b:11, c:'#059669', act:1},
+  ];
+  const NUEVO={cod:'NUEVO ▸ ¿aceptar?',nm:'Cliente nuevo · entrega 20/12',a:5,b:9,c:'#b8860b',act:0};
+
+  // ── fila ocupación (proyectos activos por semana) ──
   const counts=[0,1,2,3,4,5,5,4,3,2,1,0,0,0,0,0];
   const cls=(v)=> v===0?'z': v<=3?'ok': v<=4?'warn':'full';
   let caphtml='';
   counts.forEach((v,i)=>{ caphtml+=`<div class="cell ${cls(v)}" style="grid-column:${i+2}">${v===0?'·':v}</div>`; });
   document.getElementById('caprow').insertAdjacentHTML('beforeend',caphtml);
 
-  // ── capsula ──
+  // ── posiciones de los 8 nodos dentro de la cápsula ──
+  const nx=(i)=> 6 + i*(88/(NF-1));   // % del nodo i (0..7)
+
   function capsula(p,ghost){
-    let lastReached=0;
-    p.st && p.st.forEach((s,i)=>{ if(s!=='pend') lastReached=i; });
-    const fw = p.st ? (NPOS[lastReached]-8) : 0;
+    const fillTo = p.act>0 ? nx(p.act-1) : 6;
     let nodes='';
-    (p.st||['pend','pend','pend']).forEach((s,i)=>{
-      const stateCls = ghost?'pend':s;
-      const inner = (s==='done' && !ghost) ? CHK : IC[ICKEY[i]];
-      nodes += `<div class="node ${stateCls}" style="left:${NPOS[i]}%">
-          <span class="dot ${ghost?'pend':s}">${inner}</span><span class="t">${ETAP[i]}</span></div>`;
-    });
-    const style=`--c:${p.c};--c-soft:${soft(p.c)};--cap-bg:${ghost?'transparent':p.c+'12'};--cap-bd:${ghost?'transparent':p.c+'3a'};--cap-sh:${p.c}1f`;
+    for(let i=0;i<NF;i++){
+      const num=i+1;
+      let stateCls='';
+      if(!ghost){ if(num<p.act) stateCls='done'; else if(num===p.act) stateCls='act'; }
+      nodes += `<div class="node ${stateCls}" style="left:${nx(i)}%">${num}</div>`;
+    }
+    const tag = (!ghost && p.act>0) ? `<div class="tag" style="left:${nx(p.act-1)}%">${FASES[p.act-1]}</div>` : '';
+    const style=`--c:${p.c};--c-soft:${soft(p.c)};--cap-sh:${p.c}44;--cap-bg:${ghost?'transparent':p.c+'12'};--cap-bd:${ghost?'#e6d3a4':p.c+'3a'}`;
     return `<div class="cap-wrap" style="grid-column:${p.a+1} / ${p.b+2};${style}">
         <div class="cap ${ghost?'gh':''}"></div>
-        ${ghost?'':`<div class="rail"></div><div class="fill" style="width:${fw}%"></div>`}
-        ${nodes}
+        <div class="rail"></div>${ghost?'':`<div class="fill" style="width:${fillTo-6}%"></div>`}
+        ${nodes}${tag}
       </div>`;
   }
 
@@ -219,7 +223,6 @@
         <div class="lbl"><div class="cod">${p.cod}</div><div class="nm">${p.nm}</div></div>
         ${vlines}${capsula(p,false)}</div>`;
   });
-  // fila NUEVO (fantasma)
   rows += `<div class="grid row">
       <div class="lbl ghost"><div class="cod">${NUEVO.cod}</div><div class="nm">${NUEVO.nm}</div></div>
       ${vlines}${capsula(NUEVO,true)}</div>`;
