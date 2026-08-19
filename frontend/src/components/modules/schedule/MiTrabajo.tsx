@@ -16,12 +16,14 @@ const ATRIB: Record<string, string> = {
 const SEM_DOT: Record<Semaforo, string> = {
   rojo: 'bg-rose-500', amarillo: 'bg-amber-400', verde: 'bg-emerald-500', gris: 'bg-stone-300',
 }
-const ACCION: Record<string, { tipo: 'submittal' | 'archivo' | 'registro'; label: string }> = {
+const ACCION: Record<string, { tipo: 'submittal' | 'archivo' | 'registro' | 'pago'; label: string }> = {
   'E-06': { tipo: 'submittal', label: 'Subir planos' },
   'E-08': { tipo: 'submittal', label: 'Subir revisión' },
   'E-11': { tipo: 'archivo', label: 'Subir CNC' },
   'E-09': { tipo: 'registro', label: 'Liberar MTO' },
   'E-10': { tipo: 'registro', label: 'Release a producción' },
+  'C-04': { tipo: 'pago', label: 'Registrar pago' },   // down payment
+  'X-03': { tipo: 'pago', label: 'Registrar pago' },   // pago final
 }
 const accionDe = (codigo: string) => ACCION[codigo] ?? { tipo: 'registro' as const, label: 'Registrar' }
 
@@ -84,6 +86,8 @@ function HitoRow({ proyectoId, h, onDone }: {
 }) {
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState<string | null>(null)
+  const [pagoOpen, setPagoOpen] = useState(false)
+  const [importe, setImporte] = useState('')
   const fileRef = useRef<HTMLInputElement | null>(null)
   const accion = accionDe(h.codigo)
 
@@ -93,6 +97,15 @@ function HitoRow({ proyectoId, h, onDone }: {
       await scheduleService.registrarHito(proyectoId, h.codigo, new Date().toISOString().slice(0, 10))
       onDone()
     } catch (e: any) { setErr(e?.response?.data?.message || 'No se pudo registrar'); setBusy(false) }
+  }
+  const registrarPago = async () => {
+    const monto = Number(importe)
+    if (!importe || Number.isNaN(monto) || monto < 0) { setErr('Ingresá un monto válido'); return }
+    setBusy(true); setErr(null)
+    try {
+      await scheduleService.registrarHito(proyectoId, h.codigo, new Date().toISOString().slice(0, 10), undefined, monto)
+      onDone()
+    } catch (e: any) { setErr(e?.response?.data?.message || 'No se pudo registrar el pago'); setBusy(false) }
   }
   const subir = async (file: File) => {
     setBusy(true); setErr(null)
@@ -122,7 +135,27 @@ function HitoRow({ proyectoId, h, onDone }: {
           {h.holgura_dias < 0 ? '' : '+'}{h.holgura_dias}d
         </span>
       )}
-      {accion.tipo === 'registro' ? (
+      {accion.tipo === 'pago' ? (
+        pagoOpen ? (
+          <div className="shrink-0 flex items-center gap-1.5">
+            <span className="text-stone-400 text-sm">$</span>
+            <input type="number" min="0" step="0.01" autoFocus value={importe}
+              onChange={(e) => setImporte(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') registrarPago() }}
+              placeholder="Monto"
+              className="w-24 rounded-lg border border-stone-300 px-2 py-1.5 text-sm text-stone-800 focus:outline-none focus:ring-2 focus:ring-forest-300" />
+            <button onClick={registrarPago} disabled={busy}
+              className="inline-flex items-center gap-1 rounded-lg bg-forest-600 hover:bg-forest-700 disabled:opacity-50 text-white text-xs font-semibold px-2.5 py-2">
+              {busy ? <Loader2 className="animate-spin" size={13} /> : '✓'}
+            </button>
+          </div>
+        ) : (
+          <button onClick={() => setPagoOpen(true)} disabled={busy}
+            className="shrink-0 inline-flex items-center gap-1.5 rounded-lg bg-forest-600 hover:bg-forest-700 disabled:opacity-50 text-white text-xs font-semibold px-3 py-2">
+            <ClipboardCheck size={13} /> {accion.label}
+          </button>
+        )
+      ) : accion.tipo === 'registro' ? (
         <button onClick={registrar} disabled={busy}
           className="shrink-0 inline-flex items-center gap-1.5 rounded-lg bg-forest-600 hover:bg-forest-700 disabled:opacity-50 text-white text-xs font-semibold px-3 py-2">
           {busy ? <Loader2 className="animate-spin" size={13} /> : <ClipboardCheck size={13} />} {accion.label}

@@ -18,6 +18,8 @@ import Produccion from '@/pages/produccion/Produccion'
 import Muestras from '@/pages/Muestras'
 import Estimacion from '@/pages/Estimacion'
 import Ingenieria from '@/pages/Ingenieria'
+import ProjectMgmt from '@/pages/ProjectMgmt'
+import Finanzas from '@/pages/Finanzas'
 import KioskApp from '@/pages/kiosk/KioskApp'
 import ClientPortal from '@/pages/portal/ClientPortal'
 import { Loader2 } from 'lucide-react'
@@ -73,6 +75,20 @@ function IngenieriaRoute({ children }: { children: React.ReactNode }) {
   return <>{children}</>
 }
 
+function PmRoute({ children }: { children: React.ReactNode }) {
+  const { user } = useAuth()
+  const allowed = ['ADMIN', 'PROJECT_MANAGEMENT']
+  if (!user || !allowed.includes(user.rol)) return <Navigate to="/" replace />
+  return <>{children}</>
+}
+
+function FinanzasRoute({ children }: { children: React.ReactNode }) {
+  const { user } = useAuth()
+  const allowed = ['ADMIN', 'CONTABILIDAD']
+  if (!user || !allowed.includes(user.rol)) return <Navigate to="/" replace />
+  return <>{children}</>
+}
+
 // Tareas = buzón de Muestras por rol. Cada rol ve sus tareas (scoping en el backend).
 function TareasRoute({ children }: { children: React.ReactNode }) {
   const { user } = useAuth()
@@ -109,6 +125,8 @@ export default function App() {
         <Route path="muestras"         element={<MuestrasRoute><Muestras /></MuestrasRoute>} />
         <Route path="estimados"        element={<EstimacionRoute><Estimacion /></EstimacionRoute>} />
         <Route path="ingenieria"       element={<IngenieriaRoute><Ingenieria /></IngenieriaRoute>} />
+        <Route path="pm"               element={<PmRoute><ProjectMgmt /></PmRoute>} />
+        <Route path="finanzas"         element={<FinanzasRoute><Finanzas /></FinanzasRoute>} />
         <Route path="tareas"           element={<TareasRoute><Tareas /></TareasRoute>} />
         <Route path="usuarios"         element={<AdminRoute><Usuarios /></AdminRoute>} />
       </Route>
