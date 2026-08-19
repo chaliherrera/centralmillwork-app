@@ -1,0 +1,475 @@
+<title>Life of a Deal — Calibración de plazos</title>
+<style>
+  *{box-sizing:border-box}
+  body{font-family:"Segoe UI",system-ui,Arial,sans-serif;color:#1c1917;margin:0;padding:28px 32px;font-size:12px;line-height:1.4}
+  header{border-bottom:2.5px solid #3b4233;padding-bottom:12px;margin-bottom:16px}
+  .brand{font-size:12px;font-weight:800;letter-spacing:2px;color:#9B7200}
+  h1{font-size:22px;margin:4px 0 2px;color:#3b4233}
+  .lead{color:#57534e;font-size:12.5px;max-width:60em}
+  .box{background:#f6f4ee;border:1px solid #e7e3d8;border-radius:8px;padding:10px 14px;margin:14px 0;font-size:11.5px;color:#44403c}
+  .box b{color:#3b4233}
+  .box ul{margin:6px 0 0;padding-left:18px}
+  .meta{display:flex;gap:24px;font-size:11px;color:#78716c;margin-top:8px}
+  .meta span b{color:#1c1917}
+  section.fase{margin-top:18px;break-inside:avoid}
+  h2{font-size:14.5px;color:#3b4233;border-left:4px solid #9B7200;padding-left:9px;margin:0 0 7px}
+  h2 .sub{font-weight:500;color:#78716c;font-size:11px}
+  table{width:100%;border-collapse:collapse}
+  th,td{border:1px solid #d6d3d1;padding:5px 8px;text-align:left;vertical-align:top}
+  thead th{background:#eceae3;font-size:10.5px;text-transform:uppercase;letter-spacing:.4px;color:#57534e}
+  .c-cod{width:8%;font-family:"Courier New",monospace;font-weight:700;white-space:nowrap}
+  .c-hito{width:38%}
+  .c-rol{width:16%;color:#57534e;font-size:11px}
+  .c-num{width:9%;text-align:center;font-variant-numeric:tabular-nums}
+  .c-real{background:#fffbeb}
+  .c-notas{width:20%}
+  tr.subtarea td{background:#fafaf9;color:#57534e}
+  .ind{color:#a8a29e}
+  .c-hito em{color:#a8a29e;font-style:italic;font-size:10.5px}
+  footer{margin-top:22px;padding-top:10px;border-top:1px solid #e7e3d8;font-size:10.5px;color:#a8a29e}
+  @media print{ body{padding:0} @page{margin:14mm} }
+</style>
+
+<header>
+  <div class="brand">CENTRAL MILLWORK</div>
+  <h1>Life of a Deal — Calibración de plazos</h1>
+  <p class="lead">Estos son los plazos que el sistema usa hoy para calcular la fecha límite de cada paso, hacia atrás desde la entrega. Son estimaciones iniciales <b>a confirmar</b>. Completá la columna <b>“Plazo REAL”</b> con la duración real (en días hábiles) de cada paso, según tu experiencia y la del PM/estimador. Con eso recalibramos el schedule para que calcule sobre la realidad.</p>
+  <div class="meta"><span>Proyecto: <b>______________________</b></span><span>Completado por: <b>______________________</b></span><span>Fecha: <b>____ / ____ / ______</b></span></div>
+</header>
+
+<div class="box">
+  <b>Cómo leerlo.</b> “Plazo hoy” = días hábiles (lun–vie) que el sistema asume que tarda ese paso. El total del recorrido nace de encadenar estos plazos hacia atrás desde la fecha de entrega. Concentrate en los que más mueven la aguja (marcados con más días): el lead time de material, ingeniería, producción e instalación.
+  <br><b>Reglas que ya definiste (para chequear):</b>
+  <ul>
+    <li>De <b>firma de contrato</b> a <b>compras/OCs</b>: ≤ 2 semanas (~10 días háb.)</li>
+    <li>De <b>material en el taller</b> a <b>despacho</b>: ≤ 4 semanas (~20 días háb.)</li>
+  </ul>
+</div>
+
+<section class="fase">
+      <h2>Contrato <span class="sub">— hoy: 25 días hábiles ≈ 5.0 semanas</span></h2>
+      <table>
+        <thead><tr><th class="c-cod">Código</th><th class="c-hito">Hito</th><th class="c-rol">Responsable</th><th class="c-num">Plazo hoy<br><small>(días háb.)</small></th><th class="c-num c-real">Plazo REAL<br><small>(días háb.)</small></th><th class="c-notas">Notas</th></tr></thead>
+        <tbody><tr class="">
+        <td class="c-cod">C-01</td>
+        <td class="c-hito">Proyecto en negociación</td>
+        <td class="c-rol">Estimator</td>
+        <td class="c-num">1</td>
+        <td class="c-num c-real"></td>
+        <td class="c-notas"></td>
+      </tr><tr class="">
+        <td class="c-cod">C-02</td>
+        <td class="c-hito">Contrato revisado / addendum</td>
+        <td class="c-rol">Estimator</td>
+        <td class="c-num">7</td>
+        <td class="c-num c-real"></td>
+        <td class="c-notas"></td>
+      </tr><tr class="">
+        <td class="c-cod">C-03</td>
+        <td class="c-hito">Contrato firmado (día cero)</td>
+        <td class="c-rol">Estimator+CFO</td>
+        <td class="c-num">1</td>
+        <td class="c-num c-real"></td>
+        <td class="c-notas"></td>
+      </tr><tr class="">
+        <td class="c-cod">C-04</td>
+        <td class="c-hito">Depósito de materiales recibido</td>
+        <td class="c-rol">Office Manager</td>
+        <td class="c-num">10</td>
+        <td class="c-num c-real"></td>
+        <td class="c-notas"></td>
+      </tr><tr class="">
+        <td class="c-cod">C-05</td>
+        <td class="c-hito">MTO preliminar validado</td>
+        <td class="c-rol">Estimator</td>
+        <td class="c-num">2</td>
+        <td class="c-num c-real"></td>
+        <td class="c-notas"></td>
+      </tr><tr class="">
+        <td class="c-cod">C-06</td>
+        <td class="c-hito">Budget del proyecto validado</td>
+        <td class="c-rol">Estimator</td>
+        <td class="c-num">1</td>
+        <td class="c-num c-real"></td>
+        <td class="c-notas"></td>
+      </tr><tr class="">
+        <td class="c-cod">C-07</td>
+        <td class="c-hito">Project announcement enviado</td>
+        <td class="c-rol">Estimator</td>
+        <td class="c-num">1</td>
+        <td class="c-num c-real"></td>
+        <td class="c-notas"></td>
+      </tr><tr class="">
+        <td class="c-cod">C-08</td>
+        <td class="c-hito">Kickoff = revisión completa</td>
+        <td class="c-rol">Estimator+Eng+PM</td>
+        <td class="c-num">1</td>
+        <td class="c-num c-real"></td>
+        <td class="c-notas"></td>
+      </tr><tr class="">
+        <td class="c-cod">C-09</td>
+        <td class="c-hito">POC transferido a Engineer/PM</td>
+        <td class="c-rol">Estimator</td>
+        <td class="c-num">1</td>
+        <td class="c-num c-real"></td>
+        <td class="c-notas"></td>
+      </tr></tbody></table></section><section class="fase">
+      <h2>Ingeniería <span class="sub">— hoy: 75 días hábiles ≈ 15.0 semanas</span></h2>
+      <table>
+        <thead><tr><th class="c-cod">Código</th><th class="c-hito">Hito</th><th class="c-rol">Responsable</th><th class="c-num">Plazo hoy<br><small>(días háb.)</small></th><th class="c-num c-real">Plazo REAL<br><small>(días háb.)</small></th><th class="c-notas">Notas</th></tr></thead>
+        <tbody><tr class="">
+        <td class="c-cod">E-01</td>
+        <td class="c-hito">Design call / arranque de ingeniería</td>
+        <td class="c-rol">Engineer</td>
+        <td class="c-num">2</td>
+        <td class="c-num c-real"></td>
+        <td class="c-notas"></td>
+      </tr><tr class="subtarea">
+        <td class="c-cod">E-01a</td>
+        <td class="c-hito"><span class="ind">↳</span> Long lead times identificados</td>
+        <td class="c-rol">Engineer+PM</td>
+        <td class="c-num">3</td>
+        <td class="c-num c-real"></td>
+        <td class="c-notas"></td>
+      </tr><tr class="subtarea">
+        <td class="c-cod">E-01b</td>
+        <td class="c-hito"><span class="ind">↳</span> Compra anticipada aprobada por cliente</td>
+        <td class="c-rol">PM</td>
+        <td class="c-num">7</td>
+        <td class="c-num c-real"></td>
+        <td class="c-notas"></td>
+      </tr><tr class="subtarea">
+        <td class="c-cod">E-01c</td>
+        <td class="c-hito"><span class="ind">↳</span> Muestras solicitadas al cliente</td>
+        <td class="c-rol">Engineer</td>
+        <td class="c-num">1</td>
+        <td class="c-num c-real"></td>
+        <td class="c-notas"></td>
+      </tr><tr class="subtarea">
+        <td class="c-cod">E-01d</td>
+        <td class="c-hito"><span class="ind">↳</span> Revisión de schedule</td>
+        <td class="c-rol">Engineer+PM</td>
+        <td class="c-num">1</td>
+        <td class="c-num c-real"></td>
+        <td class="c-notas"></td>
+      </tr><tr class="subtarea">
+        <td class="c-cod">E-01e</td>
+        <td class="c-hito"><span class="ind">↳</span> Estimado validado</td>
+        <td class="c-rol">Engineer</td>
+        <td class="c-num">1</td>
+        <td class="c-num c-real"></td>
+        <td class="c-notas"></td>
+      </tr><tr class="">
+        <td class="c-cod">E-02</td>
+        <td class="c-hito">V/E propuesto al cliente <em>(condicional)</em></td>
+        <td class="c-rol">Engineer+PM</td>
+        <td class="c-num">4</td>
+        <td class="c-num c-real"></td>
+        <td class="c-notas"></td>
+      </tr><tr class="">
+        <td class="c-cod">E-03</td>
+        <td class="c-hito">VIF / medición en obra <em>(condicional)</em></td>
+        <td class="c-rol">Field Specialist</td>
+        <td class="c-num">2</td>
+        <td class="c-num c-real"></td>
+        <td class="c-notas"></td>
+      </tr><tr class="">
+        <td class="c-cod">E-04</td>
+        <td class="c-hito">Muestras fabricadas y enviadas</td>
+        <td class="c-rol">Shop Manager</td>
+        <td class="c-num">12</td>
+        <td class="c-num c-real"></td>
+        <td class="c-notas"></td>
+      </tr><tr class="">
+        <td class="c-cod">E-05</td>
+        <td class="c-hito">Muestras aprobadas por el cliente</td>
+        <td class="c-rol">Engineer</td>
+        <td class="c-num">10</td>
+        <td class="c-num c-real"></td>
+        <td class="c-notas"></td>
+      </tr><tr class="">
+        <td class="c-cod">E-06</td>
+        <td class="c-hito">Shop drawings emitidos al cliente</td>
+        <td class="c-rol">Engineer</td>
+        <td class="c-num">18</td>
+        <td class="c-num c-real"></td>
+        <td class="c-notas"></td>
+      </tr><tr class="">
+        <td class="c-cod">E-07</td>
+        <td class="c-hito">Shop drawings aprobados por el cliente</td>
+        <td class="c-rol">Engineer</td>
+        <td class="c-num">15</td>
+        <td class="c-num c-real"></td>
+        <td class="c-notas"></td>
+      </tr><tr class="">
+        <td class="c-cod">E-08</td>
+        <td class="c-hito">Revisiones incorporadas y resubmittal <em>(condicional)</em></td>
+        <td class="c-rol">Engineer</td>
+        <td class="c-num">5</td>
+        <td class="c-num c-real"></td>
+        <td class="c-notas"></td>
+      </tr><tr class="">
+        <td class="c-cod">E-09</td>
+        <td class="c-hito">MTO final liberado a compras</td>
+        <td class="c-rol">Engineer</td>
+        <td class="c-num">3</td>
+        <td class="c-num c-real"></td>
+        <td class="c-notas"></td>
+      </tr><tr class="">
+        <td class="c-cod">E-10</td>
+        <td class="c-hito">Release to Production</td>
+        <td class="c-rol">Engineer</td>
+        <td class="c-num">1</td>
+        <td class="c-num c-real"></td>
+        <td class="c-notas"></td>
+      </tr><tr class="">
+        <td class="c-cod">E-11</td>
+        <td class="c-hito">Archivos CNC entregados</td>
+        <td class="c-rol">Engineer</td>
+        <td class="c-num">3</td>
+        <td class="c-num c-real"></td>
+        <td class="c-notas"></td>
+      </tr><tr class="">
+        <td class="c-cod">E-12</td>
+        <td class="c-hito">Gestión de riesgo (¿el plazo se cumple?)</td>
+        <td class="c-rol">Engineer+PM</td>
+        <td class="c-num">0</td>
+        <td class="c-num c-real"></td>
+        <td class="c-notas"></td>
+      </tr></tbody></table></section><section class="fase">
+      <h2>Materiales <span class="sub">— hoy: 52 días hábiles ≈ 10.4 semanas</span></h2>
+      <table>
+        <thead><tr><th class="c-cod">Código</th><th class="c-hito">Hito</th><th class="c-rol">Responsable</th><th class="c-num">Plazo hoy<br><small>(días háb.)</small></th><th class="c-num c-real">Plazo REAL<br><small>(días háb.)</small></th><th class="c-notas">Notas</th></tr></thead>
+        <tbody><tr class="">
+        <td class="c-cod">M-01</td>
+        <td class="c-hito">Revisión de schedule de Compras</td>
+        <td class="c-rol">Procurement Mgr</td>
+        <td class="c-num">0</td>
+        <td class="c-num c-real"></td>
+        <td class="c-notas"></td>
+      </tr><tr class="">
+        <td class="c-cod">M-02</td>
+        <td class="c-hito">Budget de materiales validado</td>
+        <td class="c-rol">Procurement Mgr</td>
+        <td class="c-num">3</td>
+        <td class="c-num c-real"></td>
+        <td class="c-notas"></td>
+      </tr><tr class="">
+        <td class="c-cod">M-03</td>
+        <td class="c-hito">Long-lead ordenados</td>
+        <td class="c-rol">Procurement Mgr</td>
+        <td class="c-num">2</td>
+        <td class="c-num c-real"></td>
+        <td class="c-notas"></td>
+      </tr><tr class="">
+        <td class="c-cod">M-04</td>
+        <td class="c-hito">MTO cotizado</td>
+        <td class="c-rol">Procurement Mgr</td>
+        <td class="c-num">7</td>
+        <td class="c-num c-real"></td>
+        <td class="c-notas"></td>
+      </tr><tr class="">
+        <td class="c-cod">M-05</td>
+        <td class="c-hito">OCs emitidas</td>
+        <td class="c-rol">Procurement Mgr</td>
+        <td class="c-num">3</td>
+        <td class="c-num c-real"></td>
+        <td class="c-notas"></td>
+      </tr><tr class="">
+        <td class="c-cod">M-06</td>
+        <td class="c-hito">POs a subcontratistas <em>(condicional)</em></td>
+        <td class="c-rol">PM+CFO</td>
+        <td class="c-num">7</td>
+        <td class="c-num c-real"></td>
+        <td class="c-notas"></td>
+      </tr><tr class="">
+        <td class="c-cod">M-07</td>
+        <td class="c-hito">Material recibido y stockeado 100%</td>
+        <td class="c-rol">Procurement Mgr</td>
+        <td class="c-num">30</td>
+        <td class="c-num c-real"></td>
+        <td class="c-notas"></td>
+      </tr></tbody></table></section><section class="fase">
+      <h2>Producción <span class="sub">— hoy: 22 días hábiles ≈ 4.4 semanas</span></h2>
+      <table>
+        <thead><tr><th class="c-cod">Código</th><th class="c-hito">Hito</th><th class="c-rol">Responsable</th><th class="c-num">Plazo hoy<br><small>(días háb.)</small></th><th class="c-num c-real">Plazo REAL<br><small>(días háb.)</small></th><th class="c-notas">Notas</th></tr></thead>
+        <tbody><tr class="">
+        <td class="c-cod">P-01</td>
+        <td class="c-hito">Production Intake (gate compuesto)</td>
+        <td class="c-rol">Production Mgr</td>
+        <td class="c-num">1</td>
+        <td class="c-num c-real"></td>
+        <td class="c-notas"></td>
+      </tr><tr class="">
+        <td class="c-cod">P-04</td>
+        <td class="c-hito">3-Week Lookahead (formulario del sistema)</td>
+        <td class="c-rol">PM+Production Mgr</td>
+        <td class="c-num">0</td>
+        <td class="c-num c-real"></td>
+        <td class="c-notas"></td>
+      </tr><tr class="">
+        <td class="c-cod">P-05</td>
+        <td class="c-hito">Fabricación en curso</td>
+        <td class="c-rol">Production Team</td>
+        <td class="c-num">20</td>
+        <td class="c-num c-real"></td>
+        <td class="c-notas"></td>
+      </tr><tr class="">
+        <td class="c-cod">P-06</td>
+        <td class="c-hito">Fabricación completa</td>
+        <td class="c-rol">Production Mgr</td>
+        <td class="c-num">1</td>
+        <td class="c-num c-real"></td>
+        <td class="c-notas"></td>
+      </tr></tbody></table></section><section class="fase">
+      <h2>Control de calidad (QC) <span class="sub">— hoy: 2 días hábiles ≈ 0.4 semanas</span></h2>
+      <table>
+        <thead><tr><th class="c-cod">Código</th><th class="c-hito">Hito</th><th class="c-rol">Responsable</th><th class="c-num">Plazo hoy<br><small>(días háb.)</small></th><th class="c-num c-real">Plazo REAL<br><small>(días háb.)</small></th><th class="c-notas">Notas</th></tr></thead>
+        <tbody><tr class="">
+        <td class="c-cod">QC-01</td>
+        <td class="c-hito">Controles por etapa</td>
+        <td class="c-rol">Production Assistant</td>
+        <td class="c-num">0</td>
+        <td class="c-num c-real"></td>
+        <td class="c-notas"></td>
+      </tr><tr class="">
+        <td class="c-cod">QC-02</td>
+        <td class="c-hito">QC final aprobado</td>
+        <td class="c-rol">Production Assistant</td>
+        <td class="c-num">2</td>
+        <td class="c-num c-real"></td>
+        <td class="c-notas"></td>
+      </tr><tr class="">
+        <td class="c-cod">QC-03</td>
+        <td class="c-hito">Reproceso por defecto <em>(condicional)</em></td>
+        <td class="c-rol">Production Mgr</td>
+        <td class="c-num">0</td>
+        <td class="c-num c-real"></td>
+        <td class="c-notas"></td>
+      </tr></tbody></table></section><section class="fase">
+      <h2>Despacho <span class="sub">— hoy: 7 días hábiles ≈ 1.4 semanas</span></h2>
+      <table>
+        <thead><tr><th class="c-cod">Código</th><th class="c-hito">Hito</th><th class="c-rol">Responsable</th><th class="c-num">Plazo hoy<br><small>(días háb.)</small></th><th class="c-num c-real">Plazo REAL<br><small>(días háb.)</small></th><th class="c-notas">Notas</th></tr></thead>
+        <tbody><tr class="">
+        <td class="c-cod">S-01</td>
+        <td class="c-hito">Packaging completo</td>
+        <td class="c-rol">Production Team</td>
+        <td class="c-num">2</td>
+        <td class="c-num c-real"></td>
+        <td class="c-notas"></td>
+      </tr><tr class="">
+        <td class="c-cod">S-02</td>
+        <td class="c-hito">Delivery request emitido (48 h)</td>
+        <td class="c-rol">PM</td>
+        <td class="c-num">1</td>
+        <td class="c-num c-real"></td>
+        <td class="c-notas"></td>
+      </tr><tr class="">
+        <td class="c-cod">S-03</td>
+        <td class="c-hito">Transporte confirmado + BOL</td>
+        <td class="c-rol">Logistics Mgr</td>
+        <td class="c-num">2</td>
+        <td class="c-num c-real"></td>
+        <td class="c-notas"></td>
+      </tr><tr class="">
+        <td class="c-cod">S-04</td>
+        <td class="c-hito">Despachado</td>
+        <td class="c-rol">Logistics Mgr</td>
+        <td class="c-num">1</td>
+        <td class="c-num c-real"></td>
+        <td class="c-notas"></td>
+      </tr><tr class="">
+        <td class="c-cod">S-05</td>
+        <td class="c-hito">Recepción en obra coordinada <em>(condicional)</em></td>
+        <td class="c-rol">Field Specialist</td>
+        <td class="c-num">1</td>
+        <td class="c-num c-real"></td>
+        <td class="c-notas"></td>
+      </tr></tbody></table></section><section class="fase">
+      <h2>Instalación <span class="sub">— hoy: 27 días hábiles ≈ 5.4 semanas</span></h2>
+      <table>
+        <thead><tr><th class="c-cod">Código</th><th class="c-hito">Hito</th><th class="c-rol">Responsable</th><th class="c-num">Plazo hoy<br><small>(días háb.)</small></th><th class="c-num c-real">Plazo REAL<br><small>(días háb.)</small></th><th class="c-notas">Notas</th></tr></thead>
+        <tbody><tr class="">
+        <td class="c-cod">I-01</td>
+        <td class="c-hito">Fechas de instalación coordinadas</td>
+        <td class="c-rol">PM</td>
+        <td class="c-num">4</td>
+        <td class="c-num c-real"></td>
+        <td class="c-notas"></td>
+      </tr><tr class="">
+        <td class="c-cod">I-02</td>
+        <td class="c-hito">Materiales de instalación comprados</td>
+        <td class="c-rol">Procurement Mgr</td>
+        <td class="c-num">3</td>
+        <td class="c-num c-real"></td>
+        <td class="c-notas"></td>
+      </tr><tr class="">
+        <td class="c-cod">I-03</td>
+        <td class="c-hito">Obra lista para instalar (GC)</td>
+        <td class="c-rol">PM</td>
+        <td class="c-num">1</td>
+        <td class="c-num c-real"></td>
+        <td class="c-notas"></td>
+      </tr><tr class="">
+        <td class="c-cod">I-04</td>
+        <td class="c-hito">Instalación iniciada</td>
+        <td class="c-rol">Field Specialist</td>
+        <td class="c-num">1</td>
+        <td class="c-num c-real"></td>
+        <td class="c-notas"></td>
+      </tr><tr class="">
+        <td class="c-cod">I-05</td>
+        <td class="c-hito">Instalación en curso</td>
+        <td class="c-rol">Field Specialist</td>
+        <td class="c-num">12</td>
+        <td class="c-num c-real"></td>
+        <td class="c-notas"></td>
+      </tr><tr class="">
+        <td class="c-cod">I-06</td>
+        <td class="c-hito">Punch list cerrado</td>
+        <td class="c-rol">Field Specialist</td>
+        <td class="c-num">5</td>
+        <td class="c-num c-real"></td>
+        <td class="c-notas"></td>
+      </tr><tr class="">
+        <td class="c-cod">I-07</td>
+        <td class="c-hito">Sign-off del cliente (ENTREGA)</td>
+        <td class="c-rol">PM</td>
+        <td class="c-num">1</td>
+        <td class="c-num c-real"></td>
+        <td class="c-notas"></td>
+      </tr></tbody></table></section><section class="fase">
+      <h2>Cierre (post-entrega) <span class="sub">— hoy: 54 días hábiles ≈ 10.8 semanas</span></h2>
+      <table>
+        <thead><tr><th class="c-cod">Código</th><th class="c-hito">Hito</th><th class="c-rol">Responsable</th><th class="c-num">Plazo hoy<br><small>(días háb.)</small></th><th class="c-num c-real">Plazo REAL<br><small>(días háb.)</small></th><th class="c-notas">Notas</th></tr></thead>
+        <tbody><tr class="">
+        <td class="c-cod">X-01</td>
+        <td class="c-hito">Closeout report interno</td>
+        <td class="c-rol">PM</td>
+        <td class="c-num">3</td>
+        <td class="c-num c-real"></td>
+        <td class="c-notas"></td>
+      </tr><tr class="">
+        <td class="c-cod">X-02</td>
+        <td class="c-hito">Carpeta del proyecto archivada</td>
+        <td class="c-rol">PM</td>
+        <td class="c-num">1</td>
+        <td class="c-num c-real"></td>
+        <td class="c-notas"></td>
+      </tr><tr class="">
+        <td class="c-cod">X-03</td>
+        <td class="c-hito">Pago final recibido</td>
+        <td class="c-rol">Financial Mgr</td>
+        <td class="c-num">45</td>
+        <td class="c-num c-real"></td>
+        <td class="c-notas"></td>
+      </tr><tr class="">
+        <td class="c-cod">X-04</td>
+        <td class="c-hito">P&amp;L final emitido</td>
+        <td class="c-rol">CFO</td>
+        <td class="c-num">5</td>
+        <td class="c-num c-real"></td>
+        <td class="c-notas"></td>
+      </tr></tbody></table></section>
+
+<footer>Life of a Deal · Central Millwork · Los “condicionales” solo ocurren si algo puntual pasa (reproceso, resubmittal); pueden dejarse en 0 si no aplican. · Generado desde la plantilla del sistema.</footer>
