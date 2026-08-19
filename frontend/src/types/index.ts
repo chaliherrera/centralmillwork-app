@@ -8,6 +8,7 @@ export type UserRole =
   | 'CONTABILIDAD'
   | 'SHOP_MANAGER'
   | 'ENGINEERING'
+  | 'LOGISTICA'
   | 'VIEWER'
 
 export interface User {

@@ -12,6 +12,7 @@ const ROL_LABEL: Record<UserRole, string> = {
   CONTABILIDAD:       'Accounting',
   SHOP_MANAGER:       'Shop Manager',
   ENGINEERING:        'Engineering',
+  LOGISTICA:          'Logística',
   VIEWER:             'Viewer',
 }
 

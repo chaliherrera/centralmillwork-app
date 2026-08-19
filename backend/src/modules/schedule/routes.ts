@@ -9,13 +9,13 @@ const router = Router()
 
 const SCHEDULE_READ = requireRole(
   'ADMIN', 'PROJECT_MANAGEMENT', 'PROCUREMENT', 'PRODUCTION',
-  'SHOP_MANAGER', 'ENGINEERING', 'CONTABILIDAD', 'VIEWER'
+  'SHOP_MANAGER', 'ENGINEERING', 'CONTABILIDAD', 'LOGISTICA', 'VIEWER'
 )
 const SCHEDULE_WRITE = requireRole('ADMIN', 'PROJECT_MANAGEMENT')
 // Registrar un hito = el área dueña. Más amplio que WRITE (el ownership fino se
 // formaliza más adelante; por ahora cualquier rol interno con escritura puede).
 const SCHEDULE_REGISTRAR = requireRole(
-  'ADMIN', 'PROJECT_MANAGEMENT', 'ENGINEERING', 'PROCUREMENT', 'PRODUCTION', 'SHOP_MANAGER', 'CONTABILIDAD'
+  'ADMIN', 'PROJECT_MANAGEMENT', 'ENGINEERING', 'PROCUREMENT', 'PRODUCTION', 'SHOP_MANAGER', 'CONTABILIDAD', 'LOGISTICA'
 )
 
 router.get ('/mi-trabajo',              SCHEDULE_READ,  trabajoPorAreaHandler)
