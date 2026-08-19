@@ -5,52 +5,63 @@
     --bg:#F6F4EE;--ink:#1c1917;--muted:#78716c;--line:#e7e3d8;
     --forest:#3b4233;--gold:#9B7200;--emerald:#059669;--card:#fff;
     --band:#fdecec;--track:#ddd8cc;--head:#faf8f2;--faint:#f0ede4;
+    --ok:#5A8A2E;--ok-bg:#eef5e4;--warn:#b8860b;--warn-bg:#faf3e2;--full:#c2410c;--full-bg:#fbe9e0;
   }
   @media (prefers-color-scheme:dark){:root{
     --bg:#14160f;--ink:#efece2;--muted:#a8a29e;--line:#2c2f24;
     --forest:#8ea06f;--gold:#d9a521;--emerald:#34d399;--card:#1b1e15;
-    --band:#3a1d1d;--track:#2c2f24;--head:#20241a;--faint:#191d12;}}
+    --band:#3a1d1d;--track:#3a3f30;--head:#20241a;--faint:#191d12;
+    --ok:#7ba53c;--ok-bg:#1f2a12;--warn:#c69a2b;--warn-bg:#2a2410;--full:#e06a34;--full-bg:#2e1a12;}}
   body{background:var(--bg);color:var(--ink);font-family:"Segoe UI",system-ui,Arial,sans-serif;padding:22px 26px;font-size:13px}
   #wrap{max-width:1040px;margin:0 auto}
-  /* Hero (igual que el journey map) */
   .hero{display:flex;flex-wrap:wrap;align-items:center;gap:26px 34px;padding:2px 4px 16px}
   .hero .blk .k{font-size:11px;text-transform:uppercase;letter-spacing:1px;color:var(--muted);font-weight:600}
   .hero .blk .v{font-size:26px;font-weight:800;color:var(--ink);letter-spacing:-.5px;font-variant-numeric:tabular-nums}
-  .hero .status{margin-left:auto;display:inline-flex;align-items:center;gap:8px;background:var(--band);border:1px solid #f2c8c8;
-    color:#b91c1c;border-radius:12px;padding:8px 16px;font-weight:700;font-size:13px}
-  .hero .status i{width:9px;height:9px;border-radius:50%;background:#dc2626;display:inline-block}
+  .hero .status{margin-left:auto;display:inline-flex;align-items:center;gap:8px;background:var(--full-bg);border:1px solid #e2b7a3;
+    color:var(--full);border-radius:12px;padding:8px 16px;font-weight:700;font-size:13px}
+  .hero .status i{width:9px;height:9px;border-radius:50%;background:var(--full);display:inline-block}
   .brand{font-size:11px;font-weight:800;letter-spacing:2px;color:var(--gold)}
   h1{font-size:20px;color:var(--forest);letter-spacing:-.3px;margin-top:1px}
   .card{background:var(--card);border:1px solid var(--line);border-radius:18px;
         box-shadow:0 1px 4px rgba(0,0,0,.05),0 10px 30px rgba(0,0,0,.04)}
   .board{overflow:hidden}
-  .months{display:grid;grid-template-columns:150px repeat(16,1fr);background:var(--head);border-bottom:1px solid var(--line)}
+  .months{display:grid;grid-template-columns:158px repeat(16,1fr);background:var(--head);border-bottom:1px solid var(--line)}
   .months .corner{padding:10px 12px;font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--muted);font-weight:800;display:flex;align-items:flex-end}
   .months .mh{text-align:center;font-size:11.5px;font-weight:700;color:var(--forest);border-left:1px solid var(--line);padding:9px 0}
-  .lanewrap{padding:6px 0}
-  .curvelane{display:grid;grid-template-columns:150px 1fr;align-items:center;padding:6px 0 2px}
-  .lanelbl{display:flex;align-items:center;gap:7px;padding-left:14px;font-size:11px;font-weight:700;color:var(--forest)}
-  .lanelbl svg{color:var(--gold)}
-  .curvebox{height:78px;padding-right:8px}
-  .curvebox svg{width:100%;height:100%;display:block;overflow:visible}
-  .row{display:grid;grid-template-columns:150px repeat(16,1fr);align-items:center;height:38px;border-top:1px solid var(--faint)}
-  .row.first{border-top:1px solid var(--line)}
+  /* Fila de ocupación (compacta) */
+  .caprow{display:grid;grid-template-columns:158px repeat(16,1fr);align-items:center;height:30px;border-bottom:1px solid var(--line)}
+  .caprow .lbl{padding-left:14px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted)}
+  .cap{height:19px;margin:0 2px;border-radius:5px;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:800;font-variant-numeric:tabular-nums}
+  .cap.z{color:var(--muted);opacity:.35}
+  .cap.ok{background:var(--ok-bg);color:var(--ok)}
+  .cap.warn{background:var(--warn-bg);color:var(--warn)}
+  .cap.full{background:var(--full-bg);color:var(--full)}
+  /* Filas de proyecto */
+  .row{display:grid;grid-template-columns:158px repeat(16,1fr);align-items:center;height:42px;border-top:1px solid var(--faint)}
+  .row.first{border-top:none}
   .row .lbl{padding-left:14px;padding-right:8px;overflow:hidden}
   .row .lbl .cod{font-family:"Courier New",monospace;font-weight:700;font-size:10.5px;color:var(--forest)}
   .row .lbl .nm{font-size:10.5px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  .bar{height:21px;border-radius:7px;display:flex;align-items:center;padding:0 9px;color:#fff;font-size:10px;font-weight:700;white-space:nowrap;overflow:hidden}
-  .bar.ghost{background:transparent!important;border:2px dashed var(--gold);color:var(--gold)}
-  .prospect{border-top:1.5px dashed var(--gold)}
-  /* Verdict — como una card "Qué pasa ahora" */
+  /* Mini-recorrido de producción (estilo journey map) */
+  .track{position:relative;height:26px;display:flex;align-items:center;justify-content:space-between;padding:0 10px}
+  .track .rail{position:absolute;left:10px;right:10px;top:50%;height:3px;transform:translateY(-50%);background:var(--track);border-radius:3px}
+  .track .fill{position:absolute;left:10px;top:50%;height:3px;transform:translateY(-50%);background:var(--c);border-radius:3px}
+  .stn{position:relative;z-index:2;width:16px;height:16px;border-radius:50%;background:var(--card);border:2.5px solid var(--track);
+       display:flex;align-items:center;justify-content:center;font-size:9px;color:#fff;line-height:1}
+  .stn.done{background:var(--c);border-color:var(--c)}
+  .stn.active{border-color:var(--c);box-shadow:0 0 0 4px color-mix(in srgb,var(--c) 22%,transparent)}
+  .track.ghost .rail{background:transparent;border-top:2px dashed var(--gold)}
+  .track.ghost .stn{border-style:dashed;border-color:var(--gold);background:transparent;box-shadow:none}
   .verdict{margin-top:16px;padding:15px 18px;display:flex;gap:13px;align-items:flex-start;border-left:4px solid var(--gold)}
   .verdict .ic{font-size:22px;line-height:1.1}
   .verdict h3{font-size:15px;color:var(--forest);margin-bottom:3px}
   .verdict p{color:var(--muted);font-size:12.5px;line-height:1.5;max-width:72ch}
   .verdict b{color:var(--ink)}
-  .legend{display:flex;gap:16px;flex-wrap:wrap;margin-top:14px;padding-left:4px;font-size:11px;color:var(--muted);align-items:center}
+  .legend{display:flex;gap:18px;flex-wrap:wrap;margin-top:14px;padding-left:4px;font-size:11px;color:var(--muted);align-items:center}
   .legend .k{display:inline-flex;align-items:center;gap:6px}
-  .sw{width:22px;height:8px;border-radius:4px;display:inline-block}
-  .dot{width:9px;height:9px;border-radius:50%;display:inline-block}
+  .nd{width:13px;height:13px;border-radius:50%;background:var(--card);border:2.5px solid var(--track);display:inline-block}
+  .nd.d{background:var(--forest);border-color:var(--forest)}
+  .nd.a{border-color:var(--forest);box-shadow:0 0 0 3px color-mix(in srgb,var(--forest) 22%,transparent)}
   .note{margin-top:12px;padding-left:4px;font-size:11px;color:var(--muted);font-style:italic;max-width:80ch}
 </style>
 
@@ -68,46 +79,56 @@
 
   <div class="card board">
     <div class="months">
-      <div class="corner">Carga →</div>
+      <div class="corner">Taller →</div>
       <div class="mh" style="grid-column:2 / 6">Septiembre</div>
       <div class="mh" style="grid-column:6 / 11">Octubre</div>
       <div class="mh" style="grid-column:11 / 15">Noviembre</div>
       <div class="mh" style="grid-column:15 / 18">Diciembre</div>
     </div>
 
-    <div class="curvelane">
-      <div class="lanelbl">
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M3 17l5-6 4 3 5-8 4 5"/></svg>
-        Ocupación del taller
-      </div>
-      <div class="curvebox"><svg id="curve" viewBox="0 0 1000 100" preserveAspectRatio="none"></svg></div>
+    <div class="caprow">
+      <div class="lbl">Ocupación / 6</div>
+      <div class="cap z" style="grid-column:2">·</div>
+      <div class="cap ok" style="grid-column:3">1</div>
+      <div class="cap ok" style="grid-column:4">2</div>
+      <div class="cap ok" style="grid-column:5">3</div>
+      <div class="cap warn" style="grid-column:6">4</div>
+      <div class="cap warn" style="grid-column:7">5</div>
+      <div class="cap warn" style="grid-column:8">5</div>
+      <div class="cap warn" style="grid-column:9">4</div>
+      <div class="cap ok" style="grid-column:10">3</div>
+      <div class="cap ok" style="grid-column:11">2</div>
+      <div class="cap ok" style="grid-column:12">1</div>
+      <div class="cap z" style="grid-column:13">·</div>
+      <div class="cap z" style="grid-column:14">·</div>
+      <div class="cap z" style="grid-column:15">·</div>
+      <div class="cap z" style="grid-column:16">·</div>
+      <div class="cap z" style="grid-column:17">·</div>
     </div>
 
-    <div class="lanewrap">
-      <div class="row first">
-        <div class="lbl"><div class="cod">PRY-2026-101</div><div class="nm">Hotel Rivera Lobby</div></div>
-        <div class="bar" style="grid-column:3 / 9;background:#3b82f6">Producción</div>
-      </div>
-      <div class="row">
-        <div class="lbl"><div class="cod">PRY-2026-102</div><div class="nm">Office Tower Floor 12</div></div>
-        <div class="bar" style="grid-column:4 / 10;background:#0d9488">Producción</div>
-      </div>
-      <div class="row">
-        <div class="lbl"><div class="cod">PRY-2026-088</div><div class="nm">Boutique Retail Fit-out</div></div>
-        <div class="bar" style="grid-column:5 / 11;background:#b45309">Producción</div>
-      </div>
-      <div class="row">
-        <div class="lbl"><div class="cod">PRY-2026-099</div><div class="nm">Residencia Smith Kitchen</div></div>
-        <div class="bar" style="grid-column:6 / 12;background:#7c3aed">Producción</div>
-      </div>
-      <div class="row">
-        <div class="lbl"><div class="cod">PRY-2026-095</div><div class="nm">Restaurant Bar &amp; Millwork</div></div>
-        <div class="bar" style="grid-column:7 / 13;background:#059669">Producción</div>
-      </div>
-      <div class="row prospect">
-        <div class="lbl"><div class="cod" style="color:var(--gold)">NUEVO ▸ ¿aceptar?</div><div class="nm">Cliente nuevo · entrega 20/12</div></div>
-        <div class="bar ghost" style="grid-column:6 / 11">Producción proyectada</div>
-      </div>
+    <div class="row first">
+      <div class="lbl"><div class="cod">PRY-2026-101</div><div class="nm">Hotel Rivera Lobby</div></div>
+      <div class="track" style="grid-column:3 / 9;--c:#3b82f6"><div class="rail"></div><div class="fill" style="width:calc(100% - 20px)"></div><span class="stn done">✓</span><span class="stn done">✓</span><span class="stn active"></span></div>
+    </div>
+    <div class="row">
+      <div class="lbl"><div class="cod">PRY-2026-102</div><div class="nm">Office Tower Floor 12</div></div>
+      <div class="track" style="grid-column:4 / 10;--c:#0d9488"><div class="rail"></div><div class="fill" style="width:50%"></div><span class="stn done">✓</span><span class="stn active"></span><span class="stn"></span></div>
+    </div>
+    <div class="row">
+      <div class="lbl"><div class="cod">PRY-2026-088</div><div class="nm">Boutique Retail Fit-out</div></div>
+      <div class="track" style="grid-column:5 / 11;--c:#b45309"><div class="rail"></div><div class="fill" style="width:50%"></div><span class="stn done">✓</span><span class="stn active"></span><span class="stn"></span></div>
+    </div>
+    <div class="row">
+      <div class="lbl"><div class="cod">PRY-2026-099</div><div class="nm">Residencia Smith Kitchen</div></div>
+      <div class="track" style="grid-column:6 / 12;--c:#7c3aed"><div class="rail"></div><div class="fill" style="width:12px"></div><span class="stn active"></span><span class="stn"></span><span class="stn"></span></div>
+    </div>
+    <div class="row">
+      <div class="lbl"><div class="cod">PRY-2026-095</div><div class="nm">Restaurant Bar &amp; Millwork</div></div>
+      <div class="track" style="grid-column:7 / 13;--c:#059669"><div class="rail"></div><div class="fill" style="width:0"></div><span class="stn"></span><span class="stn"></span><span class="stn"></span></div>
+    </div>
+    <div class="row" style="border-top:1.5px dashed var(--gold)">
+      <div class="lbl"><div class="cod" style="color:var(--gold)">NUEVO ▸ ¿aceptar?</div><div class="nm">Cliente nuevo · entrega 20/12</div></div>
+      <div class="track ghost" style="grid-column:6 / 11"><div class="rail"></div><span class="stn"></span><span class="stn"></span><span class="stn"></span></div>
     </div>
   </div>
 
@@ -115,46 +136,16 @@
     <div class="ic">⚠️</div>
     <div>
       <h3>Entrega 20/12/2026 → factible, pero al límite</h3>
-      <p>La curva punteada muestra la ocupación <b>si aceptás el proyecto nuevo</b>: su producción caería entre <b>mediados de octubre y mediados de noviembre</b>, y esas semanas el taller —hoy en 5 / 6— <b>tocaría el tope de 6 / 6</b>. Se puede tomar, pero <b>sin margen</b>: un atraso en cualquier otro proyecto lo compromete. Si el cliente corriera la entrega a <b>enero</b>, entraría con holgura.</p>
+      <p>Calculando hacia atrás, la <b>producción</b> del proyecto nuevo (carril punteado) caería entre <b>mediados de octubre y mediados de noviembre</b>. Esas semanas el taller ya está en <b>5 / 6</b> — con este proyecto <b>toca el tope de 6 / 6</b>, sin margen para imprevistos. <b>Se puede aceptar</b>, pero un atraso en cualquier otro proyecto lo compromete. Si el cliente corriera la entrega a <b>enero</b>, entraría con holgura.</p>
     </div>
   </div>
 
   <div class="legend">
-    <span class="k"><span class="dot" style="background:#3b82f6"></span> cada color = un proyecto</span>
-    <span class="k"><span class="sw" style="background:var(--forest)"></span> ocupación actual</span>
-    <span class="k"><span class="sw" style="background:var(--gold);opacity:.8"></span> con el proyecto nuevo</span>
-    <span class="k"><span class="sw" style="background:var(--band);border:1px solid #f0b8b8"></span> zona de tope (6)</span>
+    <span class="k">Cada carril = un proyecto en el taller</span>
+    <span class="k"><span class="nd d"></span> etapa hecha</span>
+    <span class="k"><span class="nd a"></span> en curso</span>
+    <span class="k"><span class="nd"></span> pendiente</span>
+    <span class="k"><span style="color:var(--muted)">nodos =</span> intake · fabricación · completo</span>
   </div>
-  <div class="note">Mockup — datos de ejemplo. La ventana de producción de cada proyecto sale del schedule (P-01 → P-06); la exactitud depende de los plazos que estamos calibrando.</div>
+  <div class="note">Mockup — datos de ejemplo. Cada carril usa el mismo lenguaje del journey map (estaciones sobre el riel). La ventana sale del schedule (P-01 → P-06); la exactitud depende de los plazos que estamos calibrando.</div>
 </div>
-
-<script>
-  const MAX=6, W=16;
-  const cur=[0,1,2,3,4,5,5,4,3,2,1,0,0,0,0,0];
-  const neu=[0,1,2,3,5,6,6,5,4,2,1,0,0,0,0,0];
-  const cssv=(v)=>getComputedStyle(document.documentElement).getPropertyValue(v).trim();
-  const X=(i)=>((i+0.5)/W)*1000;
-  const Y=(v)=>90-(v/6.5)*78;               // v=0 abajo, v=6.5 arriba
-  function smooth(pts){let d='M '+pts[0][0]+' '+pts[0][1];for(let i=1;i<pts.length;i++){const cx=(pts[i-1][0]+pts[i][0])/2;d+=' C '+cx+' '+pts[i-1][1]+' '+cx+' '+pts[i][1]+' '+pts[i][0]+' '+pts[i][1];}return d;}
-  function draw(){
-    const forest=cssv('--forest')||'#3b4233', gold=cssv('--gold')||'#9B7200', band=cssv('--band')||'#fdecec', card=cssv('--card')||'#fff', line=cssv('--track')||'#ddd8cc';
-    const curPts=cur.map((v,i)=>[X(i),Y(v)]), neuPts=neu.map((v,i)=>[X(i),Y(v)]);
-    const yTope=Y(MAX), yCarga=Y(5);
-    let s='';
-    // zona de tope (banda rosa entre 5 y 6+)
-    s+='<rect x="0" y="'+Y(6.5)+'" width="1000" height="'+(yCarga-Y(6.5))+'" fill="'+band+'"/>';
-    // linea tope 6 (dashed)
-    s+='<line x1="0" y1="'+yTope+'" x2="1000" y2="'+yTope+'" stroke="#dc2626" stroke-width="1.2" stroke-dasharray="5 5" opacity=".55"/>';
-    s+='<text x="994" y="'+(yTope-4)+'" text-anchor="end" font-size="10" font-weight="700" fill="#dc2626" opacity=".8">6 · tope</text>';
-    // area + curva actual
-    s+='<path d="'+smooth(curPts)+' L '+X(W-1)+' 100 L '+X(0)+' 100 Z" fill="'+forest+'14"/>';
-    s+='<path d="'+smooth(curPts)+'" fill="none" stroke="'+forest+'" stroke-width="2.4"/>';
-    // curva con el nuevo (dashed gold)
-    s+='<path d="'+smooth(neuPts)+'" fill="none" stroke="'+gold+'" stroke-width="2.2" stroke-dasharray="6 5"/>';
-    // dots por semana (actual)
-    curPts.forEach((p,i)=>{ if(cur[i]>0) s+='<circle cx="'+p[0]+'" cy="'+p[1]+'" r="3.6" fill="'+card+'" stroke="'+forest+'" stroke-width="2"/>'; });
-    document.getElementById('curve').innerHTML=s;
-  }
-  draw();
-  if(window.matchMedia){window.matchMedia('(prefers-color-scheme:dark)').addEventListener('change',draw);}
-</script>
