@@ -1,22 +1,12 @@
 <title>Life of a Deal — El recorrido completo, en vivo</title>
 <style>
   *{margin:0;padding:0;box-sizing:border-box}
+  /* Diseño comprometido a modo oscuro (elección deliberada — ideal para proyectar). */
   :root{
-    --bg:#F6F4EE; --ink:#1c1917; --muted:#78716c; --line:#e7e3d8;
-    --forest:#3b4233; --gold:#9B7200; --emerald:#059669; --card:#ffffff;
-    --curve-band:#fdecec; --node-off:#d6d3d1; --node-off-ink:#a8a29e; --track:#ddd8cc;
+    --bg:#12140d; --ink:#efece2; --muted:#a8a29e; --line:#2c2f24;
+    --forest:#94a878; --gold:#e0ac2b; --emerald:#34d399; --card:#1b1e15;
+    --curve-band:#3a1d1d; --node-off:#3f4433; --node-off-ink:#83886f; --track:#2c2f24;
   }
-  @media (prefers-color-scheme:dark){
-    :root{--bg:#14160f; --ink:#efece2; --muted:#a8a29e; --line:#2c2f24;
-      --forest:#8ea06f; --gold:#d9a521; --emerald:#34d399; --card:#1c1f16;
-      --curve-band:#3a1d1d; --node-off:#3f4433; --node-off-ink:#7a7f6b; --track:#2c2f24;}
-  }
-  :root[data-theme="dark"]{--bg:#14160f;--ink:#efece2;--muted:#a8a29e;--line:#2c2f24;
-    --forest:#8ea06f;--gold:#d9a521;--emerald:#34d399;--card:#1c1f16;
-    --curve-band:#3a1d1d;--node-off:#3f4433;--node-off-ink:#7a7f6b;--track:#2c2f24;}
-  :root[data-theme="light"]{--bg:#F6F4EE;--ink:#1c1917;--muted:#78716c;--line:#e7e3d8;
-    --forest:#3b4233;--gold:#9B7200;--emerald:#059669;--card:#ffffff;
-    --curve-band:#fdecec;--node-off:#d6d3d1;--node-off-ink:#a8a29e;--track:#ddd8cc;}
   body{background:var(--bg);font-family:"Segoe UI",system-ui,Arial,sans-serif;color:var(--ink);
        min-height:100vh;display:grid;place-items:center;padding:16px}
   #wrap{width:min(1040px,96vw)}
@@ -87,7 +77,7 @@
 
 <script>
 const FASES=[{k:'CONTRATO',lbl:'Contrato'},{k:'INGENIERIA',lbl:'Ingeniería'},{k:'MATERIALES',lbl:'Materiales'},{k:'PRODUCCION',lbl:'Producción'},{k:'QC',lbl:'QC'},{k:'DESPACHO',lbl:'Despacho'},{k:'INSTALACION',lbl:'Instalación'},{k:'CIERRE',lbl:'Cierre'}];
-const ACT={estimacion:{n:'Estimación',c:'#57534e'},contabilidad:{n:'Contabilidad',c:'#9B7200'},ingenieria:{n:'Ingeniería',c:'#4338ca'},cliente:{n:'Cliente',c:'#1d4ed8'},compras:{n:'Compras',c:'#b45309'},recepcion:{n:'Recepción',c:'#b45309'},taller:{n:'Taller',c:'#059669'},qc:{n:'Control de calidad',c:'#0d9488'},logistica:{n:'Logística',c:'#0e7490'},field:{n:'Instalación (obra)',c:'#7c3aed'},pm:{n:'PM',c:'#3f6212'},sistema:{n:'El sistema',c:'#3b4233'}};
+const ACT={estimacion:{n:'Estimación',c:'#64748b'},contabilidad:{n:'Contabilidad',c:'#a16207'},ingenieria:{n:'Ingeniería',c:'#6366f1'},cliente:{n:'Cliente',c:'#3b82f6'},compras:{n:'Compras',c:'#ea580c'},recepcion:{n:'Recepción',c:'#ea580c'},taller:{n:'Taller',c:'#10b981'},qc:{n:'Control de calidad',c:'#14b8a6'},logistica:{n:'Logística',c:'#06b6d4'},field:{n:'Instalación (obra)',c:'#8b5cf6'},pm:{n:'PM',c:'#65a30d'},sistema:{n:'El sistema',c:'#6b8e5a'}};
 const STEPS=[
  {intro:true,done:[],active:null,actor:null,ttl:'Un proyecto entra al sistema',det:'Entrega comprometida: 15 de diciembre. El sistema calcula hacia atrás la fecha límite de cada hito, y sigue el recorrido en vivo — de la firma del contrato hasta la entrega y el pago final.'},
  {done:[],active:'CONTRATO',actor:'estimacion',hito:'C-03 · Contrato firmado',ttl:'Se firma el contrato',det:'Estimación sube el PDF firmado desde su escritorio. Es el día cero: a partir de acá, el reloj corre.'},
