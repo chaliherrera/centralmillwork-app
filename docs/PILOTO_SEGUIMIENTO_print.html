@@ -1,0 +1,150 @@
+<title>Seguimiento del Piloto — Life of a Deal (imprimible)</title>
+<style>
+  *{margin:0;padding:0;box-sizing:border-box}
+  :root{
+    --ink:#1c2230;--muted:#5f6675;--faint:#8b92a2;--line:#d8dae0;--hair:#eceef2;
+    --forest:#3b5137;--gold:#9B7200;--paper:#ffffff;--band:#f5f6f8;
+    --ok:#15803d;--ok-bg:#e9f5ec;--file:#b45309;--file-bg:#fbf0e0;
+  }
+  html,body{background:#e9ebee}
+  body{color:var(--ink);font-family:"Segoe UI",system-ui,-apple-system,Arial,sans-serif;
+       font-size:12px;line-height:1.4;-webkit-font-smoothing:antialiased;padding:22px}
+  .sheet{max-width:1040px;margin:0 auto;background:var(--paper);padding:30px 34px 40px;
+         box-shadow:0 2px 8px rgba(0,0,0,.08);border-radius:4px}
+
+  .top{display:flex;align-items:flex-end;justify-content:space-between;gap:20px;
+       border-bottom:2px solid var(--forest);padding-bottom:12px;margin-bottom:6px}
+  .brand{font-size:10px;font-weight:800;letter-spacing:2px;color:var(--gold)}
+  h1{font-size:20px;color:var(--forest);letter-spacing:-.3px;margin-top:2px;font-weight:800}
+  .top .meta{text-align:right;font-size:10.5px;color:var(--muted);line-height:1.5}
+  .top .meta b{color:var(--ink)}
+
+  .callout{display:flex;gap:9px;align-items:flex-start;background:var(--ok-bg);border:1px solid #bfe0c8;
+    border-radius:8px;padding:9px 12px;margin:14px 0 6px;font-size:11px;color:#1c3a25}
+  .callout b{color:#14361f}
+
+  .howto{font-size:11px;color:var(--muted);margin:12px 2px 8px}
+  .howto b{color:var(--ink)}
+
+  table{width:100%;border-collapse:collapse;margin-top:6px}
+  th{background:var(--forest);color:#fff;font-size:9.5px;text-transform:uppercase;letter-spacing:.5px;
+     font-weight:700;text-align:left;padding:7px 8px;border:1px solid var(--forest)}
+  td{border:1px solid var(--line);padding:6px 8px;vertical-align:top}
+  tbody tr:nth-child(even) td{background:var(--band)}
+  .fase-sep td{background:#eef1ee !important;border-top:2px solid var(--forest)}
+  .chk{width:26px;text-align:center}
+  .chk .box{display:inline-block;width:14px;height:14px;border:1.6px solid var(--faint);border-radius:3px}
+  .num{width:30px;font-weight:800;color:var(--forest);font-variant-numeric:tabular-nums}
+  .paso{font-weight:600}
+  .donde{font-family:"Courier New",monospace;font-size:10.5px;color:var(--muted);white-space:nowrap}
+  .cierra{font-family:"Courier New",monospace;font-size:10.5px;font-weight:700;color:var(--ink)}
+  .file{width:74px;text-align:center;font-weight:700;font-size:10px}
+  .file .y{color:var(--file);background:var(--file-bg);padding:1px 6px;border-radius:20px;white-space:nowrap}
+  .file .n{color:var(--faint)}
+  .notas{min-width:150px;color:var(--faint)}
+
+  .phasekey{margin:16px 2px 4px;font-size:10.5px;color:var(--muted)}
+  .phasekey b{color:var(--forest)}
+
+  .bitacora{margin-top:16px}
+  .bitacora h2{font-size:12px;color:var(--forest);font-weight:800;margin-bottom:8px;
+    text-transform:uppercase;letter-spacing:.5px}
+  .bitacora .lines div{border-bottom:1px solid var(--hair);height:24px}
+
+  .foot{margin-top:16px;font-size:9.5px;color:var(--faint);font-style:italic;line-height:1.5}
+
+  @media print{
+    html,body{background:#fff}
+    body{padding:0;font-size:10.5px}
+    .sheet{box-shadow:none;border-radius:0;max-width:none;padding:0}
+    @page{size:A4 landscape;margin:11mm}
+    tr{break-inside:avoid}
+    th{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+    tbody tr:nth-child(even) td,.fase-sep td,.callout,.file .y{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  }
+</style>
+
+<div class="sheet">
+  <div class="top">
+    <div>
+      <div class="brand">CENTRAL MILLWORK</div>
+      <h1>Seguimiento del Piloto — Life of a Deal</h1>
+    </div>
+    <div class="meta">
+      Proyecto piloto: <b>_______________________</b><br>
+      Fecha: <b>____ / ____ / 2026</b> &nbsp;·&nbsp; Responsable: <b>____________</b>
+    </div>
+  </div>
+
+  <div class="callout">
+    <span>✅</span>
+    <span><b>Archivos en local:</b> resuelto — el entorno local está conectado al bucket de pruebas
+    (<i>oc-imagenes-staging</i>) y probado. Todos los pasos con archivo (contrato, planos, CNC, BOL, firma) funcionan.
+    <b>Borrar los archivos de prueba del bucket al terminar.</b></span>
+  </div>
+
+  <div class="howto">
+    <b>Cómo usar:</b> recorré los pasos en orden. Marcá la casilla al completar cada uno y anotá en
+    <b>Notas</b> lo que observes (qué salió, qué ajustamos, la hora). La columna <b>Cierra</b> indica qué hito del
+    schedule se completa. 📸 En cada paso, sacá la captura para la bitácora de imágenes.
+  </div>
+
+  <table>
+    <thead>
+      <tr>
+        <th class="chk">✓</th>
+        <th class="num">#</th>
+        <th>Paso</th>
+        <th>Dónde</th>
+        <th>Cierra</th>
+        <th class="file">¿Archivo?</th>
+        <th class="notas">Notas / hora</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr class="fase-sep"><td class="chk"><span class="box"></span></td><td class="num">0</td><td class="paso">Crear el proyecto</td><td class="donde">/proyectos</td><td class="cierra">— (arranque)</td><td class="file"><span class="n">No</span></td><td class="notas"></td></tr>
+
+      <tr class="fase-sep"><td class="chk"><span class="box"></span></td><td class="num">1</td><td class="paso">Cargar fecha de entrega + contrato → genera el schedule</td><td class="donde">/estimados</td><td class="cierra">C-03 (día cero)</td><td class="file"><span class="y">Opcional</span></td><td class="notas"></td></tr>
+
+      <tr class="fase-sep"><td class="chk"><span class="box"></span></td><td class="num">2a</td><td class="paso">Ingeniería — registrar arranque / design call</td><td class="donde">/ingenieria</td><td class="cierra">E-01</td><td class="file"><span class="n">No</span></td><td class="notas"></td></tr>
+      <tr><td class="chk"><span class="box"></span></td><td class="num">2b</td><td class="paso">Subir planos (submittal Rev A)</td><td class="donde">/ingenieria</td><td class="cierra">E-06 → E-07</td><td class="file"><span class="y">Sí</span></td><td class="notas"></td></tr>
+      <tr><td class="chk"><span class="box"></span></td><td class="num">2c</td><td class="paso">Liberar MTO / Release to Production</td><td class="donde">/ingenieria</td><td class="cierra">E-09 / E-10</td><td class="file"><span class="n">No</span></td><td class="notas"></td></tr>
+      <tr><td class="chk"><span class="box"></span></td><td class="num">2d</td><td class="paso">Subir archivos CNC</td><td class="donde">/ingenieria</td><td class="cierra">E-11</td><td class="file"><span class="y">Sí</span></td><td class="notas"></td></tr>
+
+      <tr class="fase-sep"><td class="chk"><span class="box"></span></td><td class="num">3</td><td class="paso">Muestras — fabricar/enviar → Ingeniería aprueba</td><td class="donde">/muestras · /tareas</td><td class="cierra">E-05 (gate)</td><td class="file"><span class="y">Sí</span></td><td class="notas"></td></tr>
+
+      <tr class="fase-sep"><td class="chk"><span class="box"></span></td><td class="num">4</td><td class="paso">Compras — emitir OCs + recibir material</td><td class="donde">Compras / Recepciones</td><td class="cierra">M-03/04/05/07</td><td class="file"><span class="n">No*</span></td><td class="notas"></td></tr>
+
+      <tr class="fase-sep"><td class="chk"><span class="box"></span></td><td class="num">5</td><td class="paso">Producción — crear la OP → kiosko avanza estación por estación</td><td class="donde">Producción / kiosko</td><td class="cierra">P-01 → P-05/P-06</td><td class="file"><span class="n">No</span></td><td class="notas"></td></tr>
+
+      <tr class="fase-sep"><td class="chk"><span class="box"></span></td><td class="num">6</td><td class="paso">QC — inspección de calidad</td><td class="donde">kiosko / QC</td><td class="cierra">QC-01 / QC-02</td><td class="file"><span class="n">No*</span></td><td class="notas"></td></tr>
+
+      <tr class="fase-sep"><td class="chk"><span class="box"></span></td><td class="num">7a</td><td class="paso">Despacho — subir BOL</td><td class="donde">/logistica</td><td class="cierra">S-03</td><td class="file"><span class="y">Sí</span></td><td class="notas"></td></tr>
+      <tr><td class="chk"><span class="box"></span></td><td class="num">7b</td><td class="paso">Registrar despacho (+ nº de precinto)</td><td class="donde">/logistica</td><td class="cierra">S-04</td><td class="file"><span class="y">Sí</span></td><td class="notas"></td></tr>
+
+      <tr class="fase-sep"><td class="chk"><span class="box"></span></td><td class="num">8a</td><td class="paso">Instalación — check-in en obra</td><td class="donde">app móvil</td><td class="cierra">I-04</td><td class="file"><span class="n">Foto opc.</span></td><td class="notas"></td></tr>
+      <tr><td class="chk"><span class="box"></span></td><td class="num">8b</td><td class="paso">Checklist de items instalados</td><td class="donde">app móvil</td><td class="cierra">I-05</td><td class="file"><span class="n">Foto opc.</span></td><td class="notas"></td></tr>
+      <tr><td class="chk"><span class="box"></span></td><td class="num">8c</td><td class="paso">Punch list (abrir / cerrar)</td><td class="donde">app móvil</td><td class="cierra">I-06</td><td class="file"><span class="y">Foto</span></td><td class="notas"></td></tr>
+      <tr><td class="chk"><span class="box"></span></td><td class="num">8d</td><td class="paso">Sign-off del cliente (ENTREGA)</td><td class="donde">app móvil / portal</td><td class="cierra">I-07 (ancla)</td><td class="file"><span class="y">Sí</span></td><td class="notas"></td></tr>
+
+      <tr class="fase-sep"><td class="chk"><span class="box"></span></td><td class="num">9</td><td class="paso">Cliente — aprobar muestras / planos / sign-off</td><td class="donde">/portal/&lt;token&gt;</td><td class="cierra">E-05 / E-07 / I-07</td><td class="file"><span class="n">No</span></td><td class="notas"></td></tr>
+    </tbody>
+  </table>
+
+  <div class="phasekey">
+    <b>Las 7 fases del recorrido:</b> ① Contrato → ② Ingeniería → ③ Compras → ④ Producción → ⑤ QC → ⑥ Despacho → ⑦ Instalación
+    &nbsp;·&nbsp; <span style="color:var(--faint)">* foto opcional, no bloquea</span>
+  </div>
+
+  <div class="bitacora">
+    <h2>Bitácora — observaciones y ajustes</h2>
+    <div class="lines">
+      <div></div><div></div><div></div><div></div><div></div><div></div>
+    </div>
+  </div>
+
+  <div class="foot">
+    Piloto e2e del schedule Life of a Deal — entorno local (rama feat/schedule), no toca producción.
+    Los archivos de prueba van al bucket staging; borrarlos al terminar. En cada paso, capturar para la bitácora de imágenes.
+  </div>
+</div>
