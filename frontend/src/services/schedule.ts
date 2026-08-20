@@ -103,6 +103,14 @@ export const scheduleService = {
       .post<ApiResponse<{ ok: boolean }>>(`/schedule/proyecto/${proyectoId}/hito/${codigo}/registrar`, { fecha, nota, importe })
       .then((r) => r.data),
 
+  // Lista los submittals (planos enviados) del proyecto, con URL firmada — para
+  // que el equipo interno pueda ver lo que se le mandó al cliente.
+  getSubmittals: (proyectoId: number) =>
+    api
+      .get<ApiResponse<{ id: number; version_label: string; original_name: string | null; estado: string; url: string | null }[]>>(
+        `/schedule/proyecto/${proyectoId}/submittals`)
+      .then((r) => r.data),
+
   uploadSubmittal: (proyectoId: number, file: File) => {
     const fd = new FormData()
     fd.append('planos', file)

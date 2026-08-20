@@ -43,6 +43,8 @@ const SEM_DOT: Record<Semaforo, string> = { verde: 'bg-emerald-600', amarillo: '
 
 // Hitos que aprueba el cliente por el portal (no se registran a mano acá).
 const CLIENT_APROBABLES = ['E-05', 'E-07', 'I-07']
+// Hitos de planos: muestran "Ver planos enviados" (lo que Ingeniería le mandó al cliente).
+const SUBMITTAL_HITOS = new Set(['E-06', 'E-07', 'E-08'])
 const ATRIB_LABEL: Record<string, string> = {
   estimating: 'Estimación', engineering: 'Ingeniería', procurement: 'Compras', production: 'Producción',
   logistics: 'Logística', field: 'Field', finance: 'Finanzas', pm: 'PM', cliente: 'Cliente', gc: 'GC', vendor: 'Vendor',
@@ -113,10 +115,18 @@ export default function ScheduleTab({ proyectoId }: { proyectoId: number }) {
   const [pago, setPago] = useState<{ codigo: string; nombre: string } | null>(null)
   const [pagoImporte, setPagoImporte] = useState('')
   const [pagoFecha, setPagoFecha] = useState('')
+  const [planosUrl, setPlanosUrl] = useState<string | null>(null)
 
   async function load() {
     setLoading(true)
-    try { setData((await scheduleService.getPlan(proyectoId)).data) }
+    try {
+      setData((await scheduleService.getPlan(proyectoId)).data)
+      // Último submittal (planos enviados), para poder verlo desde el schedule.
+      try {
+        const subs = (await scheduleService.getSubmittals(proyectoId)).data
+        setPlanosUrl(subs.find((s) => s.url)?.url ?? null)
+      } catch { /* sin planos todavía */ }
+    }
     catch { /* toast */ } finally { setLoading(false) }
   }
   useEffect(() => { load() }, [proyectoId])
@@ -536,6 +546,12 @@ export default function ScheduleTab({ proyectoId }: { proyectoId: number }) {
                       {h.es_gate && <span className="inline-flex items-center gap-0.5 ml-1.5 align-middle text-[10px] text-stone-400 bg-stone-100 rounded px-1"><Lock size={9} /> gate</span>}
                       {h.es_ancla && <span className="inline-flex items-center gap-0.5 ml-1.5 align-middle text-[10px] font-semibold text-forest-600 bg-forest-50 rounded px-1"><Flag size={9} /> entrega</span>}
                     </span>
+                    {SUBMITTAL_HITOS.has(h.codigo) && planosUrl && (
+                      <a href={planosUrl} target="_blank" rel="noopener noreferrer"
+                         className="shrink-0 inline-flex items-center gap-1 text-[11px] font-medium text-forest-700 hover:text-forest-900">
+                        <FileText size={12} /> Ver planos
+                      </a>
+                    )}
                     {cumplido ? (
                       <span className="inline-flex items-center gap-1 text-[11px] font-medium text-emerald-700 bg-emerald-50 rounded-full px-2 py-0.5 shrink-0"><Check size={11} /> {fmt(h.fecha_real)}</span>
                     ) : (

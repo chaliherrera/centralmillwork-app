@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
 import { Link } from 'react-router-dom'
-import { Upload, ClipboardCheck, ArrowRight, Loader2, AlertTriangle } from 'lucide-react'
+import { Upload, ClipboardCheck, ArrowRight, Loader2, AlertTriangle, FileText } from 'lucide-react'
 import { scheduleService, type TrabajoProyecto, type Semaforo } from '@/services/schedule'
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -92,6 +92,16 @@ function HitoRow({ proyectoId, h, onDone }: {
   const [importe, setImporte] = useState('')
   const fileRef = useRef<HTMLInputElement | null>(null)
   const accion = accionDe(h.codigo)
+  const [planosUrl, setPlanosUrl] = useState<string | null>(null)
+
+  // Para los pasos de planos (E-06/E-08): traer el último submittal para poder
+  // ver lo ya enviado antes de subir una revisión.
+  useEffect(() => {
+    if (accion.tipo !== 'submittal') return
+    scheduleService.getSubmittals(proyectoId)
+      .then((r) => setPlanosUrl(r.data.find((s) => s.url)?.url ?? null))
+      .catch(() => {})
+  }, [accion.tipo, proyectoId])
 
   const registrar = async () => {
     setBusy(true); setErr(null)
@@ -136,6 +146,12 @@ function HitoRow({ proyectoId, h, onDone }: {
         <span className={`text-[10px] font-medium rounded-full px-1.5 py-0.5 shrink-0 tabular-nums ${h.holgura_dias < 0 ? 'bg-rose-50 text-rose-700' : 'bg-emerald-50 text-emerald-700'}`}>
           {h.holgura_dias < 0 ? '' : '+'}{h.holgura_dias}d
         </span>
+      )}
+      {planosUrl && (
+        <a href={planosUrl} target="_blank" rel="noopener noreferrer"
+          className="shrink-0 inline-flex items-center gap-1 text-[11px] font-medium text-forest-700 hover:text-forest-900">
+          <FileText size={12} /> Ver planos
+        </a>
       )}
       {accion.tipo === 'pago' ? (
         pagoOpen ? (
