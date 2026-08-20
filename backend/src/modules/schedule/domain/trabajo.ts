@@ -54,7 +54,6 @@ export async function getTrabajoPorArea(runner: QueryRunner, area: string): Prom
        JOIN schedule_hitos sh ON sh.plan_id = sp.id
        JOIN schedule_plantilla_hitos ph ON ph.plantilla_id = sp.plantilla_id AND ph.codigo = sh.codigo
       WHERE sp.scope = 'proyecto'
-        AND ph.parent_codigo IS NULL
         AND ph.fuente_dato = 'manual_futuro'
         AND sh.estado IN ('pendiente','en_riesgo','vencido')
       ORDER BY sh.holgura_dias NULLS LAST, sp.proyecto_id, ph.orden`)
