@@ -76,6 +76,16 @@ una carpeta local (`backend/uploads/`) — igual que ya hace el resto de la app.
 - **2026-08-20** — ✅ Storage local conectado al bucket staging (`oc-imagenes-staging`) y **probado con upload real**.
   Todos los pasos con archivo funcionan. Entorno listo: backend :4000, frontend :3000, cron ENABLED. **Borrar archivos de prueba del bucket al terminar.**
 - **Pendiente (post-piloto)**: Chali consigue la hoja de Smartsheet de Ingeniería (carga de trabajo/plazos) → se integra empezando por leer el Excel exportado.
+
+### Hallazgos y fixes durante el piloto (2026-08-20)
+- ✅ **Fix**: "Mi trabajo" escondía los sub-hitos (E-01a..e) por un filtro `parent_codigo IS NULL`. Sacado → los sub-pasos accionables ahora salen en el escritorio del rol. (commit)
+- ✅ **Fix**: el freno hacia adelante bloqueaba por condicionales que no aplican (E-06 no se podía subir porque E-03 cond/no_aplica lo frenaba). Ahora un `cond` en `no_aplica` cuenta como satisfecho. (commit)
+- ✅ **Feature**: "Ver planos enviados" en el schedule del proyecto y en Mi trabajo (E-06/E-07/E-08) — antes solo el portal mostraba el documento. (commit, verificado en navegador)
+- ✅ **Validado**: portal del cliente e2e — subir planos (E-06) → cliente ve el PDF y aprueba (E-07 con comentario "TODO SE VE BIEN"). Storage staging funcionando en el flujo real.
+- ✅ **Validado**: enrutamiento por rol — C-04 cae en Finanzas, E-01b en PM (cada hito a su escritorio).
+
+### 🟡 PENDIENTE de construir (decidido: opción B — después del recorrido)
+- **Confirmación de pago por el cliente (dos fechas):** el cliente marca "pago enviado" en el portal (fecha 1 + tarea a Finanzas) y Finanzas registra el recibo (fecha 2 + monto, esto completa C-04/X-03). Guardar y mostrar ambas fechas. Objetivo de Chali: "no dejar nada a la casualidad". Aplica a C-04 (depósito) y X-03 (pago final).
 - *(acá vamos anotando cada paso: qué salió, qué ajustamos, qué aprendimos)*
 
 ---
