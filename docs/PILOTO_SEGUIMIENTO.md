@@ -8,11 +8,18 @@
 
 ---
 
-## ⚠️ Tema clave: subir archivos en local
+## ✅ Tema archivos en local — RESUELTO (2026-08-20)
+
+**Aplicada la Opción 1**: el `.env` local ahora apunta al bucket de staging (`oc-imagenes-staging`).
+Probado con un upload real (subir+borrar un archivo de prueba) → **funciona**. Todos los pasos con
+archivo (contrato, planos, CNC, BOL, foto de firma) andan igual que en producción. Los archivos de
+prueba quedan en el bucket staging → **borrarlos al terminar el piloto**.
+
+<details><summary>Contexto original del problema (resuelto)</summary>
 
 Varias etapas del proceso piden **subir un archivo** (contrato, planos, CNC, BOL, foto de firma…).
-En local **no hay almacenamiento de archivos configurado** (Supabase = solo en la nube), así que esos
-pasos, tal cual están hoy, devuelven un error *"Storage no está configurado"*.
+En local **no había almacenamiento de archivos configurado** (Supabase = solo en la nube), así que esos
+pasos devolvían un error *"Storage no está configurado"*.
 
 Tenemos **dos formas de resolverlo**, y las vamos a ir aplicando según haga falta:
 
@@ -35,7 +42,7 @@ una carpeta local (`backend/uploads/`) — igual que ya hace el resto de la app.
 - Los pasos de **registro** (validar, liberar, release, sign-off sin foto) no piden archivo y andan directo.
 - **Producción y QC** avanzan por el estado de la OP (Camino A), sin fotos obligatorias en local.
 
-**Decisión a tomar antes de empezar los pasos con archivo:** ¿vamos con Opción 1 (credenciales staging) u Opción 2 (disco local)?
+</details>
 
 ---
 
@@ -65,8 +72,10 @@ una carpeta local (`backend/uploads/`) — igual que ya hace el resto de la app.
 
 ## 📓 Bitácora de decisiones y notas (se va llenando)
 
-- **2026-08-20** — Documento creado. Definido el tema de archivos en local (Opción 1 vs 2). Pendiente que Chali
-  consiga la hoja de Smartsheet de Ingeniería (carga de trabajo/plazos) — se integrará después del piloto (empezar leyendo el Excel).
+- **2026-08-20** — Documento creado. Definido el tema de archivos en local (Opción 1 vs 2).
+- **2026-08-20** — ✅ Storage local conectado al bucket staging (`oc-imagenes-staging`) y **probado con upload real**.
+  Todos los pasos con archivo funcionan. Entorno listo: backend :4000, frontend :3000, cron ENABLED. **Borrar archivos de prueba del bucket al terminar.**
+- **Pendiente (post-piloto)**: Chali consigue la hoja de Smartsheet de Ingeniería (carga de trabajo/plazos) → se integra empezando por leer el Excel exportado.
 - *(acá vamos anotando cada paso: qué salió, qué ajustamos, qué aprendimos)*
 
 ---
