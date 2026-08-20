@@ -33,6 +33,8 @@ export async function predecesoresPendientes(
        JOIN schedule_plantilla_hitos ph
          ON ph.plantilla_id = sp.plantilla_id AND ph.codigo = dep.depende_de_codigo
       WHERE sp.proyecto_id = $1 AND sp.scope = 'proyecto' AND sh.fecha_real IS NULL
+        -- Un condicional que NO aplica (no_aplica) cuenta como satisfecho: no frena.
+        AND NOT (ph.tipo = 'cond' AND sh.estado = 'no_aplica')
       ORDER BY ph.orden`, [proyectoId, codigo])
   return rows
 }
