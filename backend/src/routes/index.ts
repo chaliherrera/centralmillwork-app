@@ -10,6 +10,7 @@ import {
 } from '../controllers/dashboardController'
 import { mobileSearch, mobileProyectos, mobileProyectoVendors } from '../controllers/mobileController'
 import { getMtosActivos } from '../controllers/mtosController'
+import { getFiltrosPrecios, buscarPrecios, getEvolucionPrecio } from '../controllers/preciosController'
 import { getPlanosItem, uploadPlanoItem, uploadPlano } from '../controllers/planosController'
 import {
   getProyectos, getProyecto, createProyecto, updateProyecto, deleteProyecto,
@@ -102,6 +103,11 @@ router.get('/mobile/proyectos/:id/vendors',  mobileProyectoVendors)
 // Panel operativo MTO-céntrico (2026-07-14) — vista cruzada de todos los
 // MTOs activos para PROCUREMENT. READ-ONLY, cero cambios de schema.
 router.get('/mtos/activos',                  getMtosActivos)
+
+// ─── Precios: buscador histórico ────────────────────────────────────────────
+router.get('/precios/filtros',               getFiltrosPrecios)
+router.get('/precios/buscar',                buscarPrecios)
+router.get('/precios/evolucion',             getEvolucionPrecio)
 
 // ─── Proyectos ────────────────────────────────────────────────────────────────
 router.get('/proyectos',                      getProyectos)
