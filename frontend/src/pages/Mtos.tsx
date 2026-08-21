@@ -9,9 +9,12 @@
 import { useQuery } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
 import { useMemo, useState } from 'react'
-import { ExternalLink, CheckCircle2, Clock, DollarSign, ShoppingCart, Warehouse, Search, X } from 'lucide-react'
+import { ExternalLink, CheckCircle2, Clock, DollarSign, ShoppingCart, Warehouse, Search, X, LayoutList, LineChart as LineChartIcon } from 'lucide-react'
 import clsx from 'clsx'
 import { mtosService, type MtoActivo, type EstadoCotizMto } from '@/services/mtos'
+import PreciosBuscador from '@/components/modules/precios/PreciosBuscador'
+
+type TabKey = 'activos' | 'precios'
 
 // Categoría operativa de un MTO — usada para chips de filtro y alertas.
 // - sin_cotizar: 100% en PENDIENTE (aún no se ha cotizado nada)
@@ -68,6 +71,42 @@ const fmtDate = (d: string | null | undefined) => {
 }
 
 export default function Mtos() {
+  const [tab, setTab] = useState<TabKey>('activos')
+
+  return (
+    <div className="space-y-4">
+      {/* Header con tabs */}
+      <div>
+        <h1 className="text-2xl font-bold text-forest-900">Control MTO</h1>
+        <div className="flex items-center gap-1 mt-3 border-b border-gray-200">
+          <TabButton active={tab === 'activos'} onClick={() => setTab('activos')} icon={LayoutList} label="Activos" />
+          <TabButton active={tab === 'precios'} onClick={() => setTab('precios')} icon={LineChartIcon} label="Precios" />
+        </div>
+      </div>
+
+      {tab === 'activos' ? <MtosActivos /> : <PreciosBuscador />}
+    </div>
+  )
+}
+
+function TabButton({ active, onClick, icon: Icon, label }: { active: boolean; onClick: () => void; icon: typeof LayoutList; label: string }) {
+  return (
+    <button
+      onClick={onClick}
+      className={clsx(
+        'inline-flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors',
+        active
+          ? 'border-forest-700 text-forest-800'
+          : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300',
+      )}
+    >
+      <Icon size={15} />
+      {label}
+    </button>
+  )
+}
+
+function MtosActivos() {
   const { data: mtos = [], isLoading } = useQuery({
     queryKey: ['mtos', 'activos'],
     queryFn: mtosService.getActivos,
@@ -109,38 +148,35 @@ export default function Mtos() {
 
   return (
     <div className="space-y-4">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-forest-900">Control de MTOs</h1>
-          <p className="text-sm text-gray-500 mt-1">
-            {isLoading ? (
-              'Cargando...'
-            ) : (
-              <span className="flex items-center gap-2 flex-wrap">
-                <span className="font-medium">{totalGlobal} MTOs activos</span>
-                {conteos.sin_cotizar > 0 && (
-                  <>
-                    <span className="text-gray-300">·</span>
-                    <span className="text-amber-700">⚠ {conteos.sin_cotizar} sin cotizar</span>
-                  </>
-                )}
-                {conteos.en_proceso > 0 && (
-                  <>
-                    <span className="text-gray-300">·</span>
-                    <span className="text-blue-700">🔄 {conteos.en_proceso} en proceso</span>
-                  </>
-                )}
-                {conteos.casi_terminado > 0 && (
-                  <>
-                    <span className="text-gray-300">·</span>
-                    <span className="text-emerald-700">🏁 {conteos.casi_terminado} casi terminado{conteos.casi_terminado > 1 ? 's' : ''}</span>
-                  </>
-                )}
-              </span>
-            )}
-          </p>
-        </div>
+      {/* Sub-header: resumen textual + hint auto-refresh */}
+      <div className="flex items-center justify-between flex-wrap gap-2">
+        <p className="text-sm text-gray-500">
+          {isLoading ? (
+            'Cargando...'
+          ) : (
+            <span className="flex items-center gap-2 flex-wrap">
+              <span className="font-medium">{totalGlobal} MTOs activos</span>
+              {conteos.sin_cotizar > 0 && (
+                <>
+                  <span className="text-gray-300">·</span>
+                  <span className="text-amber-700">⚠ {conteos.sin_cotizar} sin cotizar</span>
+                </>
+              )}
+              {conteos.en_proceso > 0 && (
+                <>
+                  <span className="text-gray-300">·</span>
+                  <span className="text-blue-700">🔄 {conteos.en_proceso} en proceso</span>
+                </>
+              )}
+              {conteos.casi_terminado > 0 && (
+                <>
+                  <span className="text-gray-300">·</span>
+                  <span className="text-emerald-700">🏁 {conteos.casi_terminado} casi terminado{conteos.casi_terminado > 1 ? 's' : ''}</span>
+                </>
+              )}
+            </span>
+          )}
+        </p>
         <span className="text-xs text-gray-400 italic hidden sm:inline">Actualiza automáticamente cada minuto</span>
       </div>
 
