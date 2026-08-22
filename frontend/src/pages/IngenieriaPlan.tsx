@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Users, Layers, ClipboardList, Plus, X, Loader2, Trash2, Gauge, Check, Clock, CalendarRange } from 'lucide-react'
+import { Users, Layers, ClipboardList, Plus, X, Loader2, Trash2, Gauge, Check, FolderKanban } from 'lucide-react'
 import { ingenieriaService, type IngProyecto, type IngTarea, type TareaInput } from '@/services/ingenieria'
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Plan de Ingeniería — se elige UN ingeniero y se ve su carga (agenda por
-// proyecto). Al hacer clic en una barra se ven las tareas de ese proyecto
-// para ese ingeniero: completadas y pendientes.
+// Plan de Ingeniería — réplica de la estructura del Master.Sched (Smartsheet):
+// el PROYECTO agrupa las tareas (por fase), y cada tarea tiene un responsable.
+// Vista secundaria: carga por ingeniero (agenda tipo Gantt).
 // ─────────────────────────────────────────────────────────────────────────────
 
 const MES = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic']
@@ -14,106 +14,40 @@ const d = (iso: string) => new Date(iso + 'T00:00:00')
 const mondayOf = (dt: Date) => { const x = new Date(dt); const wd = (x.getDay() + 6) % 7; x.setDate(x.getDate() - wd); x.setHours(0, 0, 0, 0); return x }
 const fmtD = (iso: string | null) => iso ? `${d(iso).getDate()} ${MES[d(iso).getMonth()]}` : '—'
 const shortProj = (p: string | null) => (p || '—').replace(/^\s*(\d{2}-\d{3})\s*/, '$1 · ')
-
 const PAL = ['#2563eb', '#0d9488', '#ea580c', '#7c3aed', '#059669', '#db2777', '#ca8a04', '#4f46e5', '#0891b2', '#dc2626', '#65a30d', '#9333ea']
 
-// estilo de barra según estado
-function barStyle(estado: string, color: string): React.CSSProperties {
-  if (estado === 'hecha') return { background: '#d1fae5', borderLeft: '3px solid #059669' }
-  if (estado === 'en_curso') return { background: '#fef3c7', borderLeft: '3px solid #d97706' }
-  return { background: color + '1f', borderLeft: `3px solid ${color}` }
+const ESTADO_BADGE: Record<string, string> = {
+  pendiente: 'bg-sky-50 text-sky-700', en_curso: 'bg-amber-50 text-amber-700', hecha: 'bg-emerald-50 text-emerald-700', na: 'bg-stone-100 text-stone-400',
 }
+const ESTADO_LBL: Record<string, string> = { pendiente: 'Pendiente', en_curso: 'En curso', hecha: 'Completada', na: 'N/A' }
 
 export default function IngenieriaPlan() {
   const [resumen, setResumen] = useState<{ tareas: number; proyectos: number; ingenieros: number } | null>(null)
   const [proyectos, setProyectos] = useState<IngProyecto[]>([])
   const [all, setAll] = useState<IngTarea[]>([])
+  const [mode, setMode] = useState<'proyecto' | 'carga'>('proyecto')
+  const [selProj, setSelProj] = useState<string>('')
   const [selEng, setSelEng] = useState<string>('')
-  const [selProj, setSelProj] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [edit, setEdit] = useState<IngTarea | 'new' | null>(null)
 
   async function loadAll() {
     const [r, t] = await Promise.all([ingenieriaService.getResumen(), ingenieriaService.getTareas()])
     setResumen(r.data.resumen); setProyectos(r.data.proyectos); setAll(t.data)
+    if (!selProj && r.data.proyectos[0]) setSelProj(r.data.proyectos[0].proyecto_ext)
   }
   useEffect(() => { loadAll().finally(() => setLoading(false)) }, [])
-
-  const projColor = useMemo(() => {
-    const m = new Map<string, string>(); proyectos.forEach((p, i) => m.set(p.proyecto_ext, PAL[i % PAL.length])); return m
-  }, [proyectos])
-
-  // lista de ingenieros con su carga (pico de concurrencia)
-  const ingenieros = useMemo(() => {
-    const byEng = new Map<string, IngTarea[]>()
-    for (const t of all) { if (!t.asignado_nombre || !t.fecha_inicio || !t.fecha_fin || t.estado === 'na') continue; const k = t.asignado_nombre; if (!byEng.has(k)) byEng.set(k, []); byEng.get(k)!.push(t) }
-    const out = [...byEng.entries()].map(([nombre, tareas]) => {
-      let min = d(tareas[0].fecha_inicio!), max = d(tareas[0].fecha_fin!)
-      for (const t of tareas) { const a = d(t.fecha_inicio!), b = d(t.fecha_fin!); if (a < min) min = a; if (b > max) max = b }
-      let pico = 0
-      const w0 = mondayOf(min), nW = Math.ceil((max.getTime() - w0.getTime()) / (7 * DAY)) + 1
-      for (let w = 0; w < nW; w++) { const wk = w0.getTime() + w * 7 * DAY; const c = tareas.filter((t) => d(t.fecha_inicio!).getTime() <= wk + 6 * DAY && d(t.fecha_fin!).getTime() >= wk).length; if (c > pico) pico = c }
-      return { nombre, nProj: new Set(tareas.map((t) => t.proyecto_ext)).size, nTareas: tareas.length, pico, min, max }
-    }).sort((a, b) => b.pico - a.pico)
-    return out
-  }, [all])
-
-  useEffect(() => { if (!selEng && ingenieros[0]) setSelEng(ingenieros[0].nombre) }, [ingenieros, selEng])
-
-  // agenda del ingeniero seleccionado (lanes por proyecto)
-  const eng = useMemo(() => {
-    const meta = ingenieros.find((e) => e.nombre === selEng)
-    if (!meta) return null
-    const tareas = all.filter((t) => t.asignado_nombre === selEng && t.fecha_inicio && t.fecha_fin && t.estado !== 'na')
-    const week0 = mondayOf(meta.min)
-    const nWeeks = Math.max(1, Math.ceil((meta.max.getTime() - week0.getTime()) / (7 * DAY)) + 1)
-    const pct = (iso: string) => ((d(iso).getTime() - week0.getTime()) / (nWeeks * 7 * DAY)) * 100
-    const wPct = (a: string, b: string) => Math.max(((d(b).getTime() - d(a).getTime()) / (nWeeks * 7 * DAY)) * 100 + 100 / nWeeks / 2, 100 / nWeeks * 0.6)
-    const wkIdx = (iso: string) => Math.floor((d(iso).getTime() - week0.getTime()) / (7 * DAY))
-
-    const months: { label: string; startPct: number }[] = []
-    for (let i = 0; i < nWeeks; i++) { const wd = new Date(week0.getTime() + i * 7 * DAY); const label = `${MES[wd.getMonth()]} ${String(wd.getFullYear()).slice(2)}`; const last = months[months.length - 1]; if (!last || last.label !== label) months.push({ label, startPct: (i / nWeeks) * 100 }) }
-
-    const byProj = new Map<string, IngTarea[]>()
-    for (const t of tareas) { const k = t.proyecto_ext || '—'; if (!byProj.has(k)) byProj.set(k, []); byProj.get(k)!.push(t) }
-    const lanes = [...byProj.entries()].map(([proyecto, ts]) => {
-      const sorted = ts.sort((a, b) => d(a.fecha_inicio!).getTime() - d(b.fecha_inicio!).getTime())
-      // empaquetar en sub-filas: tareas que se solapan en el tiempo van en filas distintas
-      const rows: { endIdx: number; items: IngTarea[] }[] = []
-      for (const t of sorted) {
-        const s = wkIdx(t.fecha_inicio!), e = Math.max(s, wkIdx(t.fecha_fin!))
-        let row = rows.find((r) => r.endIdx < s)
-        if (!row) { row = { endIdx: -1, items: [] }; rows.push(row) }
-        row.items.push(t); row.endIdx = e
-      }
-      return { proyecto, tareas: sorted, rows }
-    }).sort((a, b) => d(a.tareas[0].fecha_inicio!).getTime() - d(b.tareas[0].fecha_inicio!).getTime())
-
-    const today = new Date(); today.setHours(0, 0, 0, 0)
-    const hoyPct = today >= week0 && today <= meta.max ? ((today.getTime() - week0.getTime()) / (nWeeks * 7 * DAY)) * 100 : null
-    return { meta, lanes, months, pct, wPct, hoyPct }
-  }, [all, selEng, ingenieros])
-
-  const detalle = useMemo(() => {
-    if (!selProj || !selEng) return null
-    const ts = all.filter((t) => t.asignado_nombre === selEng && t.proyecto_ext === selProj)
-    return {
-      proyecto: selProj,
-      completadas: ts.filter((t) => t.estado === 'hecha'),
-      pendientes: ts.filter((t) => t.estado !== 'hecha' && t.estado !== 'na'),
-    }
-  }, [selProj, selEng, all])
 
   if (loading) return <div className="py-20 text-center text-stone-400">Cargando plan de Ingeniería…</div>
 
   return (
     <div className="max-w-[1180px] mx-auto py-6 px-2 space-y-5">
       {/* Header */}
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-3 flex-wrap">
         <div className="w-11 h-11 rounded-2xl bg-forest-50 flex items-center justify-center"><Gauge className="text-forest-600" size={22} /></div>
         <div>
           <h1 className="text-xl font-bold text-stone-900">Plan de Ingeniería</h1>
-          <p className="text-sm text-stone-500">Elegí un ingeniero para ver su carga de trabajo — importado del Master.Sched.</p>
+          <p className="text-sm text-stone-500">La estructura del Master.Sched: cada proyecto agrupa sus tareas, con su responsable.</p>
         </div>
         <div className="ml-auto flex gap-5 text-center">
           <Stat icon={<Layers size={15} />} n={resumen?.proyectos ?? 0} l="proyectos" />
@@ -122,135 +56,203 @@ export default function IngenieriaPlan() {
         </div>
       </div>
 
-      {/* Selector de ingenieros */}
+      {/* Toggle de vista */}
+      <div className="inline-flex rounded-xl border border-stone-200 bg-white p-1 text-sm">
+        <button onClick={() => setMode('proyecto')} className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 font-semibold ${mode === 'proyecto' ? 'bg-forest-600 text-white' : 'text-stone-500 hover:text-stone-800'}`}><FolderKanban size={15} /> Por proyecto</button>
+        <button onClick={() => setMode('carga')} className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 font-semibold ${mode === 'carga' ? 'bg-forest-600 text-white' : 'text-stone-500 hover:text-stone-800'}`}><Gauge size={15} /> Carga por ingeniero</button>
+      </div>
+
+      {mode === 'proyecto'
+        ? <VistaProyecto proyectos={proyectos} all={all} sel={selProj} setSel={setSelProj} onEdit={setEdit} />
+        : <VistaCarga all={all} proyectos={proyectos} selEng={selEng} setSelEng={setSelEng} onEdit={setEdit} />}
+
+      {edit && <EditModal tarea={edit === 'new' ? null : edit} proyecto={selProj} onClose={() => setEdit(null)} onSaved={async () => { setEdit(null); await loadAll() }} />}
+    </div>
+  )
+}
+
+// ── Vista PRINCIPAL: por proyecto (réplica del Excel) ──
+function VistaProyecto({ proyectos, all, sel, setSel, onEdit }: { proyectos: IngProyecto[]; all: IngTarea[]; sel: string; setSel: (s: string) => void; onEdit: (t: IngTarea | 'new') => void }) {
+  const tareas = useMemo(() => all.filter((t) => t.proyecto_ext === sel), [all, sel])
+  const p = proyectos.find((x) => x.proyecto_ext === sel)
+
+  // agrupar por fase (como el Excel)
+  const fases = useMemo(() => {
+    const m = new Map<string, IngTarea[]>()
+    for (const t of tareas) { const k = t.fase || '— Sin fase —'; if (!m.has(k)) m.set(k, []); m.get(k)!.push(t) }
+    for (const arr of m.values()) arr.sort((a, b) => (a.fecha_inicio || '').localeCompare(b.fecha_inicio || ''))
+    return [...m.entries()]
+  }, [tareas])
+
+  const ingenieros = useMemo(() => [...new Set(tareas.map((t) => t.asignado_nombre).filter(Boolean))], [tareas])
+
+  return (
+    <div className="space-y-4">
+      {/* selector de proyecto */}
+      <div className="flex items-center gap-3 flex-wrap">
+        <select value={sel} onChange={(e) => setSel(e.target.value)}
+          className="rounded-lg border border-stone-300 px-3 py-2 text-sm font-semibold text-stone-800 bg-white focus:outline-none focus:ring-2 focus:ring-forest-300 min-w-[280px]">
+          {proyectos.map((pr) => <option key={pr.proyecto_ext} value={pr.proyecto_ext}>{pr.proyecto_ext} · {pr.n_tareas} tareas</option>)}
+        </select>
+        {p && <span className="text-sm text-stone-400">{p.fecha_inicio} → {p.fecha_fin} · {p.status_ext || '—'}</span>}
+        <span className="text-xs text-stone-400 inline-flex items-center gap-1"><Users size={13} /> {ingenieros.length ? ingenieros.join(', ') : 'sin responsables'}</span>
+        <button onClick={() => onEdit('new')} className="ml-auto inline-flex items-center gap-1.5 rounded-lg bg-forest-600 hover:bg-forest-700 text-white text-sm font-semibold px-3 py-1.5"><Plus size={15} /> Nueva tarea</button>
+      </div>
+
+      {/* tareas agrupadas por fase */}
+      <div className="rounded-2xl border border-stone-200 bg-white overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm min-w-[820px]">
+            <thead>
+              <tr className="text-[10.5px] uppercase tracking-wide text-stone-400 border-b border-stone-100 bg-stone-50/60">
+                <th className="text-left font-semibold px-4 py-2">Tarea</th>
+                <th className="text-left font-semibold px-3 py-2">Responsable</th>
+                <th className="text-right font-semibold px-2 py-2">Asig.</th>
+                <th className="text-right font-semibold px-2 py-2">Días</th>
+                <th className="text-left font-semibold px-3 py-2">Inicio → Fin</th>
+                <th className="text-left font-semibold px-3 py-2">Estado</th>
+                <th className="text-left font-semibold px-2 py-2">Hito</th>
+              </tr>
+            </thead>
+            <tbody>
+              {fases.map(([fase, ts]) => (
+                <FaseGroup key={fase} fase={fase} tareas={ts} onEdit={onEdit} />
+              ))}
+              {tareas.length === 0 && <tr><td colSpan={7} className="px-4 py-10 text-center text-stone-400">Sin tareas en este proyecto.</td></tr>}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function FaseGroup({ fase, tareas, onEdit }: { fase: string; tareas: IngTarea[]; onEdit: (t: IngTarea) => void }) {
+  return (
+    <>
+      <tr className="bg-forest-50/40"><td colSpan={7} className="px-4 py-1.5 text-[11px] font-bold text-forest-700 uppercase tracking-wide">{fase} <span className="text-forest-400 font-normal normal-case">· {tareas.length} tareas</span></td></tr>
+      {tareas.map((t) => (
+        <tr key={t.id} onClick={() => onEdit(t)} className="border-b border-stone-50 hover:bg-forest-50/30 cursor-pointer">
+          <td className="px-4 py-2 text-stone-800">{t.nombre}</td>
+          <td className="px-3 py-2 text-stone-600">{t.asignado_nombre || <span className="text-stone-300">—</span>}</td>
+          <td className="px-2 py-2 text-right tabular-nums"><span className={t.allocation_pct > 1 ? 'text-rose-600 font-semibold' : 'text-stone-600'}>{Math.round(t.allocation_pct * 100)}%</span></td>
+          <td className="px-2 py-2 text-right tabular-nums text-stone-600">{t.dur_dias}</td>
+          <td className="px-3 py-2 text-stone-500 text-[12.5px] tabular-nums whitespace-nowrap">{fmtD(t.fecha_inicio)} → {fmtD(t.fecha_fin)}</td>
+          <td className="px-3 py-2"><span className={`text-[11px] font-medium rounded-full px-2 py-0.5 ${ESTADO_BADGE[t.estado] || ESTADO_BADGE.pendiente}`}>{ESTADO_LBL[t.estado] || t.estado}</span></td>
+          <td className="px-2 py-2">{t.hito_codigo ? <span className="text-[11px] font-mono bg-forest-50 text-forest-700 rounded px-1.5 py-0.5">{t.hito_codigo}</span> : <span className="text-stone-300 text-xs">—</span>}</td>
+        </tr>
+      ))}
+    </>
+  )
+}
+
+// ── Vista SECUNDARIA: carga por ingeniero (agenda Gantt) ──
+function VistaCarga({ all, proyectos, selEng, setSelEng, onEdit }: { all: IngTarea[]; proyectos: IngProyecto[]; selEng: string; setSelEng: (s: string) => void; onEdit: (t: IngTarea) => void }) {
+  const projColor = useMemo(() => { const m = new Map<string, string>(); proyectos.forEach((p, i) => m.set(p.proyecto_ext, PAL[i % PAL.length])); return m }, [proyectos])
+
+  const ingenieros = useMemo(() => {
+    const byEng = new Map<string, IngTarea[]>()
+    for (const t of all) { if (!t.asignado_nombre || !t.fecha_inicio || !t.fecha_fin || t.estado === 'na') continue; const k = t.asignado_nombre; if (!byEng.has(k)) byEng.set(k, []); byEng.get(k)!.push(t) }
+    return [...byEng.entries()].map(([nombre, tareas]) => {
+      let min = d(tareas[0].fecha_inicio!), max = d(tareas[0].fecha_fin!)
+      for (const t of tareas) { const a = d(t.fecha_inicio!), b = d(t.fecha_fin!); if (a < min) min = a; if (b > max) max = b }
+      let pico = 0; const w0 = mondayOf(min), nW = Math.ceil((max.getTime() - w0.getTime()) / (7 * DAY)) + 1
+      for (let w = 0; w < nW; w++) { const wk = w0.getTime() + w * 7 * DAY; const c = tareas.filter((t) => d(t.fecha_inicio!).getTime() <= wk + 6 * DAY && d(t.fecha_fin!).getTime() >= wk).length; if (c > pico) pico = c }
+      return { nombre, nProj: new Set(tareas.map((t) => t.proyecto_ext)).size, nTareas: tareas.length, pico, min, max }
+    }).sort((a, b) => b.pico - a.pico)
+  }, [all])
+
+  useEffect(() => { if (!selEng && ingenieros[0]) setSelEng(ingenieros[0].nombre) }, [ingenieros, selEng, setSelEng])
+
+  const eng = useMemo(() => {
+    const meta = ingenieros.find((e) => e.nombre === selEng); if (!meta) return null
+    const tareas = all.filter((t) => t.asignado_nombre === selEng && t.fecha_inicio && t.fecha_fin && t.estado !== 'na')
+    const week0 = mondayOf(meta.min)
+    const nWeeks = Math.max(1, Math.ceil((meta.max.getTime() - week0.getTime()) / (7 * DAY)) + 1)
+    const pct = (iso: string) => ((d(iso).getTime() - week0.getTime()) / (nWeeks * 7 * DAY)) * 100
+    const wPct = (a: string, b: string) => Math.max(((d(b).getTime() - d(a).getTime()) / (nWeeks * 7 * DAY)) * 100 + 100 / nWeeks / 2, 100 / nWeeks * 0.6)
+    const wkIdx = (iso: string) => Math.floor((d(iso).getTime() - week0.getTime()) / (7 * DAY))
+    const months: { label: string; startPct: number }[] = []
+    for (let i = 0; i < nWeeks; i++) { const wd = new Date(week0.getTime() + i * 7 * DAY); const label = `${MES[wd.getMonth()]} ${String(wd.getFullYear()).slice(2)}`; const last = months[months.length - 1]; if (!last || last.label !== label) months.push({ label, startPct: (i / nWeeks) * 100 }) }
+    const byProj = new Map<string, IngTarea[]>()
+    for (const t of tareas) { const k = t.proyecto_ext || '—'; if (!byProj.has(k)) byProj.set(k, []); byProj.get(k)!.push(t) }
+    const lanes = [...byProj.entries()].map(([proyecto, ts]) => {
+      const sorted = ts.sort((a, b) => d(a.fecha_inicio!).getTime() - d(b.fecha_inicio!).getTime())
+      const rows: { endIdx: number; items: IngTarea[] }[] = []
+      for (const t of sorted) { const s = wkIdx(t.fecha_inicio!), e = Math.max(s, wkIdx(t.fecha_fin!)); let row = rows.find((r) => r.endIdx < s); if (!row) { row = { endIdx: -1, items: [] }; rows.push(row) } row.items.push(t); row.endIdx = e }
+      return { proyecto, tareas: sorted, rows }
+    }).sort((a, b) => d(a.tareas[0].fecha_inicio!).getTime() - d(b.tareas[0].fecha_inicio!).getTime())
+    const today = new Date(); today.setHours(0, 0, 0, 0)
+    const hoyPct = today >= week0 && today <= meta.max ? ((today.getTime() - week0.getTime()) / (nWeeks * 7 * DAY)) * 100 : null
+    return { meta, lanes, months, pct, wPct, hoyPct }
+  }, [all, selEng, ingenieros])
+
+  return (
+    <div className="space-y-4">
       <div className="flex flex-wrap gap-2">
         {ingenieros.map((e) => {
           const on = e.nombre === selEng
           return (
-            <button key={e.nombre} onClick={() => { setSelEng(e.nombre); setSelProj(null) }}
-              className={`flex items-center gap-2 rounded-xl border px-3 py-2 text-left transition-colors ${on ? 'border-forest-500 bg-forest-50 ring-1 ring-forest-300' : 'border-stone-200 bg-white hover:border-stone-300'}`}>
-              <div>
-                <div className={`text-sm font-semibold ${on ? 'text-forest-800' : 'text-stone-700'}`}>{e.nombre}</div>
-                <div className="text-[10.5px] text-stone-400">{e.nProj} proyectos · pico <b className={e.pico >= 3 ? 'text-rose-600' : 'text-stone-600'}>{e.pico}</b></div>
-              </div>
+            <button key={e.nombre} onClick={() => setSelEng(e.nombre)} className={`rounded-xl border px-3 py-2 text-left transition-colors ${on ? 'border-forest-500 bg-forest-50 ring-1 ring-forest-300' : 'border-stone-200 bg-white hover:border-stone-300'}`}>
+              <div className={`text-sm font-semibold ${on ? 'text-forest-800' : 'text-stone-700'}`}>{e.nombre}</div>
+              <div className="text-[10.5px] text-stone-400">{e.nProj} proyectos · pico <b className={e.pico >= 3 ? 'text-rose-600' : 'text-stone-600'}>{e.pico}</b></div>
             </button>
           )
         })}
       </div>
 
-      {/* Agenda del ingeniero seleccionado */}
       {eng && (
         <div className="rounded-2xl border border-stone-200 bg-white overflow-hidden">
           <div className="flex items-center gap-3 px-4 py-3 border-b border-stone-100 flex-wrap">
-            <Gauge size={17} className="text-forest-600" />
-            <h2 className="font-bold text-stone-800">{eng.meta.nombre}</h2>
-            <span className="text-xs text-stone-400 inline-flex items-center gap-1"><CalendarRange size={13} /> {fmtD(eng.meta.min.toISOString().slice(0, 10))} → {fmtD(eng.meta.max.toISOString().slice(0, 10))}</span>
-            <span className="text-xs text-stone-400">· {eng.lanes.length} proyectos · {eng.meta.nTareas} tareas · pico <b className={eng.meta.pico >= 3 ? 'text-rose-600' : 'text-stone-600'}>{eng.meta.pico} a la vez</b></span>
-            <span className="ml-auto text-[11px] text-stone-400">clic en una barra → ves las tareas de ese proyecto</span>
+            <Gauge size={17} className="text-forest-600" /><h2 className="font-bold text-stone-800">{eng.meta.nombre}</h2>
+            <span className="text-xs text-stone-400">{fmtD(eng.meta.min.toISOString().slice(0, 10))} → {fmtD(eng.meta.max.toISOString().slice(0, 10))} · {eng.lanes.length} proyectos · pico <b className={eng.meta.pico >= 3 ? 'text-rose-600' : 'text-stone-600'}>{eng.meta.pico} a la vez</b></span>
           </div>
-
-          <div className="overflow-x-auto">
-            <div className="min-w-[820px]">
-              {/* header meses */}
-              <div className="flex items-stretch border-b border-stone-100 bg-stone-50/60">
-                <div className="w-52 shrink-0 px-3 py-1.5 text-[10px] uppercase tracking-wide text-stone-400 font-semibold">Proyecto</div>
-                <div className="relative flex-1 h-7">
-                  {eng.months.map((m, i) => <div key={i} className="absolute top-0 bottom-0 border-l border-stone-200 flex items-center pl-1.5 text-[10.5px] font-semibold text-forest-700" style={{ left: `${m.startPct}%` }}>{m.label}</div>)}
-                  {eng.hoyPct !== null && <div className="absolute top-0 bottom-0 border-l-2 border-rose-400 z-10" style={{ left: `${eng.hoyPct}%` }} />}
-                </div>
+          <div className="overflow-x-auto"><div className="min-w-[820px]">
+            <div className="flex items-stretch border-b border-stone-100 bg-stone-50/60">
+              <div className="w-52 shrink-0 px-3 py-1.5 text-[10px] uppercase tracking-wide text-stone-400 font-semibold">Proyecto</div>
+              <div className="relative flex-1 h-7">
+                {eng.months.map((m, i) => <div key={i} className="absolute top-0 bottom-0 border-l border-stone-200 flex items-center pl-1.5 text-[10.5px] font-semibold text-forest-700" style={{ left: `${m.startPct}%` }}>{m.label}</div>)}
+                {eng.hoyPct !== null && <div className="absolute top-0 bottom-0 border-l-2 border-rose-400 z-10" style={{ left: `${eng.hoyPct}%` }} />}
               </div>
-
-              {/* lanes por proyecto */}
-              {eng.lanes.map((lane) => {
-                const col = projColor.get(lane.proyecto) || '#78716c'
-                const on = selProj === lane.proyecto
-                return (
-                  <div key={lane.proyecto} className={`flex border-b border-stone-100 ${on ? 'bg-forest-50/40' : ''}`}>
-                    <button onClick={() => setSelProj(on ? null : lane.proyecto)} className="w-52 shrink-0 px-3 py-2 border-r border-stone-100 text-left hover:bg-stone-50">
-                      <div className="text-[12px] font-semibold text-stone-800 truncate flex items-center gap-1.5">
-                        <span className="w-2 h-2 rounded-full shrink-0" style={{ background: col }} />{shortProj(lane.proyecto)}
-                      </div>
-                      <div className="text-[10px] text-stone-400">{lane.tareas.length} tareas</div>
-                    </button>
-                    <div className="relative flex-1 py-1.5">
-                      {eng.months.map((m, i) => <div key={i} className="absolute top-0 bottom-0 border-l border-stone-50" style={{ left: `${m.startPct}%` }} />)}
-                      {eng.hoyPct !== null && <div className="absolute top-0 bottom-0 border-l-2 border-rose-200 z-0" style={{ left: `${eng.hoyPct}%` }} />}
-                      <div className="space-y-1">
-                        {lane.rows.map((row, ri) => (
-                          <div key={ri} className="relative h-6">
-                            {row.items.map((t) => (
-                              <div key={t.id} onClick={() => setSelProj(lane.proyecto)} title={`${t.nombre}\n${t.fecha_inicio} → ${t.fecha_fin} · ${Math.round(t.allocation_pct * 100)}%`}
-                                className="absolute top-0 h-6 rounded-md flex items-center px-1.5 cursor-pointer overflow-hidden hover:ring-2 hover:ring-stone-400"
-                                style={{ left: `${eng.pct(t.fecha_inicio!)}%`, width: `calc(${eng.wPct(t.fecha_inicio!, t.fecha_fin!)}% - 2px)`, ...barStyle(t.estado, col) }}>
-                                {t.estado === 'hecha' && <Check size={10} className="text-emerald-700 shrink-0 mr-0.5" />}
-                                <span className="text-[9.5px] font-medium text-stone-600 truncate">{t.tipo_clave ? t.tipo_clave.replace(/_/g, ' ') : t.nombre}</span>
-                              </div>
-                            ))}
-                          </div>
-                        ))}
-                      </div>
+            </div>
+            {eng.lanes.map((lane) => {
+              const col = projColor.get(lane.proyecto) || '#78716c'
+              return (
+                <div key={lane.proyecto} className="flex border-b border-stone-100">
+                  <div className="w-52 shrink-0 px-3 py-2 border-r border-stone-100">
+                    <div className="text-[12px] font-semibold text-stone-800 truncate flex items-center gap-1.5"><span className="w-2 h-2 rounded-full shrink-0" style={{ background: col }} />{shortProj(lane.proyecto)}</div>
+                    <div className="text-[10px] text-stone-400">{lane.tareas.length} tareas</div>
+                  </div>
+                  <div className="relative flex-1 py-1.5">
+                    {eng.months.map((m, i) => <div key={i} className="absolute top-0 bottom-0 border-l border-stone-50" style={{ left: `${m.startPct}%` }} />)}
+                    {eng.hoyPct !== null && <div className="absolute top-0 bottom-0 border-l-2 border-rose-200 z-0" style={{ left: `${eng.hoyPct}%` }} />}
+                    <div className="space-y-1">
+                      {lane.rows.map((row, ri) => (
+                        <div key={ri} className="relative h-6">
+                          {row.items.map((t) => (
+                            <div key={t.id} onClick={() => onEdit(t)} title={`${t.nombre}\n${t.fecha_inicio} → ${t.fecha_fin} · ${Math.round(t.allocation_pct * 100)}%`}
+                              className="absolute top-0 h-6 rounded-md flex items-center px-1.5 cursor-pointer overflow-hidden hover:ring-2 hover:ring-stone-400"
+                              style={{ left: `${eng.pct(t.fecha_inicio!)}%`, width: `calc(${eng.wPct(t.fecha_inicio!, t.fecha_fin!)}% - 2px)`, background: (t.estado === 'hecha' ? '#d1fae5' : col + '1f'), borderLeft: `3px solid ${t.estado === 'hecha' ? '#059669' : col}` }}>
+                              {t.estado === 'hecha' && <Check size={10} className="text-emerald-700 shrink-0 mr-0.5" />}
+                              <span className="text-[9.5px] font-medium text-stone-600 truncate">{t.nombre}</span>
+                            </div>
+                          ))}
+                        </div>
+                      ))}
                     </div>
                   </div>
-                )
-              })}
-            </div>
-          </div>
-          <div className="px-4 py-2 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-stone-500 items-center border-t border-stone-100">
-            <Leg cls="bg-sky-100 border-sky-400" t="pendiente" /><Leg cls="bg-amber-100 border-amber-500" t="en curso" /><Leg cls="bg-emerald-100 border-emerald-500" t="completada" />
-            <span className="inline-flex items-center gap-1"><span className="w-0.5 h-3.5 bg-rose-400 inline-block" /> hoy</span>
-          </div>
+                </div>
+              )
+            })}
+          </div></div>
         </div>
       )}
-
-      {/* Detalle del proyecto elegido (tareas del ingeniero: completadas / pendientes) */}
-      {detalle && (
-        <div className="rounded-2xl border border-forest-200 bg-white overflow-hidden">
-          <div className="flex items-center gap-2 px-4 py-3 border-b border-stone-100">
-            <ClipboardList size={17} className="text-forest-600" />
-            <h2 className="font-bold text-stone-800">{shortProj(detalle.proyecto)}</h2>
-            <span className="text-xs text-stone-400">— tareas de {selEng}</span>
-            <button onClick={() => setEdit('new')} className="ml-auto inline-flex items-center gap-1.5 rounded-lg bg-forest-600 hover:bg-forest-700 text-white text-xs font-semibold px-2.5 py-1.5"><Plus size={13} /> Nueva</button>
-            <button onClick={() => setSelProj(null)} className="text-stone-400 hover:text-stone-700"><X size={17} /></button>
-          </div>
-          <div className="grid md:grid-cols-2 divide-y md:divide-y-0 md:divide-x divide-stone-100">
-            <TareaCol titulo="Pendientes" icon={<Clock size={14} className="text-sky-500" />} tareas={detalle.pendientes} onClick={setEdit} vacio="Nada pendiente en este proyecto." />
-            <TareaCol titulo="Completadas" icon={<Check size={14} className="text-emerald-600" />} tareas={detalle.completadas} onClick={setEdit} vacio="Ninguna marcada como completada todavía." />
-          </div>
-        </div>
-      )}
-
-      {edit && <EditModal tarea={edit === 'new' ? null : edit} proyecto={selProj ?? ''} onClose={() => setEdit(null)} onSaved={async () => { setEdit(null); await loadAll() }} />}
-    </div>
-  )
-}
-
-function TareaCol({ titulo, icon, tareas, onClick, vacio }: { titulo: string; icon: React.ReactNode; tareas: IngTarea[]; onClick: (t: IngTarea) => void; vacio: string }) {
-  return (
-    <div className="p-3">
-      <div className="flex items-center gap-1.5 mb-2 text-[11px] uppercase tracking-wide font-semibold text-stone-500">{icon} {titulo} <span className="text-stone-300">({tareas.length})</span></div>
-      <div className="space-y-1.5">
-        {tareas.map((t) => (
-          <button key={t.id} onClick={() => onClick(t)} className="w-full text-left rounded-lg border border-stone-100 hover:border-forest-300 hover:bg-forest-50/40 px-3 py-2">
-            <div className="flex items-center gap-2">
-              <span className="text-sm text-stone-800 flex-1 truncate">{t.nombre}</span>
-              <span className="text-[11px] tabular-nums text-stone-400">{fmtD(t.fecha_inicio)} → {fmtD(t.fecha_fin)}</span>
-            </div>
-            <div className="text-[10.5px] text-stone-400 mt-0.5">
-              {t.dur_dias}d · {Math.round(t.allocation_pct * 100)}% {t.hito_codigo && <span className="font-mono text-forest-600 ml-1">{t.hito_codigo}</span>}
-            </div>
-          </button>
-        ))}
-        {tareas.length === 0 && <div className="text-xs text-stone-400 py-3 text-center">{vacio}</div>}
-      </div>
     </div>
   )
 }
 
 function Stat({ icon, n, l }: { icon: React.ReactNode; n: number; l: string }) {
   return <div><div className="flex items-center justify-center gap-1 text-stone-400">{icon}</div><div className="text-xl font-bold text-stone-900 tabular-nums leading-none mt-0.5">{n}</div><div className="text-[10px] uppercase tracking-wide text-stone-400">{l}</div></div>
-}
-function Leg({ cls, t }: { cls: string; t: string }) {
-  return <span className="inline-flex items-center gap-1.5"><span className={`w-3.5 h-3.5 rounded border-l-[3px] ${cls}`} /> {t}</span>
 }
 
 function EditModal({ tarea, proyecto, onClose, onSaved }: { tarea: IngTarea | null; proyecto: string; onClose: () => void; onSaved: () => void }) {
@@ -281,7 +283,7 @@ function EditModal({ tarea, proyecto, onClose, onSaved }: { tarea: IngTarea | nu
         <div className="space-y-3">
           <L t="Tarea"><input value={f.nombre} onChange={(e) => set('nombre', e.target.value)} className="inp" /></L>
           <div className="grid grid-cols-2 gap-3">
-            <L t="Ingeniero"><input value={f.asignado_nombre ?? ''} onChange={(e) => set('asignado_nombre', e.target.value)} className="inp" /></L>
+            <L t="Responsable"><input value={f.asignado_nombre ?? ''} onChange={(e) => set('asignado_nombre', e.target.value)} className="inp" /></L>
             <L t="Estado"><select value={f.estado} onChange={(e) => set('estado', e.target.value)} className="inp"><option value="pendiente">Pendiente</option><option value="en_curso">En curso</option><option value="hecha">Completada</option><option value="na">No aplica</option></select></L>
           </div>
           <div className="grid grid-cols-2 gap-3">
