@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Users, Layers, ClipboardList, Plus, X, Loader2, Trash2, Gauge, Check, FolderKanban } from 'lucide-react'
+import { Users, Layers, ClipboardList, Plus, X, Loader2, Trash2, Gauge, Check, FolderKanban, Activity, AlertTriangle } from 'lucide-react'
 import { ingenieriaService, type IngProyecto, type IngTarea, type TareaInput } from '@/services/ingenieria'
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -20,7 +20,7 @@ export default function IngenieriaPlan() {
   const [resumen, setResumen] = useState<{ tareas: number; proyectos: number; ingenieros: number } | null>(null)
   const [proyectos, setProyectos] = useState<IngProyecto[]>([])
   const [all, setAll] = useState<IngTarea[]>([])
-  const [mode, setMode] = useState<'proyecto' | 'carga'>('proyecto')
+  const [mode, setMode] = useState<'disponibilidad' | 'proyecto' | 'carga'>('disponibilidad')
   const [selProj, setSelProj] = useState<string>('')
   const [selEng, setSelEng] = useState<string>('')
   const [loading, setLoading] = useState(true)
@@ -53,15 +53,109 @@ export default function IngenieriaPlan() {
 
       {/* Toggle de vista */}
       <div className="inline-flex rounded-xl border border-stone-200 bg-white p-1 text-sm">
+        <button onClick={() => setMode('disponibilidad')} className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 font-semibold ${mode === 'disponibilidad' ? 'bg-forest-600 text-white' : 'text-stone-500 hover:text-stone-800'}`}><Activity size={15} /> Disponibilidad</button>
         <button onClick={() => setMode('proyecto')} className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 font-semibold ${mode === 'proyecto' ? 'bg-forest-600 text-white' : 'text-stone-500 hover:text-stone-800'}`}><FolderKanban size={15} /> Por proyecto</button>
         <button onClick={() => setMode('carga')} className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 font-semibold ${mode === 'carga' ? 'bg-forest-600 text-white' : 'text-stone-500 hover:text-stone-800'}`}><Gauge size={15} /> Carga por ingeniero</button>
       </div>
 
-      {mode === 'proyecto'
-        ? <VistaProyecto proyectos={proyectos} all={all} sel={selProj} setSel={setSelProj} onEdit={setEdit} />
-        : <VistaCarga all={all} proyectos={proyectos} selEng={selEng} setSelEng={setSelEng} onEdit={setEdit} />}
+      {mode === 'disponibilidad'
+        ? <VistaDisponibilidad all={all} />
+        : mode === 'proyecto'
+          ? <VistaProyecto proyectos={proyectos} all={all} sel={selProj} setSel={setSelProj} onEdit={setEdit} />
+          : <VistaCarga all={all} proyectos={proyectos} selEng={selEng} setSelEng={setSelEng} onEdit={setEdit} />}
 
       {edit && <EditModal tarea={edit === 'new' ? null : edit} proyecto={selProj} onClose={() => setEdit(null)} onSaved={async () => { setEdit(null); await loadAll() }} />}
+    </div>
+  )
+}
+
+// ── Vista de arranque: DISPONIBILIDAD de Ingeniería (agregada, provisional) ──
+function VistaDisponibilidad({ all }: { all: IngTarea[] }) {
+  const g = useMemo(() => {
+    const conF = all.filter((t) => t.asignado_nombre && t.fecha_inicio && t.fecha_fin && t.estado !== 'na')
+    if (!conF.length) return null
+    const engs = [...new Set(conF.map((t) => t.asignado_nombre as string))]
+    let min = d(conF[0].fecha_inicio!), max = d(conF[0].fecha_fin!)
+    for (const t of conF) { const a = d(t.fecha_inicio!), b = d(t.fecha_fin!); if (a < min) min = a; if (b > max) max = b }
+    const week0 = mondayOf(min); const nWeeks = Math.max(1, Math.ceil((max.getTime() - week0.getTime()) / (7 * DAY)) + 1)
+    const months: { label: string; startPct: number }[] = []
+    for (let i = 0; i < nWeeks; i++) { const wd = new Date(week0.getTime() + i * 7 * DAY); const label = `${MES[wd.getMonth()]} ${String(wd.getFullYear()).slice(2)}`; const last = months[months.length - 1]; if (!last || last.label !== label) months.push({ label, startPct: (i / nWeeks) * 100 }) }
+    const today = new Date(); today.setHours(0, 0, 0, 0)
+    const semanas: { i: number; wsMs: number; ocupados: number; libres: number }[] = []
+    for (let i = 0; i < nWeeks; i++) { const ws = week0.getTime() + i * 7 * DAY, we = ws + 6 * DAY; const occ = new Set(conF.filter((t) => d(t.fecha_inicio!).getTime() <= we && d(t.fecha_fin!).getTime() >= ws).map((t) => t.asignado_nombre)); semanas.push({ i, wsMs: ws, ocupados: occ.size, libres: engs.length - occ.size }) }
+    const primerLibre = semanas.find((s) => s.wsMs >= today.getTime() && s.libres >= 1)
+    const porIng = engs.map((e) => { const ts = conF.filter((t) => t.asignado_nombre === e); let mx = d(ts[0].fecha_fin!); for (const t of ts) { const b = d(t.fecha_fin!); if (b > mx) mx = b } return { nombre: e, hasta: mx } }).sort((a, b) => a.hasta.getTime() - b.hasta.getTime())
+    const cnc = [...new Set(conF.filter((t) => t.tipo_clave === 'cnc').map((t) => t.asignado_nombre as string))]
+    const cncHasta = cnc.length === 1 ? porIng.find((p) => p.nombre === cnc[0])?.hasta : null
+    const hoyPct = today >= week0 && today <= max ? ((today.getTime() - week0.getTime()) / (nWeeks * 7 * DAY)) * 100 : null
+    return { nWeeks, months, semanas, porIng, primerLibre, cnc, cncHasta, hoyPct, total: engs.length }
+  }, [all])
+
+  if (!g) return <div className="py-16 text-center text-stone-400">Sin datos de ingeniería.</div>
+  const cellCls = (l: number) => l <= 0 ? 'bg-rose-200 text-rose-900' : l === 1 ? 'bg-amber-100 text-amber-800' : 'bg-emerald-100 text-emerald-800'
+  const fmt = (dt: Date) => `${dt.getDate()} ${MES[dt.getMonth()]}`
+
+  return (
+    <div className="space-y-4">
+      <div className="rounded-2xl border border-amber-200 bg-amber-50/60 px-4 py-2.5 text-[12.5px] text-amber-800 flex items-start gap-2">
+        <AlertTriangle size={15} className="shrink-0 mt-0.5" />
+        <span><b>Provisional.</b> Mide "ingenieros ocupados" de forma binaria (tiene o no tarea esa semana). El significado exacto del "% de asignación" lo calibramos con el creador — ahí pasa a ser capacidad real por persona.</span>
+      </div>
+
+      {/* respuesta rápida */}
+      <div className="rounded-2xl border border-stone-200 bg-white p-4 flex flex-wrap items-center gap-x-8 gap-y-3">
+        <div>
+          <div className="text-[11px] uppercase tracking-wide text-stone-400 font-semibold">Equipo</div>
+          <div className="text-2xl font-bold text-stone-900">{g.total} <span className="text-sm font-medium text-stone-400">ingenieros</span></div>
+        </div>
+        <div>
+          <div className="text-[11px] uppercase tracking-wide text-stone-400 font-semibold">Primer lugar libre</div>
+          <div className="text-2xl font-bold text-forest-700">{g.primerLibre ? fmt(new Date(g.primerLibre.wsMs)) : '—'}</div>
+        </div>
+        {g.cncHasta && (
+          <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-2">
+            <div className="text-[11px] uppercase tracking-wide text-rose-500 font-semibold flex items-center gap-1"><AlertTriangle size={12} /> Cuello de botella</div>
+            <div className="text-sm font-bold text-rose-700">CNC pasa solo por {g.cnc[0]}</div>
+            <div className="text-xs text-rose-600">ocupado hasta <b>{fmt(g.cncHasta)}</b></div>
+          </div>
+        )}
+      </div>
+
+      {/* timeline de disponibilidad */}
+      <div className="rounded-2xl border border-stone-200 bg-white overflow-hidden">
+        <div className="flex items-center gap-2 px-4 py-3 border-b border-stone-100">
+          <Activity size={17} className="text-forest-600" />
+          <h2 className="font-bold text-stone-800">Disponibilidad semana a semana</h2>
+          <span className="text-xs text-stone-400">nº = ingenieros libres · <b className="text-rose-600">rojo = ninguno libre</b></span>
+        </div>
+        <div className="overflow-x-auto"><div className="min-w-[820px] p-3">
+          <div className="relative h-6 mb-1">
+            {g.months.map((m, i) => <div key={i} className="absolute top-0 text-[10.5px] font-semibold text-forest-700 border-l border-stone-200 pl-1.5 h-6 flex items-center" style={{ left: `${m.startPct}%` }}>{m.label}</div>)}
+            {g.hoyPct !== null && <div className="absolute top-0 bottom-0 border-l-2 border-rose-400 z-10" style={{ left: `${g.hoyPct}%` }}><span className="absolute -top-0 left-1 text-[9px] font-bold text-rose-500">hoy</span></div>}
+          </div>
+          <div className="flex gap-0.5">
+            {g.semanas.map((s) => (
+              <div key={s.i} title={`Semana del ${fmt(new Date(s.wsMs))}: ${s.libres} de ${g.total} libres`}
+                className={`flex-1 h-9 rounded flex items-center justify-center text-[11px] font-bold ${cellCls(s.libres)}`}>{s.libres}</div>
+            ))}
+          </div>
+        </div></div>
+      </div>
+
+      {/* por ingeniero: ocupado hasta */}
+      <div className="rounded-2xl border border-stone-200 bg-white overflow-hidden">
+        <div className="px-4 py-3 border-b border-stone-100"><h2 className="font-bold text-stone-800 text-sm">Cada ingeniero está ocupado hasta…</h2></div>
+        <div className="divide-y divide-stone-50">
+          {g.porIng.map((p) => (
+            <div key={p.nombre} className="flex items-center gap-3 px-4 py-2.5">
+              <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: PAL[g.porIng.indexOf(p) % PAL.length] }} />
+              <span className="text-sm font-semibold text-stone-700 flex-1">{p.nombre}</span>
+              <span className="text-sm text-stone-500">ocupado hasta <b className="text-stone-800 tabular-nums">{fmt(p.hasta)}</b></span>
+            </div>
+          ))}
+        </div>
+        <div className="px-4 py-2 text-[11px] text-stone-400 italic border-t border-stone-100">Para ver el detalle de qué hace cada uno, entrá a "Carga por ingeniero". Para las tareas de un proyecto, a "Por proyecto".</div>
+      </div>
     </div>
   )
 }
