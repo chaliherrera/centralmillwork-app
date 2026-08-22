@@ -16,11 +16,6 @@ const fmtD = (iso: string | null) => iso ? `${d(iso).getDate()} ${MES[d(iso).get
 const shortProj = (p: string | null) => (p || '—').replace(/^\s*(\d{2}-\d{3})\s*/, '$1 · ')
 const PAL = ['#2563eb', '#0d9488', '#ea580c', '#7c3aed', '#059669', '#db2777', '#ca8a04', '#4f46e5', '#0891b2', '#dc2626', '#65a30d', '#9333ea']
 
-const ESTADO_BADGE: Record<string, string> = {
-  pendiente: 'bg-sky-50 text-sky-700', en_curso: 'bg-amber-50 text-amber-700', hecha: 'bg-emerald-50 text-emerald-700', na: 'bg-stone-100 text-stone-400',
-}
-const ESTADO_LBL: Record<string, string> = { pendiente: 'Pendiente', en_curso: 'En curso', hecha: 'Completada', na: 'N/A' }
-
 export default function IngenieriaPlan() {
   const [resumen, setResumen] = useState<{ tareas: number; proyectos: number; ingenieros: number } | null>(null)
   const [proyectos, setProyectos] = useState<IngProyecto[]>([])
@@ -71,20 +66,37 @@ export default function IngenieriaPlan() {
   )
 }
 
-// ── Vista PRINCIPAL: por proyecto (réplica del Excel) ──
+// ── Vista PRINCIPAL: Gantt del proyecto (réplica del Excel + barra por tarea) ──
+function barBg(estado: string) {
+  if (estado === 'hecha') return { background: '#d1fae5', border: '1px solid #6ee7b7', color: '#065f46' }
+  if (estado === 'en_curso') return { background: '#fde68a', border: '1px solid #fbbf24', color: '#92400e' }
+  return { background: '#dbeafe', border: '1px solid #93c5fd', color: '#1e40af' }
+}
 function VistaProyecto({ proyectos, all, sel, setSel, onEdit }: { proyectos: IngProyecto[]; all: IngTarea[]; sel: string; setSel: (s: string) => void; onEdit: (t: IngTarea | 'new') => void }) {
   const tareas = useMemo(() => all.filter((t) => t.proyecto_ext === sel), [all, sel])
   const p = proyectos.find((x) => x.proyecto_ext === sel)
+  const ingenieros = useMemo(() => [...new Set(tareas.map((t) => t.asignado_nombre).filter(Boolean))], [tareas])
 
-  // agrupar por fase (como el Excel)
-  const fases = useMemo(() => {
-    const m = new Map<string, IngTarea[]>()
-    for (const t of tareas) { const k = t.fase || '— Sin fase —'; if (!m.has(k)) m.set(k, []); m.get(k)!.push(t) }
-    for (const arr of m.values()) arr.sort((a, b) => (a.fecha_inicio || '').localeCompare(b.fecha_inicio || ''))
-    return [...m.entries()]
+  const g = useMemo(() => {
+    const conF = tareas.filter((t) => t.fecha_inicio && t.fecha_fin)
+    const fasesMap = new Map<string, IngTarea[]>()
+    for (const t of tareas) { const k = t.fase || '— Sin fase —'; if (!fasesMap.has(k)) fasesMap.set(k, []); fasesMap.get(k)!.push(t) }
+    for (const arr of fasesMap.values()) arr.sort((a, b) => (a.fecha_inicio || '~').localeCompare(b.fecha_inicio || '~'))
+    const fases = [...fasesMap.entries()]
+    if (!conF.length) return { fases, months: [], pct: () => 0, wPct: () => 0, hoyPct: null as number | null }
+    let min = d(conF[0].fecha_inicio!), max = d(conF[0].fecha_fin!)
+    for (const t of conF) { const a = d(t.fecha_inicio!), b = d(t.fecha_fin!); if (a < min) min = a; if (b > max) max = b }
+    const week0 = mondayOf(min); const nWeeks = Math.max(1, Math.ceil((max.getTime() - week0.getTime()) / (7 * DAY)) + 1)
+    const pct = (iso: string) => ((d(iso).getTime() - week0.getTime()) / (nWeeks * 7 * DAY)) * 100
+    const wPct = (a: string, b: string) => Math.max(((d(b).getTime() - d(a).getTime()) / (nWeeks * 7 * DAY)) * 100 + 100 / nWeeks / 2, 100 / nWeeks * 0.55)
+    const months: { label: string; startPct: number }[] = []
+    for (let i = 0; i < nWeeks; i++) { const wd = new Date(week0.getTime() + i * 7 * DAY); const label = `${MES[wd.getMonth()]} ${String(wd.getFullYear()).slice(2)}`; const last = months[months.length - 1]; if (!last || last.label !== label) months.push({ label, startPct: (i / nWeeks) * 100 }) }
+    const today = new Date(); today.setHours(0, 0, 0, 0)
+    const hoyPct = today >= week0 && today <= max ? ((today.getTime() - week0.getTime()) / (nWeeks * 7 * DAY)) * 100 : null
+    return { fases, months, pct, wPct, hoyPct }
   }, [tareas])
 
-  const ingenieros = useMemo(() => [...new Set(tareas.map((t) => t.asignado_nombre).filter(Boolean))], [tareas])
+  const GUT = 300
 
   return (
     <div className="space-y-4">
@@ -99,51 +111,58 @@ function VistaProyecto({ proyectos, all, sel, setSel, onEdit }: { proyectos: Ing
         <button onClick={() => onEdit('new')} className="ml-auto inline-flex items-center gap-1.5 rounded-lg bg-forest-600 hover:bg-forest-700 text-white text-sm font-semibold px-3 py-1.5"><Plus size={15} /> Nueva tarea</button>
       </div>
 
-      {/* tareas agrupadas por fase */}
       <div className="rounded-2xl border border-stone-200 bg-white overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm min-w-[820px]">
-            <thead>
-              <tr className="text-[10.5px] uppercase tracking-wide text-stone-400 border-b border-stone-100 bg-stone-50/60">
-                <th className="text-left font-semibold px-4 py-2">Tarea</th>
-                <th className="text-left font-semibold px-3 py-2">Responsable</th>
-                <th className="text-right font-semibold px-2 py-2">Asig.</th>
-                <th className="text-right font-semibold px-2 py-2">Días</th>
-                <th className="text-left font-semibold px-3 py-2">Inicio → Fin</th>
-                <th className="text-left font-semibold px-3 py-2">Estado</th>
-                <th className="text-left font-semibold px-2 py-2">Hito</th>
-              </tr>
-            </thead>
-            <tbody>
-              {fases.map(([fase, ts]) => (
-                <FaseGroup key={fase} fase={fase} tareas={ts} onEdit={onEdit} />
+        <div className="overflow-x-auto"><div className="min-w-[900px]">
+          {/* header: gutter + meses */}
+          <div className="flex items-stretch border-b border-stone-100 bg-stone-50/60">
+            <div className="shrink-0 px-4 py-2 text-[10.5px] uppercase tracking-wide text-stone-400 font-semibold" style={{ width: GUT }}>Tarea · responsable</div>
+            <div className="relative flex-1">
+              {g.months.map((m, i) => <div key={i} className="absolute top-0 bottom-0 border-l border-stone-200 flex items-center pl-1.5 text-[10.5px] font-semibold text-forest-700" style={{ left: `${m.startPct}%` }}>{m.label}</div>)}
+              {g.hoyPct !== null && <div className="absolute top-0 bottom-0 border-l-2 border-rose-400 z-10" style={{ left: `${g.hoyPct}%` }} />}
+            </div>
+          </div>
+
+          {g.fases.map(([fase, ts]) => (
+            <div key={fase}>
+              <div className="bg-forest-50/40 px-4 py-1.5 text-[11px] font-bold text-forest-700 uppercase tracking-wide">{fase} <span className="text-forest-400 font-normal normal-case">· {ts.length} tareas</span></div>
+              {ts.map((t) => (
+                <div key={t.id} onClick={() => onEdit(t)} className="flex items-stretch border-b border-stone-50 hover:bg-forest-50/30 cursor-pointer">
+                  <div className="shrink-0 px-4 py-2 border-r border-stone-100" style={{ width: GUT }}>
+                    <div className="text-[13px] text-stone-800 truncate">{t.nombre}</div>
+                    <div className="text-[11px] text-stone-400 truncate">
+                      {t.asignado_nombre || 'sin responsable'} · <span className={t.allocation_pct > 1 ? 'text-rose-600 font-semibold' : ''}>{Math.round(t.allocation_pct * 100)}%</span> · {t.dur_dias}d
+                      {t.hito_codigo && <span className="font-mono text-forest-600 ml-1">{t.hito_codigo}</span>}
+                    </div>
+                  </div>
+                  <div className="relative flex-1 py-2 min-h-[42px]">
+                    {g.months.map((m, i) => <div key={i} className="absolute top-0 bottom-0 border-l border-stone-50" style={{ left: `${m.startPct}%` }} />)}
+                    {g.hoyPct !== null && <div className="absolute top-0 bottom-0 border-l-2 border-rose-200 z-0" style={{ left: `${g.hoyPct}%` }} />}
+                    {t.fecha_inicio && t.fecha_fin ? (
+                      <div title={`${t.fecha_inicio} → ${t.fecha_fin}`}
+                        className="absolute top-1.5 h-6 rounded-md flex items-center px-2 gap-1 overflow-hidden"
+                        style={{ left: `${g.pct(t.fecha_inicio)}%`, width: `calc(${g.wPct(t.fecha_inicio, t.fecha_fin)}% - 3px)`, ...barBg(t.estado) }}>
+                        {t.estado === 'hecha' && <Check size={11} className="shrink-0" />}
+                        <span className="text-[10px] font-semibold whitespace-nowrap">{fmtD(t.fecha_inicio)} → {fmtD(t.fecha_fin)}</span>
+                      </div>
+                    ) : <span className="absolute top-3 left-2 text-[10px] text-stone-300 italic">sin fecha</span>}
+                  </div>
+                </div>
               ))}
-              {tareas.length === 0 && <tr><td colSpan={7} className="px-4 py-10 text-center text-stone-400">Sin tareas en este proyecto.</td></tr>}
-            </tbody>
-          </table>
+            </div>
+          ))}
+          {tareas.length === 0 && <div className="px-4 py-10 text-center text-stone-400">Sin tareas en este proyecto.</div>}
+        </div></div>
+        <div className="px-4 py-2 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-stone-500 items-center border-t border-stone-100">
+          <Leg style={barBg('pendiente')} t="pendiente" /><Leg style={barBg('en_curso')} t="en curso" /><Leg style={barBg('hecha')} t="completada" />
+          <span className="inline-flex items-center gap-1"><span className="w-0.5 h-3.5 bg-rose-400 inline-block" /> hoy</span>
+          <span className="italic text-stone-400">La barra muestra desde/hasta cuándo el responsable está ocupado en la tarea.</span>
         </div>
       </div>
     </div>
   )
 }
-
-function FaseGroup({ fase, tareas, onEdit }: { fase: string; tareas: IngTarea[]; onEdit: (t: IngTarea) => void }) {
-  return (
-    <>
-      <tr className="bg-forest-50/40"><td colSpan={7} className="px-4 py-1.5 text-[11px] font-bold text-forest-700 uppercase tracking-wide">{fase} <span className="text-forest-400 font-normal normal-case">· {tareas.length} tareas</span></td></tr>
-      {tareas.map((t) => (
-        <tr key={t.id} onClick={() => onEdit(t)} className="border-b border-stone-50 hover:bg-forest-50/30 cursor-pointer">
-          <td className="px-4 py-2 text-stone-800">{t.nombre}</td>
-          <td className="px-3 py-2 text-stone-600">{t.asignado_nombre || <span className="text-stone-300">—</span>}</td>
-          <td className="px-2 py-2 text-right tabular-nums"><span className={t.allocation_pct > 1 ? 'text-rose-600 font-semibold' : 'text-stone-600'}>{Math.round(t.allocation_pct * 100)}%</span></td>
-          <td className="px-2 py-2 text-right tabular-nums text-stone-600">{t.dur_dias}</td>
-          <td className="px-3 py-2 text-stone-500 text-[12.5px] tabular-nums whitespace-nowrap">{fmtD(t.fecha_inicio)} → {fmtD(t.fecha_fin)}</td>
-          <td className="px-3 py-2"><span className={`text-[11px] font-medium rounded-full px-2 py-0.5 ${ESTADO_BADGE[t.estado] || ESTADO_BADGE.pendiente}`}>{ESTADO_LBL[t.estado] || t.estado}</span></td>
-          <td className="px-2 py-2">{t.hito_codigo ? <span className="text-[11px] font-mono bg-forest-50 text-forest-700 rounded px-1.5 py-0.5">{t.hito_codigo}</span> : <span className="text-stone-300 text-xs">—</span>}</td>
-        </tr>
-      ))}
-    </>
-  )
+function Leg({ style, t }: { style: React.CSSProperties; t: string }) {
+  return <span className="inline-flex items-center gap-1.5"><span className="w-4 h-3.5 rounded" style={style} /> {t}</span>
 }
 
 // ── Vista SECUNDARIA: carga por ingeniero (agenda Gantt) ──
