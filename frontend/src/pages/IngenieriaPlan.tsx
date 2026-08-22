@@ -67,15 +67,30 @@ export default function IngenieriaPlan() {
 }
 
 // ── Vista PRINCIPAL: Gantt del proyecto (réplica del Excel + barra por tarea) ──
-function barBg(estado: string) {
-  if (estado === 'hecha') return { background: '#d1fae5', border: '1px solid #6ee7b7', color: '#065f46' }
-  if (estado === 'en_curso') return { background: '#fde68a', border: '1px solid #fbbf24', color: '#92400e' }
+// La "situación" se deriva de las fechas vs HOY (+ si está marcada hecha).
+type Sit = 'completada' | 'vencida' | 'en_curso' | 'pendiente'
+function situacion(t: IngTarea, hoyMs: number): Sit {
+  if (t.estado === 'hecha') return 'completada'
+  if (!t.fecha_inicio || !t.fecha_fin) return 'pendiente'
+  const ini = d(t.fecha_inicio).getTime(), fin = d(t.fecha_fin).getTime()
+  if (fin < hoyMs) return 'vencida'
+  if (ini <= hoyMs && hoyMs <= fin) return 'en_curso'
+  return 'pendiente'
+}
+const SIT_LBL: Record<Sit, string> = { completada: 'completada', vencida: 'vencida', en_curso: 'en curso', pendiente: 'pendiente' }
+function sitBg(s: Sit): React.CSSProperties {
+  if (s === 'completada') return { background: '#d1fae5', border: '1px solid #6ee7b7', color: '#065f46' }
+  if (s === 'vencida') return { background: '#ffe4e6', border: '1px solid #fda4af', color: '#9f1239' }
+  if (s === 'en_curso') return { background: '#fde68a', border: '1px solid #fbbf24', color: '#92400e' }
   return { background: '#dbeafe', border: '1px solid #93c5fd', color: '#1e40af' }
 }
 function VistaProyecto({ proyectos, all, sel, setSel, onEdit }: { proyectos: IngProyecto[]; all: IngTarea[]; sel: string; setSel: (s: string) => void; onEdit: (t: IngTarea | 'new') => void }) {
   const tareas = useMemo(() => all.filter((t) => t.proyecto_ext === sel), [all, sel])
   const p = proyectos.find((x) => x.proyecto_ext === sel)
   const ingenieros = useMemo(() => [...new Set(tareas.map((t) => t.asignado_nombre).filter(Boolean))], [tareas])
+  const hoyMs = useMemo(() => { const t = new Date(); t.setHours(0, 0, 0, 0); return t.getTime() }, [])
+  // color por ingeniero (estable en todo el sistema)
+  const engColor = useMemo(() => { const m = new Map<string, string>(); [...new Set(all.map((t) => t.asignado_nombre).filter(Boolean))].forEach((e, i) => m.set(e as string, PAL[i % PAL.length])); return m }, [all])
 
   const g = useMemo(() => {
     const conF = tareas.filter((t) => t.fecha_inicio && t.fecha_fin)
@@ -129,22 +144,28 @@ function VistaProyecto({ proyectos, all, sel, setSel, onEdit }: { proyectos: Ing
                 <div key={t.id} onClick={() => onEdit(t)} className="flex items-stretch border-b border-stone-50 hover:bg-forest-50/30 cursor-pointer">
                   <div className="shrink-0 px-4 py-2 border-r border-stone-100" style={{ width: GUT }}>
                     <div className="text-[13px] text-stone-800 truncate">{t.nombre}</div>
-                    <div className="text-[11px] text-stone-400 truncate">
-                      {t.asignado_nombre || 'sin responsable'} · <span className={t.allocation_pct > 1 ? 'text-rose-600 font-semibold' : ''}>{Math.round(t.allocation_pct * 100)}%</span> · {t.dur_dias}d
-                      {t.hito_codigo && <span className="font-mono text-forest-600 ml-1">{t.hito_codigo}</span>}
+                    <div className="text-[11px] text-stone-400 truncate flex items-center gap-1">
+                      {t.asignado_nombre
+                        ? <><span className="w-2 h-2 rounded-full shrink-0" style={{ background: engColor.get(t.asignado_nombre) }} /><span className="font-semibold text-stone-600">{t.asignado_nombre}</span></>
+                        : <span className="text-stone-300">sin responsable</span>}
+                      <span>· <span className={t.allocation_pct > 1 ? 'text-rose-600 font-semibold' : ''}>{Math.round(t.allocation_pct * 100)}%</span> · {t.dur_dias}d</span>
+                      {t.hito_codigo && <span className="font-mono text-forest-600">{t.hito_codigo}</span>}
                     </div>
                   </div>
                   <div className="relative flex-1 py-2 min-h-[42px]">
                     {g.months.map((m, i) => <div key={i} className="absolute top-0 bottom-0 border-l border-stone-50" style={{ left: `${m.startPct}%` }} />)}
-                    {g.hoyPct !== null && <div className="absolute top-0 bottom-0 border-l-2 border-rose-200 z-0" style={{ left: `${g.hoyPct}%` }} />}
-                    {t.fecha_inicio && t.fecha_fin ? (
-                      <div title={`${t.fecha_inicio} → ${t.fecha_fin}`}
-                        className="absolute top-1.5 h-6 rounded-md flex items-center px-2 gap-1 overflow-hidden"
-                        style={{ left: `${g.pct(t.fecha_inicio)}%`, width: `calc(${g.wPct(t.fecha_inicio, t.fecha_fin)}% - 3px)`, ...barBg(t.estado) }}>
-                        {t.estado === 'hecha' && <Check size={11} className="shrink-0" />}
-                        <span className="text-[10px] font-semibold whitespace-nowrap">{fmtD(t.fecha_inicio)} → {fmtD(t.fecha_fin)}</span>
-                      </div>
-                    ) : <span className="absolute top-3 left-2 text-[10px] text-stone-300 italic">sin fecha</span>}
+                    {g.hoyPct !== null && <div className="absolute top-0 bottom-0 border-l-2 border-rose-300 z-0" style={{ left: `${g.hoyPct}%` }} />}
+                    {t.fecha_inicio && t.fecha_fin ? (() => {
+                      const s = situacion(t, hoyMs)
+                      return (
+                        <div title={`${t.nombre}\n${t.asignado_nombre || 'sin responsable'} · ${SIT_LBL[s]}\n${t.fecha_inicio} → ${t.fecha_fin}`}
+                          className="absolute top-1.5 h-6 rounded-md flex items-center px-2 gap-1 overflow-hidden"
+                          style={{ left: `${g.pct(t.fecha_inicio)}%`, width: `calc(${g.wPct(t.fecha_inicio, t.fecha_fin)}% - 3px)`, ...sitBg(s) }}>
+                          {s === 'completada' && <Check size={11} className="shrink-0" />}
+                          <span className="text-[10px] font-semibold whitespace-nowrap">{fmtD(t.fecha_inicio)} → {fmtD(t.fecha_fin)}</span>
+                        </div>
+                      )
+                    })() : <span className="absolute top-3 left-2 text-[10px] text-stone-300 italic">sin fecha</span>}
                   </div>
                 </div>
               ))}
@@ -153,9 +174,9 @@ function VistaProyecto({ proyectos, all, sel, setSel, onEdit }: { proyectos: Ing
           {tareas.length === 0 && <div className="px-4 py-10 text-center text-stone-400">Sin tareas en este proyecto.</div>}
         </div></div>
         <div className="px-4 py-2 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-stone-500 items-center border-t border-stone-100">
-          <Leg style={barBg('pendiente')} t="pendiente" /><Leg style={barBg('en_curso')} t="en curso" /><Leg style={barBg('hecha')} t="completada" />
+          <Leg style={sitBg('pendiente')} t="pendiente" /><Leg style={sitBg('en_curso')} t="en curso" /><Leg style={sitBg('vencida')} t="vencida" /><Leg style={sitBg('completada')} t="completada" />
           <span className="inline-flex items-center gap-1"><span className="w-0.5 h-3.5 bg-rose-400 inline-block" /> hoy</span>
-          <span className="italic text-stone-400">La barra muestra desde/hasta cuándo el responsable está ocupado en la tarea.</span>
+          <span className="inline-flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-stone-400 inline-block" /> = ingeniero (un color por persona)</span>
         </div>
       </div>
     </div>
