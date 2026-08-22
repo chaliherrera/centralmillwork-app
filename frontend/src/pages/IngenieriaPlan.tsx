@@ -69,92 +69,103 @@ export default function IngenieriaPlan() {
   )
 }
 
-// ── Vista de arranque: DISPONIBILIDAD de Ingeniería (agregada, provisional) ──
+// ── Vista de arranque: DISPONIBILIDAD de Ingeniería (grilla por ingeniero, provisional) ──
 function VistaDisponibilidad({ all }: { all: IngTarea[] }) {
   const g = useMemo(() => {
     const conF = all.filter((t) => t.asignado_nombre && t.fecha_inicio && t.fecha_fin && t.estado !== 'na')
     if (!conF.length) return null
     const engs = [...new Set(conF.map((t) => t.asignado_nombre as string))]
+    const engColor = new Map(engs.map((e, i) => [e, PAL[i % PAL.length]]))
     let min = d(conF[0].fecha_inicio!), max = d(conF[0].fecha_fin!)
     for (const t of conF) { const a = d(t.fecha_inicio!), b = d(t.fecha_fin!); if (a < min) min = a; if (b > max) max = b }
     const week0 = mondayOf(min); const nWeeks = Math.max(1, Math.ceil((max.getTime() - week0.getTime()) / (7 * DAY)) + 1)
     const months: { label: string; startPct: number }[] = []
     for (let i = 0; i < nWeeks; i++) { const wd = new Date(week0.getTime() + i * 7 * DAY); const label = `${MES[wd.getMonth()]} ${String(wd.getFullYear()).slice(2)}`; const last = months[months.length - 1]; if (!last || last.label !== label) months.push({ label, startPct: (i / nWeeks) * 100 }) }
     const today = new Date(); today.setHours(0, 0, 0, 0)
-    const semanas: { i: number; wsMs: number; ocupados: number; libres: number }[] = []
-    for (let i = 0; i < nWeeks; i++) { const ws = week0.getTime() + i * 7 * DAY, we = ws + 6 * DAY; const occ = new Set(conF.filter((t) => d(t.fecha_inicio!).getTime() <= we && d(t.fecha_fin!).getTime() >= ws).map((t) => t.asignado_nombre)); semanas.push({ i, wsMs: ws, ocupados: occ.size, libres: engs.length - occ.size }) }
-    const primerLibre = semanas.find((s) => s.wsMs >= today.getTime() && s.libres >= 1)
-    const porIng = engs.map((e) => { const ts = conF.filter((t) => t.asignado_nombre === e); let mx = d(ts[0].fecha_fin!); for (const t of ts) { const b = d(t.fecha_fin!); if (b > mx) mx = b } return { nombre: e, hasta: mx } }).sort((a, b) => a.hasta.getTime() - b.hasta.getTime())
+    // matriz: por ingeniero, cuántas tareas activas por semana (0 = libre)
+    const engRows = engs.map((e) => {
+      const ts = conF.filter((t) => t.asignado_nombre === e)
+      const busy: number[] = []
+      for (let i = 0; i < nWeeks; i++) { const ws = week0.getTime() + i * 7 * DAY, we = ws + 6 * DAY; busy.push(ts.filter((t) => d(t.fecha_inicio!).getTime() <= we && d(t.fecha_fin!).getTime() >= ws).length) }
+      return { nombre: e, color: engColor.get(e)!, busy, semOcup: busy.filter((b) => b > 0).length }
+    }).sort((a, b) => b.semOcup - a.semOcup)
+    const libres: number[] = []
+    for (let i = 0; i < nWeeks; i++) libres.push(engRows.filter((r) => r.busy[i] === 0).length)
     const cnc = [...new Set(conF.filter((t) => t.tipo_clave === 'cnc').map((t) => t.asignado_nombre as string))]
-    const cncHasta = cnc.length === 1 ? porIng.find((p) => p.nombre === cnc[0])?.hasta : null
+    let cncHasta: Date | null = null
+    if (cnc.length === 1) { const ts = conF.filter((t) => t.asignado_nombre === cnc[0]); let mx = d(ts[0].fecha_fin!); for (const t of ts) { const b = d(t.fecha_fin!); if (b > mx) mx = b } cncHasta = mx }
+    const weekDate = (i: number) => new Date(week0.getTime() + i * 7 * DAY)
     const hoyPct = today >= week0 && today <= max ? ((today.getTime() - week0.getTime()) / (nWeeks * 7 * DAY)) * 100 : null
-    return { nWeeks, months, semanas, porIng, primerLibre, cnc, cncHasta, hoyPct, total: engs.length }
+    return { nWeeks, months, engRows, libres, cnc, cncHasta, hoyPct, total: engs.length, weekDate }
   }, [all])
 
   if (!g) return <div className="py-16 text-center text-stone-400">Sin datos de ingeniería.</div>
-  const cellCls = (l: number) => l <= 0 ? 'bg-rose-200 text-rose-900' : l === 1 ? 'bg-amber-100 text-amber-800' : 'bg-emerald-100 text-emerald-800'
   const fmt = (dt: Date) => `${dt.getDate()} ${MES[dt.getMonth()]}`
+  const libCls = (l: number) => l <= 0 ? 'bg-rose-200 text-rose-900' : l === 1 ? 'bg-amber-100 text-amber-800' : 'bg-emerald-100 text-emerald-800'
+  const GUT = 176
 
   return (
     <div className="space-y-4">
       <div className="rounded-2xl border border-amber-200 bg-amber-50/60 px-4 py-2.5 text-[12.5px] text-amber-800 flex items-start gap-2">
         <AlertTriangle size={15} className="shrink-0 mt-0.5" />
-        <span><b>Provisional.</b> Mide "ingenieros ocupados" de forma binaria (tiene o no tarea esa semana). El significado exacto del "% de asignación" lo calibramos con el creador — ahí pasa a ser capacidad real por persona.</span>
+        <span><b>Provisional.</b> Pintado = el ingeniero tiene tarea esa semana; claro = libre. Ojo: si aparecen muchos huecos, puede ser tiempo real libre o que el Excel no capture todo — <b>a validar con el creador</b>. El "%" real se calibra con él.</span>
       </div>
 
-      {/* respuesta rápida */}
-      <div className="rounded-2xl border border-stone-200 bg-white p-4 flex flex-wrap items-center gap-x-8 gap-y-3">
-        <div>
-          <div className="text-[11px] uppercase tracking-wide text-stone-400 font-semibold">Equipo</div>
-          <div className="text-2xl font-bold text-stone-900">{g.total} <span className="text-sm font-medium text-stone-400">ingenieros</span></div>
-        </div>
-        <div>
-          <div className="text-[11px] uppercase tracking-wide text-stone-400 font-semibold">Primer lugar libre</div>
-          <div className="text-2xl font-bold text-forest-700">{g.primerLibre ? fmt(new Date(g.primerLibre.wsMs)) : '—'}</div>
-        </div>
-        {g.cncHasta && (
-          <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-2">
-            <div className="text-[11px] uppercase tracking-wide text-rose-500 font-semibold flex items-center gap-1"><AlertTriangle size={12} /> Cuello de botella</div>
-            <div className="text-sm font-bold text-rose-700">CNC pasa solo por {g.cnc[0]}</div>
-            <div className="text-xs text-rose-600">ocupado hasta <b>{fmt(g.cncHasta)}</b></div>
+      {/* respuesta rápida: el cuello de botella */}
+      {g.cncHasta && (
+        <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 flex items-center gap-3">
+          <AlertTriangle size={20} className="text-rose-500 shrink-0" />
+          <div>
+            <div className="text-[11px] uppercase tracking-wide text-rose-500 font-semibold">Cuello de botella</div>
+            <div className="text-sm font-bold text-rose-700">El CNC pasa solo por {g.cnc[0]} — su última tarea termina el {fmt(g.cncHasta)}</div>
           </div>
-        )}
-      </div>
+          <div className="ml-auto text-right"><div className="text-[11px] uppercase tracking-wide text-stone-400 font-semibold">Equipo</div><div className="text-xl font-bold text-stone-800">{g.total} <span className="text-xs text-stone-400 font-medium">ingenieros</span></div></div>
+        </div>
+      )}
 
-      {/* timeline de disponibilidad */}
+      {/* grilla ingeniero × semana */}
       <div className="rounded-2xl border border-stone-200 bg-white overflow-hidden">
         <div className="flex items-center gap-2 px-4 py-3 border-b border-stone-100">
           <Activity size={17} className="text-forest-600" />
-          <h2 className="font-bold text-stone-800">Disponibilidad semana a semana</h2>
-          <span className="text-xs text-stone-400">nº = ingenieros libres · <b className="text-rose-600">rojo = ninguno libre</b></span>
+          <h2 className="font-bold text-stone-800">Disponibilidad · quién está ocupado cada semana</h2>
         </div>
-        <div className="overflow-x-auto"><div className="min-w-[820px] p-3">
-          <div className="relative h-6 mb-1">
-            {g.months.map((m, i) => <div key={i} className="absolute top-0 text-[10.5px] font-semibold text-forest-700 border-l border-stone-200 pl-1.5 h-6 flex items-center" style={{ left: `${m.startPct}%` }}>{m.label}</div>)}
-            {g.hoyPct !== null && <div className="absolute top-0 bottom-0 border-l-2 border-rose-400 z-10" style={{ left: `${g.hoyPct}%` }}><span className="absolute -top-0 left-1 text-[9px] font-bold text-rose-500">hoy</span></div>}
+        <div className="overflow-x-auto"><div className="min-w-[880px]">
+          {/* header meses */}
+          <div className="flex items-stretch border-b border-stone-100 bg-stone-50/60">
+            <div className="shrink-0 px-3 py-1.5 text-[10px] uppercase tracking-wide text-stone-400 font-semibold" style={{ width: GUT }}>Ingeniero</div>
+            <div className="relative flex-1 h-7">
+              {g.months.map((m, i) => <div key={i} className="absolute top-0 bottom-0 border-l border-stone-200 flex items-center pl-1.5 text-[10.5px] font-semibold text-forest-700" style={{ left: `${m.startPct}%` }}>{m.label}</div>)}
+              {g.hoyPct !== null && <div className="absolute top-0 bottom-0 border-l-2 border-rose-400 z-10" style={{ left: `${g.hoyPct}%` }}><span className="absolute top-0 left-1 text-[9px] font-bold text-rose-500">hoy</span></div>}
+            </div>
           </div>
-          <div className="flex gap-0.5">
-            {g.semanas.map((s) => (
-              <div key={s.i} title={`Semana del ${fmt(new Date(s.wsMs))}: ${s.libres} de ${g.total} libres`}
-                className={`flex-1 h-9 rounded flex items-center justify-center text-[11px] font-bold ${cellCls(s.libres)}`}>{s.libres}</div>
-            ))}
+          {/* fila resumen: libres */}
+          <div className="flex items-center border-b border-stone-200 bg-stone-50/40">
+            <div className="shrink-0 px-3 py-1.5 text-[11px] font-bold text-stone-600" style={{ width: GUT }}>Ingenieros libres</div>
+            <div className="flex-1 flex gap-px py-1">
+              {g.libres.map((l, i) => <div key={i} title={`${fmt(g.weekDate(i))}: ${l} de ${g.total} libres`} className={`flex-1 h-6 rounded-sm flex items-center justify-center text-[10px] font-bold ${libCls(l)}`}>{l}</div>)}
+            </div>
           </div>
-        </div></div>
-      </div>
-
-      {/* por ingeniero: ocupado hasta */}
-      <div className="rounded-2xl border border-stone-200 bg-white overflow-hidden">
-        <div className="px-4 py-3 border-b border-stone-100"><h2 className="font-bold text-stone-800 text-sm">Cada ingeniero está ocupado hasta…</h2></div>
-        <div className="divide-y divide-stone-50">
-          {g.porIng.map((p) => (
-            <div key={p.nombre} className="flex items-center gap-3 px-4 py-2.5">
-              <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: PAL[g.porIng.indexOf(p) % PAL.length] }} />
-              <span className="text-sm font-semibold text-stone-700 flex-1">{p.nombre}</span>
-              <span className="text-sm text-stone-500">ocupado hasta <b className="text-stone-800 tabular-nums">{fmt(p.hasta)}</b></span>
+          {/* una fila por ingeniero */}
+          {g.engRows.map((r) => (
+            <div key={r.nombre} className="flex items-center border-b border-stone-50 hover:bg-stone-50/40">
+              <div className="shrink-0 px-3 py-1.5 flex items-center gap-1.5" style={{ width: GUT }}>
+                <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: r.color }} />
+                <span className="text-[12.5px] font-semibold text-stone-700 truncate">{r.nombre}</span>
+              </div>
+              <div className="flex-1 flex gap-px py-1">
+                {r.busy.map((b, i) => (
+                  <div key={i} title={`${r.nombre} · ${fmt(g.weekDate(i))}: ${b === 0 ? 'libre' : b + ' tarea' + (b > 1 ? 's' : '')}`}
+                    className="flex-1 h-6 rounded-sm" style={{ background: b === 0 ? '#f5f5f4' : r.color + (b > 1 ? '' : 'aa') }} />
+                ))}
+              </div>
             </div>
           ))}
+        </div></div>
+        <div className="px-4 py-2 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-stone-500 items-center border-t border-stone-100">
+          <span className="inline-flex items-center gap-1.5"><span className="w-3.5 h-3.5 rounded-sm bg-stone-100 inline-block" /> libre</span>
+          <span className="inline-flex items-center gap-1.5"><span className="w-3.5 h-3.5 rounded-sm bg-forest-600 inline-block" /> ocupado</span>
+          <span className="italic text-stone-400">La fila "Ingenieros libres" es la suma de abajo — así los huecos coinciden. Detalle en "Carga por ingeniero".</span>
         </div>
-        <div className="px-4 py-2 text-[11px] text-stone-400 italic border-t border-stone-100">Para ver el detalle de qué hace cada uno, entrá a "Carga por ingeniero". Para las tareas de un proyecto, a "Por proyecto".</div>
       </div>
     </div>
   )
