@@ -69,14 +69,25 @@ export default function IngenieriaPlan() {
     const nWeeks = Math.max(1, Math.ceil((meta.max.getTime() - week0.getTime()) / (7 * DAY)) + 1)
     const pct = (iso: string) => ((d(iso).getTime() - week0.getTime()) / (nWeeks * 7 * DAY)) * 100
     const wPct = (a: string, b: string) => Math.max(((d(b).getTime() - d(a).getTime()) / (nWeeks * 7 * DAY)) * 100 + 100 / nWeeks / 2, 100 / nWeeks * 0.6)
+    const wkIdx = (iso: string) => Math.floor((d(iso).getTime() - week0.getTime()) / (7 * DAY))
 
     const months: { label: string; startPct: number }[] = []
     for (let i = 0; i < nWeeks; i++) { const wd = new Date(week0.getTime() + i * 7 * DAY); const label = `${MES[wd.getMonth()]} ${String(wd.getFullYear()).slice(2)}`; const last = months[months.length - 1]; if (!last || last.label !== label) months.push({ label, startPct: (i / nWeeks) * 100 }) }
 
     const byProj = new Map<string, IngTarea[]>()
     for (const t of tareas) { const k = t.proyecto_ext || '—'; if (!byProj.has(k)) byProj.set(k, []); byProj.get(k)!.push(t) }
-    const lanes = [...byProj.entries()].map(([proyecto, ts]) => ({ proyecto, tareas: ts.sort((a, b) => d(a.fecha_inicio!).getTime() - d(b.fecha_inicio!).getTime()) }))
-      .sort((a, b) => d(a.tareas[0].fecha_inicio!).getTime() - d(b.tareas[0].fecha_inicio!).getTime())
+    const lanes = [...byProj.entries()].map(([proyecto, ts]) => {
+      const sorted = ts.sort((a, b) => d(a.fecha_inicio!).getTime() - d(b.fecha_inicio!).getTime())
+      // empaquetar en sub-filas: tareas que se solapan en el tiempo van en filas distintas
+      const rows: { endIdx: number; items: IngTarea[] }[] = []
+      for (const t of sorted) {
+        const s = wkIdx(t.fecha_inicio!), e = Math.max(s, wkIdx(t.fecha_fin!))
+        let row = rows.find((r) => r.endIdx < s)
+        if (!row) { row = { endIdx: -1, items: [] }; rows.push(row) }
+        row.items.push(t); row.endIdx = e
+      }
+      return { proyecto, tareas: sorted, rows }
+    }).sort((a, b) => d(a.tareas[0].fecha_inicio!).getTime() - d(b.tareas[0].fecha_inicio!).getTime())
 
     const today = new Date(); today.setHours(0, 0, 0, 0)
     const hoyPct = today >= week0 && today <= meta.max ? ((today.getTime() - week0.getTime()) / (nWeeks * 7 * DAY)) * 100 : null
@@ -161,17 +172,23 @@ export default function IngenieriaPlan() {
                       </div>
                       <div className="text-[10px] text-stone-400">{lane.tareas.length} tareas</div>
                     </button>
-                    <div className="relative flex-1 py-2 min-h-[38px]">
+                    <div className="relative flex-1 py-1.5">
                       {eng.months.map((m, i) => <div key={i} className="absolute top-0 bottom-0 border-l border-stone-50" style={{ left: `${m.startPct}%` }} />)}
                       {eng.hoyPct !== null && <div className="absolute top-0 bottom-0 border-l-2 border-rose-200 z-0" style={{ left: `${eng.hoyPct}%` }} />}
-                      {lane.tareas.map((t) => (
-                        <div key={t.id} onClick={() => setSelProj(lane.proyecto)} title={`${t.nombre}\n${t.fecha_inicio} → ${t.fecha_fin} · ${Math.round(t.allocation_pct * 100)}%`}
-                          className="absolute top-1.5 h-6 rounded-md flex items-center px-1.5 cursor-pointer overflow-hidden hover:ring-2 hover:ring-stone-400"
-                          style={{ left: `${eng.pct(t.fecha_inicio!)}%`, width: `calc(${eng.wPct(t.fecha_inicio!, t.fecha_fin!)}% - 2px)`, ...barStyle(t.estado, col) }}>
-                          {t.estado === 'hecha' && <Check size={10} className="text-emerald-700 shrink-0 mr-0.5" />}
-                          <span className="text-[9.5px] font-medium text-stone-600 truncate">{t.tipo_clave ? t.tipo_clave.replace(/_/g, ' ') : t.nombre}</span>
-                        </div>
-                      ))}
+                      <div className="space-y-1">
+                        {lane.rows.map((row, ri) => (
+                          <div key={ri} className="relative h-6">
+                            {row.items.map((t) => (
+                              <div key={t.id} onClick={() => setSelProj(lane.proyecto)} title={`${t.nombre}\n${t.fecha_inicio} → ${t.fecha_fin} · ${Math.round(t.allocation_pct * 100)}%`}
+                                className="absolute top-0 h-6 rounded-md flex items-center px-1.5 cursor-pointer overflow-hidden hover:ring-2 hover:ring-stone-400"
+                                style={{ left: `${eng.pct(t.fecha_inicio!)}%`, width: `calc(${eng.wPct(t.fecha_inicio!, t.fecha_fin!)}% - 2px)`, ...barStyle(t.estado, col) }}>
+                                {t.estado === 'hecha' && <Check size={10} className="text-emerald-700 shrink-0 mr-0.5" />}
+                                <span className="text-[9.5px] font-medium text-stone-600 truncate">{t.tipo_clave ? t.tipo_clave.replace(/_/g, ' ') : t.nombre}</span>
+                              </div>
+                            ))}
+                          </div>
+                        ))}
+                      </div>
                     </div>
                   </div>
                 )
