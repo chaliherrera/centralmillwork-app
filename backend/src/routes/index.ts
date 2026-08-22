@@ -61,6 +61,7 @@ import {
 } from '../controllers/muestrasController'
 import { muestrasModuleRouter } from '../modules/muestras'
 import { scheduleModuleRouter } from '../modules/schedule'
+import { ingenieriaModuleRouter } from '../modules/ingenieria'
 import diagnosticRouter from './diagnostic'
 // teamsBotRouter se monta directamente en src/index.ts (antes de authenticate),
 // porque su autenticación la hace el Bot Framework SDK internamente.
@@ -240,6 +241,9 @@ router.use('/muestras', muestrasModuleRouter)
 
 // Life of a Deal — schedule inteligente de proyectos (Etapa 1: motor + captura)
 router.use('/schedule', scheduleModuleRouter)
+
+// Plan de Ingeniería — schedule con recursos (réplica nativa del Master.Sched)
+router.use('/ingenieria', ingenieriaModuleRouter)
 
 // ─── Diagnóstico (solo ADMIN) ────────────────────────────────────────────────
 // GET /api/admin/storage-status: para debuggear el bug de imágenes 2026-06-08
