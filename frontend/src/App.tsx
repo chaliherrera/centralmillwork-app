@@ -18,6 +18,7 @@ import Produccion from '@/pages/produccion/Produccion'
 import Muestras from '@/pages/Muestras'
 import Estimacion from '@/pages/Estimacion'
 import Ingenieria from '@/pages/Ingenieria'
+import IngenieriaPlan from '@/pages/IngenieriaPlan'
 import ProjectMgmt from '@/pages/ProjectMgmt'
 import Finanzas from '@/pages/Finanzas'
 import Logistica from '@/pages/Logistica'
@@ -133,6 +134,7 @@ export default function App() {
         <Route path="muestras"         element={<MuestrasRoute><Muestras /></MuestrasRoute>} />
         <Route path="estimados"        element={<EstimacionRoute><Estimacion /></EstimacionRoute>} />
         <Route path="ingenieria"       element={<IngenieriaRoute><Ingenieria /></IngenieriaRoute>} />
+        <Route path="ingenieria-plan"  element={<IngenieriaRoute><IngenieriaPlan /></IngenieriaRoute>} />
         <Route path="pm"               element={<PmRoute><ProjectMgmt /></PmRoute>} />
         <Route path="finanzas"         element={<FinanzasRoute><Finanzas /></FinanzasRoute>} />
         <Route path="logistica"        element={<LogisticaRoute><Logistica /></LogisticaRoute>} />

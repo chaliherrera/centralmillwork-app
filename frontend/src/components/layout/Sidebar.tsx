@@ -2,7 +2,7 @@ import { NavLink } from 'react-router-dom'
 import {
   LayoutDashboard, FolderOpen, ShoppingCart,
   Package, Truck, Users, ChevronLeft, ChevronRight, ShieldCheck,
-  Factory, Inbox, Beaker, Layers, FileSignature, DraftingCompass, ClipboardList, Wallet, Send,
+  Factory, Inbox, Beaker, Layers, FileSignature, DraftingCompass, ClipboardList, Wallet, Send, Gauge,
 } from 'lucide-react'
 import { useState } from 'react'
 import clsx from 'clsx'
@@ -25,6 +25,7 @@ const NAV_ITEMS: NavItem[] = [
   { to: '/proyectos',      label: 'Proyectos',          icon: FolderOpen,      roles: ['ADMIN','PROCUREMENT','PROJECT_MANAGEMENT','SHOP_MANAGER','VIEWER'] },
   { to: '/estimados',      label: 'Estimados',          icon: FileSignature,   roles: ['ADMIN','PROJECT_MANAGEMENT'] },
   { to: '/ingenieria',     label: 'Ingeniería',         icon: DraftingCompass, roles: ['ADMIN','ENGINEERING','PROJECT_MANAGEMENT'] },
+  { to: '/ingenieria-plan', label: 'Plan Ingeniería',   icon: Gauge,           roles: ['ADMIN','ENGINEERING','PROJECT_MANAGEMENT'] },
   { to: '/pm',             label: 'PM',                 icon: ClipboardList,   roles: ['ADMIN','PROJECT_MANAGEMENT'] },
   { to: '/finanzas',       label: 'Finanzas',           icon: Wallet,          roles: ['ADMIN','CONTABILIDAD'] },
   { to: '/logistica',      label: 'Logística',          icon: Send,            roles: ['ADMIN','LOGISTICA','PROJECT_MANAGEMENT'] },
