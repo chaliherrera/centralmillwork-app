@@ -29,7 +29,8 @@ export async function intakeProyecto(
   fechaObjetivo: string,
   contrato: { filename: string; original_name: string; size: number } | null,
   usuarioId: string | null,
-  usuarioNombre: string | null
+  usuarioNombre: string | null,
+  firma?: { fechaFirma: string | null; fechaEnvio: string | null }
 ): Promise<IntakeResult> {
   // ¿Ya tiene plan? Si no, generarlo (calcula todo hacia atrás desde la fecha).
   const { rows: pl } = await runner.query<{ id: number }>(
@@ -57,14 +58,25 @@ export async function intakeProyecto(
            VALUES ($1,'C-03',$2,$3,$4,$5)`,
         [proyectoId, contrato.filename, contrato.original_name, contrato.size, usuarioId])
     }
+    // Retraso atribuible al cliente = días entre que se le envió el contrato y que
+    // lo firmó. Se documenta como evidencia (no se usa para mover la fecha sagrada;
+    // sirve para justificar una renegociación si comprometió la entrega).
+    const fechaFirma = firma?.fechaFirma || null
+    const fechaEnvio = firma?.fechaEnvio || null
+    const diasCliente = fechaFirma && fechaEnvio
+      ? Math.max(0, Math.round((new Date(fechaFirma).getTime() - new Date(fechaEnvio).getTime()) / 86400000))
+      : null
     const evidencia = JSON.stringify({
       source: 'contrato', archivo: contrato?.original_name, usuario: usuarioNombre || undefined,
+      fecha_firma: fechaFirma || undefined, fecha_envio: fechaEnvio || undefined,
+      dias_atribuibles_cliente: diasCliente ?? undefined,
     })
+    // Día cero = la firma del cliente (si se registró); si no, la fecha de hoy.
     await runner.query(
-      `UPDATE schedule_hitos sh SET fecha_real = NOW(), evidencia_ref = $2::jsonb, updated_at = NOW()
+      `UPDATE schedule_hitos sh SET fecha_real = COALESCE($3::timestamptz, NOW()), evidencia_ref = $2::jsonb, updated_at = NOW()
          FROM schedule_planes sp
         WHERE sp.id = sh.plan_id AND sp.proyecto_id = $1 AND sp.scope = 'proyecto' AND sh.codigo = 'C-03'`,
-      [proyectoId, evidencia])
+      [proyectoId, evidencia, fechaFirma])
   }
 
   await recomputeScheduleForProyecto(runner, proyectoId, 'manual')

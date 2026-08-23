@@ -107,12 +107,15 @@ export const scheduleService = {
       .post<ApiResponse<{ plan_id: number }>>(`/schedule/proyecto/${proyectoId}/generar`, { fecha_objetivo })
       .then((r) => r.data),
 
-  // Intake de Estimación: fecha de entrega + contrato firmado (PDF opcional) →
-  // arranca el proyecto en el schedule y cierra C-03 (día cero).
-  intake: (proyectoId: number, fecha_objetivo: string, contrato?: File | null) => {
+  // Intake de Estimación: fecha de entrega + contrato firmado (PDF) + fechas de
+  // envío/firma → arranca el proyecto y cierra C-03. Día cero = fecha de firma.
+  intake: (proyectoId: number, fecha_objetivo: string, contrato?: File | null,
+           fechas?: { fecha_firma?: string; fecha_envio?: string }) => {
     const fd = new FormData()
     fd.append('fecha_objetivo', fecha_objetivo)
     if (contrato) fd.append('contrato', contrato)
+    if (fechas?.fecha_firma) fd.append('fecha_firma', fechas.fecha_firma)
+    if (fechas?.fecha_envio) fd.append('fecha_envio', fechas.fecha_envio)
     return api
       .post<ApiResponse<{ ok: boolean; planNuevo: boolean }>>(`/schedule/proyecto/${proyectoId}/intake`, fd, {
         headers: { 'Content-Type': 'multipart/form-data' },

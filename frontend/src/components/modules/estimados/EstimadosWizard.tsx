@@ -30,6 +30,8 @@ export default function EstimadosWizard() {
   const [tienePlan, setTienePlan] = useState(false)
   const [formOpen, setFormOpen] = useState(false)
   const [contrato, setContrato] = useState<File | null>(null)
+  const [fechaEnvio, setFechaEnvio] = useState('')   // cuándo se envió el contrato al cliente
+  const [fechaFirma, setFechaFirma] = useState('')   // cuándo el cliente firmó = día cero real
   const [factRes, setFactRes] = useState<FactibilidadResult | null>(null)
   const [fechaSolicitada, setFechaSolicitada] = useState('')
   const [fechaComprometida, setFechaComprometida] = useState('')
@@ -48,9 +50,16 @@ export default function EstimadosWizard() {
     try { const r = await scheduleService.getPlan(id); setTienePlan(!!r.data?.plan) } catch { setTienePlan(false) }
   }
 
+  // Días que tardó el cliente en firmar (envío → firma) = retraso atribuible a él.
+  const diasCliente = useMemo(() => {
+    if (!fechaEnvio || !fechaFirma) return null
+    const d = Math.round((new Date(fechaFirma + 'T00:00:00').getTime() - new Date(fechaEnvio + 'T00:00:00').getTime()) / 86400000)
+    return d
+  }, [fechaEnvio, fechaFirma])
+
   const canNext =
     paso === 1 ? !!sel && !tienePlan :
-    paso === 2 ? !!contrato :
+    paso === 2 ? !!contrato && !!fechaFirma && (diasCliente === null || diasCliente >= 0) :
     paso === 3 ? !!fechaComprometida :
     false
 
@@ -58,7 +67,8 @@ export default function EstimadosWizard() {
     if (!sel || !fechaComprometida || !contrato) return
     setCreating(true); setError(null)
     try {
-      await scheduleService.intake(sel.id, fechaComprometida, contrato)
+      await scheduleService.intake(sel.id, fechaComprometida, contrato,
+        { fecha_firma: fechaFirma || undefined, fecha_envio: fechaEnvio || undefined })
       // Reservar la capacidad de Ingeniería (best-effort; el PM la confirma después).
       try { const rr = await ingenieriaService.reservar(sel.id); setReservadas(rr.data?.creadas ?? 0) } catch { /* la reserva no bloquea */ }
       setCreado(true)
@@ -77,7 +87,7 @@ export default function EstimadosWizard() {
           <Link to={`/proyectos/${sel.id}`} className="inline-flex items-center gap-1.5 rounded-lg bg-forest-600 hover:bg-forest-700 text-white text-sm font-semibold px-4 py-2">
             Ver el schedule <ArrowRight size={15} />
           </Link>
-          <button onClick={() => { setCreado(false); setPaso(1); setSelId(null); setContrato(null); setFactRes(null); setFechaSolicitada(''); setFechaComprometida(''); cargarProyectos() }}
+          <button onClick={() => { setCreado(false); setPaso(1); setSelId(null); setContrato(null); setFechaEnvio(''); setFechaFirma(''); setFactRes(null); setFechaSolicitada(''); setFechaComprometida(''); cargarProyectos() }}
             className="text-sm text-stone-500 hover:text-stone-800 px-3 py-2">Arrancar otro</button>
         </div>
       </div>
@@ -139,15 +149,47 @@ export default function EstimadosWizard() {
           <div className="space-y-4">
             <div>
               <h3 className="font-bold text-stone-800">Contrato firmado</h3>
-              <p className="text-sm text-stone-500">Subí el PDF del contrato firmado. <b>Es obligatorio</b> — es el día cero del proyecto.</p>
+              <p className="text-sm text-stone-500">El <b>día cero</b> del proyecto es <b>la fecha en que el cliente firmó</b> — no la de hoy. Registrala para no regalar días.</p>
             </div>
-            <label className="flex flex-col items-center justify-center gap-2 border-2 border-dashed border-stone-300 rounded-xl py-10 cursor-pointer hover:border-forest-400 transition-colors">
-              <FileUp size={28} className="text-stone-300" />
-              <span className="text-sm text-stone-500">{contrato ? contrato.name : 'Elegí el PDF del contrato firmado'}</span>
-              <input type="file" accept="application/pdf" className="hidden" onChange={(e) => setContrato(e.target.files?.[0] ?? null)} />
-            </label>
-            {contrato && <div className="text-xs text-emerald-700 flex items-center gap-1"><Check size={13} /> {contrato.name} listo</div>}
-            <div className="text-[11px] text-stone-400">Más adelante, la firma de DocuSign va a marcar automáticamente la fecha de firma. Por ahora, el PDF acá alcanza.</div>
+
+            {/* Fechas del contrato: envío (nuestro) y firma (del cliente = día cero) */}
+            <div className="rounded-xl border border-stone-200 bg-stone-50/50 p-4">
+              <div className="flex flex-wrap items-end gap-4">
+                <div>
+                  <label className="text-[11px] uppercase tracking-wider text-stone-400 font-semibold">Contrato enviado al cliente</label>
+                  <input type="date" value={fechaEnvio} onChange={(e) => setFechaEnvio(e.target.value)}
+                    className="mt-1 block rounded-lg border border-stone-300 px-3 py-2 text-sm text-stone-800 focus:outline-none focus:ring-2 focus:ring-forest-300" />
+                </div>
+                <div className="text-stone-300 pb-2"><ArrowRight size={16} /></div>
+                <div>
+                  <label className="text-[11px] uppercase tracking-wider text-forest-600 font-semibold">Firmado por el cliente <span className="text-forest-700">· día cero</span></label>
+                  <input type="date" value={fechaFirma} onChange={(e) => setFechaFirma(e.target.value)}
+                    className="mt-1 block rounded-lg border-2 border-forest-300 px-3 py-2 text-sm text-stone-900 font-medium focus:outline-none focus:ring-2 focus:ring-forest-300" />
+                </div>
+              </div>
+              {diasCliente !== null && diasCliente > 0 && (
+                <div className="mt-3 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                  El cliente tardó <b>{diasCliente} día{diasCliente > 1 ? 's' : ''}</b> en firmar (envío → firma). Es un retraso <b>atribuible al cliente</b>: si compromete la entrega, queda documentado para renegociar la fecha.
+                </div>
+              )}
+              {diasCliente !== null && diasCliente < 0 && (
+                <div className="mt-3 text-xs text-rose-700 bg-rose-50 border border-rose-200 rounded-lg px-3 py-2">
+                  La firma no puede ser anterior al envío. Revisá las fechas.
+                </div>
+              )}
+              <div className="mt-2 text-[11px] text-stone-400">Cuando conectemos <b>DocuSign</b>, estas dos fechas llegan automáticas desde el portal del cliente (envío y firma del sobre).</div>
+            </div>
+
+            {/* PDF del contrato firmado (obligatorio) */}
+            <div>
+              <label className="text-[11px] uppercase tracking-wider text-stone-400 font-semibold">PDF del contrato firmado · obligatorio</label>
+              <label className="mt-1 flex flex-col items-center justify-center gap-2 border-2 border-dashed border-stone-300 rounded-xl py-8 cursor-pointer hover:border-forest-400 transition-colors">
+                <FileUp size={26} className="text-stone-300" />
+                <span className="text-sm text-stone-500">{contrato ? contrato.name : 'Elegí el PDF del contrato firmado'}</span>
+                <input type="file" accept="application/pdf" className="hidden" onChange={(e) => setContrato(e.target.files?.[0] ?? null)} />
+              </label>
+              {contrato && <div className="mt-1 text-xs text-emerald-700 flex items-center gap-1"><Check size={13} /> {contrato.name} listo</div>}
+            </div>
           </div>
         )}
 
@@ -186,6 +228,9 @@ export default function EstimadosWizard() {
             <div className="rounded-xl border border-stone-100 bg-stone-50/60 divide-y divide-stone-100">
               <Row k="Proyecto" v={`${sel.codigo} · ${sel.nombre}`} />
               <Row k="Contrato" v={contrato?.name ?? '—'} />
+              {fechaEnvio && <Row k="Contrato enviado" v={fmt(fechaEnvio)} />}
+              <Row k="Firmado por el cliente (día cero)" v={<b className="text-forest-700">{fechaFirma ? fmt(fechaFirma) : 'hoy'}</b>} />
+              {diasCliente !== null && diasCliente > 0 && <Row k="Retraso del cliente en firmar" v={<span className="text-amber-700">{diasCliente} día{diasCliente > 1 ? 's' : ''} (documentado)</span>} />}
               <Row k="Fecha pedida por el cliente" v={fechaSolicitada ? fmt(fechaSolicitada) : '—'} />
               <Row k="Fecha comprometida (objetivo)" v={<b className="text-forest-700">{fmt(fechaComprometida)}</b>} />
               {factRes && !factRes.factible && <Row k="Aviso" v={<span className="text-amber-700">La pedida no era factible — se comprometió una fecha real.</span>} />}

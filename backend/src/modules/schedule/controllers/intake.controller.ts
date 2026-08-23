@@ -30,6 +30,18 @@ export async function intakeHandler(req: Request, res: Response, next: NextFunct
     const fecha = String(req.body?.fecha_objetivo ?? '')
     if (!/^\d{4}-\d{2}-\d{2}$/.test(fecha)) return next(createError('fecha_objetivo inválida (YYYY-MM-DD)', 400))
 
+    // Día cero REAL = fecha de firma del cliente (no la de creación del schedule).
+    // fecha_envio = cuándo se le mandó el contrato; el gap firma−envío es retraso
+    // atribuible al cliente. Ambas opcionales (hoy manuales; mañana DocuSign).
+    const okFecha = (v: unknown) => v == null || v === '' || /^\d{4}-\d{2}-\d{2}$/.test(String(v))
+    const fechaFirma = req.body?.fecha_firma ? String(req.body.fecha_firma) : null
+    const fechaEnvio = req.body?.fecha_envio ? String(req.body.fecha_envio) : null
+    if (!okFecha(fechaFirma) || !okFecha(fechaEnvio)) return next(createError('fecha_firma/fecha_envio inválida (YYYY-MM-DD)', 400))
+    if (fechaFirma && new Date(fechaFirma) > new Date(fecha))
+      return next(createError('la fecha de firma no puede ser posterior a la entrega comprometida', 400))
+    if (fechaFirma && fechaEnvio && new Date(fechaEnvio) > new Date(fechaFirma))
+      return next(createError('el envío del contrato no puede ser posterior a la firma', 400))
+
     // Si vino contrato, subirlo a Supabase (si está configurado).
     let contrato: { filename: string; original_name: string; size: number } | null = null
     if (req.file) {
@@ -48,7 +60,8 @@ export async function intakeHandler(req: Request, res: Response, next: NextFunct
 
     await client.query('BEGIN')
     const r = await intakeProyecto(client, proyectoId, fecha, contrato,
-      (req as any).user?.id ?? null, (req as any).user?.nombre ?? null)
+      (req as any).user?.id ?? null, (req as any).user?.nombre ?? null,
+      { fechaFirma, fechaEnvio })
     if (!r.ok) { await client.query('ROLLBACK'); return next(createError(r.error ?? 'no se pudo iniciar', 400)) }
     await client.query('COMMIT')
 
