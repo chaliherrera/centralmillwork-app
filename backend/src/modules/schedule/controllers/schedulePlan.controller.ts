@@ -13,6 +13,16 @@ import { generarPlan, recomputeScheduleForProyecto, cambiarFechaObjetivo } from 
 import { crearToken, revocarToken } from '../domain/portal'
 import { registrarHito } from '../domain/registro'
 import { getTrabajoPorArea } from '../domain/trabajo'
+import { chequearFactibilidad } from '../domain/factibilidad'
+
+// POST /api/schedule/factibilidad  { fecha_pedida: 'YYYY-MM-DD' }  (read-only, dry-run)
+export async function factibilidadHandler(req: Request, res: Response, next: NextFunction) {
+  try {
+    const fecha = String(req.body?.fecha_pedida ?? '')
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(fecha)) return next(createError('fecha_pedida inválida (YYYY-MM-DD)', 400))
+    res.json({ data: await chequearFactibilidad(pool, fecha) })
+  } catch (e) { next(e) }
+}
 
 function parseProyectoId(req: Request): number {
   const id = parseInt(String(req.params.id), 10)

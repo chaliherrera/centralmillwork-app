@@ -4,6 +4,7 @@ import { FileSignature, CalendarClock, Upload, CheckCircle2, ArrowRight, Loader2
 import { proyectosService } from '@/services/proyectos'
 import { scheduleService, type ScheduleData } from '@/services/schedule'
 import MiTrabajo from '@/components/modules/schedule/MiTrabajo'
+import FactibilidadCheck from '@/components/modules/estimados/FactibilidadCheck'
 import type { Proyecto } from '@/types'
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -92,6 +93,9 @@ export default function Estimacion() {
           <p className="text-sm text-stone-500">Arrancá un proyecto en el schedule: contrato firmado + fecha de entrega.</p>
         </div>
       </div>
+
+      {/* Chequeo de factibilidad (nuevo — paso 4 del flujo). Read-only. */}
+      <FactibilidadCheck />
 
       {/* Paso previo: el proyecto debe existir. */}
       <div className="rounded-xl border border-amber-200 bg-amber-50/70 px-4 py-3 text-sm text-amber-800 flex items-start gap-2">
