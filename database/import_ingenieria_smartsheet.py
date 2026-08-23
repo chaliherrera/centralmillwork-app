@@ -50,7 +50,10 @@ proj_re=re.compile(r'^\s*\d{2}-\d{3}')
 
 lines=[]
 lines.append("BEGIN;")
-lines.append("TRUNCATE ing_tarea_deps, ing_tareas RESTART IDENTITY;")
+# IMPORTANTE: NO borrar todo. Solo refrescamos lo que vino del Excel (origen='import_excel').
+# Las reservas (origen='reserva') y las tareas manuales se PRESERVAN. Las deps de las filas
+# borradas caen por FK ON DELETE CASCADE. (Antes: TRUNCATE — borraba las reservas. Bug corregido.)
+lines.append("DELETE FROM ing_tareas WHERE origen='import_excel';")
 # seed catálogo (idempotente)
 for c,n,h,t,mn,mx,o,al in TIPOS:
     arr="ARRAY[" + ",".join(sq(a) for a in al) + "]::text[]"
