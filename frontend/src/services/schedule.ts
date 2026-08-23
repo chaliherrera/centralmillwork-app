@@ -67,7 +67,30 @@ export interface FactibilidadResult {
   provisional: true
 }
 
+export interface ProyectoOverview {
+  proyecto_id: number
+  codigo: string
+  nombre: string
+  fecha_objetivo: string | null
+  fecha_objetivo_original: string | null
+  semaforo: Semaforo
+  holgura_dias: number | null
+  total: number
+  cumplidos: number
+  atrasados: number
+  prox_codigo: string | null
+  prox_nombre: string | null
+  prox_fase: string | null
+  prox_rol: string | null
+  prox_fecha: string | null
+  prox_semaforo: Semaforo | null
+}
+
 export const scheduleService = {
+  // Índice de la cartera: todos los proyectos con schedule y su estado (nav "Schedule").
+  getProyectosOverview: () =>
+    api.get<ApiResponse<ProyectoOverview[]>>(`/schedule/proyectos`).then((r) => r.data),
+
   getPlan: (proyectoId: number) =>
     api.get<ApiResponse<ScheduleData>>(`/schedule/proyecto/${proyectoId}`).then((r) => r.data),
 

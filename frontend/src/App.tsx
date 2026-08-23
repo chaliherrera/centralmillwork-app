@@ -20,6 +20,8 @@ import Estimacion from '@/pages/Estimacion'
 import Ingenieria from '@/pages/Ingenieria'
 import IngenieriaPlan from '@/pages/IngenieriaPlan'
 import ProjectMgmt from '@/pages/ProjectMgmt'
+import Schedule from '@/pages/Schedule'
+import ScheduleProyecto from '@/pages/ScheduleProyecto'
 import Finanzas from '@/pages/Finanzas'
 import Logistica from '@/pages/Logistica'
 import KioskApp from '@/pages/kiosk/KioskApp'
@@ -84,6 +86,16 @@ function PmRoute({ children }: { children: React.ReactNode }) {
   return <>{children}</>
 }
 
+// Schedule = la columna vertebral. Vista de cartera (por proyecto). La ven quienes
+// dirigen el flujo: PM, dirección, taller e ingeniería. Read-only; las escrituras
+// las enforce el backend por endpoint (VIEWER, por ej., ve pero no modifica).
+function ScheduleRoute({ children }: { children: React.ReactNode }) {
+  const { user } = useAuth()
+  const allowed = ['ADMIN', 'PROJECT_MANAGEMENT', 'SHOP_MANAGER', 'ENGINEERING', 'VIEWER']
+  if (!user || !allowed.includes(user.rol)) return <Navigate to="/" replace />
+  return <>{children}</>
+}
+
 function FinanzasRoute({ children }: { children: React.ReactNode }) {
   const { user } = useAuth()
   const allowed = ['ADMIN', 'CONTABILIDAD']
@@ -121,6 +133,8 @@ export default function App() {
 
       <Route element={<ProtectedRoute><MainLayout /></ProtectedRoute>}>
         <Route index element={<Dashboard />} />
+        <Route path="schedule"         element={<ScheduleRoute><Schedule /></ScheduleRoute>} />
+        <Route path="schedule/:id"     element={<ScheduleRoute><ScheduleProyecto /></ScheduleRoute>} />
         <Route path="proyectos"        element={<Proyectos />} />
         <Route path="proyectos/:id"    element={<ProyectoDetalle />} />
         <Route path="ordenes-compra/*" element={<OrdenesCompra />} />

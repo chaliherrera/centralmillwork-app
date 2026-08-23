@@ -30,6 +30,49 @@ function parseProyectoId(req: Request): number {
   return id
 }
 
+// ── GET /api/schedule/proyectos ──────────────────────────────────────────────
+// Índice de la cartera: TODOS los proyectos con schedule y su estado de un
+// vistazo (la vista del nav "Schedule"). Read-only. Orden por urgencia.
+export async function proyectosOverviewHandler(_req: Request, res: Response, next: NextFunction) {
+  try {
+    const { rows } = await pool.query(
+      `SELECT p.id AS proyecto_id, p.codigo, p.nombre,
+              to_char(sp.fecha_objetivo,'YYYY-MM-DD')          AS fecha_objetivo,
+              to_char(sp.fecha_objetivo_original,'YYYY-MM-DD') AS fecha_objetivo_original,
+              sp.semaforo, sp.holgura_dias,
+              COUNT(*) FILTER (WHERE ph.parent_codigo IS NULL)                            AS total,
+              COUNT(*) FILTER (WHERE ph.parent_codigo IS NULL AND sh.estado = 'cumplido') AS cumplidos,
+              -- Atraso EN VIVO: fecha_planeada es estable, HOY es live -> no depende del
+              -- cron (que está apagado). Un proyecto que nadie abrió no miente verde.
+              COUNT(*) FILTER (WHERE ph.parent_codigo IS NULL AND sh.estado <> 'cumplido'
+                               AND sh.fecha_planeada < CURRENT_DATE)                       AS atrasados,
+              prox.codigo AS prox_codigo, prox.nombre AS prox_nombre, prox.fase AS prox_fase,
+              prox.rol_responsable AS prox_rol, prox.fecha AS prox_fecha, prox.semaforo AS prox_semaforo
+         FROM schedule_planes sp
+         JOIN proyectos p ON p.id = sp.proyecto_id
+         JOIN schedule_hitos sh ON sh.plan_id = sp.id
+         JOIN schedule_plantilla_hitos ph
+              ON ph.plantilla_id = sp.plantilla_id AND ph.codigo = sh.codigo
+         LEFT JOIN LATERAL (
+           SELECT sh2.codigo, ph2.nombre, ph2.fase, ph2.rol_responsable, sh2.semaforo,
+                  to_char(sh2.fecha_planeada,'YYYY-MM-DD') AS fecha
+             FROM schedule_hitos sh2
+             JOIN schedule_plantilla_hitos ph2
+                  ON ph2.plantilla_id = sp.plantilla_id AND ph2.codigo = sh2.codigo
+            WHERE sh2.plan_id = sp.id AND ph2.parent_codigo IS NULL
+              AND sh2.estado IN ('pendiente','en_riesgo','vencido')
+            ORDER BY ph2.orden LIMIT 1
+         ) prox ON true
+        WHERE sp.scope = 'proyecto'
+        GROUP BY p.id, p.codigo, p.nombre, sp.fecha_objetivo, sp.fecha_objetivo_original,
+                 sp.semaforo, sp.holgura_dias,
+                 prox.codigo, prox.nombre, prox.fase, prox.rol_responsable, prox.fecha, prox.semaforo
+        ORDER BY CASE sp.semaforo WHEN 'rojo' THEN 0 WHEN 'amarillo' THEN 1 WHEN 'verde' THEN 2 ELSE 3 END,
+                 sp.fecha_objetivo NULLS LAST`)
+    res.json({ data: rows })
+  } catch (err) { next(err) }
+}
+
 // ── GET /api/schedule/proyecto/:id ───────────────────────────────────────────
 // Devuelve el plan + hitos (con metadata de la plantilla) para el timeline.
 export async function getPlan(req: Request, res: Response, next: NextFunction) {
