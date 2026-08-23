@@ -42,7 +42,7 @@ export default function ReservasPendientes() {
       <div className="flex items-center gap-2 px-4 py-3 border-b border-stone-100 bg-forest-50/40">
         <Lock size={16} className="text-forest-600" />
         <h2 className="font-bold text-stone-800">Reservas de Ingeniería por confirmar</h2>
-        <span className="text-xs text-stone-400">asigná el ingeniero y confirmá</span>
+        <span className="text-xs text-stone-400">revisá el ingeniero propuesto y confirmá (o cambialo)</span>
       </div>
       <div className="divide-y divide-stone-100">
         {reservas.map((p) => (
@@ -57,8 +57,9 @@ export default function ReservasPendientes() {
                 <div key={t.id} className="flex flex-wrap items-center gap-2 text-sm">
                   <span className="flex-1 min-w-[160px] text-stone-700">{t.nombre.replace(' (reserva)', '')}</span>
                   <span className="text-xs text-stone-400 tabular-nums">{fmt(t.fecha_inicio)} → {fmt(t.fecha_fin)}</span>
+                  <span className="text-[11px] text-stone-400">reservado para</span>
                   <input value={asigns[t.id] ?? ''} onChange={(e) => setAsigns((a) => ({ ...a, [t.id]: e.target.value }))}
-                    placeholder="ingeniero…"
+                    placeholder="sin asignar"
                     className="w-40 rounded-lg border border-stone-300 px-2.5 py-1.5 text-sm text-stone-800 focus:outline-none focus:ring-2 focus:ring-forest-300" />
                 </div>
               ))}

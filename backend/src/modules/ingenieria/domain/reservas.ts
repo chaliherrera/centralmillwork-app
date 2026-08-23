@@ -41,6 +41,21 @@ async function duracionesPara(runner: QueryRunner, _presupuesto: number | null):
   return m
 }
 
+/** Propone el ingeniero MENOS cargado en la ventana [inicio, fin] (incluye a los
+ *  que están totalmente libres). Es una propuesta: el PM la confirma o la cambia. */
+async function proponerIngeniero(runner: QueryRunner, inicio: string, fin: string): Promise<string | null> {
+  const { rows } = await runner.query<{ nombre: string }>(
+    `WITH engs AS (SELECT DISTINCT asignado_nombre AS nombre FROM ing_tareas WHERE asignado_nombre IS NOT NULL)
+     SELECT e.nombre
+       FROM engs e
+       LEFT JOIN ing_tareas t ON t.asignado_nombre = e.nombre AND t.estado NOT IN ('hecha','na')
+            AND t.fecha_inicio <= $2 AND t.fecha_fin >= $1
+      GROUP BY e.nombre
+      ORDER BY COUNT(t.id) ASC, e.nombre
+      LIMIT 1`, [inicio, fin])
+  return rows[0]?.nombre ?? null
+}
+
 /** Crea la reserva de Ingeniería para un proyecto (idempotente). */
 export async function crearReserva(runner: QueryRunner, proyectoId: number): Promise<{ creadas: number }> {
   const { rows: ya } = await runner.query<{ n: number }>(
@@ -58,7 +73,10 @@ export async function crearReserva(runner: QueryRunner, proyectoId: number): Pro
   const feriados = await loadFeriados(runner)
   const tipos = await duracionesPara(runner, presupuesto)
 
-  // recurso de CNC (el único que hoy hace CNC = el cuello)
+  // Recurso de CNC. HOY Santos es el único que hace CNC (= el cuello), así que la
+  // reserva de CNC se propone para él. FUTURO: el objetivo es que cada ingeniero
+  // genere sus propios CNC; cuando haya más de uno, cae a proponerIngeniero (menos
+  // cargado). Sea como sea, es una PROPUESTA: el PM la confirma o la cambia.
   const { rows: cncEng } = await runner.query<{ asignado_nombre: string }>(
     `SELECT DISTINCT t.asignado_nombre FROM ing_tareas t JOIN ing_tarea_tipos tt ON tt.id = t.tipo_id
       WHERE tt.clave = 'cnc' AND t.asignado_nombre IS NOT NULL`)
@@ -71,7 +89,9 @@ export async function crearReserva(runner: QueryRunner, proyectoId: number): Pro
     const deadline = planeadas.get(t.hito)
     if (!deadline) continue
     const inicio = subBusinessDays(deadline, t.dur, feriados)
-    const asignado = clave === 'cnc' ? cncRecurso : null // los demás: el PM asigna al confirmar
+    // Toda tarea reservada lleva un ingeniero PROPUESTO (nunca vacía): CNC → Santos
+    // (o el menos cargado si hubiera varios); el resto → el menos cargado en la ventana.
+    const asignado = (clave === 'cnc' ? cncRecurso : null) ?? await proponerIngeniero(runner, inicio, deadline)
     await runner.query(
       `INSERT INTO ing_tareas (proyecto_ext, proyecto_id, tipo_id, nombre, asignado_nombre, allocation_pct, dur_dias, fecha_inicio, fecha_fin, estado, origen)
          VALUES ($1,$2,$3,$4,$5,1.0,$6,$7,$8,'pendiente','reserva')`,
