@@ -5,7 +5,7 @@ import type { User } from '@/types'
 interface AuthContextValue {
   user: User | null
   isLoading: boolean
-  login: (email: string, password: string) => Promise<void>
+  login: (email: string, password: string) => Promise<User>
   logout: () => void
 }
 
@@ -28,6 +28,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const { token, user } = await authService.login(email, password)
     localStorage.setItem('cm_token', token)
     setUser(user)
+    return user
   }
 
   function logout() {
