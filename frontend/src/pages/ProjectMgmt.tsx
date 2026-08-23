@@ -1,5 +1,6 @@
 import { ClipboardList } from 'lucide-react'
 import MiTrabajo from '@/components/modules/schedule/MiTrabajo'
+import ReservasPendientes from '@/components/modules/estimados/ReservasPendientes'
 
 // Escritorio del PM — el hilo conductor: lo que le toca al PM en todos los
 // proyectos (delivery requests, coordinación de instalación, closeout, etc.).
@@ -15,6 +16,7 @@ export default function ProjectMgmt() {
           <p className="text-sm text-stone-500">Lo que le toca a la dirección de proyecto, en todos los proyectos.</p>
         </div>
       </div>
+      <ReservasPendientes />
       <MiTrabajo area="pm" emptyMsg="El PM no tiene nada pendiente ahora mismo. 🎉" />
     </div>
   )

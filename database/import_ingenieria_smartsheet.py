@@ -89,6 +89,12 @@ for rn,r in enumerate(ws.iter_rows(min_row=2,values_only=True),start=2):
       "allocation_pct=EXCLUDED.allocation_pct,dur_dias=EXCLUDED.dur_dias,fecha_inicio=EXCLUDED.fecha_inicio,"
       "fecha_fin=EXCLUDED.fecha_fin,status_ext=EXCLUDED.status_ext,comentario=EXCLUDED.comentario,updated_at=NOW();")
     ntask+=1
+# Anti doble-conteo: si el Excel trae las tareas reales de un proyecto que tenia una
+# reserva provisional (sin confirmar), esas reservas ya no aplican -> estado='na'.
+# Las confirmadas por el PM se preservan (son compromiso real).
+lines.append("UPDATE ing_tareas SET estado='na', updated_at=NOW() "
+             "WHERE origen='reserva' AND reserva_confirmada_at IS NULL "
+             "AND proyecto_ext IN (SELECT DISTINCT proyecto_ext FROM ing_tareas WHERE origen='import_excel');")
 lines.append("COMMIT;")
 open(OUT,"w",encoding="utf-8").write("\n".join(lines))
 print(f"SQL generado: {OUT} | proyectos={nproj} tareas={ntask}")

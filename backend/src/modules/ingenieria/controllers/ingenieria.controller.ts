@@ -9,6 +9,33 @@ import {
   getResumen, listProyectos, listTareas, getCargaPorIngeniero,
   crearTarea, actualizarTarea, borrarTarea,
 } from '../domain/tareas'
+import { crearReserva, listReservasPendientes, confirmarReserva, liberarReserva } from '../domain/reservas'
+
+function pid(req: Request): number {
+  const id = parseInt(String(req.params.id ?? req.params.proyectoId), 10)
+  if (Number.isNaN(id)) throw createError('id de proyecto inválido', 400)
+  return id
+}
+
+// POST /api/ingenieria/proyecto/:id/reservar
+export async function reservarHandler(req: Request, res: Response, next: NextFunction) {
+  try { res.status(201).json({ data: await crearReserva(pool, pid(req)) }) } catch (e) { next(e) }
+}
+// GET /api/ingenieria/reservas-pendientes
+export async function reservasPendientesHandler(_req: Request, res: Response, next: NextFunction) {
+  try { res.json({ data: await listReservasPendientes(pool) }) } catch (e) { next(e) }
+}
+// POST /api/ingenieria/reserva/:proyectoId/confirmar  { asignaciones?: [{id, asignado_nombre}] }
+export async function confirmarReservaHandler(req: Request, res: Response, next: NextFunction) {
+  try {
+    const asigns = Array.isArray(req.body?.asignaciones) ? req.body.asignaciones : undefined
+    res.json({ data: await confirmarReserva(pool, pid(req), (req as any).user?.id ?? null, asigns) })
+  } catch (e) { next(e) }
+}
+// DELETE /api/ingenieria/proyecto/:id/reserva
+export async function liberarReservaHandler(req: Request, res: Response, next: NextFunction) {
+  try { res.json({ data: await liberarReserva(pool, pid(req)) }) } catch (e) { next(e) }
+}
 
 export async function resumenHandler(_req: Request, res: Response, next: NextFunction) {
   try {

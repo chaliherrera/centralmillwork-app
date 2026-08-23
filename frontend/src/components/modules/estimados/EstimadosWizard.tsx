@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { FolderKanban, FileUp, CalendarClock, Rocket, Check, ChevronRight, ChevronLeft, Plus, Loader2, CheckCircle2, ArrowRight } from 'lucide-react'
 import { proyectosService } from '@/services/proyectos'
 import { scheduleService, type FactibilidadResult } from '@/services/schedule'
+import { ingenieriaService } from '@/services/ingenieria'
 import ProyectoForm from '@/components/modules/proyectos/ProyectoForm'
 import FactibilidadCheck from './FactibilidadCheck'
 import type { Proyecto } from '@/types'
@@ -35,6 +36,7 @@ export default function EstimadosWizard() {
   const [creating, setCreating] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [creado, setCreado] = useState(false)
+  const [reservadas, setReservadas] = useState(0)
 
   const cargarProyectos = () => proyectosService.getAll({ limit: 200 } as any).then((r) => setProyectos(r.data ?? [])).catch(() => {})
   useEffect(() => { cargarProyectos() }, [])
@@ -57,6 +59,8 @@ export default function EstimadosWizard() {
     setCreating(true); setError(null)
     try {
       await scheduleService.intake(sel.id, fechaComprometida, contrato)
+      // Reservar la capacidad de Ingeniería (best-effort; el PM la confirma después).
+      try { const rr = await ingenieriaService.reservar(sel.id); setReservadas(rr.data?.creadas ?? 0) } catch { /* la reserva no bloquea */ }
       setCreado(true)
     } catch (e: any) { setError(e?.response?.data?.message || 'No se pudo crear el schedule') } finally { setCreating(false) }
   }
@@ -68,6 +72,7 @@ export default function EstimadosWizard() {
         <CheckCircle2 size={44} className="text-emerald-600 mx-auto" />
         <h2 className="mt-3 text-xl font-bold text-stone-900">Schedule creado</h2>
         <p className="mt-1 text-stone-600">{sel.codigo} · {sel.nombre} — comprometido para el <b>{fmt(fechaComprometida)}</b>.</p>
+        {reservadas > 0 && <p className="mt-1 text-sm text-forest-700">🔒 {reservadas} espacio{reservadas > 1 ? 's' : ''} de Ingeniería reservado{reservadas > 1 ? 's' : ''} — el PM confirma y asigna el ingeniero.</p>}
         <div className="mt-5 flex items-center justify-center gap-3">
           <Link to={`/proyectos/${sel.id}`} className="inline-flex items-center gap-1.5 rounded-lg bg-forest-600 hover:bg-forest-700 text-white text-sm font-semibold px-4 py-2">
             Ver el schedule <ArrowRight size={15} />

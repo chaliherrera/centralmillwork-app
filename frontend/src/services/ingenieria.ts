@@ -36,6 +36,9 @@ export interface IngCarga {
   ingenieros: IngCargaIngeniero[]
   tope: number
 }
+export interface ReservaTarea { id: number; nombre: string; asignado_nombre: string | null; fecha_inicio: string | null; fecha_fin: string | null; tipo_clave: string | null }
+export interface ReservaProyecto { proyecto_id: number; proyecto_codigo: string; proyecto_nombre: string; fecha_objetivo: string | null; tareas: ReservaTarea[] }
+
 export interface TareaInput {
   proyecto_ext?: string | null
   nombre: string
@@ -58,6 +61,16 @@ export const ingenieriaService = {
     api.get<ApiResponse<IngCarga>>('/ingenieria/carga').then((r) => r.data),
   crearTarea: (t: TareaInput) =>
     api.post<ApiResponse<{ id: number }>>('/ingenieria/tareas', t).then((r) => r.data),
+
+  // ── Reserva de capacidad ──
+  reservar: (proyectoId: number) =>
+    api.post<ApiResponse<{ creadas: number }>>(`/ingenieria/proyecto/${proyectoId}/reservar`).then((r) => r.data),
+  liberarReserva: (proyectoId: number) =>
+    api.delete<ApiResponse<{ liberadas: number }>>(`/ingenieria/proyecto/${proyectoId}/reserva`).then((r) => r.data),
+  reservasPendientes: () =>
+    api.get<ApiResponse<ReservaProyecto[]>>('/ingenieria/reservas-pendientes').then((r) => r.data),
+  confirmarReserva: (proyectoId: number, asignaciones?: { id: number; asignado_nombre: string }[]) =>
+    api.post<ApiResponse<{ confirmadas: number }>>(`/ingenieria/reserva/${proyectoId}/confirmar`, { asignaciones }).then((r) => r.data),
   actualizarTarea: (id: number, t: Partial<TareaInput>) =>
     api.patch<ApiResponse<{ ok: boolean }>>(`/ingenieria/tareas/${id}`, t).then((r) => r.data),
   borrarTarea: (id: number) =>
