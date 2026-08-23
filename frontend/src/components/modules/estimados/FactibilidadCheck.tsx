@@ -11,8 +11,8 @@ import { scheduleService, type FactibilidadResult } from '@/services/schedule'
 const MES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic']
 const fmt = (iso: string | null) => { if (!iso) return '—'; const d = new Date(iso + 'T00:00:00'); return `${d.getDate()} ${MES[d.getMonth()]} ${d.getFullYear()}` }
 
-export default function FactibilidadCheck({ onFactible }: { onFactible?: (fecha: string, r: FactibilidadResult) => void }) {
-  const [fecha, setFecha] = useState('')
+export default function FactibilidadCheck({ onResult, fechaInicial }: { onResult?: (fecha: string, r: FactibilidadResult) => void; fechaInicial?: string }) {
+  const [fecha, setFecha] = useState(fechaInicial ?? '')
   const [busy, setBusy] = useState(false)
   const [r, setR] = useState<FactibilidadResult | null>(null)
   const [err, setErr] = useState<string | null>(null)
@@ -23,7 +23,7 @@ export default function FactibilidadCheck({ onFactible }: { onFactible?: (fecha:
     try {
       const res = (await scheduleService.getFactibilidad(fecha)).data
       setR(res)
-      if (res.factible) onFactible?.(fecha, res)
+      onResult?.(fecha, res)
     } catch (e: any) { setErr(e?.response?.data?.message || 'No se pudo verificar') } finally { setBusy(false) }
   }
 

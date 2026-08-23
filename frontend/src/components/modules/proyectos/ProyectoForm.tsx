@@ -26,6 +26,10 @@ interface Props {
   open: boolean
   onClose: () => void
   proyecto?: Proyecto
+  /** Oculta las fechas (no son determinantes en el alta desde Estimados). */
+  hideDates?: boolean
+  /** Callback con el proyecto creado (para el wizard de Estimados). */
+  onCreated?: (p: Proyecto) => void
 }
 
 const estadoOpts: { value: 'activo' | 'completado'; label: string }[] = [
@@ -33,7 +37,7 @@ const estadoOpts: { value: 'activo' | 'completado'; label: string }[] = [
   { value: 'completado', label: 'Completado' },
 ]
 
-export default function ProyectoForm({ open, onClose, proyecto }: Props) {
+export default function ProyectoForm({ open, onClose, proyecto, hideDates, onCreated }: Props) {
   const qc = useQueryClient()
   const isEdit = !!proyecto
 
@@ -66,9 +70,10 @@ export default function ProyectoForm({ open, onClose, proyecto }: Props) {
       isEdit
         ? proyectosService.update(proyecto!.id, data)
         : proyectosService.create(data as Omit<Proyecto, 'id' | 'created_at' | 'updated_at'>),
-    onSuccess: () => {
+    onSuccess: (res: any) => {
       qc.invalidateQueries({ queryKey: ['proyectos'] })
       toast.success(isEdit ? 'Proyecto actualizado' : 'Proyecto creado')
+      if (!isEdit && onCreated && res?.data) onCreated(res.data as Proyecto)
       reset()
       onClose()
     },
@@ -112,16 +117,18 @@ export default function ProyectoForm({ open, onClose, proyecto }: Props) {
             placeholder="Closets, cocina integral…" />
         </div>
 
-        <div className="grid grid-cols-2 gap-4">
-          <div>
-            <label className="label">Fecha Inicio</label>
-            <input type="date" {...register('fecha_inicio')} className="input" />
+        {!hideDates && (
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="label">Fecha Inicio</label>
+              <input type="date" {...register('fecha_inicio')} className="input" />
+            </div>
+            <div>
+              <label className="label">Fecha Fin Estimada</label>
+              <input type="date" {...register('fecha_fin_estimada')} className="input" />
+            </div>
           </div>
-          <div>
-            <label className="label">Fecha Fin Estimada</label>
-            <input type="date" {...register('fecha_fin_estimada')} className="input" />
-          </div>
-        </div>
+        )}
 
         <div className="grid grid-cols-2 gap-4">
           <div>
