@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Life of a Deal — How it works</title>
+<style>
+  @page { size: letter landscape; margin: 10mm; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  :root{
+    --ink:#12223b; --muted:#5a6b82; --line:#d7dfea; --bg:#ffffff; --panel:#f5f8fc;
+    --accent:#1f6feb; --accentsoft:#e7f0ff;
+    --green:#1a9d5a; --greenbg:#e5f6ec; --amber:#c98a12; --amberbg:#fdf3dd; --red:#d1443b; --redbg:#fbe7e5;
+    --slate:#34465f;
+  }
+  body{ font-family:"Segoe UI",Arial,Helvetica,sans-serif; color:var(--ink); background:var(--bg);
+        font-size:11pt; line-height:1.4; padding:2mm 4mm; }
+  .noprint{ background:var(--ink); color:#fff; padding:2.5mm 5mm; margin:-2mm -4mm 5mm; font-size:9pt; }
+  header{ display:flex; align-items:flex-end; justify-content:space-between; border-bottom:3px solid var(--ink);
+          padding-bottom:3mm; margin-bottom:5mm; }
+  header h1{ font-size:23pt; letter-spacing:-.4px; }
+  header .sub{ font-size:10.5pt; color:var(--muted); margin-top:1mm; }
+  header .tag{ font-size:8.5pt; color:var(--muted); text-align:right; line-height:1.7; }
+
+  .band{ border:1px solid var(--line); border-radius:9px; padding:4mm 5mm; margin-bottom:4.5mm;
+         background:var(--bg); page-break-inside:avoid; position:relative; }
+  .band .no{ position:absolute; top:-3mm; left:5mm; width:8mm; height:8mm; border-radius:50%;
+             background:var(--ink); color:#fff; font-weight:700; font-size:11pt; display:flex;
+             align-items:center; justify-content:center; }
+  .band h2{ font-size:13pt; margin:1mm 0 2mm 9mm; }
+  .band .lead{ font-size:12.5pt; line-height:1.45; color:var(--slate); }
+  .band p.body{ color:var(--muted); font-size:10.5pt; margin-top:2mm; }
+  .hero .lead{ font-size:15pt; color:var(--ink); font-weight:600; }
+  .hero .lead b{ color:var(--accent); }
+
+  /* phase flow */
+  .flow{ display:flex; align-items:stretch; gap:0; margin-top:2mm; }
+  .ph{ flex:1; background:var(--panel); border:1px solid var(--line); border-right:none;
+       padding:3mm 1mm; text-align:center; position:relative; }
+  .ph:first-child{ border-radius:7px 0 0 7px; }
+  .ph .n{ font-size:7.5pt; color:var(--muted); text-transform:uppercase; letter-spacing:.4px; }
+  .ph .t{ font-size:9.5pt; font-weight:700; margin-top:1mm; }
+  .ph.mid{ background:var(--accentsoft); }
+  .goal{ flex:0 0 34mm; background:var(--ink); color:#fff; border-radius:0 7px 7px 0;
+         padding:3mm 2mm; text-align:center; display:flex; flex-direction:column; justify-content:center; }
+  .goal .t{ font-size:9pt; font-weight:700; text-transform:uppercase; letter-spacing:.5px; }
+  .goal .d{ font-size:8pt; opacity:.85; margin-top:1mm; }
+  .arrow-back{ text-align:center; color:var(--accent); font-size:9.5pt; font-weight:600; margin-top:2mm; }
+  .arrow-back .ln{ display:inline-block; }
+
+  /* SLA callouts */
+  .slas{ display:flex; gap:4mm; margin-top:3mm; }
+  .sla{ flex:1; border:1.5px dashed var(--amber); background:var(--amberbg); border-radius:7px; padding:2.5mm 3mm; }
+  .sla .k{ font-size:8pt; text-transform:uppercase; letter-spacing:.4px; color:var(--amber); font-weight:700; }
+  .sla .v{ font-size:12pt; font-weight:700; color:var(--ink); margin:.5mm 0; }
+  .sla .n{ font-size:9pt; color:var(--muted); }
+  .pill{ display:inline-block; font-size:7.5pt; font-weight:700; padding:.5mm 2mm; border-radius:10px;
+         background:#fff; border:1px solid var(--amber); color:var(--amber); }
+
+  /* loop */
+  .loop{ display:flex; align-items:center; gap:3mm; margin-top:2mm; flex-wrap:wrap; }
+  .loop .step{ flex:1; min-width:40mm; background:var(--panel); border:1px solid var(--line);
+               border-radius:7px; padding:3mm; text-align:center; }
+  .loop .step .t{ font-weight:700; font-size:10.5pt; }
+  .loop .step .s{ font-size:9pt; color:var(--muted); margin-top:1mm; }
+  .loop .to{ font-size:16pt; color:var(--accent); font-weight:700; }
+  .lights{ display:flex; gap:2mm; justify-content:center; margin-top:1.5mm; }
+  .dot{ font-size:7.5pt; font-weight:700; padding:.6mm 2.5mm; border-radius:10px; }
+  .dot.g{ background:var(--greenbg); color:var(--green); } .dot.a{ background:var(--amberbg); color:var(--amber); }
+  .dot.r{ background:var(--redbg); color:var(--red); }
+  .rule{ margin-top:2.5mm; background:var(--redbg); border-left:3px solid var(--red); padding:2mm 3mm;
+         font-size:10pt; color:var(--ink); border-radius:0 5px 5px 0; }
+
+  .cols{ display:flex; gap:5mm; }
+  .cols > div{ flex:1; }
+  .gate{ display:flex; align-items:center; gap:2mm; font-size:10pt; padding:1.3mm 0; border-bottom:1px dotted var(--line); }
+  .gate b{ color:var(--ink); } .gate .lock{ color:var(--red); font-weight:700; }
+  .intake{ background:var(--panel); border:1px solid var(--line); border-radius:7px; padding:3mm; }
+  .intake .h{ font-weight:700; margin-bottom:1.5mm; }
+  .req{ display:inline-block; background:#fff; border:1px solid var(--line); border-radius:5px;
+        padding:1mm 2.5mm; font-size:9pt; margin:.6mm; }
+  ul.clean{ list-style:none; } ul.clean li{ padding:1mm 0 1mm 5mm; position:relative; font-size:10.5pt; color:var(--slate); }
+  ul.clean li:before{ content:"→"; position:absolute; left:0; color:var(--accent); font-weight:700; }
+  .scope{ display:flex; gap:3mm; }
+  .scope .box{ flex:1; border-radius:7px; padding:3mm; font-size:9.5pt; }
+  .scope .now{ background:var(--greenbg); border:1px solid #bfe6cd; }
+  .scope .next{ background:var(--panel); border:1px solid var(--line); }
+  .scope .k{ font-size:8pt; text-transform:uppercase; letter-spacing:.4px; font-weight:700; margin-bottom:1mm; }
+  .scope .now .k{ color:var(--green); } .scope .next .k{ color:var(--muted); }
+  footer{ margin-top:4mm; font-size:8.5pt; color:var(--muted); text-align:center; border-top:1px solid var(--line); padding-top:2mm; }
+  .objnote{ font-size:8.5pt; color:var(--muted); font-style:italic; margin-left:9mm; margin-bottom:1mm; }
+</style>
+</head>
+<body>
+
+<div class="noprint">To print / save as PDF: <b>Ctrl+P</b> → <b>Landscape</b> → enable <b>Background graphics</b>. This bar won't be printed.</div>
+
+<header>
+  <div>
+    <h1>Life of a Deal — How the system works</h1>
+    <div class="sub">A plain-language overview for leadership. Every box is numbered so it's easy to point at and change.</div>
+  </div>
+  <div class="tag">Central Millwork<br>Draft for review · Aug 2026<br>CEO · PM · Chali</div>
+</header>
+
+<!-- 1 -->
+<section class="band hero">
+  <div class="no">1</div>
+  <h2>The one idea</h2>
+  <div class="lead">Every project has <b>one delivery date</b>. The system works <b>backward</b> from it to
+  figure out what must happen and by when — and it <b>warns before</b> a deadline slips, instead of
+  explaining after.</div>
+  <p class="body">Today this lives in spreadsheets that never find out what actually happened. The system connects the plan to reality.</p>
+</section>
+
+<!-- 2 -->
+<section class="band">
+  <div class="no">2</div>
+  <h2>The journey — from signed contract to delivery</h2>
+  <div class="flow">
+    <div class="ph"><div class="n">1</div><div class="t">Contract</div></div>
+    <div class="ph"><div class="n">2</div><div class="t">Engineering</div></div>
+    <div class="ph mid"><div class="n">3</div><div class="t">Materials</div></div>
+    <div class="ph mid"><div class="n">4</div><div class="t">Production</div></div>
+    <div class="ph mid"><div class="n">5</div><div class="t">QC</div></div>
+    <div class="ph"><div class="n">6</div><div class="t">Shipping</div></div>
+    <div class="ph"><div class="n">7</div><div class="t">Install</div></div>
+    <div class="goal"><div class="t">Delivery date</div><div class="d">the fixed anchor</div></div>
+  </div>
+  <div class="arrow-back">◄────────────  the system calculates every deadline from the delivery date, backward  ────────────</div>
+
+  <div class="slas">
+    <div class="sla">
+      <div class="k">Target rule &nbsp;<span class="pill">to confirm</span></div>
+      <div class="v">≤ 2 weeks</div>
+      <div class="n">From <b>contract signed</b> to <b>handed off to purchasing</b>.</div>
+    </div>
+    <div class="sla">
+      <div class="k">Target rule &nbsp;<span class="pill">to confirm</span></div>
+      <div class="v">≤ 4 weeks</div>
+      <div class="n">From <b>material in the shop</b> to <b>shipped</b> (fabrication + finishing + shipping).</div>
+    </div>
+  </div>
+  <p class="body">Blue phases (Materials · Production · QC) are the ones the system already measures today. The two rules above are commitments to lock in — they set the pace of the whole schedule.</p>
+</section>
+
+<!-- 3 -->
+<section class="band">
+  <div class="no">3</div>
+  <h2>The project is alive — it re-plans by itself</h2>
+  <div class="loop">
+    <div class="step"><div class="t">Something real happens</div><div class="s">material arrives · a piece is finished · a vendor slips</div></div>
+    <div class="to">→</div>
+    <div class="step"><div class="t">The system recalculates</div><div class="s">every downstream date moves automatically</div></div>
+    <div class="to">→</div>
+    <div class="step"><div class="t">Traffic light updates</div>
+      <div class="lights"><span class="dot g">ON TRACK</span><span class="dot a">TIGHT</span><span class="dot r">AT RISK</span></div>
+    </div>
+  </div>
+  <div class="rule"><b>The delivery date never moves on its own.</b> If we're going to miss it, the project turns red — moving the date is a human decision that gets recorded (who, why, how many days).</div>
+</section>
+
+<!-- 4 -->
+<section class="band">
+  <div class="no">4</div>
+  <h2>The system holds the line — 8 hard stops</h2>
+  <div class="cols">
+    <div>
+      <div class="gate"><span class="lock">■</span> <b>Contract signed</b> — the clock doesn't start without it</div>
+      <div class="gate"><span class="lock">■</span> <b>MTO released</b> — purchasing can't quote before drawings are approved</div>
+      <div class="gate"><span class="lock">■</span> <b>Release to production</b> — needs approved, stamped drawings</div>
+      <div class="gate"><span class="lock">■</span> <b>QC passed</b> · <b>Delivery request</b> · <b>Site ready</b> · <b>Punch list</b></div>
+    </div>
+    <div>
+      <div class="intake">
+        <div class="h">★ Production Intake — the big one</div>
+        <div style="font-size:9.5pt;color:var(--muted);margin-bottom:1.5mm">Production does not start until all five are green:</div>
+        <span class="req">Samples approved</span><span class="req">Drawings approved</span><span class="req">Release done</span><span class="req">CNC files</span><span class="req">Material 100%</span>
+        <div style="font-size:9pt;color:var(--muted);margin-top:2mm">The one that arrives last is named — no more "I sent the drawings" vs "the material never came."</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 5 -->
+<section class="band">
+  <div class="no">5</div>
+  <h2>Accountability — who holds the ball, and where days are lost</h2>
+  <div class="cols">
+    <div>
+      <ul class="clean">
+        <li>At any moment, the system shows which phase is active and who it's waiting on.</li>
+        <li>When something finishes late, it records <b>who</b> the delay belongs to.</li>
+      </ul>
+    </div>
+    <div>
+      <div style="font-size:10pt;color:var(--slate)">At year end, one report answers <b>"why did we deliver late?"</b> with numbers, not opinions:</div>
+      <div style="margin-top:2mm;font-size:9.5pt;color:var(--muted);line-height:1.9">
+        Client · GC · Vendor · Estimating · Engineering · Procurement · Production · Logistics · Field · Finance
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 6 -->
+<section class="band">
+  <div class="no">6</div>
+  <h2>The client watches their own project</h2>
+  <div class="cols">
+    <div>
+      <ul class="clean">
+        <li>A private link — no account needed — shows the client their timeline and what it's waiting on.</li>
+        <li>They <b>approve drawings, samples and sign-off</b> right there; the date and person are captured automatically.</li>
+        <li>Automatic reminders when the ball is in their court — with the impact on the delivery date spelled out.</li>
+      </ul>
+    </div>
+    <div>
+      <div style="font-size:10pt;color:var(--slate)">The client never sees costs, margins, vendors or pricing.</div>
+      <div class="rule" style="background:var(--accentsoft);border-left-color:var(--accent);margin-top:2mm">This turns "waiting on the client" from a black hole into a dated, accountable fact.</div>
+    </div>
+  </div>
+</section>
+
+<!-- 7 -->
+<section class="band">
+  <div class="no">7</div>
+  <h2>What we build first — honest scope</h2>
+  <div class="scope">
+    <div class="box now">
+      <div class="k">Stage 1 — already underway</div>
+      The engine + the phases the system already measures (Materials, Production, QC) + the auto-generated <b>3-Week Lookahead</b>. Half the journey, live, from the start.
+    </div>
+    <div class="box next">
+      <div class="k">Then, in order</div>
+      Client portal → Engineering (drawings, CNC, release) → Field &amp; Install on mobile → Contract intake → Financial close-out.
+    </div>
+  </div>
+  <p class="body">The office areas that work outside the system today (Estimating, Engineering, Field) are where most delays happen. Bringing that work in is the real decision behind this project — not the software.</p>
+</section>
+
+<footer>Life of a Deal — How the system works · Draft for leadership review · Central Millwork · Numbered blocks are meant to be marked up.</footer>
+
+</body>
+</html>

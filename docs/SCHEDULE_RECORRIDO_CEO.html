@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Life of a Deal — El recorrido, en vivo</title>
+<style>
+  *{margin:0;padding:0;box-sizing:border-box}
+  :root{
+    --bg:#F6F4EE; --ink:#1c1917; --muted:#78716c; --line:#e7e3d8;
+    --forest:#3b4233; --forest2:#4A5240; --gold:#9B7200; --emerald:#059669;
+    --card:#ffffff;
+  }
+  html,body{background:var(--bg);font-family:"Segoe UI",Arial,sans-serif;color:var(--ink)}
+  #stage{width:1000px;height:620px;margin:0 auto;position:relative;overflow:hidden;background:var(--bg);
+         padding:26px 34px;display:flex;flex-direction:column}
+  .top{display:flex;align-items:center;gap:10px;margin-bottom:4px}
+  .brand{font-weight:800;letter-spacing:-.3px;font-size:15px;color:var(--forest)}
+  .brand b{color:var(--gold)}
+  .sub{font-size:12px;color:var(--muted)}
+  .dots{margin-left:auto;display:flex;gap:5px}
+  .dots i{width:7px;height:7px;border-radius:50%;background:#d6d3d1;transition:.3s}
+  .dots i.on{background:var(--forest);transform:scale(1.25)}
+
+  /* estaciones */
+  .road{position:relative;margin:26px 6px 6px}
+  .line{position:absolute;left:5%;right:5%;top:26px;height:3px;background:#ddd8cc;border-radius:3px}
+  .fill{position:absolute;left:5%;top:26px;height:3px;background:var(--forest);border-radius:3px;width:0;transition:width .8s ease}
+  .stations{position:relative;display:flex;justify-content:space-between}
+  .st{width:11%;display:flex;flex-direction:column;align-items:center;text-align:center;position:relative}
+  .node{width:52px;height:52px;border-radius:50%;background:#fff;border:2.5px solid #d6d3d1;
+        display:flex;align-items:center;justify-content:center;font-size:19px;color:#a8a29e;
+        transition:.5s;z-index:2}
+  .st.done .node{background:var(--emerald);border-color:var(--emerald);color:#fff}
+  .st.active .node{border-color:var(--forest);color:var(--forest);box-shadow:0 0 0 7px rgba(59,66,51,.12)}
+  .st .lbl{font-size:11.5px;font-weight:600;color:#a8a29e;margin-top:9px;transition:.4s}
+  .st.done .lbl{color:var(--emerald)} .st.active .lbl{color:var(--forest)}
+  .actor{position:absolute;top:-34px;left:50%;transform:translateX(-50%);white-space:nowrap;
+         font-size:11px;font-weight:700;color:#fff;border-radius:20px;padding:3px 10px;opacity:0;transition:.4s}
+  .st.active .actor{opacity:1}
+  .actor:after{content:"";position:absolute;left:50%;bottom:-4px;transform:translateX(-50%) rotate(45deg);
+               width:8px;height:8px;background:inherit}
+
+  /* curva salud */
+  .curvewrap{margin:14px 6px 0;height:66px}
+  .curvewrap svg{width:100%;height:66px;display:block}
+
+  /* caption */
+  .cap{margin-top:auto;background:var(--card);border:1px solid var(--line);border-radius:16px;
+       padding:18px 22px;box-shadow:0 1px 4px rgba(0,0,0,.05),0 12px 30px rgba(0,0,0,.05);
+       min-height:118px;display:flex;flex-direction:column;justify-content:center;transition:.3s}
+  .cap .who{display:inline-flex;align-items:center;gap:7px;font-size:12px;font-weight:700;color:#fff;
+            border-radius:20px;padding:4px 12px;align-self:flex-start;margin-bottom:8px}
+  .cap .ttl{font-size:20px;font-weight:800;letter-spacing:-.3px;line-height:1.2}
+  .cap .det{font-size:13.5px;color:var(--muted);margin-top:5px;line-height:1.4}
+  .cap .hito{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:700;
+             background:#ecfdf5;color:#047857;border-radius:20px;padding:3px 10px;margin-top:9px;align-self:flex-start}
+  .intro .ttl{font-size:26px} .intro .det{font-size:15px}
+
+  .controls{position:absolute;bottom:10px;right:16px;display:flex;gap:8px;z-index:9}
+  .controls button{font-size:12px;border:1px solid var(--line);background:#fff;border-radius:8px;padding:5px 10px;cursor:pointer;color:var(--muted)}
+  .noprint{max-width:1000px;margin:8px auto 0;font-size:12px;color:var(--muted);text-align:center}
+</style>
+</head>
+<body>
+<div id="stage">
+  <div class="top">
+    <span class="brand">Life of a <b>Deal</b></span>
+    <span class="sub">— el recorrido de un proyecto, en vivo</span>
+    <span class="dots" id="dots"></span>
+  </div>
+
+  <div class="road">
+    <div class="line"></div><div class="fill" id="fill"></div>
+    <div class="stations" id="stations"></div>
+  </div>
+
+  <div class="curvewrap"><svg id="curve" viewBox="0 0 1000 66" preserveAspectRatio="none"></svg></div>
+
+  <div class="cap" id="cap"></div>
+
+  <div class="controls">
+    <button id="btnPlay">⏸ Pausa</button>
+    <button id="btnRestart">↻ Reiniciar</button>
+  </div>
+</div>
+<div class="noprint">Se reproduce solo. Podés pausar/reiniciar. Pantalla completa para presentar (F11).</div>
+
+<script>
+// ── Fases del recorrido (las 5 primeras se animan; las 3 finales quedan de contexto) ──
+const FASES = [
+  {k:'CONTRATO',   lbl:'Contrato'},
+  {k:'INGENIERIA', lbl:'Ingeniería'},
+  {k:'MATERIALES', lbl:'Materiales'},
+  {k:'PRODUCCION', lbl:'Producción'},
+  {k:'QC',         lbl:'QC'},
+  {k:'DESPACHO',   lbl:'Despacho'},
+  {k:'INSTALACION',lbl:'Instalación'},
+  {k:'CIERRE',     lbl:'Cierre'},
+];
+const ACT = {
+  estimacion:{n:'Estimación', c:'#57534e'}, contabilidad:{n:'Contabilidad', c:'#9B7200'},
+  ingenieria:{n:'Ingeniería', c:'#4338ca'}, cliente:{n:'Cliente', c:'#1d4ed8'},
+  compras:{n:'Compras', c:'#b45309'}, recepcion:{n:'Recepción', c:'#b45309'},
+  taller:{n:'Taller', c:'#059669'}, qc:{n:'Control de calidad', c:'#0d9488'}, sistema:{n:'El sistema', c:'#3b4233'},
+};
+// ── El guion. TODO el texto vive acá (traducir = duplicar este array). ──
+const STEPS = [
+  {intro:true, done:[], active:null, actor:null,
+   ttl:'Un proyecto entra al sistema', det:'Entrega comprometida: 15 de diciembre. El sistema calcula hacia atrás la fecha límite de cada hito, y sigue el recorrido en vivo.'},
+
+  {done:[], active:'CONTRATO', actor:'estimacion', hito:'C-03 · Contrato firmado',
+   ttl:'Se firma el contrato', det:'Estimación sube el PDF firmado. Es el día cero: a partir de acá, el reloj corre.'},
+
+  {done:[], active:'CONTRATO', actor:'contabilidad', hito:'C-04 · Down Payment',
+   ttl:'Contabilidad registra el anticipo', det:'Se registra el pago recibido (USD 25.000), con importe y autor. Evidencia real, no un tilde.'},
+
+  {done:['CONTRATO'], active:'INGENIERIA', actor:'ingenieria', hito:'E-06 · Planos emitidos',
+   ttl:'Ingeniería emite los shop drawings', det:'Sube los planos (Rev A). El hito se completa solo, y el cliente ya puede verlos en su portal.'},
+
+  {done:['CONTRATO'], active:'INGENIERIA', actor:'cliente', hito:'E-07 · Planos aprobados',
+   ttl:'El cliente aprueba los planos', det:'Desde su portal, sobre el documento real. Su respuesta queda registrada con fecha y nombre.'},
+
+  {done:['CONTRATO'], active:'INGENIERIA', actor:'ingenieria', hito:'E-10 · Release · E-11 · CNC',
+   ttl:'Release a producción y archivos CNC', det:'Ingeniería libera los planos aprobados y entrega los archivos CNC al taller.'},
+
+  {done:['CONTRATO','INGENIERIA'], active:'MATERIALES', actor:'compras', hito:'M-05 · OCs emitidas',
+   ttl:'Compras emite las órdenes de compra', det:'El sistema lo capta solo, de las OCs que Compras ya carga en su día a día. Sin trabajo extra.'},
+
+  {done:['CONTRATO','INGENIERIA'], active:'MATERIALES', actor:'recepcion', hito:'M-07 · Material 100%',
+   ttl:'Llega el material al taller', det:'Se cierra la recepción y el hito se completa solo. El schedule se entera de lo que realmente pasa.'},
+
+  {done:['CONTRATO','INGENIERIA','MATERIALES'], active:'PRODUCCION', actor:'sistema', hito:'P-01 · Production Intake', gate:true,
+   ttl:'Producción ARRANCA', det:'Están las 5 condiciones: muestras, planos, release, CNC y material. Recién ahí el sistema deja abrir producción.'},
+
+  {done:['CONTRATO','INGENIERIA','MATERIALES'], active:'PRODUCCION', actor:'taller', hito:'P-05 · Fabricación',
+   ttl:'El taller fabrica', det:'El kiosko registra el avance por estación, en tiempo real. Cada pieza suma al progreso.'},
+
+  {done:['CONTRATO','INGENIERIA','MATERIALES','PRODUCCION'], active:'QC', actor:'qc', hito:'QC-02 · QC aprobado',
+   ttl:'Control de calidad aprueba', det:'Inspección final con fotos de cada ítem. La fabricación queda validada.'},
+
+  {done:['CONTRATO','INGENIERIA','MATERIALES','PRODUCCION','QC'], active:null, actor:null, closing:true,
+   ttl:'De Contrato a QC, en vivo', det:'Cada hito, con su dueño y su evidencia. El journey map lo refleja al instante — y el recorrido sigue hasta la entrega.'},
+];
+
+// salud (0..1) por fase segun estado, para la curva
+function healthFor(step){
+  return FASES.map(f=>{
+    if(step.done.includes(f.k)) return 0.9;
+    if(step.active===f.k) return 0.62;
+    return 0.42;
+  });
+}
+function smooth(xs,ys){let d='M '+xs[0]+' '+ys[0];for(let i=1;i<xs.length;i++){const cx=(xs[i-1]+xs[i])/2;d+=' C '+cx+' '+ys[i-1]+' '+cx+' '+ys[i]+' '+xs[i]+' '+ys[i];}return d;}
+
+// build stations
+const stationsEl=document.getElementById('stations');
+FASES.forEach(f=>{
+  const d=document.createElement('div');d.className='st';d.dataset.k=f.k;
+  d.innerHTML='<div class="actor"></div><div class="node">'+ '●' +'</div><div class="lbl">'+f.lbl+'</div>';
+  stationsEl.appendChild(d);
+});
+const dotsEl=document.getElementById('dots');
+STEPS.forEach(()=>{const i=document.createElement('i');dotsEl.appendChild(i);});
+
+const N=FASES.length, W=1000, PAD=60;
+const xs=FASES.map((_,i)=>PAD+(W-2*PAD)*i/(N-1));
+
+function render(i){
+  const s=STEPS[i];
+  // dots
+  [...dotsEl.children].forEach((d,j)=>d.classList.toggle('on',j===i));
+  // stations
+  [...stationsEl.children].forEach(el=>{
+    const k=el.dataset.k, done=s.done.includes(k), active=s.active===k;
+    el.classList.toggle('done',done); el.classList.toggle('active',active);
+    el.querySelector('.node').textContent = done ? '✓' : '●';
+    const a=el.querySelector('.actor');
+    if(active && s.actor){a.textContent=ACT[s.actor].n; a.style.background=ACT[s.actor].c;} else {a.textContent='';}
+  });
+  // fill line
+  let lastDone=-1; FASES.forEach((f,j)=>{ if(s.done.includes(f.k)) lastDone=j; });
+  const activeIdx = s.active? FASES.findIndex(f=>f.k===s.active): lastDone;
+  const frac = Math.max(0, activeIdx) / (N-1);
+  document.getElementById('fill').style.width = (frac*90)+'%';
+  // curve
+  const ys=healthFor(s).map(h=>60-(60-8)*h);
+  const path=smooth(xs,ys);
+  const svg=document.getElementById('curve');
+  svg.innerHTML='<rect x="0" y="52" width="1000" height="14" fill="#fdecec"/>'+
+    '<path d="'+path+' L '+xs[N-1]+' 66 L '+xs[0]+' 66 Z" fill="#3b423311"/>'+
+    '<path d="'+path+'" fill="none" stroke="#3b4233" stroke-width="2"/>'+
+    FASES.map((f,j)=>{const done=s.done.includes(f.k),active=s.active===f.k;const c=done?'#059669':active?'#3b4233':'#d6d3d1';return '<circle cx="'+xs[j]+'" cy="'+ys[j]+'" r="4.5" fill="#fff" stroke="'+c+'" stroke-width="2.5"/>';}).join('');
+  // caption
+  const cap=document.getElementById('cap');
+  cap.className='cap'+(s.intro?' intro':'')+(s.closing?' intro':'');
+  let who='';
+  if(s.actor){const a=ACT[s.actor];who='<span class="who" style="background:'+a.c+'">'+a.n+'</span>';}
+  cap.innerHTML=who+'<div class="ttl">'+(s.gate?'🔒 ':'')+s.ttl+'</div><div class="det">'+s.det+'</div>'+
+    (s.hito?'<div class="hito">✓ '+s.hito+'</div>':'');
+}
+
+// autoplay / controls / static frame
+const params=new URLSearchParams(location.search);
+if(params.has('f')){ render(parseInt(params.get('f'))||0); }
+else {
+  let i=0, playing=true, timer=null;
+  const STEP_MS=3600;
+  function tick(){ render(i); i=(i+1)%STEPS.length; }
+  function play(){ tick(); timer=setInterval(tick,STEP_MS); }
+  document.getElementById('btnPlay').onclick=function(){ playing=!playing; if(playing){this.textContent='⏸ Pausa'; play();} else {clearInterval(timer); this.textContent='▶ Reproducir';} };
+  document.getElementById('btnRestart').onclick=function(){ clearInterval(timer); i=0; render(0); if(playing){ i=1; timer=setInterval(tick,STEP_MS);} };
+  play();
+}
+</script>
+</body>
+</html>
