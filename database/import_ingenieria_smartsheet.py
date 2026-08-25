@@ -1,6 +1,7 @@
 import openpyxl, re, datetime, sys
 
-SRC = r"C:\Users\chali\OneDrive - Central Millwork\Desktop\UTILITIES\Master.Sched.xlsx"
+# Ruta del Excel: 1er argumento de línea de comandos, o el default de siempre.
+SRC = sys.argv[1] if len(sys.argv) > 1 else r"C:\Users\chali\OneDrive - Central Millwork\Desktop\UTILITIES\Master.Sched.xlsx"
 OUT = "import_ing.sql"
 
 # Catálogo canónico: (clave, nombre, hito, tipico, min, max, orden, [aliases])
