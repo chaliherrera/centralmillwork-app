@@ -42,6 +42,23 @@ def pdur(v):
     if isinstance(v,(int,float)): return v
     m=re.match(r'([\d.]+)',str(v)); return float(m.group(1)) if m else 1
 
+# Parsea la notación de predecesores del Smartsheet: "93FS+6d", "99", "12,15", "8SS-2d".
+# El número es la FILA de Smartsheet (1-indexada, arranca en la fila-proyecto); el xlsx
+# tiene header en la fila 1, así que fila-Smartsheet N == fila-xlsx (N+1). Devuelve una
+# lista de (xlsx_row_destino, tipo, lag_dias). Verificado con casos reales del Excel.
+DEP_RE=re.compile(r'^\s*(\d+)\s*(FS|SS|FF|SF)?\s*([+-]\s*\d+)?\s*d?\s*$', re.I)
+def parse_preds(v):
+    if v in (None,''): return []
+    out=[]
+    for tok in str(v).replace(';',',').split(','):
+        m=DEP_RE.match(tok)
+        if not m: continue
+        ss_row=int(m.group(1))
+        tipo=(m.group(2) or 'FS').upper()
+        lag=int(m.group(3).replace(' ','')) if m.group(3) else 0
+        out.append((ss_row+1, tipo, lag))   # +1: Smartsheet -> xlsx
+    return out
+
 wb=openpyxl.load_workbook(SRC,data_only=True)
 ws=wb["Master.Sched"]
 H=[c.value for c in ws[1]]; idx={h:i for i,h in enumerate(H)}
@@ -55,6 +72,8 @@ lines.append("BEGIN;")
 # Las reservas (origen='reserva') y las tareas manuales se PRESERVAN. Las deps de las filas
 # borradas caen por FK ON DELETE CASCADE. (Antes: TRUNCATE — borraba las reservas. Bug corregido.)
 lines.append("DELETE FROM ing_tareas WHERE origen='import_excel';")
+# Los encabezados de proyecto (fecha fija) también se refrescan. Los manuales se preservan.
+lines.append("DELETE FROM ing_proyectos WHERE origen='import_excel';")
 # seed catálogo (idempotente)
 for c,n,h,t,mn,mx,o,al in TIPOS:
     arr="ARRAY[" + ",".join(sq(a) for a in al) + "]::text[]"
@@ -63,12 +82,20 @@ for c,n,h,t,mn,mx,o,al in TIPOS:
                  f"ON CONFLICT (clave) DO UPDATE SET nombre=EXCLUDED.nombre,hito_codigo=EXCLUDED.hito_codigo,"
                  f"dur_dias_tipico=EXCLUDED.dur_dias_tipico,dur_dias_min=EXCLUDED.dur_dias_min,dur_dias_max=EXCLUDED.dur_dias_max,aliases=EXCLUDED.aliases;")
 
-cur_proj=None; cur_phase=None; ntask=0; nproj=0
+cur_proj=None; cur_phase=None; ntask=0; nproj=0; deps=[]
 for rn,r in enumerate(ws.iter_rows(min_row=2,values_only=True),start=2):
     name=(g(r,'Project Name') or '').strip()
     if not name: continue
     if proj_re.match(name):
-        cur_proj=name; cur_phase=None; nproj+=1; continue
+        cur_proj=name; cur_phase=None; nproj+=1
+        # Encabezado del proyecto: la FECHA FIJA (Finish) + inicio + total + estado.
+        lines.append(
+          "INSERT INTO ing_proyectos (proyecto_ext,fecha_inicio,fecha_entrega,dur_total_dias,status_ext,origen) VALUES ("
+          f"{sq(cur_proj)},{dat(g(r,'Start'))},{dat(g(r,'Finish'))},{pdur(g(r,'Duration'))},"
+          f"{sq((g(r,'Status') or '').strip() or None)},'import_excel') "
+          "ON CONFLICT (proyecto_ext) DO UPDATE SET fecha_inicio=EXCLUDED.fecha_inicio,fecha_entrega=EXCLUDED.fecha_entrega,"
+          "dur_total_dias=EXCLUDED.dur_total_dias,status_ext=EXCLUDED.status_ext,updated_at=NOW();")
+        continue
     if name.lower().startswith('phase'):
         cur_phase=name; continue
     assigned=(g(r,'Assigned To') or '').strip() or None
@@ -90,6 +117,18 @@ for rn,r in enumerate(ws.iter_rows(min_row=2,values_only=True),start=2):
       "allocation_pct=EXCLUDED.allocation_pct,dur_dias=EXCLUDED.dur_dias,fecha_inicio=EXCLUDED.fecha_inicio,"
       "fecha_fin=EXCLUDED.fecha_fin,status_ext=EXCLUDED.status_ext,comentario=EXCLUDED.comentario,updated_at=NOW();")
     ntask+=1
+    for tgt_row, tipo, lag in parse_preds(preds):
+        deps.append((rn, tgt_row, tipo, lag))
+
+# Dependencias (aristas editables): resuelve external_ref -> id. Las que apunten a
+# filas que no son tareas (proyecto/fase) no matchean y se saltan solas. Las deps de
+# tareas import_excel ya se borraron por CASCADE al borrar sus tareas arriba.
+for src_row, tgt_row, tipo, lag in deps:
+    lines.append(
+      "INSERT INTO ing_tarea_deps (tarea_id,depende_de_id,tipo,lag_dias) "
+      f"SELECT t.id, d.id, {sq(tipo)}, {lag} FROM ing_tareas t JOIN ing_tareas d ON true "
+      f"WHERE t.external_ref='xlsx-row-{src_row}' AND d.external_ref='xlsx-row-{tgt_row}' "
+      "ON CONFLICT (tarea_id,depende_de_id) DO UPDATE SET tipo=EXCLUDED.tipo, lag_dias=EXCLUDED.lag_dias;")
 # Anti doble-conteo: si el Excel trae las tareas reales de un proyecto que tenia una
 # reserva provisional (sin confirmar), esas reservas ya no aplican -> estado='na'.
 # Las confirmadas por el PM se preservan (son compromiso real).
@@ -98,4 +137,4 @@ lines.append("UPDATE ing_tareas SET estado='na', updated_at=NOW() "
              "AND proyecto_ext IN (SELECT DISTINCT proyecto_ext FROM ing_tareas WHERE origen='import_excel');")
 lines.append("COMMIT;")
 open(OUT,"w",encoding="utf-8").write("\n".join(lines))
-print(f"SQL generado: {OUT} | proyectos={nproj} tareas={ntask}")
+print(f"SQL generado: {OUT} | proyectos={nproj} tareas={ntask} dependencias={len(deps)}")
