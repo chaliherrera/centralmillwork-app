@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Users, Layers, ClipboardList, Plus, X, Loader2, Trash2, Gauge, Check, FolderKanban, Activity, AlertTriangle } from 'lucide-react'
-import { ingenieriaService, type IngProyecto, type IngTarea, type TareaInput, type IngPlan, type IngTareaPlan, type IngArista } from '@/services/ingenieria'
+import { ingenieriaService, type IngProyecto, type IngTarea, type TareaInput, type IngPlan, type IngTareaPlan, type IngArista, type IngCarga } from '@/services/ingenieria'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Plan de Ingeniería — réplica de la estructura del Master.Sched (Smartsheet):
@@ -28,9 +28,10 @@ export default function IngenieriaPlan() {
   const [plan, setPlan] = useState<IngPlan | null>(null)
   const [planLoading, setPlanLoading] = useState(false)
 
+  const [carga, setCarga] = useState<IngCarga | null>(null)
   async function loadAll() {
-    const [r, t] = await Promise.all([ingenieriaService.getResumen(), ingenieriaService.getTareas()])
-    setResumen(r.data.resumen); setProyectos(r.data.proyectos); setAll(t.data)
+    const [r, t, c] = await Promise.all([ingenieriaService.getResumen(), ingenieriaService.getTareas(), ingenieriaService.getCarga()])
+    setResumen(r.data.resumen); setProyectos(r.data.proyectos); setAll(t.data); setCarga(c.data)
     if (!selProj && r.data.proyectos[0]) setSelProj(r.data.proyectos[0].proyecto_ext)
   }
   useEffect(() => { loadAll().finally(() => setLoading(false)) }, [])
@@ -69,7 +70,7 @@ export default function IngenieriaPlan() {
       </div>
 
       {mode === 'disponibilidad'
-        ? <VistaDisponibilidad all={all} />
+        ? <VistaDisponibilidad carga={carga} />
         : mode === 'proyecto'
           ? <VistaProyecto proyectos={proyectos} all={all} plan={plan} planLoading={planLoading} sel={selProj} setSel={setSelProj} onEdit={setEdit} />
           : <VistaCarga all={all} proyectos={proyectos} selEng={selEng} setSelEng={setSelEng} onEdit={setEdit} />}
@@ -81,65 +82,43 @@ export default function IngenieriaPlan() {
   )
 }
 
-// ── Vista de arranque: DISPONIBILIDAD de Ingeniería (grilla por ingeniero, provisional) ──
-function VistaDisponibilidad({ all }: { all: IngTarea[] }) {
+// ── Vista de arranque: DISPONIBILIDAD — heatmap de % de carga por ingeniero/semana ──
+function VistaDisponibilidad({ carga }: { carga: IngCarga | null }) {
   const g = useMemo(() => {
-    const conF = all.filter((t) => t.asignado_nombre && t.fecha_inicio && t.fecha_fin && t.estado !== 'na')
-    if (!conF.length) return null
-    const engs = [...new Set(conF.map((t) => t.asignado_nombre as string))]
-    const engColor = new Map(engs.map((e, i) => [e, PAL[i % PAL.length]]))
-    let min = d(conF[0].fecha_inicio!), max = d(conF[0].fecha_fin!)
-    for (const t of conF) { const a = d(t.fecha_inicio!), b = d(t.fecha_fin!); if (a < min) min = a; if (b > max) max = b }
-    const week0 = mondayOf(min); const nWeeks = Math.max(1, Math.ceil((max.getTime() - week0.getTime()) / (7 * DAY)) + 1)
+    if (!carga || !carga.semanas.length || !carga.ingenieros.length) return null
+    const semanas = carga.semanas, nWeeks = semanas.length
     const months: { label: string; startPct: number }[] = []
-    for (let i = 0; i < nWeeks; i++) { const wd = new Date(week0.getTime() + i * 7 * DAY); const label = `${MES[wd.getMonth()]} ${String(wd.getFullYear()).slice(2)}`; const last = months[months.length - 1]; if (!last || last.label !== label) months.push({ label, startPct: (i / nWeeks) * 100 }) }
+    semanas.forEach((w, i) => { const wd = d(w); const label = `${MES[wd.getMonth()]} ${String(wd.getFullYear()).slice(2)}`; const last = months[months.length - 1]; if (!last || last.label !== label) months.push({ label, startPct: (i / nWeeks) * 100 }) })
     const today = new Date(); today.setHours(0, 0, 0, 0)
-    // matriz: por ingeniero, cuántas tareas activas por semana (0 = libre)
-    const engRows = engs.map((e) => {
-      const ts = conF.filter((t) => t.asignado_nombre === e)
-      const busy: number[] = []
-      for (let i = 0; i < nWeeks; i++) { const ws = week0.getTime() + i * 7 * DAY, we = ws + 6 * DAY; busy.push(ts.filter((t) => d(t.fecha_inicio!).getTime() <= we && d(t.fecha_fin!).getTime() >= ws).length) }
-      return { nombre: e, color: engColor.get(e)!, busy, semOcup: busy.filter((b) => b > 0).length }
-    }).sort((a, b) => b.semOcup - a.semOcup)
+    let hoyIdx = -1
+    for (let i = 0; i < nWeeks; i++) { const ws = d(semanas[i]).getTime(); if (today.getTime() >= ws && today.getTime() < ws + 7 * DAY) { hoyIdx = i; break } }
+    const hoyPct = hoyIdx >= 0 ? ((hoyIdx + (today.getTime() - d(semanas[hoyIdx]).getTime()) / (7 * DAY)) / nWeeks) * 100 : null
+    // libres por semana = ingenieros con carga 0
     const libres: number[] = []
-    for (let i = 0; i < nWeeks; i++) libres.push(engRows.filter((r) => r.busy[i] === 0).length)
-    const cnc = [...new Set(conF.filter((t) => t.tipo_clave === 'cnc').map((t) => t.asignado_nombre as string))]
-    let cncHasta: Date | null = null
-    if (cnc.length === 1) { const ts = conF.filter((t) => t.asignado_nombre === cnc[0]); let mx = d(ts[0].fecha_fin!); for (const t of ts) { const b = d(t.fecha_fin!); if (b > mx) mx = b } cncHasta = mx }
-    const weekDate = (i: number) => new Date(week0.getTime() + i * 7 * DAY)
-    const hoyPct = today >= week0 && today <= max ? ((today.getTime() - week0.getTime()) / (nWeeks * 7 * DAY)) * 100 : null
-    return { nWeeks, months, engRows, libres, cnc, cncHasta, hoyPct, total: engs.length, weekDate }
-  }, [all])
+    for (let i = 0; i < nWeeks; i++) libres.push(carga.ingenieros.filter((e) => (e.cargas[i] ?? 0) <= 0).length)
+    return { semanas, nWeeks, months, hoyPct, ingenieros: carga.ingenieros, libres, total: carga.ingenieros.length }
+  }, [carga])
 
-  if (!g) return <div className="py-16 text-center text-stone-400">Sin datos de ingeniería.</div>
-  const fmt = (dt: Date) => `${dt.getDate()} ${MES[dt.getMonth()]}`
+  if (!carga) return <div className="py-20 text-center text-stone-400"><Loader2 className="animate-spin inline" size={22} /></div>
+  if (!g) return <div className="py-16 text-center text-stone-400">Sin datos de carga de ingeniería.</div>
+  // color por % de carga: libre / verde <80% / ámbar 80-100% / rojo >100% (sobrecarga)
+  const cell = (pct: number): { bg: string; txt: string } => {
+    if (pct <= 0) return { bg: '#f5f5f4', txt: '' }
+    if (pct < 0.8) return { bg: '#bbf7d0', txt: '#166534' }
+    if (pct <= 1.0) return { bg: '#fde68a', txt: '#92400e' }
+    return { bg: '#fecaca', txt: '#991b1b' }
+  }
   const libCls = (l: number) => l <= 0 ? 'bg-rose-200 text-rose-900' : l === 1 ? 'bg-amber-100 text-amber-800' : 'bg-emerald-100 text-emerald-800'
+  const fmtW = (w: string) => `${d(w).getDate()} ${MES[d(w).getMonth()]}`
   const GUT = 176
 
   return (
     <div className="space-y-4">
-      <div className="rounded-2xl border border-amber-200 bg-amber-50/60 px-4 py-2.5 text-[12.5px] text-amber-800 flex items-start gap-2">
-        <AlertTriangle size={15} className="shrink-0 mt-0.5" />
-        <span><b>Provisional.</b> Pintado = el ingeniero tiene tarea esa semana; claro = libre. Ojo: si aparecen muchos huecos, puede ser tiempo real libre o que el Excel no capture todo — <b>a validar con el creador</b>. El "%" real se calibra con él.</span>
-      </div>
-
-      {/* respuesta rápida: el cuello de botella */}
-      {g.cncHasta && (
-        <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 flex items-center gap-3">
-          <AlertTriangle size={20} className="text-rose-500 shrink-0" />
-          <div>
-            <div className="text-[11px] uppercase tracking-wide text-rose-500 font-semibold">Cuello de botella</div>
-            <div className="text-sm font-bold text-rose-700">El CNC pasa solo por {g.cnc[0]} — su última tarea termina el {fmt(g.cncHasta)}</div>
-          </div>
-          <div className="ml-auto text-right"><div className="text-[11px] uppercase tracking-wide text-stone-400 font-semibold">Equipo</div><div className="text-xl font-bold text-stone-800">{g.total} <span className="text-xs text-stone-400 font-medium">ingenieros</span></div></div>
-        </div>
-      )}
-
-      {/* grilla ingeniero × semana */}
       <div className="rounded-2xl border border-stone-200 bg-white overflow-hidden">
         <div className="flex items-center gap-2 px-4 py-3 border-b border-stone-100">
           <Activity size={17} className="text-forest-600" />
-          <h2 className="font-bold text-stone-800">Disponibilidad · quién está ocupado cada semana</h2>
+          <h2 className="font-bold text-stone-800">Carga por ingeniero · % de capacidad cada semana</h2>
+          <span className="ml-auto text-xs text-stone-400">suma del % de asignación de sus tareas activas</span>
         </div>
         <div className="overflow-x-auto"><div className="min-w-[880px]">
           {/* header meses */}
@@ -154,29 +133,33 @@ function VistaDisponibilidad({ all }: { all: IngTarea[] }) {
           <div className="flex items-center border-b border-stone-200 bg-stone-50/40">
             <div className="shrink-0 px-3 py-1.5 text-[11px] font-bold text-stone-600" style={{ width: GUT }}>Ingenieros libres</div>
             <div className="flex-1 flex gap-px py-1">
-              {g.libres.map((l, i) => <div key={i} title={`${fmt(g.weekDate(i))}: ${l} de ${g.total} libres`} className={`flex-1 h-6 rounded-sm flex items-center justify-center text-[10px] font-bold ${libCls(l)}`}>{l}</div>)}
+              {g.libres.map((l, i) => <div key={i} title={`${fmtW(g.semanas[i])}: ${l} de ${g.total} libres`} className={`flex-1 h-6 rounded-sm flex items-center justify-center text-[10px] font-bold ${libCls(l)}`}>{l}</div>)}
             </div>
           </div>
-          {/* una fila por ingeniero */}
-          {g.engRows.map((r) => (
-            <div key={r.nombre} className="flex items-center border-b border-stone-50 hover:bg-stone-50/40">
+          {/* una fila por ingeniero — heatmap de % */}
+          {g.ingenieros.map((e) => (
+            <div key={e.nombre} className="flex items-center border-b border-stone-50 hover:bg-stone-50/40">
               <div className="shrink-0 px-3 py-1.5 flex items-center gap-1.5" style={{ width: GUT }}>
-                <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: r.color }} />
-                <span className="text-[12.5px] font-semibold text-stone-700 truncate">{r.nombre}</span>
+                <span className="text-[12.5px] font-semibold text-stone-700 truncate flex-1">{e.nombre}</span>
+                <span className={`text-[10px] font-bold tabular-nums ${e.pico > 1 ? 'text-rose-600' : 'text-stone-400'}`} title="pico de carga">{Math.round(e.pico * 100)}%</span>
               </div>
               <div className="flex-1 flex gap-px py-1">
-                {r.busy.map((b, i) => (
-                  <div key={i} title={`${r.nombre} · ${fmt(g.weekDate(i))}: ${b === 0 ? 'libre' : b + ' tarea' + (b > 1 ? 's' : '')}`}
-                    className="flex-1 h-6 rounded-sm" style={{ background: b === 0 ? '#f5f5f4' : r.color + (b > 1 ? '' : 'aa') }} />
-                ))}
+                {g.semanas.map((_, i) => { const pct = e.cargas[i] ?? 0; const c = cell(pct); return (
+                  <div key={i} title={`${e.nombre} · ${fmtW(g.semanas[i])}: ${Math.round(pct * 100)}% (${e.n_tareas[i] ?? 0} tarea${(e.n_tareas[i] ?? 0) === 1 ? '' : 's'})`}
+                    className="flex-1 h-6 rounded-sm flex items-center justify-center text-[9px] font-bold" style={{ background: c.bg, color: c.txt }}>
+                    {pct > 0 ? Math.round(pct * 100) : ''}
+                  </div>
+                ) })}
               </div>
             </div>
           ))}
         </div></div>
         <div className="px-4 py-2 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-stone-500 items-center border-t border-stone-100">
-          <span className="inline-flex items-center gap-1.5"><span className="w-3.5 h-3.5 rounded-sm bg-stone-100 inline-block" /> libre</span>
-          <span className="inline-flex items-center gap-1.5"><span className="w-3.5 h-3.5 rounded-sm bg-forest-600 inline-block" /> ocupado</span>
-          <span className="italic text-stone-400">La fila "Ingenieros libres" es la suma de abajo — así los huecos coinciden. Detalle en "Carga por ingeniero".</span>
+          <span className="inline-flex items-center gap-1.5"><span className="w-3.5 h-3.5 rounded-sm inline-block" style={{ background: '#f5f5f4' }} /> libre</span>
+          <span className="inline-flex items-center gap-1.5"><span className="w-3.5 h-3.5 rounded-sm inline-block" style={{ background: '#bbf7d0' }} /> &lt;80%</span>
+          <span className="inline-flex items-center gap-1.5"><span className="w-3.5 h-3.5 rounded-sm inline-block" style={{ background: '#fde68a' }} /> 80–100%</span>
+          <span className="inline-flex items-center gap-1.5"><span className="w-3.5 h-3.5 rounded-sm inline-block" style={{ background: '#fecaca' }} /> &gt;100% sobrecarga</span>
+          <span className="italic text-stone-400">El número es el % de capacidad ocupada esa semana. La columna de la derecha es el pico.</span>
         </div>
       </div>
     </div>
@@ -190,6 +173,10 @@ function VistaProyecto({ proyectos, all, plan, planLoading, sel, setSel, onEdit 
   const engColor = useMemo(() => { const m = new Map<string, string>(); [...new Set(all.map((t) => t.asignado_nombre).filter(Boolean))].forEach((e, i) => m.set(e as string, PAL[i % PAL.length])); return m }, [all])
   const tareas = plan?.tareas ?? []
   const ingenieros = useMemo(() => [...new Set(tareas.map((t) => t.asignado_nombre).filter(Boolean))], [tareas])
+  // Validación vs Excel: la app calcula la fecha (early_finish); el Excel la trae (fecha_fin).
+  // Si difieren, suele faltar una dependencia (o el experto la puso a mano) — a revisar.
+  const difExcel = (t: IngTareaPlan) => !!(t.early_finish && t.fecha_fin && t.early_finish !== t.fecha_fin)
+  const valida = useMemo(() => { const con = tareas.filter((t) => t.early_finish && t.fecha_fin); return { match: con.filter((t) => t.early_finish === t.fecha_fin).length, total: con.length } }, [tareas])
 
   // ── Geometría del Gantt (usa las fechas tempranas del CPM + la entrega fija) ──
   const GUT = 320, ROW_H = 40, PH_H = 26, BAR_H = 22
@@ -262,6 +249,12 @@ function VistaProyecto({ proyectos, all, plan, planLoading, sel, setSel, onEdit 
             <div className="text-[10px] uppercase tracking-wide text-stone-400 font-semibold">{plan.en_riesgo ? 'Atraso' : 'Holgura'}</div>
             <div className={`text-lg font-bold tabular-nums ${plan.en_riesgo ? 'text-rose-700' : 'text-emerald-700'}`}>{Math.abs(plan.holgura_proyecto)} <span className="text-xs font-medium text-stone-500">días</span></div>
           </div>
+          {valida.total > 0 && (
+            <div title="Tareas cuya fecha calculada por la app coincide con la del Excel. Las que no, suelen tener una dependencia faltante.">
+              <div className="text-[10px] uppercase tracking-wide text-stone-400 font-semibold">vs Excel</div>
+              <div className={`text-lg font-bold tabular-nums ${valida.match === valida.total ? 'text-emerald-700' : 'text-amber-700'}`}>{valida.match}/{valida.total} <span className="text-xs font-medium text-stone-500">coinciden</span></div>
+            </div>
+          )}
           <div className={`ml-auto inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-sm font-bold ${plan.en_riesgo ? 'bg-rose-600 text-white' : 'bg-emerald-600 text-white'}`}>
             {plan.en_riesgo ? <><AlertTriangle size={15} /> En riesgo</> : <><Check size={15} /> En fecha</>}
           </div>
@@ -291,6 +284,7 @@ function VistaProyecto({ proyectos, all, plan, planLoading, sel, setSel, onEdit 
                     return (
                       <div key={i} onClick={() => onEdit(t)} className="px-4 border-b border-stone-50 border-r border-stone-100 hover:bg-forest-50/30 cursor-pointer flex flex-col justify-center" style={{ height: ROW_H }}>
                         <div className="flex items-center gap-1.5">
+                          {difExcel(t) && <AlertTriangle size={12} className="text-amber-500 shrink-0" title={`No coincide con el Excel\nExcel: ${fmtD(t.fecha_fin)} · app: ${fmtD(t.early_finish)}\n(revisá dependencias)`} />}
                           <div className="text-[12.5px] text-stone-800 truncate flex-1">{t.nombre}</div>
                           {holg !== null && (
                             <span className={`text-[10px] font-bold rounded px-1 py-0.5 tabular-nums shrink-0 ${t.critico ? 'bg-forest-100 text-forest-700' : holg < 0 ? 'bg-rose-100 text-rose-700' : 'bg-stone-100 text-stone-500'}`}>
