@@ -3,7 +3,8 @@ import EstimadosWizard from '@/components/modules/estimados/EstimadosWizard'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Escritorio de Estimación — la PUERTA DE ENTRADA del schedule.
-// Flujo guiado (wizard): Proyecto → Contrato → Factibilidad → Crear schedule.
+// Flujo guiado (wizard): Proyecto (intake) → Factibilidad → Aceptación PM →
+// Reserva → Firma del contrato (día cero, al final).
 // ─────────────────────────────────────────────────────────────────────────────
 
 export default function Estimacion() {
@@ -15,7 +16,7 @@ export default function Estimacion() {
         </div>
         <div>
           <h1 className="text-xl font-bold text-stone-900">Estimados</h1>
-          <p className="text-sm text-stone-500">Arrancá un proyecto: contrato firmado → factibilidad → schedule.</p>
+          <p className="text-sm text-stone-500">Arrancá un proyecto: intake → factibilidad → PM → reserva → firma del contrato.</p>
         </div>
       </div>
 
