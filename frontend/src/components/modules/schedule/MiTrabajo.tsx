@@ -12,6 +12,7 @@ import { scheduleService, type TrabajoProyecto, type Semaforo } from '@/services
 const ATRIB: Record<string, string> = {
   estimating: 'Estimación', engineering: 'Ingeniería', procurement: 'Compras',
   production: 'Producción', logistics: 'Logística', field: 'Field', finance: 'Finanzas', pm: 'PM',
+  cliente: 'Cliente',
 }
 const SEM_DOT: Record<Semaforo, string> = {
   rojo: 'bg-rose-500', amarillo: 'bg-amber-400', verde: 'bg-emerald-500', gris: 'bg-stone-300',

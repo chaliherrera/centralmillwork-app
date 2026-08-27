@@ -60,6 +60,14 @@ export function areaFromRol(rol: string | null): string {
   return r || 'sin_asignar'
 }
 
+/** Atribución del atraso de un hito. C-03 (contrato firmado = día cero): mientras el
+ *  cliente no firme, el atraso es SUYO (no de Estimación) — decisión de Chali, para
+ *  documentar la demora del cliente y poder renegociar la fecha. El resto va por rol. */
+function atribucionDe(codigo: string, rol: string | null): string {
+  if (codigo === 'C-03') return 'cliente'
+  return areaFromRol(rol)
+}
+
 interface PlantillaHito {
   codigo: string
   dur_dias_default: number
@@ -268,7 +276,7 @@ export async function recomputeScheduleForProyecto(
       proyectada = fechaReal
       if (planeada) {
         holgura = businessDaysBetween(fechaReal, planeada, feriados) // + = cumplido antes
-        if (holgura < 0) atribucion = areaFromRol(rolPorCodigo.get(h.codigo) ?? null)
+        if (holgura < 0) atribucion = atribucionDe(h.codigo, rolPorCodigo.get(h.codigo) ?? null)
       }
     } else if (tipoPorCodigo.get(h.codigo) === 'cond') {
       // Hito condicional (solo ocurre si algo puntual pasa: reproceso, resubmittal…).
@@ -292,7 +300,7 @@ export async function recomputeScheduleForProyecto(
       } else if (planeada) {
         holgura = businessDaysBetween(hoy, planeada, feriados) // días hábiles de hoy al deadline
         proyectada = planeada < hoy ? hoy : planeada
-        if (holgura < 0) { estado = 'vencido'; semaforo = 'rojo'; atribucion = areaFromRol(rolPorCodigo.get(h.codigo) ?? null) }
+        if (holgura < 0) { estado = 'vencido'; semaforo = 'rojo'; atribucion = atribucionDe(h.codigo, rolPorCodigo.get(h.codigo) ?? null) }
         else if (holgura < HOLGURA_VERDE) { estado = 'en_riesgo'; semaforo = 'amarillo' }
         else { estado = 'pendiente'; semaforo = 'verde' }
       } else {
