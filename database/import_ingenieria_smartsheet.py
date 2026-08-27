@@ -64,7 +64,8 @@ ws=wb["Master.Sched"]
 H=[c.value for c in ws[1]]; idx={h:i for i,h in enumerate(H)}
 def g(r,name):
     i=idx.get(name); return r[i] if i is not None and i<len(r) else None
-proj_re=re.compile(r'^\s*\d{2}-\d{3}')
+proj_re=re.compile(r'^\s*(\d{2}-\d{3})')
+prefix_re=re.compile(r'^\s*\d{2}-\d{3}\s+')   # para quitar el codigo de tareas prefijadas
 
 lines=[]
 lines.append("BEGIN;")
@@ -82,12 +83,16 @@ for c,n,h,t,mn,mx,o,al in TIPOS:
                  f"ON CONFLICT (clave) DO UPDATE SET nombre=EXCLUDED.nombre,hito_codigo=EXCLUDED.hito_codigo,"
                  f"dur_dias_tipico=EXCLUDED.dur_dias_tipico,dur_dias_min=EXCLUDED.dur_dias_min,dur_dias_max=EXCLUDED.dur_dias_max,aliases=EXCLUDED.aliases;")
 
-cur_proj=None; cur_phase=None; ntask=0; nproj=0; deps=[]
+cur_proj=None; cur_code=None; cur_phase=None; ntask=0; nproj=0; deps=[]
 for rn,r in enumerate(ws.iter_rows(min_row=2,values_only=True),start=2):
     name=(g(r,'Project Name') or '').strip()
     if not name: continue
-    if proj_re.match(name):
-        cur_proj=name; cur_phase=None; nproj+=1
+    # El formato nuevo del Excel prefija TODAS las filas con el codigo ("25-562 Field
+    # measurements"). El encabezado de proyecto = primera fila con un codigo NUEVO; las
+    # tareas prefijadas repiten el codigo del proyecto actual, asi que NO son proyectos.
+    m=proj_re.match(name); code=m.group(1) if m else None
+    if code and code != cur_code:
+        cur_code=code; cur_proj=name; cur_phase=None; nproj+=1
         # Encabezado del proyecto: la FECHA FIJA (Finish) + inicio + total + estado.
         lines.append(
           "INSERT INTO ing_proyectos (proyecto_ext,fecha_inicio,fecha_entrega,dur_total_dias,status_ext,origen) VALUES ("
@@ -96,6 +101,8 @@ for rn,r in enumerate(ws.iter_rows(min_row=2,values_only=True),start=2):
           "ON CONFLICT (proyecto_ext) DO UPDATE SET fecha_inicio=EXCLUDED.fecha_inicio,fecha_entrega=EXCLUDED.fecha_entrega,"
           "dur_total_dias=EXCLUDED.dur_total_dias,status_ext=EXCLUDED.status_ext,updated_at=NOW();")
         continue
+    # Tarea (o fase): quita el prefijo de codigo si lo trae.
+    name=prefix_re.sub('',name).strip()
     if name.lower().startswith('phase'):
         cur_phase=name; continue
     assigned=(g(r,'Assigned To') or '').strip() or None
