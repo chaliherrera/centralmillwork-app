@@ -55,6 +55,12 @@ export interface Proyecto {
   fecha_fin_real: string | null
   presupuesto: number
   responsable: string
+  // Campos de la hoja de intake (Estimados, migración 058)
+  millwork_total?: number | null
+  stone_total?: number | null
+  items_qty?: number | null
+  intake_comments?: string | null
+  fecha_entrega_solicitada?: string | null   // Millwork Date = fecha que pide el cliente
   total_ocs?: number
   created_at: string
   updated_at: string

@@ -18,7 +18,26 @@ const schema = z.object({
   fecha_fin_estimada: z.string().optional().transform((v) => v || undefined),
   presupuesto:        z.coerce.number().min(0),
   responsable:        z.string().optional(),
+  // Hoja de intake (solo se muestran con variant intake). Se guardan como texto en
+  // el form y se limpian a número/undefined al enviar (toPayload).
+  millwork_total:          z.string().optional(),
+  stone_total:             z.string().optional(),
+  items_qty:               z.string().optional(),
+  intake_comments:         z.string().optional(),
+  fecha_entrega_solicitada: z.string().optional().transform((v) => v || undefined),
 })
+
+// Convierte los campos de intake (texto del form) a número/undefined limpios.
+const toPayload = (d: FormValues) => {
+  const numOrU = (v?: string) => (v === undefined || v === '' ? undefined : Number(v))
+  return {
+    ...d,
+    millwork_total: numOrU(d.millwork_total),
+    stone_total:    numOrU(d.stone_total),
+    items_qty:      numOrU(d.items_qty),
+    intake_comments: d.intake_comments || undefined,
+  }
+}
 
 type FormValues = z.infer<typeof schema>
 
@@ -28,6 +47,8 @@ interface Props {
   proyecto?: Proyecto
   /** Oculta las fechas (no son determinantes en el alta desde Estimados). */
   hideDates?: boolean
+  /** Muestra los campos de la hoja de intake (alta desde Estimados). */
+  intake?: boolean
   /** Callback con el proyecto creado (para el wizard de Estimados). */
   onCreated?: (p: Proyecto) => void
 }
@@ -37,7 +58,7 @@ const estadoOpts: { value: 'activo' | 'completado'; label: string }[] = [
   { value: 'completado', label: 'Completado' },
 ]
 
-export default function ProyectoForm({ open, onClose, proyecto, hideDates, onCreated }: Props) {
+export default function ProyectoForm({ open, onClose, proyecto, hideDates, intake, onCreated }: Props) {
   const qc = useQueryClient()
   const isEdit = !!proyecto
 
@@ -59,8 +80,14 @@ export default function ProyectoForm({ open, onClose, proyecto, hideDates, onCre
             fecha_fin_estimada: proyecto.fecha_fin_estimada?.slice(0, 10) ?? '',
             presupuesto:        proyecto.presupuesto,
             responsable:        proyecto.responsable ?? '',
+            millwork_total:     proyecto.millwork_total != null ? String(proyecto.millwork_total) : '',
+            stone_total:        proyecto.stone_total != null ? String(proyecto.stone_total) : '',
+            items_qty:          proyecto.items_qty != null ? String(proyecto.items_qty) : '',
+            intake_comments:    proyecto.intake_comments ?? '',
+            fecha_entrega_solicitada: proyecto.fecha_entrega_solicitada?.slice(0, 10) ?? '',
           }
-        : { codigo: '', nombre: '', cliente: '', descripcion: '', estado: 'activo', fecha_inicio: '', fecha_fin_estimada: '', presupuesto: 0, responsable: '' }
+        : { codigo: '', nombre: '', cliente: '', descripcion: '', estado: 'activo', fecha_inicio: '', fecha_fin_estimada: '', presupuesto: 0, responsable: '',
+            millwork_total: '', stone_total: '', items_qty: '', intake_comments: '', fecha_entrega_solicitada: '' }
       )
     }
   }, [open])
@@ -68,8 +95,8 @@ export default function ProyectoForm({ open, onClose, proyecto, hideDates, onCre
   const mutation = useMutation({
     mutationFn: (data: FormValues) =>
       isEdit
-        ? proyectosService.update(proyecto!.id, data)
-        : proyectosService.create(data as Omit<Proyecto, 'id' | 'created_at' | 'updated_at'>),
+        ? proyectosService.update(proyecto!.id, toPayload(data))
+        : proyectosService.create(toPayload(data) as Omit<Proyecto, 'id' | 'created_at' | 'updated_at'>),
     onSuccess: (res: any) => {
       qc.invalidateQueries({ queryKey: ['proyectos'] })
       toast.success(isEdit ? 'Proyecto actualizado' : 'Proyecto creado')
@@ -117,6 +144,39 @@ export default function ProyectoForm({ open, onClose, proyecto, hideDates, onCre
             placeholder="Closets, cocina integral…" />
         </div>
 
+        {intake && (
+          <div className="rounded-xl border border-forest-100 bg-forest-50/40 p-4 space-y-4">
+            <div className="text-[11px] uppercase tracking-wider text-forest-700 font-semibold">Hoja de intake</div>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="label">Cantidad de ítems</label>
+                <input type="number" min="0" step="1" {...register('items_qty')} className="input" placeholder="Ej. 24" />
+                <p className="text-[11px] text-stone-400 mt-1">Alimenta la duración de shop drawings (≈ 1 día por ítem).</p>
+              </div>
+              <div>
+                <label className="label">Millwork Date (fecha que pide el cliente)</label>
+                <input type="date" {...register('fecha_entrega_solicitada')} className="input" />
+                <p className="text-[11px] text-stone-400 mt-1">Es la fecha objetivo que se evalúa en factibilidad.</p>
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="label">Millwork Total (USD)</label>
+                <input type="number" step="0.01" min="0" {...register('millwork_total')} className="input" placeholder="0.00" />
+              </div>
+              <div>
+                <label className="label">Stone / Countertops (USD)</label>
+                <input type="number" step="0.01" min="0" {...register('stone_total')} className="input" placeholder="0.00" />
+              </div>
+            </div>
+            <div>
+              <label className="label">Comentarios / lead times</label>
+              <textarea {...register('intake_comments')} rows={2} className="input resize-none"
+                placeholder="Ej. SP-001 3-4 sem · MT-02 Banker's mesh 9.5 sem · installation not included" />
+            </div>
+          </div>
+        )}
+
         {!hideDates && (
           <div className="grid grid-cols-2 gap-4">
             <div>
@@ -132,7 +192,7 @@ export default function ProyectoForm({ open, onClose, proyecto, hideDates, onCre
 
         <div className="grid grid-cols-2 gap-4">
           <div>
-            <label className="label">Presupuesto (USD)</label>
+            <label className="label">{intake ? 'Project Total (USD)' : 'Presupuesto (USD)'}</label>
             <input type="number" step="0.01" {...register('presupuesto')} className="input" placeholder="0.00" />
             {errors.presupuesto && <p className="text-red-500 text-xs mt-1">{errors.presupuesto.message}</p>}
           </div>

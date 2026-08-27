@@ -3,8 +3,9 @@ import { Lock, Loader2, Check, CalendarRange } from 'lucide-react'
 import { ingenieriaService, type ReservaProyecto } from '@/services/ingenieria'
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Reservas de Ingeniería por confirmar — escritorio del PM.
-// El PM revisa las reservas que Estimados creó, asigna el ingeniero real y confirma.
+// Aceptación del PM — escritorio del PM (paso 3 del flujo de Estimados).
+// Estimados envió el proyecto: el PM ACEPTA la fecha comprometida, revisa el
+// ingeniero propuesto y confirma la reserva (asigna el ingeniero real).
 // ─────────────────────────────────────────────────────────────────────────────
 
 const MES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic']
@@ -41,8 +42,8 @@ export default function ReservasPendientes() {
     <div className="rounded-2xl border border-forest-200 bg-white overflow-hidden">
       <div className="flex items-center gap-2 px-4 py-3 border-b border-stone-100 bg-forest-50/40">
         <Lock size={16} className="text-forest-600" />
-        <h2 className="font-bold text-stone-800">Reservas de Ingeniería por confirmar</h2>
-        <span className="text-xs text-stone-400">revisá el ingeniero propuesto y confirmá (o cambialo)</span>
+        <h2 className="font-bold text-stone-800">Aceptación del PM · Reserva de Ingeniería</h2>
+        <span className="text-xs text-stone-400">aceptá la fecha comprometida, revisá el ingeniero propuesto y confirmá</span>
       </div>
       <div className="divide-y divide-stone-100">
         {reservas.map((p) => (
@@ -67,7 +68,7 @@ export default function ReservasPendientes() {
             <div className="mt-3 flex justify-end">
               <button onClick={() => confirmar(p)} disabled={busy === p.proyecto_id}
                 className="inline-flex items-center gap-1.5 rounded-lg bg-forest-600 hover:bg-forest-700 disabled:opacity-50 text-white text-sm font-semibold px-3.5 py-2">
-                {busy === p.proyecto_id ? <Loader2 className="animate-spin" size={15} /> : <Check size={15} />} Confirmar reserva
+                {busy === p.proyecto_id ? <Loader2 className="animate-spin" size={15} /> : <Check size={15} />} Aceptar y confirmar
               </button>
             </div>
           </div>

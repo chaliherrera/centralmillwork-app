@@ -31,13 +31,22 @@ async function dryRun(runner: QueryRunner, plantillaId: number, fecha: string): 
   return calcularPlaneadas(hitos, deps, fecha, feriados).planeadas
 }
 
-/** Duraciones (días hábiles) por tipo de tarea de la reserva. Hoy: catálogo.
- *  Mañana: función del presupuesto/tamaño (histórico). Único punto de cambio. */
-async function duracionesPara(runner: QueryRunner, _presupuesto: number | null): Promise<Map<string, { id: number; nombre: string; hito: string | null; dur: number }>> {
-  const { rows } = await runner.query<{ id: number; clave: string; nombre: string; hito_codigo: string | null; dur_dias_tipico: number | null }>(
-    `SELECT id, clave, nombre, hito_codigo, dur_dias_tipico FROM ing_tarea_tipos WHERE clave = ANY($1)`, [RESERVA_CLAVES])
+/** Duraciones (días hábiles) por tipo de tarea de la reserva.
+ *  REGLA ACTIVADA (decisión de Chali): si el proyecto trae #ítems y el tipo define
+ *  dias_por_item (shop drawings = 1 día/ítem, migración 057), la duración = ítems ×
+ *  días-por-ítem. Sin #ítems, cae al catálogo (dur_dias_tipico). El presupuesto
+ *  queda como gancho futuro. Único punto de cambio. */
+async function duracionesPara(runner: QueryRunner, _presupuesto: number | null, itemsQty: number | null): Promise<Map<string, { id: number; nombre: string; hito: string | null; dur: number }>> {
+  const { rows } = await runner.query<{ id: number; clave: string; nombre: string; hito_codigo: string | null; dur_dias_tipico: number | null; dias_por_item: number | null }>(
+    `SELECT id, clave, nombre, hito_codigo, dur_dias_tipico, dias_por_item FROM ing_tarea_tipos WHERE clave = ANY($1)`, [RESERVA_CLAVES])
   const m = new Map<string, { id: number; nombre: string; hito: string | null; dur: number }>()
-  for (const r of rows) m.set(r.clave, { id: r.id, nombre: r.nombre, hito: r.hito_codigo, dur: Math.max(1, r.dur_dias_tipico ?? 3) })
+  for (const r of rows) {
+    let dur = Math.max(1, r.dur_dias_tipico ?? 3)
+    if (itemsQty != null && itemsQty > 0 && r.dias_por_item != null && Number(r.dias_por_item) > 0) {
+      dur = Math.max(1, Math.round(itemsQty * Number(r.dias_por_item)))
+    }
+    m.set(r.clave, { id: r.id, nombre: r.nombre, hito: r.hito_codigo, dur })
+  }
   return m
 }
 
@@ -62,16 +71,16 @@ export async function crearReserva(runner: QueryRunner, proyectoId: number): Pro
     `SELECT count(*)::int AS n FROM ing_tareas WHERE proyecto_id = $1 AND origen = 'reserva'`, [proyectoId])
   if ((ya[0]?.n ?? 0) > 0) return { creadas: 0 }
 
-  const { rows: planes } = await runner.query<{ plantilla_id: number; fecha: string; codigo: string; presupuesto: number | null }>(
-    `SELECT sp.plantilla_id, to_char(sp.fecha_objetivo,'YYYY-MM-DD') AS fecha, p.codigo, p.presupuesto
+  const { rows: planes } = await runner.query<{ plantilla_id: number; fecha: string; codigo: string; presupuesto: number | null; items_qty: number | null }>(
+    `SELECT sp.plantilla_id, to_char(sp.fecha_objetivo,'YYYY-MM-DD') AS fecha, p.codigo, p.presupuesto, p.items_qty
        FROM schedule_planes sp JOIN proyectos p ON p.id = sp.proyecto_id
       WHERE sp.proyecto_id = $1 AND sp.scope = 'proyecto' LIMIT 1`, [proyectoId])
   if (!planes[0]) return { creadas: 0 }
-  const { plantilla_id, fecha, codigo, presupuesto } = planes[0]
+  const { plantilla_id, fecha, codigo, presupuesto, items_qty } = planes[0]
 
   const planeadas = await dryRun(runner, plantilla_id, fecha)
   const feriados = await loadFeriados(runner)
-  const tipos = await duracionesPara(runner, presupuesto)
+  const tipos = await duracionesPara(runner, presupuesto, items_qty)
 
   // Recurso de CNC. HOY Santos es el único que hace CNC (= el cuello), así que la
   // reserva de CNC se propone para él. FUTURO: el objetivo es que cada ingeniero

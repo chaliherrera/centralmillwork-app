@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { FolderKanban, FileUp, CalendarClock, Rocket, Check, ChevronRight, ChevronLeft, Plus, Loader2, CheckCircle2, ArrowRight } from 'lucide-react'
+import { FolderKanban, CalendarClock, UserCheck, Lock, FileUp, Check, ChevronRight, ChevronLeft, Plus, Loader2, CheckCircle2, ArrowRight, Send } from 'lucide-react'
 import { proyectosService } from '@/services/proyectos'
 import { scheduleService, type FactibilidadResult } from '@/services/schedule'
 import { ingenieriaService } from '@/services/ingenieria'
@@ -9,16 +9,21 @@ import FactibilidadCheck from './FactibilidadCheck'
 import type { Proyecto } from '@/types'
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Wizard de Estimados — el flujo guiado: Proyecto → Contrato → Factibilidad →
-// Crear schedule. Encadena piezas existentes; el schedule se crea SOLO si la
-// fecha es factible (o se comprometió una fecha real negociada).
+// Wizard de Estimados — el flujo guiado, en el orden que el contrato va AL FINAL:
+//   1 Proyecto (con hoja de intake) → 2 Factibilidad → 3 Aceptación del PM →
+//   4 Reserva → 5 Firma + contrato (día cero).
+// El schedule se calcula hacia atrás desde la fecha comprometida (no desde la
+// firma), así que factibilidad y reserva pueden ir ANTES de la firma. El PM
+// acepta la fecha y confirma la reserva en su bandeja (asíncrono, Estimados no
+// espera). La firma cierra C-03 = día cero.
 // ─────────────────────────────────────────────────────────────────────────────
 
 const PASOS = [
   { n: 1, label: 'Proyecto', icon: FolderKanban },
-  { n: 2, label: 'Contrato', icon: FileUp },
-  { n: 3, label: 'Factibilidad', icon: CalendarClock },
-  { n: 4, label: 'Crear schedule', icon: Rocket },
+  { n: 2, label: 'Factibilidad', icon: CalendarClock },
+  { n: 3, label: 'Aceptación PM', icon: UserCheck },
+  { n: 4, label: 'Reserva', icon: Lock },
+  { n: 5, label: 'Firma', icon: FileUp },
 ]
 const MES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic']
 const fmt = (iso: string) => { if (!iso) return '—'; const d = new Date(iso + 'T00:00:00'); return `${d.getDate()} ${MES[d.getMonth()]} ${d.getFullYear()}` }
@@ -29,16 +34,25 @@ export default function EstimadosWizard() {
   const [selId, setSelId] = useState<number | null>(null)
   const [tienePlan, setTienePlan] = useState(false)
   const [formOpen, setFormOpen] = useState(false)
-  const [contrato, setContrato] = useState<File | null>(null)
-  const [fechaEnvio, setFechaEnvio] = useState('')   // cuándo se envió el contrato al cliente
-  const [fechaFirma, setFechaFirma] = useState('')   // cuándo el cliente firmó = día cero real
+
   const [factRes, setFactRes] = useState<FactibilidadResult | null>(null)
   const [fechaSolicitada, setFechaSolicitada] = useState('')
   const [fechaComprometida, setFechaComprometida] = useState('')
-  const [creating, setCreating] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const [creado, setCreado] = useState(false)
+
+  // Paso 3/4 — envío al PM + reserva
+  const [enviandoPM, setEnviandoPM] = useState(false)
+  const [enviadoPM, setEnviadoPM] = useState(false)
   const [reservadas, setReservadas] = useState(0)
+  const [liberando, setLiberando] = useState(false)
+
+  // Paso 5 — contrato
+  const [contrato, setContrato] = useState<File | null>(null)
+  const [fechaEnvio, setFechaEnvio] = useState('')   // cuándo se envió el contrato al cliente
+  const [fechaFirma, setFechaFirma] = useState('')   // cuándo el cliente firmó = día cero real
+  const [firmando, setFirmando] = useState(false)
+  const [firmado, setFirmado] = useState(false)
+
+  const [error, setError] = useState<string | null>(null)
 
   const cargarProyectos = () => proyectosService.getAll({ limit: 200 } as any).then((r) => setProyectos(r.data ?? [])).catch(() => {})
   useEffect(() => { cargarProyectos() }, [])
@@ -53,42 +67,64 @@ export default function EstimadosWizard() {
   // Días que tardó el cliente en firmar (envío → firma) = retraso atribuible a él.
   const diasCliente = useMemo(() => {
     if (!fechaEnvio || !fechaFirma) return null
-    const d = Math.round((new Date(fechaFirma + 'T00:00:00').getTime() - new Date(fechaEnvio + 'T00:00:00').getTime()) / 86400000)
-    return d
+    return Math.round((new Date(fechaFirma + 'T00:00:00').getTime() - new Date(fechaEnvio + 'T00:00:00').getTime()) / 86400000)
   }, [fechaEnvio, fechaFirma])
 
-  const canNext =
-    paso === 1 ? !!sel && !tienePlan :
-    paso === 2 ? !!contrato && !!fechaFirma && (diasCliente === null || diasCliente >= 0) :
-    paso === 3 ? !!fechaComprometida :
-    false
+  const resetTodo = () => {
+    setPaso(1); setSelId(null); setTienePlan(false); setFactRes(null); setFechaSolicitada(''); setFechaComprometida('')
+    setEnviadoPM(false); setReservadas(0); setContrato(null); setFechaEnvio(''); setFechaFirma(''); setFirmado(false); setError(null)
+    cargarProyectos()
+  }
 
-  const crearSchedule = async () => {
+  // ── Paso 3 → crea el plan (hacia atrás) + reserva provisional para el PM ──
+  const enviarAlPM = async () => {
+    if (!sel || !fechaComprometida) return
+    setEnviandoPM(true); setError(null)
+    try {
+      await scheduleService.generar(sel.id, fechaComprometida)
+      try { const rr = await ingenieriaService.reservar(sel.id); setReservadas(rr.data?.creadas ?? 0) } catch { /* la reserva no bloquea */ }
+      setEnviadoPM(true); setTienePlan(true)
+    } catch (e: any) { setError(e?.response?.data?.message || 'No se pudo enviar al PM') } finally { setEnviandoPM(false) }
+  }
+
+  const liberarReserva = async () => {
+    if (!sel) return
+    setLiberando(true); setError(null)
+    try { await ingenieriaService.liberarReserva(sel.id); setReservadas(0) } catch { /* no bloquea */ } finally { setLiberando(false) }
+  }
+
+  // ── Paso 5 → registra la firma + contrato (cierra C-03 = día cero) ──
+  const registrarFirma = async () => {
     if (!sel || !fechaComprometida || !contrato) return
-    setCreating(true); setError(null)
+    setFirmando(true); setError(null)
     try {
       await scheduleService.intake(sel.id, fechaComprometida, contrato,
         { fecha_firma: fechaFirma || undefined, fecha_envio: fechaEnvio || undefined })
-      // Reservar la capacidad de Ingeniería (best-effort; el PM la confirma después).
-      try { const rr = await ingenieriaService.reservar(sel.id); setReservadas(rr.data?.creadas ?? 0) } catch { /* la reserva no bloquea */ }
-      setCreado(true)
-    } catch (e: any) { setError(e?.response?.data?.message || 'No se pudo crear el schedule') } finally { setCreating(false) }
+      setFirmado(true)
+    } catch (e: any) { setError(e?.response?.data?.message || 'No se pudo registrar la firma') } finally { setFirmando(false) }
   }
 
+  const canNext =
+    paso === 1 ? !!sel && (!tienePlan || enviadoPM) :
+    paso === 2 ? !!fechaComprometida :
+    paso === 3 ? enviadoPM :
+    paso === 4 ? true :
+    false
+
   // ── pantalla final ──
-  if (creado && sel) {
+  if (firmado && sel) {
     return (
       <div className="rounded-2xl border border-emerald-200 bg-emerald-50/60 p-8 text-center">
         <CheckCircle2 size={44} className="text-emerald-600 mx-auto" />
-        <h2 className="mt-3 text-xl font-bold text-stone-900">Schedule creado</h2>
+        <h2 className="mt-3 text-xl font-bold text-stone-900">Contrato firmado y schedule en marcha</h2>
         <p className="mt-1 text-stone-600">{sel.codigo} · {sel.nombre} — comprometido para el <b>{fmt(fechaComprometida)}</b>.</p>
+        <p className="mt-1 text-sm text-forest-700">Día cero = firma del cliente {fechaFirma ? <b>{fmt(fechaFirma)}</b> : '(hoy)'}.</p>
         {reservadas > 0 && <p className="mt-1 text-sm text-forest-700">🔒 {reservadas} espacio{reservadas > 1 ? 's' : ''} de Ingeniería reservado{reservadas > 1 ? 's' : ''} — el PM confirma y asigna el ingeniero.</p>}
         <div className="mt-5 flex items-center justify-center gap-3">
           <Link to={`/proyectos/${sel.id}`} className="inline-flex items-center gap-1.5 rounded-lg bg-forest-600 hover:bg-forest-700 text-white text-sm font-semibold px-4 py-2">
             Ver el schedule <ArrowRight size={15} />
           </Link>
-          <button onClick={() => { setCreado(false); setPaso(1); setSelId(null); setContrato(null); setFechaEnvio(''); setFechaFirma(''); setFactRes(null); setFechaSolicitada(''); setFechaComprometida(''); cargarProyectos() }}
-            className="text-sm text-stone-500 hover:text-stone-800 px-3 py-2">Arrancar otro</button>
+          <button onClick={resetTodo} className="text-sm text-stone-500 hover:text-stone-800 px-3 py-2">Arrancar otro</button>
         </div>
       </div>
     )
@@ -115,13 +151,13 @@ export default function EstimadosWizard() {
         })}
       </div>
 
-      <div className="p-5 min-h-[280px]">
+      <div className="p-5 min-h-[300px]">
         {/* PASO 1 — Proyecto */}
         {paso === 1 && (
           <div className="space-y-4">
             <div>
               <h3 className="font-bold text-stone-800">¿Para qué proyecto?</h3>
-              <p className="text-sm text-stone-500">Elegí un proyecto o creá uno nuevo. Las fechas se definen más adelante, con la factibilidad.</p>
+              <p className="text-sm text-stone-500">Elegí un proyecto o creá uno nuevo con los datos de la hoja de intake. La fecha se evalúa en el próximo paso.</p>
             </div>
             <div className="flex flex-wrap items-end gap-3">
               <div className="flex-1 min-w-[280px]">
@@ -136,71 +172,26 @@ export default function EstimadosWizard() {
                 <Plus size={15} /> Crear proyecto
               </button>
             </div>
-            {sel && tienePlan && (
-              <div className="rounded-lg bg-amber-50 border border-amber-200 px-3 py-2 text-sm text-amber-800">
-                Este proyecto <b>ya tiene schedule</b>. <Link to={`/proyectos/${sel.id}`} className="underline font-semibold">Verlo</Link> o elegí otro.
+            {sel && tienePlan && !enviadoPM && (
+              <div className="rounded-lg bg-amber-50 border border-amber-200 px-3 py-2.5 text-sm text-amber-800">
+                Este proyecto <b>ya tiene schedule</b>. Podés <Link to={`/proyectos/${sel.id}`} className="underline font-semibold">verlo</Link>, elegir otro, o
+                <button onClick={() => setPaso(5)} className="ml-1 underline font-semibold text-forest-700">retomar para firmar el contrato</button>.
               </div>
+            )}
+            {sel && sel.items_qty != null && (
+              <div className="text-xs text-stone-500">Intake: <b>{sel.items_qty}</b> ítems{sel.presupuesto ? ` · Project Total $${Number(sel.presupuesto).toLocaleString()}` : ''}{sel.fecha_entrega_solicitada ? ` · Millwork Date ${fmt(sel.fecha_entrega_solicitada.slice(0,10))}` : ''}.</div>
             )}
           </div>
         )}
 
-        {/* PASO 2 — Contrato */}
+        {/* PASO 2 — Factibilidad */}
         {paso === 2 && (
           <div className="space-y-4">
             <div>
-              <h3 className="font-bold text-stone-800">Contrato firmado</h3>
-              <p className="text-sm text-stone-500">El <b>día cero</b> del proyecto es <b>la fecha en que el cliente firmó</b> — no la de hoy. Registrala para no regalar días.</p>
-            </div>
-
-            {/* Fechas del contrato: envío (nuestro) y firma (del cliente = día cero) */}
-            <div className="rounded-xl border border-stone-200 bg-stone-50/50 p-4">
-              <div className="flex flex-wrap items-end gap-4">
-                <div>
-                  <label className="text-[11px] uppercase tracking-wider text-stone-400 font-semibold">Contrato enviado al cliente</label>
-                  <input type="date" value={fechaEnvio} onChange={(e) => setFechaEnvio(e.target.value)}
-                    className="mt-1 block rounded-lg border border-stone-300 px-3 py-2 text-sm text-stone-800 focus:outline-none focus:ring-2 focus:ring-forest-300" />
-                </div>
-                <div className="text-stone-300 pb-2"><ArrowRight size={16} /></div>
-                <div>
-                  <label className="text-[11px] uppercase tracking-wider text-forest-600 font-semibold">Firmado por el cliente <span className="text-forest-700">· día cero</span></label>
-                  <input type="date" value={fechaFirma} onChange={(e) => setFechaFirma(e.target.value)}
-                    className="mt-1 block rounded-lg border-2 border-forest-300 px-3 py-2 text-sm text-stone-900 font-medium focus:outline-none focus:ring-2 focus:ring-forest-300" />
-                </div>
-              </div>
-              {diasCliente !== null && diasCliente > 0 && (
-                <div className="mt-3 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
-                  El cliente tardó <b>{diasCliente} día{diasCliente > 1 ? 's' : ''}</b> en firmar (envío → firma). Es un retraso <b>atribuible al cliente</b>: si compromete la entrega, queda documentado para renegociar la fecha.
-                </div>
-              )}
-              {diasCliente !== null && diasCliente < 0 && (
-                <div className="mt-3 text-xs text-rose-700 bg-rose-50 border border-rose-200 rounded-lg px-3 py-2">
-                  La firma no puede ser anterior al envío. Revisá las fechas.
-                </div>
-              )}
-              <div className="mt-2 text-[11px] text-stone-400">Cuando conectemos <b>DocuSign</b>, estas dos fechas llegan automáticas desde el portal del cliente (envío y firma del sobre).</div>
-            </div>
-
-            {/* PDF del contrato firmado (obligatorio) */}
-            <div>
-              <label className="text-[11px] uppercase tracking-wider text-stone-400 font-semibold">PDF del contrato firmado · obligatorio</label>
-              <label className="mt-1 flex flex-col items-center justify-center gap-2 border-2 border-dashed border-stone-300 rounded-xl py-8 cursor-pointer hover:border-forest-400 transition-colors">
-                <FileUp size={26} className="text-stone-300" />
-                <span className="text-sm text-stone-500">{contrato ? contrato.name : 'Elegí el PDF del contrato firmado'}</span>
-                <input type="file" accept="application/pdf" className="hidden" onChange={(e) => setContrato(e.target.files?.[0] ?? null)} />
-              </label>
-              {contrato && <div className="mt-1 text-xs text-emerald-700 flex items-center gap-1"><Check size={13} /> {contrato.name} listo</div>}
-            </div>
-          </div>
-        )}
-
-        {/* PASO 3 — Factibilidad */}
-        {paso === 3 && (
-          <div className="space-y-4">
-            <div>
               <h3 className="font-bold text-stone-800">¿Se puede cumplir la fecha?</h3>
-              <p className="text-sm text-stone-500">Ingresá la fecha que pide el cliente. El sistema revisa la carga de Ingeniería y te dice si es factible.</p>
+              <p className="text-sm text-stone-500">Ingresá la fecha que pide el cliente. El sistema revisa la carga de Ingeniería y te dice si es factible. Es tu elemento de negociación.</p>
             </div>
-            <FactibilidadCheck fechaInicial={fechaSolicitada} onResult={(f, r) => {
+            <FactibilidadCheck fechaInicial={fechaSolicitada || sel?.fecha_entrega_solicitada?.slice(0, 10) || ''} onResult={(f, r) => {
               setFechaSolicitada(f); setFactRes(r)
               setFechaComprometida(r.factible ? f : r.fecha_real_mas_temprana)
             }} />
@@ -218,25 +209,103 @@ export default function EstimadosWizard() {
           </div>
         )}
 
-        {/* PASO 4 — Crear schedule */}
-        {paso === 4 && sel && (
+        {/* PASO 3 — Aceptación del PM */}
+        {paso === 3 && sel && (
           <div className="space-y-4">
             <div>
-              <h3 className="font-bold text-stone-800">Crear el schedule</h3>
-              <p className="text-sm text-stone-500">Revisá y creá. Se genera el schedule (hacia atrás) y se registra el día cero.</p>
+              <h3 className="font-bold text-stone-800">Aceptación del PM</h3>
+              <p className="text-sm text-stone-500">Se genera el schedule (hacia atrás desde la fecha comprometida) y se propone la reserva de Ingeniería. El <b>PM la acepta y confirma en su bandeja</b> — no hace falta esperarlo acá.</p>
             </div>
             <div className="rounded-xl border border-stone-100 bg-stone-50/60 divide-y divide-stone-100">
               <Row k="Proyecto" v={`${sel.codigo} · ${sel.nombre}`} />
-              <Row k="Contrato" v={contrato?.name ?? '—'} />
-              {fechaEnvio && <Row k="Contrato enviado" v={fmt(fechaEnvio)} />}
-              <Row k="Firmado por el cliente (día cero)" v={<b className="text-forest-700">{fechaFirma ? fmt(fechaFirma) : 'hoy'}</b>} />
-              {diasCliente !== null && diasCliente > 0 && <Row k="Retraso del cliente en firmar" v={<span className="text-amber-700">{diasCliente} día{diasCliente > 1 ? 's' : ''} (documentado)</span>} />}
               <Row k="Fecha pedida por el cliente" v={fechaSolicitada ? fmt(fechaSolicitada) : '—'} />
               <Row k="Fecha comprometida (objetivo)" v={<b className="text-forest-700">{fmt(fechaComprometida)}</b>} />
               {factRes && !factRes.factible && <Row k="Aviso" v={<span className="text-amber-700">La pedida no era factible — se comprometió una fecha real.</span>} />}
             </div>
+            {!enviadoPM ? (
+              <button onClick={enviarAlPM} disabled={enviandoPM}
+                className="inline-flex items-center gap-1.5 rounded-lg bg-forest-600 hover:bg-forest-700 disabled:opacity-40 text-white text-sm font-semibold px-4 py-2">
+                {enviandoPM ? <Loader2 className="animate-spin" size={16} /> : <Send size={15} />} Enviar al PM
+              </button>
+            ) : (
+              <div className="rounded-lg bg-emerald-50 border border-emerald-200 px-3 py-2.5 text-sm text-emerald-800 flex items-center gap-2">
+                <CheckCircle2 size={16} /> Enviado. El PM acepta la fecha y confirma la reserva en su bandeja. Continuá cuando quieras.
+              </div>
+            )}
             {error && <div className="rounded-lg bg-rose-50 border border-rose-200 px-3 py-2 text-sm text-rose-700">{error}</div>}
-            <div className="text-[11px] text-stone-400">La reserva de la capacidad de Ingeniería se agrega en el próximo paso del sistema (la confirma el PM).</div>
+          </div>
+        )}
+
+        {/* PASO 4 — Reserva */}
+        {paso === 4 && sel && (
+          <div className="space-y-4">
+            <div>
+              <h3 className="font-bold text-stone-800">Reserva de Ingeniería</h3>
+              <p className="text-sm text-stone-500">Los espacios de Ingeniería quedan reservados (provisionales) hasta que el PM los confirme y asigne el ingeniero. Consumen capacidad para que la próxima cotización cuente con eso.</p>
+            </div>
+            <div className="rounded-xl border border-forest-100 bg-forest-50/40 p-4">
+              {reservadas > 0 ? (
+                <p className="text-sm text-forest-800">🔒 <b>{reservadas}</b> espacio{reservadas > 1 ? 's' : ''} reservado{reservadas > 1 ? 's' : ''} para <b>{sel.codigo}</b>. El PM confirma y asigna el ingeniero en <Link to="/pm" className="underline font-semibold">su bandeja</Link>.</p>
+              ) : (
+                <p className="text-sm text-stone-500">No hay reserva activa para este proyecto.</p>
+              )}
+            </div>
+            <div className="text-xs text-stone-400">
+              ¿Se cae el deal? {reservadas > 0 && (
+                <button onClick={liberarReserva} disabled={liberando} className="underline font-semibold text-rose-600 disabled:opacity-40">
+                  {liberando ? 'Liberando…' : 'Liberar la reserva'}
+                </button>
+              )}
+            </div>
+            {error && <div className="rounded-lg bg-rose-50 border border-rose-200 px-3 py-2 text-sm text-rose-700">{error}</div>}
+          </div>
+        )}
+
+        {/* PASO 5 — Firma + contrato */}
+        {paso === 5 && sel && (
+          <div className="space-y-4">
+            <div>
+              <h3 className="font-bold text-stone-800">Firma del contrato</h3>
+              <p className="text-sm text-stone-500">El <b>día cero</b> del proyecto es <b>la fecha en que el cliente firmó</b> — no la de hoy. Registrala para no regalar días.</p>
+            </div>
+
+            <div className="rounded-xl border border-stone-200 bg-stone-50/50 p-4">
+              <div className="flex flex-wrap items-end gap-4">
+                <div>
+                  <label className="text-[11px] uppercase tracking-wider text-stone-400 font-semibold">Contrato enviado al cliente</label>
+                  <input type="date" value={fechaEnvio} onChange={(e) => setFechaEnvio(e.target.value)}
+                    className="mt-1 block rounded-lg border border-stone-300 px-3 py-2 text-sm text-stone-800 focus:outline-none focus:ring-2 focus:ring-forest-300" />
+                </div>
+                <div className="text-stone-300 pb-2"><ArrowRight size={16} /></div>
+                <div>
+                  <label className="text-[11px] uppercase tracking-wider text-forest-600 font-semibold">Firmado por el cliente <span className="text-forest-700">· día cero</span></label>
+                  <input type="date" value={fechaFirma} onChange={(e) => setFechaFirma(e.target.value)}
+                    className="mt-1 block rounded-lg border-2 border-forest-300 px-3 py-2 text-sm text-stone-900 font-medium focus:outline-none focus:ring-2 focus:ring-forest-300" />
+                </div>
+              </div>
+              {diasCliente !== null && diasCliente > 0 && (
+                <div className="mt-3 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                  El cliente tardó <b>{diasCliente} día{diasCliente > 1 ? 's' : ''}</b> en firmar (envío → firma). Es un retraso <b>atribuible al cliente</b>: queda documentado para renegociar la fecha.
+                </div>
+              )}
+              {diasCliente !== null && diasCliente < 0 && (
+                <div className="mt-3 text-xs text-rose-700 bg-rose-50 border border-rose-200 rounded-lg px-3 py-2">
+                  La firma no puede ser anterior al envío. Revisá las fechas.
+                </div>
+              )}
+              <div className="mt-2 text-[11px] text-stone-400">Cuando conectemos <b>DocuSign</b>, estas dos fechas llegan automáticas desde el portal del cliente.</div>
+            </div>
+
+            <div>
+              <label className="text-[11px] uppercase tracking-wider text-stone-400 font-semibold">PDF del contrato firmado · obligatorio</label>
+              <label className="mt-1 flex flex-col items-center justify-center gap-2 border-2 border-dashed border-stone-300 rounded-xl py-8 cursor-pointer hover:border-forest-400 transition-colors">
+                <FileUp size={26} className="text-stone-300" />
+                <span className="text-sm text-stone-500">{contrato ? contrato.name : 'Elegí el PDF del contrato firmado'}</span>
+                <input type="file" accept="application/pdf" className="hidden" onChange={(e) => setContrato(e.target.files?.[0] ?? null)} />
+              </label>
+              {contrato && <div className="mt-1 text-xs text-emerald-700 flex items-center gap-1"><Check size={13} /> {contrato.name} listo</div>}
+            </div>
+            {error && <div className="rounded-lg bg-rose-50 border border-rose-200 px-3 py-2 text-sm text-rose-700">{error}</div>}
           </div>
         )}
       </div>
@@ -245,20 +314,20 @@ export default function EstimadosWizard() {
       <div className="flex items-center justify-between px-5 py-3 border-t border-stone-100 bg-stone-50/50">
         <button onClick={() => setPaso((p) => Math.max(1, p - 1))} disabled={paso === 1}
           className="inline-flex items-center gap-1 text-sm font-medium text-stone-500 hover:text-stone-800 disabled:opacity-30"><ChevronLeft size={16} /> Atrás</button>
-        {paso < 4 ? (
+        {paso < 5 ? (
           <button onClick={() => setPaso((p) => p + 1)} disabled={!canNext}
             className="inline-flex items-center gap-1.5 rounded-lg bg-forest-600 hover:bg-forest-700 disabled:opacity-40 text-white text-sm font-semibold px-4 py-2">
             Continuar <ChevronRight size={16} />
           </button>
         ) : (
-          <button onClick={crearSchedule} disabled={creating || !contrato || !fechaComprometida}
+          <button onClick={registrarFirma} disabled={firmando || !contrato || (diasCliente !== null && diasCliente < 0)}
             className="inline-flex items-center gap-1.5 rounded-lg bg-forest-600 hover:bg-forest-700 disabled:opacity-40 text-white text-sm font-semibold px-4 py-2">
-            {creating ? <Loader2 className="animate-spin" size={16} /> : <Rocket size={16} />} Crear el schedule
+            {firmando ? <Loader2 className="animate-spin" size={16} /> : <FileUp size={16} />} Registrar firma y contrato
           </button>
         )}
       </div>
 
-      <ProyectoForm open={formOpen} onClose={() => setFormOpen(false)} hideDates
+      <ProyectoForm open={formOpen} onClose={() => setFormOpen(false)} hideDates intake
         onCreated={(p) => { setProyectos((prev) => [p, ...prev]); onSelect(p.id) }} />
     </div>
   )

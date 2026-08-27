@@ -8,6 +8,16 @@ import { supabase, supabaseEnabled, SUPABASE_BUCKET } from '../utils/supabase'
 // ─── Schemas de validación ──────────────────────────────────────────────────
 const ESTADOS_PROYECTO = ['cotizacion', 'activo', 'en_pausa', 'completado', 'cancelado'] as const
 
+// Campos de la hoja de intake (migración 058). Millwork Date = fecha que pide el
+// cliente = fecha_entrega_solicitada (decisión de Chali, no se agrega fecha nueva).
+const intakeShape = {
+  millwork_total:          z.coerce.number().min(0).nullable().optional(),
+  stone_total:             z.coerce.number().min(0).nullable().optional(),
+  items_qty:               z.coerce.number().int().min(0).nullable().optional(),
+  intake_comments:         z.string().max(4000).nullable().optional(),
+  fecha_entrega_solicitada: z.string().regex(/^\d{4}-\d{2}-\d{2}/, 'formato YYYY-MM-DD').nullable().optional(),
+}
+
 export const createProyectoSchema = z.object({
   codigo:               z.string().trim().min(1, 'requerido').max(30),
   nombre:               z.string().trim().min(1, 'requerido').max(300),
@@ -18,6 +28,7 @@ export const createProyectoSchema = z.object({
   fecha_fin_estimada:   z.string().regex(/^\d{4}-\d{2}-\d{2}/, 'formato YYYY-MM-DD').nullable().optional(),
   presupuesto:          z.coerce.number().min(0, 'debe ser ≥ 0').optional(),
   responsable:          z.string().max(150).nullable().optional(),
+  ...intakeShape,
 })
 
 export const updateProyectoSchema = z.object({
@@ -31,6 +42,7 @@ export const updateProyectoSchema = z.object({
   fecha_fin_real:       z.string().regex(/^\d{4}-\d{2}-\d{2}/).nullable().optional(),
   presupuesto:          z.coerce.number().min(0).optional(),
   responsable:          z.string().max(150).nullable().optional(),
+  ...intakeShape,
 })
 
 export async function getProyectos(req: Request, res: Response, next: NextFunction) {
@@ -76,13 +88,17 @@ export async function getProyecto(req: Request, res: Response, next: NextFunctio
 export async function createProyecto(req: Request, res: Response, next: NextFunction) {
   try {
     const { codigo, nombre, cliente, descripcion, estado, fecha_inicio,
-            fecha_fin_estimada, presupuesto, responsable } = req.body
+            fecha_fin_estimada, presupuesto, responsable,
+            millwork_total, stone_total, items_qty, intake_comments, fecha_entrega_solicitada } = req.body
     const { rows } = await pool.query(
       `INSERT INTO proyectos (codigo, nombre, cliente, descripcion, estado,
-        fecha_inicio, fecha_fin_estimada, presupuesto, responsable)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *`,
+        fecha_inicio, fecha_fin_estimada, presupuesto, responsable,
+        millwork_total, stone_total, items_qty, intake_comments, fecha_entrega_solicitada)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) RETURNING *`,
       [codigo, nombre, cliente, descripcion || null, estado || 'activo',
-       fecha_inicio || null, fecha_fin_estimada || null, presupuesto ?? 0, responsable || null]
+       fecha_inicio || null, fecha_fin_estimada || null, presupuesto ?? 0, responsable || null,
+       millwork_total ?? null, stone_total ?? null, items_qty ?? null,
+       intake_comments || null, fecha_entrega_solicitada || null]
     )
     res.status(201).json({ data: rows[0], message: 'Proyecto creado exitosamente' })
   } catch (err) { next(err) }
@@ -91,7 +107,8 @@ export async function createProyecto(req: Request, res: Response, next: NextFunc
 export async function updateProyecto(req: Request, res: Response, next: NextFunction) {
   try {
     const fields = ['codigo','nombre','cliente','descripcion','estado',
-                    'fecha_inicio','fecha_fin_estimada','fecha_fin_real','presupuesto','responsable']
+                    'fecha_inicio','fecha_fin_estimada','fecha_fin_real','presupuesto','responsable',
+                    'millwork_total','stone_total','items_qty','intake_comments','fecha_entrega_solicitada']
     const updates = fields
       .filter((f) => req.body[f] !== undefined)
       .map((f, i) => `${f} = $${i + 2}`)
