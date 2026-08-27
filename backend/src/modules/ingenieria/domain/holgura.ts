@@ -145,16 +145,22 @@ export function calcularHolgura(
   // ── Holgura por tarea + estado del proyecto ──
   const out = new Map<number, HolguraTarea>()
   let finProyectado: ISODate | null = null
+  let minHolgura = Infinity
   for (const t of tareas) {
     const ef = EF.get(t.id)!, lf = LF.get(t.id)!
     const holguraDias = businessDaysBetween(ef, lf, feriados)   // LF − EF
     out.set(t.id, {
       earlyStart: ES.get(t.id)!, earlyFinish: ef,
       lateStart: LS.get(t.id)!, lateFinish: lf,
-      holguraDias, critico: holguraDias === 0,
+      holguraDias, critico: false,
     })
     if (finProyectado === null || ef > finProyectado) finProyectado = ef
+    if (holguraDias < minHolgura) minHolgura = holguraDias
   }
+  // Camino crítico = las tareas con la MENOR holgura de la red (la cadena que
+  // define el fin). Si el proyecto está tenso contra la entrega, esa holgura es 0;
+  // si termina antes, es la holgura del proyecto — pero siguen siendo las críticas.
+  if (Number.isFinite(minHolgura)) for (const h of out.values()) h.critico = h.holguraDias === minHolgura
 
   const holguraProyecto = finProyectado ? businessDaysBetween(finProyectado, fechaEntrega, feriados) : 0
   return { tareas: out, finProyectado, holguraProyecto, enRiesgo: holguraProyecto < 0 }

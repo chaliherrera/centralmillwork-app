@@ -9,6 +9,8 @@
 
 import type { PoolClient } from 'pg'
 import pool from '../../../db/pool'
+import { loadFeriados } from '../../schedule/domain/calendario'
+import { calcularHolgura, type TareaCPM, type AristaCPM } from './holgura'
 
 type QueryRunner = PoolClient | typeof pool
 
@@ -132,6 +134,71 @@ export async function getCargaPorIngeniero(runner: QueryRunner): Promise<CargaRe
   }
   ingenieros.sort((a, b) => b.pico - a.pico)
   return { semanas, ingenieros, tope: 1.0 }
+}
+
+// ── Plan de UN proyecto: tareas + dependencias + holgura/riesgo (CPM) ──
+export interface TareaPlan extends Tarea {
+  early_start: string | null
+  early_finish: string | null
+  late_finish: string | null
+  holgura_dias: number | null
+  critico: boolean
+}
+export interface AristaPlan { tarea_id: number; depende_de_id: number; tipo: string; lag_dias: number }
+export interface PlanProyecto {
+  proyecto_ext: string
+  fecha_inicio: string | null   // inicio del proyecto (ancla hacia adelante)
+  fecha_entrega: string | null  // entrega FIJA (ancla hacia atrás) — sagrada
+  status_ext: string | null
+  n_items: number | null
+  presupuesto: number | null
+  fin_proyectado: string | null // cuándo termina la cadena
+  holgura_proyecto: number      // días hábiles de holgura del proyecto (< 0 = riesgo)
+  en_riesgo: boolean
+  tareas: TareaPlan[]
+  aristas: AristaPlan[]
+}
+
+/** Devuelve el plan completo de un proyecto con la holgura de cada tarea. */
+export async function getPlanProyecto(runner: QueryRunner, proyectoExt: string): Promise<PlanProyecto> {
+  const { rows: hdr } = await runner.query<{ ini: string | null; entrega: string | null; status: string | null; n_items: number | null; presupuesto: string | null }>(
+    `SELECT to_char(fecha_inicio,'YYYY-MM-DD') AS ini, to_char(fecha_entrega,'YYYY-MM-DD') AS entrega,
+            status_ext AS status, n_items, presupuesto
+       FROM ing_proyectos WHERE proyecto_ext = $1`, [proyectoExt])
+  const h = hdr[0] ?? { ini: null, entrega: null, status: null, n_items: null, presupuesto: null }
+
+  const tareas = await listTareas(runner, proyectoExt)
+  const ids = tareas.map((t) => t.id)
+  const { rows: deps } = ids.length
+    ? await runner.query<AristaPlan>(
+        `SELECT tarea_id, depende_de_id, tipo, lag_dias FROM ing_tarea_deps
+          WHERE tarea_id = ANY($1) AND depende_de_id = ANY($1)`, [ids])
+    : { rows: [] as AristaPlan[] }
+
+  // Holgura: solo si el proyecto tiene inicio + entrega (ancla en ambas puntas).
+  let holgura: PlanProyecto['tareas'] = tareas.map((t) => ({ ...t, early_start: null, early_finish: null, late_finish: null, holgura_dias: null, critico: false }))
+  let finProyectado: string | null = null, holguraProyecto = 0, enRiesgo = false
+  if (h.ini && h.entrega) {
+    const feriados = await loadFeriados(runner)
+    const cpmTareas: TareaCPM[] = tareas.map((t) => ({ id: t.id, dur: t.dur_dias }))
+    const cpmAristas: AristaCPM[] = deps.map((d) => ({ tareaId: d.tarea_id, dependeDeId: d.depende_de_id, lag: d.lag_dias }))
+    try {
+      const r = calcularHolgura(cpmTareas, cpmAristas, h.ini, h.entrega, feriados)
+      finProyectado = r.finProyectado; holguraProyecto = r.holguraProyecto; enRiesgo = r.enRiesgo
+      holgura = tareas.map((t) => {
+        const c = r.tareas.get(t.id)
+        return { ...t, early_start: c?.earlyStart ?? null, early_finish: c?.earlyFinish ?? null,
+          late_finish: c?.lateFinish ?? null, holgura_dias: c?.holguraDias ?? null, critico: c?.critico ?? false }
+      })
+    } catch { /* ciclo en dependencias: se devuelve el plan sin holgura */ }
+  }
+
+  return {
+    proyecto_ext: proyectoExt, fecha_inicio: h.ini, fecha_entrega: h.entrega, status_ext: h.status,
+    n_items: h.n_items, presupuesto: h.presupuesto != null ? +h.presupuesto : null,
+    fin_proyectado: finProyectado, holgura_proyecto: holguraProyecto, en_riesgo: enRiesgo,
+    tareas: holgura, aristas: deps,
+  }
 }
 
 // ── Edición (MVP: que el creador la pruebe y la corrijamos) ──

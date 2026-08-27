@@ -7,7 +7,7 @@ import pool from '../../../db/pool'
 import { createError } from '../../../middleware/errorHandler'
 import {
   getResumen, listProyectos, listTareas, getCargaPorIngeniero,
-  crearTarea, actualizarTarea, borrarTarea,
+  crearTarea, actualizarTarea, borrarTarea, getPlanProyecto,
 } from '../domain/tareas'
 import { crearReserva, listReservasPendientes, confirmarReserva, liberarReserva } from '../domain/reservas'
 
@@ -54,6 +54,15 @@ export async function tareasHandler(req: Request, res: Response, next: NextFunct
 export async function cargaHandler(_req: Request, res: Response, next: NextFunction) {
   try {
     res.json({ data: await getCargaPorIngeniero(pool) })
+  } catch (e) { next(e) }
+}
+
+// GET /api/ingenieria/plan?proyecto=<proyecto_ext>  → tareas + dependencias + holgura/riesgo
+export async function planHandler(req: Request, res: Response, next: NextFunction) {
+  try {
+    const proyecto = typeof req.query.proyecto === 'string' ? req.query.proyecto : ''
+    if (!proyecto) return next(createError('falta el parámetro proyecto', 400))
+    res.json({ data: await getPlanProyecto(pool, proyecto) })
   } catch (e) { next(e) }
 }
 

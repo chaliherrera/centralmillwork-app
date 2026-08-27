@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Users, Layers, ClipboardList, Plus, X, Loader2, Trash2, Gauge, Check, FolderKanban, Activity, AlertTriangle } from 'lucide-react'
-import { ingenieriaService, type IngProyecto, type IngTarea, type TareaInput } from '@/services/ingenieria'
+import { ingenieriaService, type IngProyecto, type IngTarea, type TareaInput, type IngPlan, type IngTareaPlan } from '@/services/ingenieria'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Plan de Ingeniería — réplica de la estructura del Master.Sched (Smartsheet):
@@ -171,126 +171,208 @@ function VistaDisponibilidad({ all }: { all: IngTarea[] }) {
   )
 }
 
-// ── Vista PRINCIPAL: Gantt del proyecto (réplica del Excel + barra por tarea) ──
-// La "situación" se deriva de las fechas vs HOY (+ si está marcada hecha).
-type Sit = 'completada' | 'vencida' | 'en_curso' | 'pendiente'
-function situacion(t: IngTarea, hoyMs: number): Sit {
-  if (t.estado === 'hecha') return 'completada'
-  if (!t.fecha_inicio || !t.fecha_fin) return 'pendiente'
-  const ini = d(t.fecha_inicio).getTime(), fin = d(t.fecha_fin).getTime()
-  if (fin < hoyMs) return 'vencida'
-  if (ini <= hoyMs && hoyMs <= fin) return 'en_curso'
-  return 'pendiente'
-}
-const SIT_LBL: Record<Sit, string> = { completada: 'completada', vencida: 'vencida', en_curso: 'en curso', pendiente: 'pendiente' }
-function sitBg(s: Sit): React.CSSProperties {
-  if (s === 'completada') return { background: '#d1fae5', border: '1px solid #6ee7b7', color: '#065f46' }
-  if (s === 'vencida') return { background: '#ffe4e6', border: '1px solid #fda4af', color: '#9f1239' }
-  if (s === 'en_curso') return { background: '#fde68a', border: '1px solid #fbbf24', color: '#92400e' }
-  return { background: '#dbeafe', border: '1px solid #93c5fd', color: '#1e40af' }
-}
+// ── Vista PRINCIPAL: Gantt del proyecto con holgura/riesgo (CPM sobre fecha fija) ──
 function VistaProyecto({ proyectos, all, sel, setSel, onEdit }: { proyectos: IngProyecto[]; all: IngTarea[]; sel: string; setSel: (s: string) => void; onEdit: (t: IngTarea | 'new') => void }) {
-  const tareas = useMemo(() => all.filter((t) => t.proyecto_ext === sel), [all, sel])
+  const [plan, setPlan] = useState<IngPlan | null>(null)
+  const [loadingPlan, setLoadingPlan] = useState(false)
+  useEffect(() => {
+    if (!sel) return
+    setLoadingPlan(true)
+    ingenieriaService.getPlan(sel).then((r) => setPlan(r.data)).catch(() => setPlan(null)).finally(() => setLoadingPlan(false))
+  }, [sel])
+
   const p = proyectos.find((x) => x.proyecto_ext === sel)
-  const ingenieros = useMemo(() => [...new Set(tareas.map((t) => t.asignado_nombre).filter(Boolean))], [tareas])
-  const hoyMs = useMemo(() => { const t = new Date(); t.setHours(0, 0, 0, 0); return t.getTime() }, [])
   // color por ingeniero (estable en todo el sistema)
   const engColor = useMemo(() => { const m = new Map<string, string>(); [...new Set(all.map((t) => t.asignado_nombre).filter(Boolean))].forEach((e, i) => m.set(e as string, PAL[i % PAL.length])); return m }, [all])
+  const tareas = plan?.tareas ?? []
+  const ingenieros = useMemo(() => [...new Set(tareas.map((t) => t.asignado_nombre).filter(Boolean))], [tareas])
 
+  // ── Geometría del Gantt (usa las fechas tempranas del CPM + la entrega fija) ──
+  const GUT = 320, ROW_H = 40, PH_H = 26, BAR_H = 22
   const g = useMemo(() => {
-    const conF = tareas.filter((t) => t.fecha_inicio && t.fecha_fin)
-    const fasesMap = new Map<string, IngTarea[]>()
+    // fases en orden, tareas por fecha temprana
+    const fasesMap = new Map<string, typeof tareas>()
     for (const t of tareas) { const k = t.fase || '— Sin fase —'; if (!fasesMap.has(k)) fasesMap.set(k, []); fasesMap.get(k)!.push(t) }
-    for (const arr of fasesMap.values()) arr.sort((a, b) => (a.fecha_inicio || '~').localeCompare(b.fecha_inicio || '~'))
+    for (const arr of fasesMap.values()) arr.sort((a, b) => (a.early_start || a.fecha_inicio || '~').localeCompare(b.early_start || b.fecha_inicio || '~'))
     const fases = [...fasesMap.entries()]
-    if (!conF.length) return { fases, months: [], pct: () => 0, wPct: () => 0, hoyPct: null as number | null }
-    let min = d(conF[0].fecha_inicio!), max = d(conF[0].fecha_fin!)
-    for (const t of conF) { const a = d(t.fecha_inicio!), b = d(t.fecha_fin!); if (a < min) min = a; if (b > max) max = b }
-    const week0 = mondayOf(min); const nWeeks = Math.max(1, Math.ceil((max.getTime() - week0.getTime()) / (7 * DAY)) + 1)
-    const pct = (iso: string) => ((d(iso).getTime() - week0.getTime()) / (nWeeks * 7 * DAY)) * 100
-    const wPct = (a: string, b: string) => Math.max(((d(b).getTime() - d(a).getTime()) / (nWeeks * 7 * DAY)) * 100 + 100 / nWeeks / 2, 100 / nWeeks * 0.55)
+
+    // layout vertical: y de cada tarea (para alinear barras y conectores)
+    const rows: { type: 'phase'; label: string; count: number; y: number }[] & any[] = [] as any
+    const yOf = new Map<number, number>()
+    let y = 0
+    for (const [fase, ts] of fases) {
+      rows.push({ type: 'phase', label: fase, count: ts.length, y }); y += PH_H
+      for (const t of ts) { rows.push({ type: 'task', tarea: t, y }); yOf.set(t.id, y); y += ROW_H }
+    }
+    const totalH = y
+
+    // rango temporal: incluye tareas + la entrega fija
+    const fechas: string[] = []
+    for (const t of tareas) { if (t.early_start) fechas.push(t.early_start); if (t.late_finish) fechas.push(t.late_finish); if (t.fecha_inicio) fechas.push(t.fecha_inicio); if (t.fecha_fin) fechas.push(t.fecha_fin) }
+    if (plan?.fecha_inicio) fechas.push(plan.fecha_inicio)
+    if (plan?.fecha_entrega) fechas.push(plan.fecha_entrega)
+    if (!fechas.length) return { fases, rows, totalH, months: [] as any[], pct: () => 0, hoyPct: null as number | null, entregaPct: null as number | null }
+    let min = d(fechas[0]), max = d(fechas[0])
+    for (const f of fechas) { const dd = d(f); if (dd < min) min = dd; if (dd > max) max = dd }
+    const week0 = mondayOf(min); const nWeeks = Math.max(1, Math.ceil((max.getTime() - week0.getTime()) / (7 * DAY)) + 2)
+    const span = nWeeks * 7 * DAY
+    const pct = (iso: string) => ((d(iso).getTime() - week0.getTime()) / span) * 100
     const months: { label: string; startPct: number }[] = []
     for (let i = 0; i < nWeeks; i++) { const wd = new Date(week0.getTime() + i * 7 * DAY); const label = `${MES[wd.getMonth()]} ${String(wd.getFullYear()).slice(2)}`; const last = months[months.length - 1]; if (!last || last.label !== label) months.push({ label, startPct: (i / nWeeks) * 100 }) }
     const today = new Date(); today.setHours(0, 0, 0, 0)
-    const hoyPct = today >= week0 && today <= max ? ((today.getTime() - week0.getTime()) / (nWeeks * 7 * DAY)) * 100 : null
-    return { fases, months, pct, wPct, hoyPct }
-  }, [tareas])
+    const hoyPct = today >= week0 && today <= max ? pct(today.toISOString().slice(0, 10)) : null
+    const entregaPct = plan?.fecha_entrega ? pct(plan.fecha_entrega) : null
+    return { fases, rows, totalH, months, pct, hoyPct, entregaPct, yOf }
+  }, [tareas, plan])
 
-  const GUT = 300
+  // barra mínima (para hitos de 0 días): medio % de una semana
+  const minW = 0.7
+  const barGeom = (t: IngTareaPlan) => {
+    const s = t.early_start || t.fecha_inicio, e = t.early_finish || t.fecha_fin
+    if (!s || !e) return null
+    const x = g.pct(s)
+    const w = Math.max(g.pct(e) - x, minW)
+    const lf = t.late_finish ? g.pct(t.late_finish) : g.pct(e)
+    const slackW = Math.max(0, lf - (x + w))   // sombreado de holgura tras la barra
+    return { x, w, slackW, hito: (t.early_start === t.early_finish) }
+  }
 
   return (
     <div className="space-y-4">
-      {/* selector de proyecto */}
+      {/* selector + estado del proyecto */}
       <div className="flex items-center gap-3 flex-wrap">
         <select value={sel} onChange={(e) => setSel(e.target.value)}
           className="rounded-lg border border-stone-300 px-3 py-2 text-sm font-semibold text-stone-800 bg-white focus:outline-none focus:ring-2 focus:ring-forest-300 min-w-[280px]">
           {proyectos.map((pr) => <option key={pr.proyecto_ext} value={pr.proyecto_ext}>{pr.proyecto_ext} · {pr.n_tareas} tareas</option>)}
         </select>
-        {p && <span className="text-sm text-stone-400">{p.fecha_inicio} → {p.fecha_fin} · {p.status_ext || '—'}</span>}
         <span className="text-xs text-stone-400 inline-flex items-center gap-1"><Users size={13} /> {ingenieros.length ? ingenieros.join(', ') : 'sin responsables'}</span>
         <button onClick={() => onEdit('new')} className="ml-auto inline-flex items-center gap-1.5 rounded-lg bg-forest-600 hover:bg-forest-700 text-white text-sm font-semibold px-3 py-1.5"><Plus size={15} /> Nueva tarea</button>
       </div>
 
+      {/* tarjeta de estado: entrega fija + holgura/riesgo */}
+      {plan && plan.fecha_entrega && (
+        <div className={`rounded-2xl border px-4 py-3 flex flex-wrap items-center gap-x-8 gap-y-2 ${plan.en_riesgo ? 'border-rose-200 bg-rose-50' : 'border-emerald-200 bg-emerald-50'}`}>
+          <div><div className="text-[10px] uppercase tracking-wide text-stone-400 font-semibold">Entrega (fija)</div><div className="text-lg font-bold text-stone-900 tabular-nums">{fmtD(plan.fecha_entrega)}</div></div>
+          <div><div className="text-[10px] uppercase tracking-wide text-stone-400 font-semibold">Termina</div><div className="text-lg font-bold text-stone-900 tabular-nums">{fmtD(plan.fin_proyectado)}</div></div>
+          <div>
+            <div className="text-[10px] uppercase tracking-wide text-stone-400 font-semibold">{plan.en_riesgo ? 'Atraso' : 'Holgura'}</div>
+            <div className={`text-lg font-bold tabular-nums ${plan.en_riesgo ? 'text-rose-700' : 'text-emerald-700'}`}>{Math.abs(plan.holgura_proyecto)} <span className="text-xs font-medium text-stone-500">días</span></div>
+          </div>
+          <div className={`ml-auto inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-sm font-bold ${plan.en_riesgo ? 'bg-rose-600 text-white' : 'bg-emerald-600 text-white'}`}>
+            {plan.en_riesgo ? <><AlertTriangle size={15} /> En riesgo</> : <><Check size={15} /> En fecha</>}
+          </div>
+        </div>
+      )}
+
       <div className="rounded-2xl border border-stone-200 bg-white overflow-hidden">
-        <div className="overflow-x-auto"><div className="min-w-[900px]">
-          {/* header: gutter + meses */}
+        {loadingPlan && !plan ? <div className="py-16 text-center text-stone-400"><Loader2 className="animate-spin inline" size={22} /></div> : (
+        <div className="overflow-x-auto"><div className="min-w-[960px]">
+          {/* header: gutter + meses + marca de entrega */}
           <div className="flex items-stretch border-b border-stone-100 bg-stone-50/60">
-            <div className="shrink-0 px-4 py-2 text-[10.5px] uppercase tracking-wide text-stone-400 font-semibold" style={{ width: GUT }}>Tarea · responsable</div>
-            <div className="relative flex-1">
+            <div className="shrink-0 px-4 py-2 text-[10.5px] uppercase tracking-wide text-stone-400 font-semibold" style={{ width: GUT }}>Tarea · responsable · holgura</div>
+            <div className="relative flex-1 h-7">
               {g.months.map((m, i) => <div key={i} className="absolute top-0 bottom-0 border-l border-stone-200 flex items-center pl-1.5 text-[10.5px] font-semibold text-forest-700" style={{ left: `${m.startPct}%` }}>{m.label}</div>)}
-              {g.hoyPct !== null && <div className="absolute top-0 bottom-0 border-l-2 border-rose-400 z-10" style={{ left: `${g.hoyPct}%` }} />}
+              {g.hoyPct !== null && <div className="absolute top-0 bottom-0 border-l-2 border-rose-400 z-10" style={{ left: `${g.hoyPct}%` }}><span className="absolute -top-0 left-1 text-[9px] font-bold text-rose-500">hoy</span></div>}
+              {g.entregaPct !== null && <div className="absolute top-0 bottom-0 z-10" style={{ left: `${g.entregaPct}%`, borderLeft: '2px dashed #059669' }}><span className="absolute top-0 -left-8 text-[9px] font-bold text-emerald-700">entrega</span></div>}
             </div>
           </div>
 
-          {g.fases.map(([fase, ts]) => (
-            <div key={fase}>
-              <div className="bg-forest-50/40 px-4 py-1.5 text-[11px] font-bold text-forest-700 uppercase tracking-wide">{fase} <span className="text-forest-400 font-normal normal-case">· {ts.length} tareas</span></div>
-              {ts.map((t) => (
-                <div key={t.id} onClick={() => onEdit(t)} className="flex items-stretch border-b border-stone-50 hover:bg-forest-50/30 cursor-pointer">
-                  <div className="shrink-0 px-4 py-2 border-r border-stone-100" style={{ width: GUT }}>
-                    <div className="text-[13px] text-stone-800 truncate">{t.nombre}</div>
-                    <div className="text-[11px] text-stone-400 truncate flex items-center gap-1">
-                      {t.asignado_nombre
-                        ? <><span className="w-2 h-2 rounded-full shrink-0" style={{ background: engColor.get(t.asignado_nombre) }} /><span className="font-semibold text-stone-600">{t.asignado_nombre}</span></>
-                        : <span className="text-stone-300">sin responsable</span>}
-                      <span>· <span className={t.allocation_pct > 1 ? 'text-rose-600 font-semibold' : ''}>{Math.round(t.allocation_pct * 100)}%</span> · {t.dur_dias}d</span>
-                      {t.hito_codigo && <span className="font-mono text-forest-600">{t.hito_codigo}</span>}
+          {/* cuerpo: columna izquierda (nombres) + columna derecha (barras + conectores) */}
+          <div className="flex items-stretch">
+            {/* gutter: filas de nombres */}
+            <div className="shrink-0" style={{ width: GUT }}>
+              {g.rows.map((r: any, i: number) => r.type === 'phase'
+                ? <div key={i} className="bg-forest-50/40 px-4 text-[11px] font-bold text-forest-700 uppercase tracking-wide flex items-center" style={{ height: PH_H }}>{r.label} <span className="text-forest-400 font-normal normal-case ml-1">· {r.count}</span></div>
+                : (() => { const t = r.tarea as IngTareaPlan; const holg = t.holgura_dias
+                    return (
+                      <div key={i} onClick={() => onEdit(t)} className="px-4 border-b border-stone-50 border-r border-stone-100 hover:bg-forest-50/30 cursor-pointer flex flex-col justify-center" style={{ height: ROW_H }}>
+                        <div className="flex items-center gap-1.5">
+                          <div className="text-[12.5px] text-stone-800 truncate flex-1">{t.nombre}</div>
+                          {holg !== null && (
+                            <span className={`text-[10px] font-bold rounded px-1 py-0.5 tabular-nums shrink-0 ${t.critico ? 'bg-forest-100 text-forest-700' : holg < 0 ? 'bg-rose-100 text-rose-700' : 'bg-stone-100 text-stone-500'}`}>
+                              {t.critico ? 'crítico' : (holg < 0 ? holg : '+' + holg) + 'd'}
+                            </span>
+                          )}
+                        </div>
+                        <div className="text-[10.5px] text-stone-400 truncate flex items-center gap-1">
+                          {t.asignado_nombre
+                            ? <><span className="w-2 h-2 rounded-full shrink-0" style={{ background: engColor.get(t.asignado_nombre) }} /><span className="font-semibold text-stone-600">{t.asignado_nombre}</span></>
+                            : <span className="text-stone-300">sin responsable</span>}
+                          <span>· <span className={t.allocation_pct > 1 ? 'text-rose-600 font-semibold' : ''}>{Math.round(t.allocation_pct * 100)}%</span> · {t.dur_dias}d</span>
+                        </div>
+                      </div>
+                    ) })()
+              )}
+            </div>
+
+            {/* timeline: barras + slack + conectores (SVG) */}
+            <div className="relative flex-1" style={{ height: g.totalH }}>
+              {/* gridlines de meses + hoy + entrega */}
+              {g.months.map((m: any, i: number) => <div key={i} className="absolute top-0 bottom-0 border-l border-stone-50" style={{ left: `${m.startPct}%` }} />)}
+              {g.hoyPct !== null && <div className="absolute top-0 bottom-0 border-l-2 border-rose-200" style={{ left: `${g.hoyPct}%` }} />}
+              {g.entregaPct !== null && <div className="absolute top-0 bottom-0 z-20" style={{ left: `${g.entregaPct}%`, borderLeft: '2px dashed #059669' }} />}
+
+              {/* conectores entre dependencias (predecesor -> sucesor) */}
+              {plan && g.yOf && (
+                <svg className="absolute inset-0 w-full pointer-events-none" style={{ height: g.totalH }} viewBox={`0 0 100 ${g.totalH}`} preserveAspectRatio="none">
+                  {plan.aristas.map((a, i) => {
+                    const pre = tareas.find((t) => t.id === a.depende_de_id), suc = tareas.find((t) => t.id === a.tarea_id)
+                    if (!pre || !suc) return null
+                    const gp = barGeom(pre), gs = barGeom(suc)
+                    const yp = g.yOf.get(pre.id), ys = g.yOf.get(suc.id)
+                    if (!gp || !gs || yp === undefined || ys === undefined) return null
+                    const x1 = gp.x + gp.w, y1 = yp + ROW_H / 2
+                    const x2 = gs.x, y2 = ys + ROW_H / 2
+                    const midX = Math.max(x1 + 0.4, x2 - 0.6)
+                    return <path key={i} d={`M ${x1} ${y1} L ${midX} ${y1} L ${midX} ${y2} L ${x2} ${y2}`} fill="none" stroke="#a8a29e" strokeWidth={1} vectorEffect="non-scaling-stroke" />
+                  })}
+                </svg>
+              )}
+
+              {/* barras */}
+              {g.rows.filter((r: any) => r.type === 'task').map((r: any, i: number) => {
+                const t = r.tarea as IngTareaPlan; const geo = barGeom(t); if (!geo) return null
+                const col = t.asignado_nombre ? engColor.get(t.asignado_nombre)! : '#78716c'
+                const done = t.estado === 'hecha'
+                return (
+                  <div key={i} className="absolute" style={{ top: r.y, height: ROW_H, left: 0, right: 0 }}>
+                    {/* holgura sombreada tras la barra */}
+                    {geo.slackW > 0.3 && (
+                      <div className="absolute rounded-r-sm" title={`holgura ${t.holgura_dias}d`}
+                        style={{ top: (ROW_H - BAR_H) / 2 + 4, height: BAR_H - 8, left: `${geo.x + geo.w}%`, width: `${geo.slackW}%`,
+                          background: 'repeating-linear-gradient(45deg,#e7e5e4,#e7e5e4 3px,transparent 3px,transparent 6px)' }} />
+                    )}
+                    {/* barra de la tarea (crítica: borde fuerte forest; normal: color del ingeniero) */}
+                    <div onClick={() => onEdit(t)} title={`${t.nombre}\n${t.asignado_nombre || 'sin responsable'}\n${geo.hito ? 'hito ' + fmtD(t.early_start) : fmtD(t.early_start) + ' → ' + fmtD(t.early_finish)}\nholgura ${t.holgura_dias ?? '—'}d${t.critico ? ' · CRÍTICO' : ''}`}
+                      className="absolute rounded-md flex items-center px-1.5 gap-1 overflow-hidden cursor-pointer hover:ring-2 hover:ring-stone-400"
+                      style={{ top: (ROW_H - BAR_H) / 2, height: BAR_H, left: `${geo.x}%`, width: `calc(${geo.w}% - 1px)`,
+                        background: done ? '#d1fae5' : col + '26',
+                        borderLeft: `3px solid ${done ? '#059669' : col}`,
+                        boxShadow: t.critico ? 'inset 0 0 0 1.5px #3b4233' : undefined }}>
+                      {done && <Check size={11} className="text-emerald-700 shrink-0" />}
+                      {!geo.hito && <span className="text-[9.5px] font-semibold text-stone-600 whitespace-nowrap">{fmtD(t.early_start)}→{fmtD(t.early_finish)}</span>}
+                      {geo.hito && <span className="text-[9px] font-bold" style={{ color: col }}>◆</span>}
                     </div>
                   </div>
-                  <div className="relative flex-1 py-2 min-h-[42px]">
-                    {g.months.map((m, i) => <div key={i} className="absolute top-0 bottom-0 border-l border-stone-50" style={{ left: `${m.startPct}%` }} />)}
-                    {g.hoyPct !== null && <div className="absolute top-0 bottom-0 border-l-2 border-rose-300 z-0" style={{ left: `${g.hoyPct}%` }} />}
-                    {t.fecha_inicio && t.fecha_fin ? (() => {
-                      const s = situacion(t, hoyMs)
-                      return (
-                        <div title={`${t.nombre}\n${t.asignado_nombre || 'sin responsable'} · ${SIT_LBL[s]}\n${t.fecha_inicio} → ${t.fecha_fin}`}
-                          className="absolute top-1.5 h-6 rounded-md flex items-center px-2 gap-1 overflow-hidden"
-                          style={{ left: `${g.pct(t.fecha_inicio)}%`, width: `calc(${g.wPct(t.fecha_inicio, t.fecha_fin)}% - 3px)`, ...sitBg(s) }}>
-                          {s === 'completada' && <Check size={11} className="shrink-0" />}
-                          <span className="text-[10px] font-semibold whitespace-nowrap">{fmtD(t.fecha_inicio)} → {fmtD(t.fecha_fin)}</span>
-                        </div>
-                      )
-                    })() : <span className="absolute top-3 left-2 text-[10px] text-stone-300 italic">sin fecha</span>}
-                  </div>
-                </div>
-              ))}
+                )
+              })}
             </div>
-          ))}
+          </div>
           {tareas.length === 0 && <div className="px-4 py-10 text-center text-stone-400">Sin tareas en este proyecto.</div>}
-        </div></div>
+        </div></div>)}
+
         <div className="px-4 py-2 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-stone-500 items-center border-t border-stone-100">
-          <Leg style={sitBg('pendiente')} t="pendiente" /><Leg style={sitBg('en_curso')} t="en curso" /><Leg style={sitBg('vencida')} t="vencida" /><Leg style={sitBg('completada')} t="completada" />
+          <span className="inline-flex items-center gap-1"><span className="w-4 h-3 rounded" style={{ boxShadow: 'inset 0 0 0 1.5px #3b4233', background: '#f5f5f4' }} /> camino crítico</span>
+          <span className="inline-flex items-center gap-1"><span className="w-4 h-3 rounded" style={{ background: 'repeating-linear-gradient(45deg,#e7e5e4,#e7e5e4 3px,transparent 3px,transparent 6px)' }} /> holgura</span>
+          <span className="inline-flex items-center gap-1"><span className="w-0.5 h-3.5 inline-block" style={{ borderLeft: '2px dashed #059669' }} /> entrega fija</span>
           <span className="inline-flex items-center gap-1"><span className="w-0.5 h-3.5 bg-rose-400 inline-block" /> hoy</span>
-          <span className="inline-flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-stone-400 inline-block" /> = ingeniero (un color por persona)</span>
+          <span className="inline-flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-stone-400 inline-block" /> = ingeniero</span>
+          <span className="italic text-stone-400">Barras = fechas calculadas (CPM). Editá una tarea y la holgura se recalcula.</span>
         </div>
       </div>
     </div>
   )
 }
-function Leg({ style, t }: { style: React.CSSProperties; t: string }) {
-  return <span className="inline-flex items-center gap-1.5"><span className="w-4 h-3.5 rounded" style={style} /> {t}</span>
-}
-
 // ── Vista SECUNDARIA: carga por ingeniero (agenda Gantt) ──
 function VistaCarga({ all, proyectos, selEng, setSelEng, onEdit }: { all: IngTarea[]; proyectos: IngProyecto[]; selEng: string; setSelEng: (s: string) => void; onEdit: (t: IngTarea) => void }) {
   const projColor = useMemo(() => { const m = new Map<string, string>(); proyectos.forEach((p, i) => m.set(p.proyecto_ext, PAL[i % PAL.length])); return m }, [proyectos])
