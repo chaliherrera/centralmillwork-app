@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Users, Layers, ClipboardList, Plus, X, Loader2, Trash2, Gauge, Check, FolderKanban, Activity, AlertTriangle } from 'lucide-react'
-import { ingenieriaService, type IngProyecto, type IngTarea, type TareaInput, type IngPlan, type IngTareaPlan } from '@/services/ingenieria'
+import { ingenieriaService, type IngProyecto, type IngTarea, type TareaInput, type IngPlan, type IngTareaPlan, type IngArista } from '@/services/ingenieria'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Plan de Ingeniería — réplica de la estructura del Master.Sched (Smartsheet):
@@ -25,6 +25,8 @@ export default function IngenieriaPlan() {
   const [selEng, setSelEng] = useState<string>('')
   const [loading, setLoading] = useState(true)
   const [edit, setEdit] = useState<IngTarea | 'new' | null>(null)
+  const [plan, setPlan] = useState<IngPlan | null>(null)
+  const [planLoading, setPlanLoading] = useState(false)
 
   async function loadAll() {
     const [r, t] = await Promise.all([ingenieriaService.getResumen(), ingenieriaService.getTareas()])
@@ -32,6 +34,14 @@ export default function IngenieriaPlan() {
     if (!selProj && r.data.proyectos[0]) setSelProj(r.data.proyectos[0].proyecto_ext)
   }
   useEffect(() => { loadAll().finally(() => setLoading(false)) }, [])
+
+  // Plan (con holgura) del proyecto seleccionado — para el Gantt y el modal.
+  async function loadPlan() {
+    if (!selProj) { setPlan(null); return }
+    setPlanLoading(true)
+    try { setPlan((await ingenieriaService.getPlan(selProj)).data) } catch { setPlan(null) } finally { setPlanLoading(false) }
+  }
+  useEffect(() => { if (mode === 'proyecto') loadPlan() }, [selProj, mode])
 
   if (loading) return <div className="py-20 text-center text-stone-400">Cargando plan de Ingeniería…</div>
 
@@ -61,10 +71,12 @@ export default function IngenieriaPlan() {
       {mode === 'disponibilidad'
         ? <VistaDisponibilidad all={all} />
         : mode === 'proyecto'
-          ? <VistaProyecto proyectos={proyectos} all={all} sel={selProj} setSel={setSelProj} onEdit={setEdit} />
+          ? <VistaProyecto proyectos={proyectos} all={all} plan={plan} planLoading={planLoading} sel={selProj} setSel={setSelProj} onEdit={setEdit} />
           : <VistaCarga all={all} proyectos={proyectos} selEng={selEng} setSelEng={setSelEng} onEdit={setEdit} />}
 
-      {edit && <EditModal tarea={edit === 'new' ? null : edit} proyecto={selProj} onClose={() => setEdit(null)} onSaved={async () => { setEdit(null); await loadAll() }} />}
+      {edit && <EditModal tarea={edit === 'new' ? null : edit} proyecto={selProj}
+        planTareas={mode === 'proyecto' ? plan?.tareas ?? null : null} aristas={mode === 'proyecto' ? plan?.aristas ?? null : null}
+        onClose={() => setEdit(null)} onSaved={async () => { setEdit(null); await Promise.all([loadAll(), loadPlan()]) }} />}
     </div>
   )
 }
@@ -172,16 +184,8 @@ function VistaDisponibilidad({ all }: { all: IngTarea[] }) {
 }
 
 // ── Vista PRINCIPAL: Gantt del proyecto con holgura/riesgo (CPM sobre fecha fija) ──
-function VistaProyecto({ proyectos, all, sel, setSel, onEdit }: { proyectos: IngProyecto[]; all: IngTarea[]; sel: string; setSel: (s: string) => void; onEdit: (t: IngTarea | 'new') => void }) {
-  const [plan, setPlan] = useState<IngPlan | null>(null)
-  const [loadingPlan, setLoadingPlan] = useState(false)
-  useEffect(() => {
-    if (!sel) return
-    setLoadingPlan(true)
-    ingenieriaService.getPlan(sel).then((r) => setPlan(r.data)).catch(() => setPlan(null)).finally(() => setLoadingPlan(false))
-  }, [sel])
-
-  const p = proyectos.find((x) => x.proyecto_ext === sel)
+function VistaProyecto({ proyectos, all, plan, planLoading, sel, setSel, onEdit }: { proyectos: IngProyecto[]; all: IngTarea[]; plan: IngPlan | null; planLoading: boolean; sel: string; setSel: (s: string) => void; onEdit: (t: IngTarea | 'new') => void }) {
+  const loadingPlan = planLoading
   // color por ingeniero (estable en todo el sistema)
   const engColor = useMemo(() => { const m = new Map<string, string>(); [...new Set(all.map((t) => t.asignado_nombre).filter(Boolean))].forEach((e, i) => m.set(e as string, PAL[i % PAL.length])); return m }, [all])
   const tareas = plan?.tareas ?? []
@@ -482,7 +486,7 @@ function Stat({ icon, n, l }: { icon: React.ReactNode; n: number; l: string }) {
   return <div><div className="flex items-center justify-center gap-1 text-stone-400">{icon}</div><div className="text-xl font-bold text-stone-900 tabular-nums leading-none mt-0.5">{n}</div><div className="text-[10px] uppercase tracking-wide text-stone-400">{l}</div></div>
 }
 
-function EditModal({ tarea, proyecto, onClose, onSaved }: { tarea: IngTarea | null; proyecto: string; onClose: () => void; onSaved: () => void }) {
+function EditModal({ tarea, proyecto, planTareas, aristas, onClose, onSaved }: { tarea: IngTarea | null; proyecto: string; planTareas: IngTareaPlan[] | null; aristas: IngArista[] | null; onClose: () => void; onSaved: () => void }) {
   const [f, setF] = useState<TareaInput>({
     proyecto_ext: tarea?.proyecto_ext ?? proyecto, nombre: tarea?.nombre ?? '', asignado_nombre: tarea?.asignado_nombre ?? '',
     allocation_pct: tarea?.allocation_pct ?? 1, dur_dias: tarea?.dur_dias ?? 1,
@@ -491,14 +495,30 @@ function EditModal({ tarea, proyecto, onClose, onSaved }: { tarea: IngTarea | nu
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState<string | null>(null)
   const set = (k: keyof TareaInput, v: any) => setF((p) => ({ ...p, [k]: v }))
+
+  // Predecesores (solo en la vista por proyecto, donde tenemos el plan)
+  const origPreds = useMemo(() => (tarea && aristas ? aristas.filter((a) => a.tarea_id === tarea.id) : []), [tarea, aristas])
+  const [preds, setPreds] = useState<{ id: number; lag: number }[]>(origPreds.map((a) => ({ id: a.depende_de_id, lag: a.lag_dias })))
+  const nameOf = (id: number) => planTareas?.find((t) => t.id === id)?.nombre ?? `#${id}`
+  const opciones = useMemo(() => (planTareas ?? []).filter((t) => t.id !== tarea?.id && !preds.some((p) => p.id === t.id)), [planTareas, tarea, preds])
+
+  const syncDeps = async (id: number) => {
+    for (const p of preds) await ingenieriaService.agregarDep(id, p.id, p.lag)         // upsert (agrega o cambia lag)
+    for (const o of origPreds) if (!preds.some((p) => p.id === o.depende_de_id)) await ingenieriaService.borrarDep(id, o.depende_de_id)
+  }
   const save = async () => {
     if (!f.nombre.trim()) { setErr('Poné un nombre'); return }
     setBusy(true); setErr(null)
     const payload: TareaInput = { ...f, asignado_nombre: f.asignado_nombre || null, fecha_inicio: f.fecha_inicio || null, fecha_fin: f.fecha_fin || null, comentario: f.comentario || null }
-    try { if (tarea) await ingenieriaService.actualizarTarea(tarea.id, payload); else await ingenieriaService.crearTarea(payload); onSaved() }
-    catch (e: any) { setErr(e?.response?.data?.message || 'No se pudo guardar'); setBusy(false) }
+    try {
+      let id = tarea?.id
+      if (tarea) await ingenieriaService.actualizarTarea(tarea.id, payload)
+      else id = (await ingenieriaService.crearTarea(payload)).data.id
+      if (planTareas && id) await syncDeps(id)
+      onSaved()
+    } catch (e: any) { setErr(e?.response?.data?.message || 'No se pudo guardar'); setBusy(false) }
   }
-  const del = async () => { if (!tarea) return; setBusy(true); try { await ingenieriaService.borrarTarea(tarea.id); onSaved() } catch (e: any) { setErr(e?.response?.data?.message || 'No se pudo borrar'); setBusy(false) } }
+  const del = async () => { if (!tarea) return; setBusy(true); try { const r = await ingenieriaService.borrarTarea(tarea.id); onSaved(); if (r.data.reconectadas) { /* cadena reconectada */ } } catch (e: any) { setErr(e?.response?.data?.message || 'No se pudo borrar'); setBusy(false) } }
   return (
     <div className="fixed inset-0 bg-black/30 flex items-center justify-center p-4 z-50" onClick={() => !busy && onClose()}>
       <div className="bg-white rounded-2xl max-w-lg w-full p-5 shadow-xl" onClick={(e) => e.stopPropagation()}>
@@ -521,6 +541,33 @@ function EditModal({ tarea, proyecto, onClose, onSaved }: { tarea: IngTarea | nu
             <L t="Inicio"><input type="date" value={f.fecha_inicio ?? ''} onChange={(e) => set('fecha_inicio', e.target.value)} className="inp" /></L>
             <L t="Fin"><input type="date" value={f.fecha_fin ?? ''} onChange={(e) => set('fecha_fin', e.target.value)} className="inp" /></L>
           </div>
+
+          {/* Predecesores — esta tarea empieza después de… (recalcula holgura al guardar) */}
+          {planTareas && (
+            <L t="Predecesores · empieza después de">
+              <div className="space-y-1.5">
+                {preds.length === 0 && <div className="text-[12px] text-stone-400 italic">Sin predecesores (arranca al inicio del proyecto).</div>}
+                {preds.map((p) => (
+                  <div key={p.id} className="flex items-center gap-2 bg-stone-50 rounded-lg px-2 py-1.5">
+                    <span className="flex-1 text-[13px] text-stone-700 truncate">{nameOf(p.id)}</span>
+                    <span className="text-[11px] text-stone-400">lag</span>
+                    <input type="number" step="1" value={p.lag} onChange={(e) => setPreds((xs) => xs.map((x) => x.id === p.id ? { ...x, lag: Math.trunc(Number(e.target.value) || 0) } : x))}
+                      className="w-14 rounded-md border border-stone-300 px-1.5 py-1 text-[12px] text-stone-800" />
+                    <span className="text-[11px] text-stone-400">d</span>
+                    <button onClick={() => setPreds((xs) => xs.filter((x) => x.id !== p.id))} className="text-stone-400 hover:text-rose-600"><X size={14} /></button>
+                  </div>
+                ))}
+                {opciones.length > 0 && (
+                  <select value="" onChange={(e) => { const id = Number(e.target.value); if (id) setPreds((xs) => [...xs, { id, lag: 0 }]) }}
+                    className="inp text-[13px]">
+                    <option value="">+ agregar predecesor…</option>
+                    {opciones.map((t) => <option key={t.id} value={t.id}>{t.nombre}</option>)}
+                  </select>
+                )}
+              </div>
+            </L>
+          )}
+
           {err && <div className="text-sm text-rose-600">{err}</div>}
         </div>
         <div className="mt-4 flex items-center gap-2">

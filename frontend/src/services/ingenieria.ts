@@ -99,5 +99,11 @@ export const ingenieriaService = {
   actualizarTarea: (id: number, t: Partial<TareaInput>) =>
     api.patch<ApiResponse<{ ok: boolean }>>(`/ingenieria/tareas/${id}`, t).then((r) => r.data),
   borrarTarea: (id: number) =>
-    api.delete<ApiResponse<{ ok: boolean }>>(`/ingenieria/tareas/${id}`).then((r) => r.data),
+    api.delete<ApiResponse<{ ok: boolean; reconectadas: number }>>(`/ingenieria/tareas/${id}`).then((r) => r.data),
+
+  // Dependencias (predecesores)
+  agregarDep: (tareaId: number, depende_de_id: number, lag_dias = 0) =>
+    api.post<ApiResponse<{ ok: boolean }>>(`/ingenieria/tareas/${tareaId}/dep`, { depende_de_id, lag_dias }).then((r) => r.data),
+  borrarDep: (tareaId: number, dependeDeId: number) =>
+    api.delete<ApiResponse<{ ok: boolean }>>(`/ingenieria/tareas/${tareaId}/dep/${dependeDeId}`).then((r) => r.data),
 }

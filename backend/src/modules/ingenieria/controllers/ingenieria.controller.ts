@@ -7,7 +7,8 @@ import pool from '../../../db/pool'
 import { createError } from '../../../middleware/errorHandler'
 import {
   getResumen, listProyectos, listTareas, getCargaPorIngeniero,
-  crearTarea, actualizarTarea, borrarTarea, getPlanProyecto,
+  crearTarea, actualizarTarea, getPlanProyecto,
+  borrarTareaConReconexion, agregarDep, borrarDep,
 } from '../domain/tareas'
 import { crearReserva, listReservasPendientes, confirmarReserva, liberarReserva } from '../domain/reservas'
 
@@ -102,9 +103,37 @@ export async function actualizarTareaHandler(req: Request, res: Response, next: 
 export async function borrarTareaHandler(req: Request, res: Response, next: NextFunction) {
   const id = parseInt(String(req.params.id), 10)
   if (Number.isNaN(id)) return next(createError('id inválido', 400))
+  const client = await pool.connect()
   try {
-    const ok = await borrarTarea(pool, id)
-    if (!ok) return next(createError('tarea no encontrada', 404))
+    await client.query('BEGIN')
+    const r = await borrarTareaConReconexion(client, id)  // reconecta la cadena antes de borrar
+    await client.query('COMMIT')
+    if (!r.ok) return next(createError('tarea no encontrada', 404))
+    res.json({ data: r })
+  } catch (e) { await client.query('ROLLBACK').catch(() => {}); next(e) } finally { client.release() }
+}
+
+// ── Dependencias (predecesores) ──
+// POST /api/ingenieria/tareas/:id/dep   { depende_de_id, lag_dias?, tipo? }
+export async function agregarDepHandler(req: Request, res: Response, next: NextFunction) {
+  const id = parseInt(String(req.params.id), 10)
+  const dep = parseInt(String(req.body?.depende_de_id), 10)
+  if (Number.isNaN(id) || Number.isNaN(dep)) return next(createError('ids inválidos', 400))
+  const lag = Number.isFinite(+req.body?.lag_dias) ? Math.trunc(+req.body.lag_dias) : 0
+  const tipo = typeof req.body?.tipo === 'string' ? req.body.tipo : 'FS'
+  try {
+    const r = await agregarDep(pool, id, dep, lag, tipo)
+    if (!r.ok) return next(createError(r.error ?? 'no se pudo agregar', 400))
+    res.status(201).json({ data: { ok: true } })
+  } catch (e) { next(e) }
+}
+// DELETE /api/ingenieria/tareas/:id/dep/:depId
+export async function borrarDepHandler(req: Request, res: Response, next: NextFunction) {
+  const id = parseInt(String(req.params.id), 10)
+  const dep = parseInt(String(req.params.depId), 10)
+  if (Number.isNaN(id) || Number.isNaN(dep)) return next(createError('ids inválidos', 400))
+  try {
+    await borrarDep(pool, id, dep)
     res.json({ data: { ok: true } })
   } catch (e) { next(e) }
 }

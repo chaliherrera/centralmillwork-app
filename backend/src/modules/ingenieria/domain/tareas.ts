@@ -234,7 +234,52 @@ export async function actualizarTarea(runner: QueryRunner, id: number, t: TareaI
   return (rowCount ?? 0) > 0
 }
 
-export async function borrarTarea(runner: QueryRunner, id: number): Promise<boolean> {
-  const { rowCount } = await runner.query(`DELETE FROM ing_tareas WHERE id = $1`, [id])
+/**
+ * Borra una tarea RECONECTANDO la cadena: cada sucesor pasa a depender de cada
+ * predecesor de la tarea borrada (lag 0). Así, borrar "Muestras" no rompe la
+ * secuencia — los días liberados se vuelven holgura (decisión de Chali).
+ */
+export async function borrarTareaConReconexion(runner: QueryRunner, id: number): Promise<{ ok: boolean; reconectadas: number }> {
+  // sucesor de X depende de predecesor de X (evita self-loop y duplicados)
+  const { rowCount: rec } = await runner.query(
+    `INSERT INTO ing_tarea_deps (tarea_id, depende_de_id, tipo, lag_dias)
+       SELECT s.tarea_id, p.depende_de_id, 'FS', 0
+         FROM ing_tarea_deps s
+         JOIN ing_tarea_deps p ON p.tarea_id = $1
+        WHERE s.depende_de_id = $1 AND s.tarea_id <> p.depende_de_id
+     ON CONFLICT (tarea_id, depende_de_id) DO NOTHING`, [id])
+  const { rowCount } = await runner.query(`DELETE FROM ing_tareas WHERE id = $1`, [id]) // cascade borra sus aristas
+  return { ok: (rowCount ?? 0) > 0, reconectadas: rec ?? 0 }
+}
+
+// ── Dependencias (aristas) editables ──
+/** ¿Agregar (tareaId depende de dependeDeId) crearía un ciclo? */
+async function crearíaCiclo(runner: QueryRunner, proyectoExt: string | null, tareaId: number, dependeDeId: number): Promise<boolean> {
+  if (tareaId === dependeDeId) return true
+  const { rows } = await runner.query<{ tarea_id: number; depende_de_id: number }>(
+    `SELECT d.tarea_id, d.depende_de_id FROM ing_tarea_deps d
+       JOIN ing_tareas t ON t.id = d.tarea_id
+      WHERE t.proyecto_ext IS NOT DISTINCT FROM $1`, [proyectoExt])
+  // flujo: depende_de_id -> tarea_id. Ciclo si dependeDeId es alcanzable desde tareaId.
+  const succ = new Map<number, number[]>()
+  for (const r of rows) { if (!succ.has(r.depende_de_id)) succ.set(r.depende_de_id, []); succ.get(r.depende_de_id)!.push(r.tarea_id) }
+  const seen = new Set<number>([tareaId]); const stack = [tareaId]
+  while (stack.length) { const n = stack.pop()!; for (const s of succ.get(n) ?? []) { if (s === dependeDeId) return true; if (!seen.has(s)) { seen.add(s); stack.push(s) } } }
+  return false
+}
+
+export async function agregarDep(runner: QueryRunner, tareaId: number, dependeDeId: number, lag = 0, tipo = 'FS'): Promise<{ ok: boolean; error?: string }> {
+  const { rows } = await runner.query<{ proyecto_ext: string | null }>(`SELECT proyecto_ext FROM ing_tareas WHERE id = $1`, [tareaId])
+  if (!rows[0]) return { ok: false, error: 'tarea no encontrada' }
+  if (await crearíaCiclo(runner, rows[0].proyecto_ext, tareaId, dependeDeId)) return { ok: false, error: 'esa dependencia crearía un ciclo' }
+  await runner.query(
+    `INSERT INTO ing_tarea_deps (tarea_id, depende_de_id, tipo, lag_dias) VALUES ($1,$2,$3,$4)
+     ON CONFLICT (tarea_id, depende_de_id) DO UPDATE SET tipo = EXCLUDED.tipo, lag_dias = EXCLUDED.lag_dias`,
+    [tareaId, dependeDeId, tipo, lag])
+  return { ok: true }
+}
+
+export async function borrarDep(runner: QueryRunner, tareaId: number, dependeDeId: number): Promise<boolean> {
+  const { rowCount } = await runner.query(`DELETE FROM ing_tarea_deps WHERE tarea_id = $1 AND depende_de_id = $2`, [tareaId, dependeDeId])
   return (rowCount ?? 0) > 0
 }

@@ -3,6 +3,7 @@ import { requireRole } from '../../middleware/auth'
 import {
   resumenHandler, tareasHandler, cargaHandler, planHandler,
   crearTareaHandler, actualizarTareaHandler, borrarTareaHandler,
+  agregarDepHandler, borrarDepHandler,
   reservarHandler, reservasPendientesHandler, confirmarReservaHandler, liberarReservaHandler,
 } from './controllers/ingenieria.controller'
 
@@ -20,6 +21,8 @@ router.get('/plan', READ, planHandler)
 router.post('/tareas', WRITE, crearTareaHandler)
 router.patch('/tareas/:id', WRITE, actualizarTareaHandler)
 router.delete('/tareas/:id', WRITE, borrarTareaHandler)
+router.post('/tareas/:id/dep', WRITE, agregarDepHandler)
+router.delete('/tareas/:id/dep/:depId', WRITE, borrarDepHandler)
 
 // Reserva de capacidad
 router.post('/proyecto/:id/reservar', WRITE, reservarHandler)
