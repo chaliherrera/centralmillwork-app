@@ -284,7 +284,7 @@ function VistaProyecto({ proyectos, all, plan, planLoading, sel, setSel, onEdit 
                     return (
                       <div key={i} onClick={() => onEdit(t)} className="px-4 border-b border-stone-50 border-r border-stone-100 hover:bg-forest-50/30 cursor-pointer flex flex-col justify-center" style={{ height: ROW_H }}>
                         <div className="flex items-center gap-1.5">
-                          {difExcel(t) && <AlertTriangle size={12} className="text-amber-500 shrink-0" title={`No coincide con el Excel\nExcel: ${fmtD(t.fecha_fin)} · app: ${fmtD(t.early_finish)}\n(revisá dependencias)`} />}
+                          {difExcel(t) && <span className="shrink-0 flex" title={`No coincide con el Excel\nExcel: ${fmtD(t.fecha_fin)} · app: ${fmtD(t.early_finish)}\n(revisá dependencias)`}><AlertTriangle size={12} className="text-amber-500" /></span>}
                           <div className="text-[12.5px] text-stone-800 truncate flex-1">{t.nombre}</div>
                           {holg !== null && (
                             <span className={`text-[10px] font-bold rounded px-1 py-0.5 tabular-nums shrink-0 ${t.critico ? 'bg-forest-100 text-forest-700' : holg < 0 ? 'bg-rose-100 text-rose-700' : 'bg-stone-100 text-stone-500'}`}>
