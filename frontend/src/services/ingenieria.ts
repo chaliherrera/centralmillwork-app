@@ -36,6 +36,14 @@ export interface IngCarga {
   ingenieros: IngCargaIngeniero[]
   tope: number
 }
+export interface IngTareaCelda {
+  nombre: string
+  proyecto_ext: string | null
+  tipo_clave: string | null
+  fecha_inicio: string | null
+  fecha_fin: string | null
+  allocation_pct: number
+}
 export interface ReservaTarea { id: number; nombre: string; asignado_nombre: string | null; fecha_inicio: string | null; fecha_fin: string | null; tipo_clave: string | null }
 export interface ReservaProyecto { proyecto_id: number; proyecto_codigo: string; proyecto_nombre: string; fecha_objetivo: string | null; tareas: ReservaTarea[] }
 
@@ -82,6 +90,8 @@ export const ingenieriaService = {
     api.get<ApiResponse<IngTarea[]>>('/ingenieria/tareas', { params: proyecto ? { proyecto } : {} }).then((r) => r.data),
   getCarga: () =>
     api.get<ApiResponse<IngCarga>>('/ingenieria/carga').then((r) => r.data),
+  getCargaDetalle: (ingeniero: string, semana: string) =>
+    api.get<ApiResponse<IngTareaCelda[]>>('/ingenieria/carga/detalle', { params: { ingeniero, semana } }).then((r) => r.data),
   getPlan: (proyecto: string) =>
     api.get<ApiResponse<IngPlan>>('/ingenieria/plan', { params: { proyecto } }).then((r) => r.data),
   crearTarea: (t: TareaInput) =>

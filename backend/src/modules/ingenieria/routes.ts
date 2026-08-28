@@ -1,7 +1,7 @@
 import { Router } from 'express'
 import { requireRole } from '../../middleware/auth'
 import {
-  resumenHandler, tareasHandler, cargaHandler, planHandler,
+  resumenHandler, tareasHandler, cargaHandler, cargaDetalleHandler, planHandler,
   crearTareaHandler, actualizarTareaHandler, borrarTareaHandler,
   agregarDepHandler, borrarDepHandler,
   reservarHandler, reservasPendientesHandler, confirmarReservaHandler, liberarReservaHandler,
@@ -17,6 +17,7 @@ const PM = requireRole('ADMIN', 'PROJECT_MANAGEMENT')
 router.get('/resumen', READ, resumenHandler)
 router.get('/tareas', READ, tareasHandler)
 router.get('/carga', READ, cargaHandler)
+router.get('/carga/detalle', READ, cargaDetalleHandler)
 router.get('/plan', READ, planHandler)
 router.post('/tareas', WRITE, crearTareaHandler)
 router.patch('/tareas/:id', WRITE, actualizarTareaHandler)

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Users, Layers, ClipboardList, Plus, X, Loader2, Trash2, Gauge, Check, FolderKanban, Activity, AlertTriangle } from 'lucide-react'
-import { ingenieriaService, type IngProyecto, type IngTarea, type TareaInput, type IngPlan, type IngTareaPlan, type IngArista, type IngCarga } from '@/services/ingenieria'
+import { ingenieriaService, type IngProyecto, type IngTarea, type TareaInput, type IngPlan, type IngTareaPlan, type IngArista, type IngCarga, type IngTareaCelda } from '@/services/ingenieria'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Plan de Ingeniería — réplica de la estructura del Master.Sched (Smartsheet):
@@ -82,8 +82,12 @@ export default function IngenieriaPlan() {
   )
 }
 
-// ── Vista de arranque: DISPONIBILIDAD — heatmap de % de carga por ingeniero/semana ──
+// ── Vista de arranque: DISPONIBILIDAD — heatmap de CANTIDAD DE TAREAS por ingeniero/semana ──
 function VistaDisponibilidad({ carga }: { carga: IngCarga | null }) {
+  const [sel, setSel] = useState<{ ing: string; sem: string } | null>(null)
+  const [detail, setDetail] = useState<IngTareaCelda[] | null>(null)
+  const [loadingDet, setLoadingDet] = useState(false)
+
   const g = useMemo(() => {
     if (!carga || !carga.semanas.length || !carga.ingenieros.length) return null
     const semanas = carga.semanas, nWeeks = semanas.length
@@ -93,19 +97,25 @@ function VistaDisponibilidad({ carga }: { carga: IngCarga | null }) {
     let hoyIdx = -1
     for (let i = 0; i < nWeeks; i++) { const ws = d(semanas[i]).getTime(); if (today.getTime() >= ws && today.getTime() < ws + 7 * DAY) { hoyIdx = i; break } }
     const hoyPct = hoyIdx >= 0 ? ((hoyIdx + (today.getTime() - d(semanas[hoyIdx]).getTime()) / (7 * DAY)) / nWeeks) * 100 : null
-    // libres por semana = ingenieros con carga 0
+    // libres por semana = ingenieros sin ninguna tarea esa semana
     const libres: number[] = []
-    for (let i = 0; i < nWeeks; i++) libres.push(carga.ingenieros.filter((e) => (e.cargas[i] ?? 0) <= 0).length)
+    for (let i = 0; i < nWeeks; i++) libres.push(carga.ingenieros.filter((e) => (e.n_tareas[i] ?? 0) <= 0).length)
     return { semanas, nWeeks, months, hoyPct, ingenieros: carga.ingenieros, libres, total: carga.ingenieros.length }
   }, [carga])
 
+  const abrirCelda = async (ing: string, sem: string) => {
+    setSel({ ing, sem }); setDetail(null); setLoadingDet(true)
+    try { const r = await ingenieriaService.getCargaDetalle(ing, sem); setDetail(r.data ?? []) }
+    catch { setDetail([]) } finally { setLoadingDet(false) }
+  }
+
   if (!carga) return <div className="py-20 text-center text-stone-400"><Loader2 className="animate-spin inline" size={22} /></div>
   if (!g) return <div className="py-16 text-center text-stone-400">Sin datos de carga de ingeniería.</div>
-  // color por % de carga: libre / verde <80% / ámbar 80-100% / rojo >100% (sobrecarga)
-  const cell = (pct: number): { bg: string; txt: string } => {
-    if (pct <= 0) return { bg: '#f5f5f4', txt: '' }
-    if (pct < 0.8) return { bg: '#bbf7d0', txt: '#166534' }
-    if (pct <= 1.0) return { bg: '#fde68a', txt: '#92400e' }
+  // color por CANTIDAD de tareas: libre / 1 verde / 2 ámbar / 3+ rojo (sobrecarga)
+  const cell = (n: number): { bg: string; txt: string } => {
+    if (n <= 0) return { bg: '#f5f5f4', txt: '' }
+    if (n === 1) return { bg: '#bbf7d0', txt: '#166534' }
+    if (n === 2) return { bg: '#fde68a', txt: '#92400e' }
     return { bg: '#fecaca', txt: '#991b1b' }
   }
   const libCls = (l: number) => l <= 0 ? 'bg-rose-200 text-rose-900' : l === 1 ? 'bg-amber-100 text-amber-800' : 'bg-emerald-100 text-emerald-800'
@@ -117,8 +127,8 @@ function VistaDisponibilidad({ carga }: { carga: IngCarga | null }) {
       <div className="rounded-2xl border border-stone-200 bg-white overflow-hidden">
         <div className="flex items-center gap-2 px-4 py-3 border-b border-stone-100">
           <Activity size={17} className="text-forest-600" />
-          <h2 className="font-bold text-stone-800">Carga por ingeniero · % de capacidad cada semana</h2>
-          <span className="ml-auto text-xs text-stone-400">suma del % de asignación de sus tareas activas</span>
+          <h2 className="font-bold text-stone-800">Carga por ingeniero · tareas cada semana</h2>
+          <span className="ml-auto text-xs text-stone-400">cuántas tareas tiene encimadas · click en una celda para verlas</span>
         </div>
         <div className="overflow-x-auto"><div className="min-w-[880px]">
           {/* header meses */}
@@ -136,32 +146,65 @@ function VistaDisponibilidad({ carga }: { carga: IngCarga | null }) {
               {g.libres.map((l, i) => <div key={i} title={`${fmtW(g.semanas[i])}: ${l} de ${g.total} libres`} className={`flex-1 h-6 rounded-sm flex items-center justify-center text-[10px] font-bold ${libCls(l)}`}>{l}</div>)}
             </div>
           </div>
-          {/* una fila por ingeniero — heatmap de % */}
-          {g.ingenieros.map((e) => (
+          {/* una fila por ingeniero — heatmap de cantidad de tareas */}
+          {g.ingenieros.map((e) => { const picoN = Math.max(0, ...e.n_tareas); return (
             <div key={e.nombre} className="flex items-center border-b border-stone-50 hover:bg-stone-50/40">
               <div className="shrink-0 px-3 py-1.5 flex items-center gap-1.5" style={{ width: GUT }}>
                 <span className="text-[12.5px] font-semibold text-stone-700 truncate flex-1">{e.nombre}</span>
-                <span className={`text-[10px] font-bold tabular-nums ${e.pico > 1 ? 'text-rose-600' : 'text-stone-400'}`} title="pico de carga">{Math.round(e.pico * 100)}%</span>
+                <span className={`text-[11px] font-bold tabular-nums ${picoN > 2 ? 'text-rose-600' : 'text-stone-400'}`} title="pico: máximo de tareas en una semana">{picoN}</span>
               </div>
               <div className="flex-1 flex gap-px py-1">
-                {g.semanas.map((_, i) => { const pct = e.cargas[i] ?? 0; const c = cell(pct); return (
-                  <div key={i} title={`${e.nombre} · ${fmtW(g.semanas[i])}: ${Math.round(pct * 100)}% (${e.n_tareas[i] ?? 0} tarea${(e.n_tareas[i] ?? 0) === 1 ? '' : 's'})`}
-                    className="flex-1 h-6 rounded-sm flex items-center justify-center text-[9px] font-bold" style={{ background: c.bg, color: c.txt }}>
-                    {pct > 0 ? Math.round(pct * 100) : ''}
-                  </div>
+                {g.semanas.map((wk, i) => { const n = e.n_tareas[i] ?? 0; const pct = e.cargas[i] ?? 0; const c = cell(n); return (
+                  <button key={i} onClick={() => n > 0 && abrirCelda(e.nombre, wk)} disabled={n <= 0}
+                    title={`${e.nombre} · ${fmtW(wk)}: ${n} tarea${n === 1 ? '' : 's'} · ${Math.round(pct * 100)}% de asignación${n > 0 ? ' — click para ver' : ''}`}
+                    className={`flex-1 h-6 rounded-sm flex items-center justify-center text-[10px] font-bold transition-shadow ${n > 0 ? 'cursor-pointer hover:ring-2 hover:ring-forest-400' : 'cursor-default'}`}
+                    style={{ background: c.bg, color: c.txt }}>
+                    {n > 0 ? n : ''}
+                  </button>
                 ) })}
               </div>
             </div>
-          ))}
+          ) })}
         </div></div>
         <div className="px-4 py-2 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-stone-500 items-center border-t border-stone-100">
           <span className="inline-flex items-center gap-1.5"><span className="w-3.5 h-3.5 rounded-sm inline-block" style={{ background: '#f5f5f4' }} /> libre</span>
-          <span className="inline-flex items-center gap-1.5"><span className="w-3.5 h-3.5 rounded-sm inline-block" style={{ background: '#bbf7d0' }} /> &lt;80%</span>
-          <span className="inline-flex items-center gap-1.5"><span className="w-3.5 h-3.5 rounded-sm inline-block" style={{ background: '#fde68a' }} /> 80–100%</span>
-          <span className="inline-flex items-center gap-1.5"><span className="w-3.5 h-3.5 rounded-sm inline-block" style={{ background: '#fecaca' }} /> &gt;100% sobrecarga</span>
-          <span className="italic text-stone-400">El número es el % de capacidad ocupada esa semana. La columna de la derecha es el pico.</span>
+          <span className="inline-flex items-center gap-1.5"><span className="w-3.5 h-3.5 rounded-sm inline-block" style={{ background: '#bbf7d0' }} /> 1 tarea</span>
+          <span className="inline-flex items-center gap-1.5"><span className="w-3.5 h-3.5 rounded-sm inline-block" style={{ background: '#fde68a' }} /> 2 tareas</span>
+          <span className="inline-flex items-center gap-1.5"><span className="w-3.5 h-3.5 rounded-sm inline-block" style={{ background: '#fecaca' }} /> 3+ sobrecarga</span>
+          <span className="italic text-stone-400">El número es cuántas tareas tiene encimadas esa semana. A la izquierda, el pico. Click en una celda para ver cuáles.</span>
         </div>
       </div>
+
+      {/* Modal: detalle de tareas de una celda */}
+      {sel && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4" onClick={() => setSel(null)}>
+          <div className="bg-white rounded-2xl border border-stone-200 shadow-xl max-w-lg w-full max-h-[80vh] overflow-hidden flex flex-col" onClick={(ev) => ev.stopPropagation()}>
+            <div className="flex items-center gap-2 px-4 py-3 border-b border-stone-100">
+              <Activity size={16} className="text-forest-600" />
+              <div>
+                <div className="font-bold text-stone-800 text-sm">{sel.ing}</div>
+                <div className="text-xs text-stone-400">semana del {fmtW(sel.sem)}{detail ? ` · ${detail.length} tarea${detail.length === 1 ? '' : 's'}` : ''}</div>
+              </div>
+              <button onClick={() => setSel(null)} className="ml-auto text-stone-400 hover:text-stone-700"><X size={18} /></button>
+            </div>
+            <div className="overflow-y-auto">
+              {loadingDet ? <div className="py-10 text-center text-stone-400"><Loader2 className="animate-spin inline" size={18} /></div>
+                : !detail || !detail.length ? <div className="py-10 text-center text-stone-400 text-sm">Sin tareas esa semana.</div>
+                : <div className="divide-y divide-stone-100">
+                    {detail.map((t, i) => (
+                      <div key={i} className="px-4 py-2.5">
+                        <div className="flex items-center gap-2">
+                          <span className="text-[13px] font-medium text-stone-800 flex-1">{t.nombre}</span>
+                          <span className="text-[10px] font-bold text-stone-500 tabular-nums shrink-0">{Math.round(t.allocation_pct * 100)}%</span>
+                        </div>
+                        <div className="text-[11px] text-stone-400 mt-0.5">{t.proyecto_ext ?? '—'} · {t.fecha_inicio ? fmtW(t.fecha_inicio) : '?'} → {t.fecha_fin ? fmtW(t.fecha_fin) : '?'}</div>
+                      </div>
+                    ))}
+                  </div>}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

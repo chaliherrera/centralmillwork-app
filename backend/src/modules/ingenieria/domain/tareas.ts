@@ -136,6 +136,23 @@ export async function getCargaPorIngeniero(runner: QueryRunner): Promise<CargaRe
   return { semanas, ingenieros, tope: 1.0 }
 }
 
+export interface TareaCelda {
+  nombre: string; proyecto_ext: string | null; tipo_clave: string | null
+  fecha_inicio: string | null; fecha_fin: string | null; allocation_pct: number
+}
+/** Tareas de un ingeniero activas en una semana (detalle al hacer click en el heatmap). */
+export async function getTareasDeCelda(runner: QueryRunner, ingeniero: string, semanaLunes: string): Promise<TareaCelda[]> {
+  const { rows } = await runner.query<TareaCelda>(
+    `SELECT t.nombre, t.proyecto_ext, tt.clave AS tipo_clave,
+            to_char(t.fecha_inicio,'YYYY-MM-DD') AS fecha_inicio, to_char(t.fecha_fin,'YYYY-MM-DD') AS fecha_fin,
+            COALESCE(t.allocation_pct,1)::float AS allocation_pct
+       FROM ing_tareas t LEFT JOIN ing_tarea_tipos tt ON tt.id = t.tipo_id
+      WHERE t.asignado_nombre = $1 AND t.estado <> 'hecha'
+        AND t.fecha_inicio <= ($2::date + 6) AND t.fecha_fin >= $2::date
+      ORDER BY t.proyecto_ext, t.fecha_inicio`, [ingeniero, semanaLunes])
+  return rows
+}
+
 // ── Plan de UN proyecto: tareas + dependencias + holgura/riesgo (CPM) ──
 export interface TareaPlan extends Tarea {
   early_start: string | null

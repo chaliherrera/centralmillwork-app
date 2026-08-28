@@ -6,7 +6,7 @@ import { z } from 'zod'
 import pool from '../../../db/pool'
 import { createError } from '../../../middleware/errorHandler'
 import {
-  getResumen, listProyectos, listTareas, getCargaPorIngeniero,
+  getResumen, listProyectos, listTareas, getCargaPorIngeniero, getTareasDeCelda,
   crearTarea, actualizarTarea, getPlanProyecto,
   borrarTareaConReconexion, agregarDep, borrarDep,
 } from '../domain/tareas'
@@ -55,6 +55,16 @@ export async function tareasHandler(req: Request, res: Response, next: NextFunct
 export async function cargaHandler(_req: Request, res: Response, next: NextFunction) {
   try {
     res.json({ data: await getCargaPorIngeniero(pool) })
+  } catch (e) { next(e) }
+}
+
+// GET /api/ingenieria/carga/detalle?ingeniero=<nombre>&semana=<YYYY-MM-DD (lunes)>
+export async function cargaDetalleHandler(req: Request, res: Response, next: NextFunction) {
+  try {
+    const ing = typeof req.query.ingeniero === 'string' ? req.query.ingeniero : ''
+    const semana = typeof req.query.semana === 'string' ? req.query.semana : ''
+    if (!ing || !/^\d{4}-\d{2}-\d{2}$/.test(semana)) return next(createError('faltan ingeniero/semana', 400))
+    res.json({ data: await getTareasDeCelda(pool, ing, semana) })
   } catch (e) { next(e) }
 }
 
