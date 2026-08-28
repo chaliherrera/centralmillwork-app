@@ -76,6 +76,9 @@ router.use('/produccion', produccionRouter)
 // Role shorthand helpers
 const ADMIN      = requireRole('ADMIN')
 const WRITE      = requireRole('ADMIN', 'PROCUREMENT')
+// Estimados/PM crea y edita proyectos (alta desde el wizard, hoja de intake).
+// PROJECT_MANAGEMENT agregado 2026-08-28 (rediseño Estimados→PM).
+const PROY_WRITE = requireRole('ADMIN', 'PROCUREMENT', 'PROJECT_MANAGEMENT')
 // SHOP_MANAGER agregado 2026-06-13: el rol coordina el taller y debe poder
 // registrar recepciones (caso de uso real: operario hace la entrega física
 // y el SHOP_MANAGER la asienta en el sistema).
@@ -122,8 +125,8 @@ router.get('/proyectos/:id/items/:numero/planos',  requireRole('ADMIN', 'SHOP_MA
 router.post('/proyectos/:id/items/:numero/planos', requireRole('ADMIN', 'SHOP_MANAGER', 'PROCUREMENT', 'ENGINEERING'), uploadPlano.single('plano'), uploadPlanoItem)
 router.get('/proyectos/:id/muestras-aprobadas', getProyectoMuestrasAprobadas)
 router.get('/proyectos/:id',                  getProyecto)
-router.post('/proyectos',                     WRITE, validateBody(createProyectoSchema), createProyecto)
-router.put('/proyectos/:id',                  WRITE, validateBody(updateProyectoSchema), updateProyecto)
+router.post('/proyectos',                     PROY_WRITE, validateBody(createProyectoSchema), createProyecto)
+router.put('/proyectos/:id',                  PROY_WRITE, validateBody(updateProyectoSchema), updateProyecto)
 router.delete('/proyectos/:id',               WRITE, deleteProyecto)
 
 // ─── Proveedores ──────────────────────────────────────────────────────────────
