@@ -82,6 +82,10 @@ for c,n,h,t,mn,mx,o,al in TIPOS:
                  f"VALUES ({sq(c)},{sq(n)},{sq(h)},{t},{mn},{mx},{o},{arr}) "
                  f"ON CONFLICT (clave) DO UPDATE SET nombre=EXCLUDED.nombre,hito_codigo=EXCLUDED.hito_codigo,"
                  f"dur_dias_tipico=EXCLUDED.dur_dias_tipico,dur_dias_min=EXCLUDED.dur_dias_min,dur_dias_max=EXCLUDED.dur_dias_max,aliases=EXCLUDED.aliases;")
+# Regla día-por-ítem (shop drawings ≈ 1 día/ítem). Se setea en cada import para que
+# no se pierda si el catálogo se re-inserta (la migración 057 no alcanza si corre antes
+# de que existan las filas del catálogo).
+lines.append("UPDATE ing_tarea_tipos SET dias_por_item = 1.0 WHERE clave = 'shop_drawings';")
 
 cur_proj=None; cur_code=None; cur_phase=None; ntask=0; nproj=0; deps=[]
 for rn,r in enumerate(ws.iter_rows(min_row=2,values_only=True),start=2):
