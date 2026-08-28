@@ -45,7 +45,7 @@ export interface IngTareaCelda {
   allocation_pct: number
 }
 export interface ReservaTarea { id: number; nombre: string; asignado_nombre: string | null; fecha_inicio: string | null; fecha_fin: string | null; tipo_clave: string | null }
-export interface ReservaProyecto { proyecto_id: number; proyecto_codigo: string; proyecto_nombre: string; fecha_objetivo: string | null; tareas: ReservaTarea[] }
+export interface ReservaProyecto { proyecto_id: number; proyecto_codigo: string; proyecto_nombre: string; proyecto_ext: string | null; fecha_objetivo: string | null; tareas: ReservaTarea[] }
 
 // Plan de un proyecto con holgura/riesgo (CPM sobre fecha fija)
 export interface IngTareaPlan extends IngTarea {

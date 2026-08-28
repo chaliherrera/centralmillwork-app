@@ -16,12 +16,12 @@ const fmtD = (iso: string | null) => iso ? `${d(iso).getDate()} ${MES[d(iso).get
 const shortProj = (p: string | null) => (p || '—').replace(/^\s*(\d{2}-\d{3})\s*/, '$1 · ')
 const PAL = ['#2563eb', '#0d9488', '#ea580c', '#7c3aed', '#059669', '#db2777', '#ca8a04', '#4f46e5', '#0891b2', '#dc2626', '#65a30d', '#9333ea']
 
-export default function IngenieriaPlan({ embedded }: { embedded?: boolean }) {
+export default function IngenieriaPlan({ embedded, initialProyecto, initialMode }: { embedded?: boolean; initialProyecto?: string; initialMode?: 'disponibilidad' | 'proyecto' | 'carga' }) {
   const [resumen, setResumen] = useState<{ tareas: number; proyectos: number; ingenieros: number } | null>(null)
   const [proyectos, setProyectos] = useState<IngProyecto[]>([])
   const [all, setAll] = useState<IngTarea[]>([])
-  const [mode, setMode] = useState<'disponibilidad' | 'proyecto' | 'carga'>('disponibilidad')
-  const [selProj, setSelProj] = useState<string>('')
+  const [mode, setMode] = useState<'disponibilidad' | 'proyecto' | 'carga'>(initialMode ?? 'disponibilidad')
+  const [selProj, setSelProj] = useState<string>(initialProyecto ?? '')
   const [selEng, setSelEng] = useState<string>('')
   const [loading, setLoading] = useState(true)
   const [edit, setEdit] = useState<IngTarea | 'new' | null>(null)
@@ -35,6 +35,8 @@ export default function IngenieriaPlan({ embedded }: { embedded?: boolean }) {
     if (!selProj && r.data.proyectos[0]) setSelProj(r.data.proyectos[0].proyecto_ext)
   }
   useEffect(() => { loadAll().finally(() => setLoading(false)) }, [])
+  // Abrir un proyecto puntual (ej: el PM hace "Revisar plan" desde su bandeja).
+  useEffect(() => { if (initialProyecto) { setSelProj(initialProyecto); setMode('proyecto') } }, [initialProyecto])
 
   // Plan (con holgura) del proyecto seleccionado — para el Gantt y el modal.
   async function loadPlan() {
