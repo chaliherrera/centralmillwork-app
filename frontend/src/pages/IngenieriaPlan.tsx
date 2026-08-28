@@ -16,7 +16,7 @@ const fmtD = (iso: string | null) => iso ? `${d(iso).getDate()} ${MES[d(iso).get
 const shortProj = (p: string | null) => (p || '—').replace(/^\s*(\d{2}-\d{3})\s*/, '$1 · ')
 const PAL = ['#2563eb', '#0d9488', '#ea580c', '#7c3aed', '#059669', '#db2777', '#ca8a04', '#4f46e5', '#0891b2', '#dc2626', '#65a30d', '#9333ea']
 
-export default function IngenieriaPlan() {
+export default function IngenieriaPlan({ embedded }: { embedded?: boolean }) {
   const [resumen, setResumen] = useState<{ tareas: number; proyectos: number; ingenieros: number } | null>(null)
   const [proyectos, setProyectos] = useState<IngProyecto[]>([])
   const [all, setAll] = useState<IngTarea[]>([])
@@ -47,14 +47,14 @@ export default function IngenieriaPlan() {
   if (loading) return <div className="py-20 text-center text-stone-400">Cargando plan de Ingeniería…</div>
 
   return (
-    <div className="max-w-[1180px] mx-auto py-6 px-2 space-y-5">
+    <div className={`max-w-[1180px] mx-auto px-2 space-y-5 ${embedded ? '' : 'py-6'}`}>
       {/* Header */}
       <div className="flex items-center gap-3 flex-wrap">
-        <div className="w-11 h-11 rounded-2xl bg-forest-50 flex items-center justify-center"><Gauge className="text-forest-600" size={22} /></div>
-        <div>
+        {!embedded && <div className="w-11 h-11 rounded-2xl bg-forest-50 flex items-center justify-center"><Gauge className="text-forest-600" size={22} /></div>}
+        {!embedded && <div>
           <h1 className="text-xl font-bold text-stone-900">Plan de Ingeniería</h1>
           <p className="text-sm text-stone-500">La estructura del Master.Sched: cada proyecto agrupa sus tareas, con su responsable.</p>
-        </div>
+        </div>}
         <div className="ml-auto flex gap-5 text-center">
           <Stat icon={<Layers size={15} />} n={resumen?.proyectos ?? 0} l="proyectos" />
           <Stat icon={<ClipboardList size={15} />} n={resumen?.tareas ?? 0} l="tareas" />
