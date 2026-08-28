@@ -240,8 +240,8 @@ export default function EstimadosWizard() {
         {paso === 4 && sel && (
           <div className="space-y-4">
             <div>
-              <h3 className="font-bold text-stone-800">Reserva de Ingeniería</h3>
-              <p className="text-sm text-stone-500">Los espacios de Ingeniería quedan reservados (provisionales) hasta que el PM los confirme y asigne el ingeniero. Consumen capacidad para que la próxima cotización cuente con eso.</p>
+              <h3 className="font-bold text-stone-800">Reserva tentativa de Ingeniería</h3>
+              <p className="text-sm text-stone-500">Se aparta capacidad de Ingeniería (pipeline) para que la próxima cotización cuente con este deal. Cuando el <b>PM acepte</b> en su bandeja, se genera el plan completo de tareas. Si el deal se cae, se libera.</p>
             </div>
             <div className="rounded-xl border border-forest-100 bg-forest-50/40 p-4">
               {reservadas > 0 ? (

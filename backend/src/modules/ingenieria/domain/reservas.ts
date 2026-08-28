@@ -52,7 +52,7 @@ async function duracionesPara(runner: QueryRunner, _presupuesto: number | null, 
 
 /** Propone el ingeniero MENOS cargado en la ventana [inicio, fin] (incluye a los
  *  que están totalmente libres). Es una propuesta: el PM la confirma o la cambia. */
-async function proponerIngeniero(runner: QueryRunner, inicio: string, fin: string): Promise<string | null> {
+export async function proponerIngeniero(runner: QueryRunner, inicio: string, fin: string): Promise<string | null> {
   const { rows } = await runner.query<{ nombre: string }>(
     `WITH engs AS (SELECT DISTINCT asignado_nombre AS nombre FROM ing_tareas WHERE asignado_nombre IS NOT NULL)
      SELECT e.nombre

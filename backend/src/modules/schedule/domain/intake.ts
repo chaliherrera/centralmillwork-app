@@ -13,6 +13,7 @@
 import type { PoolClient } from 'pg'
 import pool from '../../../db/pool'
 import { generarPlan, recomputeScheduleForProyecto } from './recompute'
+import { reanclarPlanAFirma } from '../../ingenieria/domain/plan_inicial'
 
 type QueryRunner = PoolClient | typeof pool
 
@@ -80,5 +81,13 @@ export async function intakeProyecto(
   }
 
   await recomputeScheduleForProyecto(runner, proyectoId, 'manual')
+
+  // Re-anclar el día cero del plan de ingeniería a la firma (si el plan lo generó el
+  // PM en la app). La holgura se achica por lo que tardó el cliente en firmar; el
+  // inicio original queda guardado para documentar la demora.
+  if (firma?.fechaFirma) {
+    try { await reanclarPlanAFirma(runner, proyectoId, firma.fechaFirma) } catch { /* best-effort */ }
+  }
+
   return { ok: true, planNuevo }
 }

@@ -10,7 +10,8 @@ import {
   crearTarea, actualizarTarea, getPlanProyecto,
   borrarTareaConReconexion, agregarDep, borrarDep,
 } from '../domain/tareas'
-import { crearReserva, listReservasPendientes, confirmarReserva, liberarReserva } from '../domain/reservas'
+import { crearReserva, listReservasPendientes, liberarReserva } from '../domain/reservas'
+import { generarPlanIngenieria } from '../domain/plan_inicial'
 
 function pid(req: Request): number {
   const id = parseInt(String(req.params.id ?? req.params.proyectoId), 10)
@@ -26,12 +27,19 @@ export async function reservarHandler(req: Request, res: Response, next: NextFun
 export async function reservasPendientesHandler(_req: Request, res: Response, next: NextFunction) {
   try { res.json({ data: await listReservasPendientes(pool) }) } catch (e) { next(e) }
 }
-// POST /api/ingenieria/reserva/:proyectoId/confirmar  { asignaciones?: [{id, asignado_nombre}] }
+// POST /api/ingenieria/reserva/:proyectoId/confirmar
+// Opción B: el PM confirma → se genera el ESPEJO COMPLETO del plan de ingeniería
+// (todas las tareas + dependencias, pre-llenadas del intake), absorbiendo la reserva
+// tentativa. El PM poda y asigna en el plan del proyecto.
 export async function confirmarReservaHandler(req: Request, res: Response, next: NextFunction) {
+  const client = await pool.connect()
   try {
-    const asigns = Array.isArray(req.body?.asignaciones) ? req.body.asignaciones : undefined
-    res.json({ data: await confirmarReserva(pool, pid(req), (req as any).user?.id ?? null, asigns) })
-  } catch (e) { next(e) }
+    await client.query('BEGIN')
+    const r = await generarPlanIngenieria(client, pid(req))
+    await client.query('COMMIT')
+    if (r.error) return next(createError(r.error, 400))
+    res.json({ data: r })
+  } catch (e) { await client.query('ROLLBACK').catch(() => {}); next(e) } finally { client.release() }
 }
 // DELETE /api/ingenieria/proyecto/:id/reserva
 export async function liberarReservaHandler(req: Request, res: Response, next: NextFunction) {
