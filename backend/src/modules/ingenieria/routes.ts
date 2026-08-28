@@ -1,7 +1,8 @@
 import { Router } from 'express'
 import { requireRole } from '../../middleware/auth'
 import {
-  resumenHandler, tareasHandler, cargaHandler, cargaDetalleHandler, planHandler,
+  resumenHandler, tareasHandler, cargaHandler, cargaDetalleHandler,
+  cargaEtapasHandler, etapaDetalleHandler, planHandler,
   crearTareaHandler, actualizarTareaHandler, avanceTareaHandler, borrarTareaHandler,
   agregarDepHandler, borrarDepHandler,
   reservarHandler, reservasPendientesHandler, confirmarReservaHandler, liberarReservaHandler,
@@ -21,6 +22,8 @@ router.get('/resumen', READ, resumenHandler)
 router.get('/tareas', READ, tareasHandler)
 router.get('/carga', READ, cargaHandler)
 router.get('/carga/detalle', READ, cargaDetalleHandler)
+router.get('/carga-etapas', READ, cargaEtapasHandler)
+router.get('/carga-etapas/detalle', READ, etapaDetalleHandler)
 router.get('/plan', READ, planHandler)
 // Estructura del plan = PM (gestión de recursos)
 router.post('/tareas', PM, crearTareaHandler)

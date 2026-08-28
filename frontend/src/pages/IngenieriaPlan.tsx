@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Users, Layers, ClipboardList, Plus, X, Loader2, Trash2, Gauge, Check, FolderKanban, Activity, AlertTriangle } from 'lucide-react'
 import { ingenieriaService, type IngProyecto, type IngTarea, type TareaInput, type IngPlan, type IngTareaPlan, type IngArista, type IngCarga, type IngTareaCelda } from '@/services/ingenieria'
+import MapaEtapas from '@/components/modules/ingenieria/MapaEtapas'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Plan de Ingeniería — réplica de la estructura del Master.Sched (Smartsheet):
@@ -16,11 +17,11 @@ const fmtD = (iso: string | null) => iso ? `${d(iso).getDate()} ${MES[d(iso).get
 const shortProj = (p: string | null) => (p || '—').replace(/^\s*(\d{2}-\d{3})\s*/, '$1 · ')
 const PAL = ['#2563eb', '#0d9488', '#ea580c', '#7c3aed', '#059669', '#db2777', '#ca8a04', '#4f46e5', '#0891b2', '#dc2626', '#65a30d', '#9333ea']
 
-export default function IngenieriaPlan({ embedded, initialProyecto, initialMode }: { embedded?: boolean; initialProyecto?: string; initialMode?: 'disponibilidad' | 'proyecto' | 'carga' }) {
+export default function IngenieriaPlan({ embedded, initialProyecto, initialMode }: { embedded?: boolean; initialProyecto?: string; initialMode?: 'disponibilidad' | 'proyecto' | 'carga' | 'etapas' }) {
   const [resumen, setResumen] = useState<{ tareas: number; proyectos: number; ingenieros: number } | null>(null)
   const [proyectos, setProyectos] = useState<IngProyecto[]>([])
   const [all, setAll] = useState<IngTarea[]>([])
-  const [mode, setMode] = useState<'disponibilidad' | 'proyecto' | 'carga'>(initialMode ?? 'disponibilidad')
+  const [mode, setMode] = useState<'disponibilidad' | 'proyecto' | 'carga' | 'etapas'>(initialMode ?? 'disponibilidad')
   const [selProj, setSelProj] = useState<string>(initialProyecto ?? '')
   const [selEng, setSelEng] = useState<string>('')
   const [loading, setLoading] = useState(true)
@@ -69,13 +70,16 @@ export default function IngenieriaPlan({ embedded, initialProyecto, initialMode 
         <button onClick={() => setMode('disponibilidad')} className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 font-semibold ${mode === 'disponibilidad' ? 'bg-forest-600 text-white' : 'text-stone-500 hover:text-stone-800'}`}><Activity size={15} /> Disponibilidad</button>
         <button onClick={() => setMode('proyecto')} className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 font-semibold ${mode === 'proyecto' ? 'bg-forest-600 text-white' : 'text-stone-500 hover:text-stone-800'}`}><FolderKanban size={15} /> Por proyecto</button>
         <button onClick={() => setMode('carga')} className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 font-semibold ${mode === 'carga' ? 'bg-forest-600 text-white' : 'text-stone-500 hover:text-stone-800'}`}><Gauge size={15} /> Carga por ingeniero</button>
+        <button onClick={() => setMode('etapas')} className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 font-semibold ${mode === 'etapas' ? 'bg-forest-600 text-white' : 'text-stone-500 hover:text-stone-800'}`}><Layers size={15} /> Portafolio</button>
       </div>
 
       {mode === 'disponibilidad'
         ? <VistaDisponibilidad carga={carga} />
         : mode === 'proyecto'
           ? <VistaProyecto proyectos={proyectos} all={all} plan={plan} planLoading={planLoading} sel={selProj} setSel={setSelProj} onEdit={setEdit} />
-          : <VistaCarga all={all} proyectos={proyectos} selEng={selEng} setSelEng={setSelEng} onEdit={setEdit} />}
+          : mode === 'etapas'
+            ? <MapaEtapas />
+            : <VistaCarga all={all} proyectos={proyectos} selEng={selEng} setSelEng={setSelEng} onEdit={setEdit} />}
 
       {edit && <EditModal tarea={edit === 'new' ? null : edit} proyecto={selProj}
         planTareas={mode === 'proyecto' ? plan?.tareas ?? null : null} aristas={mode === 'proyecto' ? plan?.aristas ?? null : null}

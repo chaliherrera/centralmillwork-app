@@ -7,6 +7,7 @@ import pool from '../../../db/pool'
 import { createError } from '../../../middleware/errorHandler'
 import {
   getResumen, listProyectos, listTareas, getCargaPorIngeniero, getTareasDeCelda,
+  getCargaPorEtapa, getProyectosDeEtapa,
   crearTarea, actualizarTarea, getPlanProyecto,
   borrarTareaConReconexion, agregarDep, borrarDep,
 } from '../domain/tareas'
@@ -83,6 +84,20 @@ export async function cargaDetalleHandler(req: Request, res: Response, next: Nex
     const semana = typeof req.query.semana === 'string' ? req.query.semana : ''
     if (!ing || !/^\d{4}-\d{2}-\d{2}$/.test(semana)) return next(createError('faltan ingeniero/semana', 400))
     res.json({ data: await getTareasDeCelda(pool, ing, semana) })
+  } catch (e) { next(e) }
+}
+
+// GET /api/ingenieria/carga-etapas — mapa de calor de etapas del portafolio
+export async function cargaEtapasHandler(_req: Request, res: Response, next: NextFunction) {
+  try { res.json({ data: await getCargaPorEtapa(pool) }) } catch (e) { next(e) }
+}
+// GET /api/ingenieria/carga-etapas/detalle?etapa=<clave>&semana=<YYYY-MM-DD>
+export async function etapaDetalleHandler(req: Request, res: Response, next: NextFunction) {
+  try {
+    const etapa = typeof req.query.etapa === 'string' ? req.query.etapa : ''
+    const semana = typeof req.query.semana === 'string' ? req.query.semana : ''
+    if (!etapa || !/^\d{4}-\d{2}-\d{2}$/.test(semana)) return next(createError('faltan etapa/semana', 400))
+    res.json({ data: await getProyectosDeEtapa(pool, etapa, semana) })
   } catch (e) { next(e) }
 }
 

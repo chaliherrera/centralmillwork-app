@@ -6,6 +6,7 @@ import { scheduleService, type FactibilidadResult } from '@/services/schedule'
 import { ingenieriaService } from '@/services/ingenieria'
 import ProyectoForm from '@/components/modules/proyectos/ProyectoForm'
 import FactibilidadCheck from './FactibilidadCheck'
+import MapaEtapas from '@/components/modules/ingenieria/MapaEtapas'
 import type { Proyecto } from '@/types'
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -195,6 +196,10 @@ export default function EstimadosWizard() {
               setFechaSolicitada(f); setFactRes(r)
               setFechaComprometida(r.factible ? f : r.fecha_real_mas_temprana)
             }} />
+            <div className="pt-1">
+              <div className="text-[11px] uppercase tracking-wider text-stone-400 font-semibold mb-2">Portafolio — dónde hay lugar en la agenda</div>
+              <MapaEtapas />
+            </div>
             {factRes && (
               <div className="rounded-xl border border-forest-200 bg-forest-50/40 p-4">
                 <div className="text-[11px] uppercase tracking-wide text-forest-600 font-semibold">Fecha a comprometer con el cliente</div>

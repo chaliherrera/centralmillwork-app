@@ -44,6 +44,10 @@ export interface IngTareaCelda {
   fecha_fin: string | null
   allocation_pct: number
 }
+// Mapa de calor de etapas del portafolio
+export interface IngEtapaCarga { clave: string; nombre: string; orden: number; hito: string | null; counts: number[] }
+export interface IngCargaEtapas { semanas: string[]; etapas: IngEtapaCarga[] }
+export interface IngProyectoEtapa { proyecto_ext: string | null; nombre: string; asignado_nombre: string | null; fecha_inicio: string | null; fecha_fin: string | null }
 export interface ReservaTarea { id: number; nombre: string; asignado_nombre: string | null; fecha_inicio: string | null; fecha_fin: string | null; tipo_clave: string | null }
 export interface ReservaProyecto { proyecto_id: number; proyecto_codigo: string; proyecto_nombre: string; proyecto_ext: string | null; fecha_objetivo: string | null; tareas: ReservaTarea[] }
 
@@ -92,6 +96,10 @@ export const ingenieriaService = {
     api.get<ApiResponse<IngCarga>>('/ingenieria/carga').then((r) => r.data),
   getCargaDetalle: (ingeniero: string, semana: string) =>
     api.get<ApiResponse<IngTareaCelda[]>>('/ingenieria/carga/detalle', { params: { ingeniero, semana } }).then((r) => r.data),
+  getCargaEtapas: () =>
+    api.get<ApiResponse<IngCargaEtapas>>('/ingenieria/carga-etapas').then((r) => r.data),
+  getEtapaDetalle: (etapa: string, semana: string) =>
+    api.get<ApiResponse<IngProyectoEtapa[]>>('/ingenieria/carga-etapas/detalle', { params: { etapa, semana } }).then((r) => r.data),
   getPlan: (proyecto: string) =>
     api.get<ApiResponse<IngPlan>>('/ingenieria/plan', { params: { proyecto } }).then((r) => r.data),
   crearTarea: (t: TareaInput) =>
