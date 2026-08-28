@@ -23,7 +23,7 @@ export interface User {
 
 // ─── Enums ────────────────────────────────────────────────────────────────────
 
-export type EstadoProyecto = 'cotizacion' | 'activo' | 'en_pausa' | 'completado' | 'cancelado'
+export type EstadoProyecto = 'prospecto' | 'cotizacion' | 'activo' | 'en_pausa' | 'completado' | 'cancelado'
 export type EstadoOrden    = 'borrador' | 'enviada' | 'confirmada' | 'parcial' | 'recibida' | 'cancelada' | 'en_transito'
 export type EstadoCotizacion = 'pendiente' | 'enviada' | 'recibida' | 'aprobada' | 'rechazada'
 export type EstadoRecepcion  = 'pendiente' | 'completa' | 'con_diferencias'

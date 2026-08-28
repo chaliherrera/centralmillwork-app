@@ -106,6 +106,7 @@ export async function chequearFactibilidad(
        FROM ing_tareas
       WHERE asignado_nombre = $1 AND fecha_inicio IS NOT NULL AND fecha_fin IS NOT NULL
         AND estado NOT IN ('hecha','na')
+        AND origen <> 'sugerencia'
       ORDER BY fecha_inicio`, [recurso])
   const busy: Intervalo[] = tareas.map((t) => ({ start: t.start, end: t.end }))
   const ocupadoHasta = busy.length ? busy.reduce((mx, b) => (b.end > mx ? b.end : mx), busy[0].end) : fechaPedida

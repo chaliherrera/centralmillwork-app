@@ -1,12 +1,13 @@
 import clsx from 'clsx'
 
 type Status =
-  | 'cotizacion' | 'activo' | 'en_pausa' | 'completado' | 'cancelado' | 'cancelada'
+  | 'prospecto' | 'cotizacion' | 'activo' | 'en_pausa' | 'completado' | 'cancelado' | 'cancelada'
   | 'borrador' | 'enviada' | 'confirmada' | 'parcial' | 'recibida'
   | 'pendiente' | 'aprobada' | 'rechazada'
   | 'completa' | 'con_diferencias'
 
 const statusConfig: Record<Status, { label: string; class: string }> = {
+  prospecto:        { label: 'Prospecto',        class: 'bg-forest-50 text-forest-700' },
   cotizacion:       { label: 'Cotización',       class: 'bg-gray-100  text-gray-600' },
   activo:           { label: 'Activo',            class: 'bg-green-100 text-green-700' },
   en_pausa:         { label: 'En Pausa',          class: 'bg-yellow-100 text-yellow-700' },

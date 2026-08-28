@@ -22,8 +22,9 @@ const STONE_CLAVES = ['stone_measure', 'stone_fab', 'stone_install']
 function hoyISO(): string { return new Date().toISOString().slice(0, 10) }
 
 export async function generarPlanIngenieria(
-  runner: QueryRunner, proyectoId: number, fechaInicioOpt?: string
+  runner: QueryRunner, proyectoId: number, opts?: { origen?: string; fechaInicio?: string }
 ): Promise<{ creadas: number; error?: string }> {
+  const origen = opts?.origen ?? 'app'
   const { rows: pr } = await runner.query<{ codigo: string; items_qty: number | null; presupuesto: number | null; stone_total: number | null; fecha_objetivo: string | null }>(
     `SELECT p.codigo, p.items_qty, p.presupuesto, p.stone_total,
             to_char(sp.fecha_objetivo,'YYYY-MM-DD') AS fecha_objetivo
@@ -35,15 +36,15 @@ export async function generarPlanIngenieria(
   if (!fecha_objetivo) return { creadas: 0, error: 'el proyecto no tiene fecha comprometida' }
   const proyectoExt = codigo
   const hayStone = stone_total != null && Number(stone_total) > 0
-  const fechaInicio = fechaInicioOpt || hoyISO()
+  const fechaInicio = opts?.fechaInicio || hoyISO()
 
-  // No pisar proyectos importados del Excel
+  // No pisar un plan REAL ya existente (importado del Excel o aceptado por el PM = 'app')
   const { rows: ex } = await runner.query<{ n: number }>(
-    `SELECT count(*)::int AS n FROM ing_tareas WHERE proyecto_ext = $1 AND origen = 'import_excel'`, [proyectoExt])
-  if ((ex[0]?.n ?? 0) > 0) return { creadas: 0, error: 'el proyecto ya tiene tareas importadas del Excel' }
+    `SELECT count(*)::int AS n FROM ing_tareas WHERE proyecto_ext = $1 AND origen IN ('import_excel','app')`, [proyectoExt])
+  if ((ex[0]?.n ?? 0) > 0) return { creadas: 0, error: 'el proyecto ya tiene un plan (del Excel o aceptado por el PM)' }
 
-  // Idempotente: borra el plan app/reserva previo (absorbe la reserva tentativa)
-  await runner.query(`DELETE FROM ing_tareas WHERE proyecto_ext = $1 AND origen IN ('app','reserva')`, [proyectoExt])
+  // Idempotente: borra el plan BLANDO previo (sugerencia/reserva); nunca toca 'app'/'import_excel'
+  await runner.query(`DELETE FROM ing_tareas WHERE proyecto_ext = $1 AND origen IN ('sugerencia','reserva')`, [proyectoExt])
 
   // Tipos a generar (stone solo si hay piedra)
   const { rows: tipos } = await runner.query<{ id: number; clave: string; nombre: string; dur_dias_tipico: number | null; dias_por_item: number | null }>(
@@ -54,11 +55,11 @@ export async function generarPlanIngenieria(
   // Encabezado del proyecto de ingeniería (fecha fija + inicio provisional = original)
   await runner.query(
     `INSERT INTO ing_proyectos (proyecto_ext, proyecto_id, fecha_inicio, fecha_entrega, fecha_inicio_original, n_items, presupuesto, origen)
-       VALUES ($1,$2,$3,$4,$3,$5,$6,'app')
+       VALUES ($1,$2,$3,$4,$3,$5,$6,$7)
      ON CONFLICT (proyecto_ext) DO UPDATE SET proyecto_id=EXCLUDED.proyecto_id, fecha_inicio=EXCLUDED.fecha_inicio,
        fecha_entrega=EXCLUDED.fecha_entrega, fecha_inicio_original=EXCLUDED.fecha_inicio_original,
-       n_items=EXCLUDED.n_items, presupuesto=EXCLUDED.presupuesto, updated_at=NOW()`,
-    [proyectoExt, proyectoId, fechaInicio, fecha_objetivo, items_qty, presupuesto])
+       n_items=EXCLUDED.n_items, presupuesto=EXCLUDED.presupuesto, origen=EXCLUDED.origen, updated_at=NOW()`,
+    [proyectoExt, proyectoId, fechaInicio, fecha_objetivo, items_qty, presupuesto, origen])
 
   // Crear las tareas (sin asignado; se propone después con sus fechas)
   const idPorClave = new Map<string, number>()
@@ -69,8 +70,8 @@ export async function generarPlanIngenieria(
       dur = Math.max(1, Math.round(items_qty * Number(t.dias_por_item)))
     const { rows } = await runner.query<{ id: number }>(
       `INSERT INTO ing_tareas (proyecto_ext, proyecto_id, tipo_id, nombre, allocation_pct, dur_dias, estado, origen)
-         VALUES ($1,$2,$3,$4,1.0,$5,'pendiente','app') RETURNING id`,
-      [proyectoExt, proyectoId, t.id, t.nombre, dur])
+         VALUES ($1,$2,$3,$4,1.0,$5,'pendiente',$6) RETURNING id`,
+      [proyectoExt, proyectoId, t.id, t.nombre, dur, origen])
     idPorClave.set(t.clave, rows[0].id)
     durPorClave.set(t.clave, dur)
   }
@@ -109,6 +110,18 @@ export async function generarPlanIngenieria(
   }
 
   return { creadas: incluir.length }
+}
+
+/** El PM ACEPTA el plan sugerido: lo endurece (origen 'sugerencia' → 'app') preservando
+ *  las ediciones que el PM haya hecho (podar/asignar/mover). Avanza el estado del deal. */
+export async function aceptarPlanPM(runner: QueryRunner, proyectoId: number): Promise<{ aceptadas: number; error?: string }> {
+  const { rows } = await runner.query<{ codigo: string }>(`SELECT codigo FROM proyectos WHERE id = $1`, [proyectoId])
+  if (!rows[0]) return { aceptadas: 0, error: 'proyecto no encontrado' }
+  const ext = rows[0].codigo
+  const r = await runner.query(`UPDATE ing_tareas SET origen = 'app', updated_at = NOW() WHERE proyecto_ext = $1 AND origen = 'sugerencia'`, [ext])
+  await runner.query(`UPDATE ing_proyectos SET origen = 'app', updated_at = NOW() WHERE proyecto_ext = $1 AND origen = 'sugerencia'`, [ext])
+  await runner.query(`UPDATE proyectos SET deal_estado = 'plan_propuesto' WHERE id = $1`, [proyectoId])
+  return { aceptadas: r.rowCount ?? 0 }
 }
 
 /** Re-ancla el día cero del plan de ingeniería a la firma del contrato y recalcula.

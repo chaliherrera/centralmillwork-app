@@ -58,6 +58,7 @@ export async function proponerIngeniero(runner: QueryRunner, inicio: string, fin
      SELECT e.nombre
        FROM engs e
        LEFT JOIN ing_tareas t ON t.asignado_nombre = e.nombre AND t.estado NOT IN ('hecha','na')
+            AND t.origen <> 'sugerencia'
             AND t.fecha_inicio <= $2 AND t.fecha_fin >= $1
       GROUP BY e.nombre
       ORDER BY COUNT(t.id) ASC, e.nombre

@@ -6,7 +6,7 @@ import { createError } from '../middleware/errorHandler'
 import { supabase, supabaseEnabled, SUPABASE_BUCKET } from '../utils/supabase'
 
 // ─── Schemas de validación ──────────────────────────────────────────────────
-const ESTADOS_PROYECTO = ['cotizacion', 'activo', 'en_pausa', 'completado', 'cancelado'] as const
+const ESTADOS_PROYECTO = ['prospecto', 'cotizacion', 'activo', 'en_pausa', 'completado', 'cancelado'] as const
 
 // Campos de la hoja de intake (migración 058). Millwork Date = fecha que pide el
 // cliente = fecha_entrega_solicitada (decisión de Chali, no se agrega fecha nueva).

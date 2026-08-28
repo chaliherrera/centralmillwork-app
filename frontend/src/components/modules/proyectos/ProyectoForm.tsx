@@ -93,10 +93,15 @@ export default function ProyectoForm({ open, onClose, proyecto, hideDates, intak
   }, [open])
 
   const mutation = useMutation({
-    mutationFn: (data: FormValues) =>
-      isEdit
-        ? proyectosService.update(proyecto!.id, toPayload(data))
-        : proyectosService.create(toPayload(data) as Omit<Proyecto, 'id' | 'created_at' | 'updated_at'>),
+    mutationFn: (data: FormValues) => {
+      const payload = toPayload(data) as any
+      // Creado desde Estimados = nace como PROSPECTO (invisible para Compras/Producción
+      // hasta que el cliente apruebe el schedule y pase a 'activo').
+      if (!isEdit && intake) payload.estado = 'prospecto'
+      return isEdit
+        ? proyectosService.update(proyecto!.id, payload)
+        : proyectosService.create(payload as Omit<Proyecto, 'id' | 'created_at' | 'updated_at'>)
+    },
     onSuccess: (res: any) => {
       qc.invalidateQueries({ queryKey: ['proyectos'] })
       toast.success(isEdit ? 'Proyecto actualizado' : 'Proyecto creado')
@@ -118,12 +123,19 @@ export default function ProyectoForm({ open, onClose, proyecto, hideDates, intak
             <input {...register('codigo')} className="input" placeholder="PRY-2026-001" />
             {errors.codigo && <p className="text-red-500 text-xs mt-1">{errors.codigo.message}</p>}
           </div>
-          <div>
-            <label className="label">Estado</label>
-            <select {...register('estado')} className="input">
-              {estadoOpts.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-            </select>
-          </div>
+          {!intake ? (
+            <div>
+              <label className="label">Estado</label>
+              <select {...register('estado')} className="input">
+                {estadoOpts.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+              </select>
+            </div>
+          ) : (
+            <div className="flex flex-col justify-end">
+              <span className="text-[11px] uppercase tracking-wider text-forest-600 font-semibold mb-1">Estado</span>
+              <span className="inline-flex items-center gap-1.5 text-sm text-forest-700 bg-forest-50 border border-forest-200 rounded-lg px-3 py-2 font-medium">Prospecto</span>
+            </div>
+          )}
         </div>
 
         <div>

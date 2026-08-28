@@ -10,8 +10,8 @@ import {
   crearTarea, actualizarTarea, getPlanProyecto,
   borrarTareaConReconexion, agregarDep, borrarDep,
 } from '../domain/tareas'
-import { crearReserva, listReservasPendientes, liberarReserva } from '../domain/reservas'
-import { generarPlanIngenieria } from '../domain/plan_inicial'
+import { listReservasPendientes, liberarReserva } from '../domain/reservas'
+import { generarPlanIngenieria, aceptarPlanPM } from '../domain/plan_inicial'
 
 function pid(req: Request): number {
   const id = parseInt(String(req.params.id ?? req.params.proyectoId), 10)
@@ -20,22 +20,32 @@ function pid(req: Request): number {
 }
 
 // POST /api/ingenieria/proyecto/:id/reservar
+// Estimados envía al PM → se genera el plan SUGERIDO completo (origen='sugerencia',
+// no bloquea capacidad dura) y el deal pasa a 'esperando_pm'.
 export async function reservarHandler(req: Request, res: Response, next: NextFunction) {
-  try { res.status(201).json({ data: await crearReserva(pool, pid(req)) }) } catch (e) { next(e) }
+  const client = await pool.connect()
+  try {
+    const id = pid(req)
+    await client.query('BEGIN')
+    const r = await generarPlanIngenieria(client, id, { origen: 'sugerencia' })
+    if (!r.error) await client.query(`UPDATE proyectos SET deal_estado = 'esperando_pm' WHERE id = $1`, [id])
+    await client.query('COMMIT')
+    if (r.error) return next(createError(r.error, 400))
+    res.status(201).json({ data: r })
+  } catch (e) { await client.query('ROLLBACK').catch(() => {}); next(e) } finally { client.release() }
 }
 // GET /api/ingenieria/reservas-pendientes
 export async function reservasPendientesHandler(_req: Request, res: Response, next: NextFunction) {
   try { res.json({ data: await listReservasPendientes(pool) }) } catch (e) { next(e) }
 }
 // POST /api/ingenieria/reserva/:proyectoId/confirmar
-// Opción B: el PM confirma → se genera el ESPEJO COMPLETO del plan de ingeniería
-// (todas las tareas + dependencias, pre-llenadas del intake), absorbiendo la reserva
-// tentativa. El PM poda y asigna en el plan del proyecto.
+// El PM ACEPTA el plan sugerido → se endurece (origen 'sugerencia' → 'app'), preservando
+// las ediciones del PM (podar/asignar/mover). El deal pasa a 'plan_propuesto'.
 export async function confirmarReservaHandler(req: Request, res: Response, next: NextFunction) {
   const client = await pool.connect()
   try {
     await client.query('BEGIN')
-    const r = await generarPlanIngenieria(client, pid(req))
+    const r = await aceptarPlanPM(client, pid(req))
     await client.query('COMMIT')
     if (r.error) return next(createError(r.error, 400))
     res.json({ data: r })
