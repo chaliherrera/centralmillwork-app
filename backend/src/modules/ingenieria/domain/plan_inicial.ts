@@ -124,6 +124,54 @@ export async function aceptarPlanPM(runner: QueryRunner, proyectoId: number): Pr
   return { aceptadas: r.rowCount ?? 0 }
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Handoff Estimados → Cliente → PM (decisión de Chali):
+//   plan_propuesto → (Estimados envía) → esperando_cliente → (Estimados registra
+//   la respuesta del cliente) → aprobado → (el PM ACTIVA) → proyecto 'activo'.
+// El PM es quien activa: no pierde control y todo su plan se enciende de una.
+// Cada transición valida el estado previo (máquina de estados honesta).
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Estimados manda el schedule al cliente para su aprobación. */
+export async function enviarAClienteDeal(runner: QueryRunner, proyectoId: number): Promise<{ ok: boolean; error?: string }> {
+  const { rowCount } = await runner.query(
+    `UPDATE proyectos SET deal_estado = 'esperando_cliente' WHERE id = $1 AND deal_estado = 'plan_propuesto'`, [proyectoId])
+  return rowCount ? { ok: true } : { ok: false, error: 'el plan tiene que estar aceptado por el PM antes de mandarlo al cliente' }
+}
+
+/** Estimados registra que el cliente aprobó el schedule. */
+export async function registrarAprobacionCliente(runner: QueryRunner, proyectoId: number): Promise<{ ok: boolean; error?: string }> {
+  const { rowCount } = await runner.query(
+    `UPDATE proyectos SET deal_estado = 'aprobado' WHERE id = $1 AND deal_estado = 'esperando_cliente'`, [proyectoId])
+  return rowCount ? { ok: true } : { ok: false, error: 'el schedule tiene que estar enviado al cliente primero' }
+}
+
+/** El PM activa el proyecto: prospecto → activo (todo el plan queda en marcha). */
+export async function activarProyecto(runner: QueryRunner, proyectoId: number): Promise<{ ok: boolean; error?: string }> {
+  const { rowCount } = await runner.query(
+    `UPDATE proyectos SET estado = 'activo' WHERE id = $1 AND deal_estado = 'aprobado' AND estado = 'prospecto'`, [proyectoId])
+  return rowCount ? { ok: true } : { ok: false, error: 'el cliente todavía no aprobó el schedule' }
+}
+
+export interface DealEnCurso {
+  proyecto_id: number; codigo: string; nombre: string; cliente: string | null
+  estado: string; deal_estado: string; fecha_objetivo: string | null; n_tareas: number
+}
+
+/** Deals post-aceptación del PM que siguen en curso (prospecto): esperando el handoff
+ *  al cliente o la activación. Alimenta el tracker de Estimados y el de "activar" del PM. */
+export async function listDealsEnCurso(runner: QueryRunner): Promise<DealEnCurso[]> {
+  const { rows } = await runner.query<DealEnCurso>(
+    `SELECT p.id AS proyecto_id, p.codigo, p.nombre, p.cliente, p.estado, p.deal_estado,
+            to_char(sp.fecha_objetivo,'YYYY-MM-DD') AS fecha_objetivo,
+            (SELECT count(*)::int FROM ing_tareas t WHERE t.proyecto_id = p.id AND t.origen = 'app') AS n_tareas
+       FROM proyectos p
+       LEFT JOIN schedule_planes sp ON sp.proyecto_id = p.id AND sp.scope = 'proyecto'
+      WHERE p.estado = 'prospecto' AND p.deal_estado IN ('plan_propuesto','esperando_cliente','aprobado')
+      ORDER BY p.codigo`)
+  return rows
+}
+
 /** Re-ancla el día cero del plan de ingeniería a la firma del contrato y recalcula.
  *  Guarda el inicio original la primera vez; el delta documenta la demora del cliente. */
 export async function reanclarPlanAFirma(runner: QueryRunner, proyectoId: number, fechaFirma: string): Promise<{ ok: boolean }> {

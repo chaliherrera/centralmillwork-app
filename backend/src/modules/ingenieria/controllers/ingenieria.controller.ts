@@ -12,7 +12,10 @@ import {
   borrarTareaConReconexion, agregarDep, borrarDep,
 } from '../domain/tareas'
 import { listReservasPendientes, liberarReserva } from '../domain/reservas'
-import { generarPlanIngenieria, aceptarPlanPM } from '../domain/plan_inicial'
+import {
+  generarPlanIngenieria, aceptarPlanPM,
+  enviarAClienteDeal, registrarAprobacionCliente, activarProyecto, listDealsEnCurso,
+} from '../domain/plan_inicial'
 
 function pid(req: Request): number {
   const id = parseInt(String(req.params.id ?? req.params.proyectoId), 10)
@@ -55,6 +58,36 @@ export async function confirmarReservaHandler(req: Request, res: Response, next:
 // DELETE /api/ingenieria/proyecto/:id/reserva
 export async function liberarReservaHandler(req: Request, res: Response, next: NextFunction) {
   try { res.json({ data: await liberarReserva(pool, pid(req)) }) } catch (e) { next(e) }
+}
+
+// ── Handoff Estimados → Cliente → PM ─────────────────────────────────────────
+// GET /api/ingenieria/deals — deals en curso (tracker de Estimados + activar del PM)
+export async function dealsEnCursoHandler(_req: Request, res: Response, next: NextFunction) {
+  try { res.json({ data: await listDealsEnCurso(pool) }) } catch (e) { next(e) }
+}
+// POST /api/ingenieria/proyecto/:id/enviar-cliente — Estimados manda el schedule al cliente
+export async function enviarClienteHandler(req: Request, res: Response, next: NextFunction) {
+  try {
+    const r = await enviarAClienteDeal(pool, pid(req))
+    if (!r.ok) return next(createError(r.error ?? 'no se pudo enviar', 400))
+    res.json({ data: r })
+  } catch (e) { next(e) }
+}
+// POST /api/ingenieria/proyecto/:id/cliente-aprobo — Estimados registra la aprobación del cliente
+export async function clienteAproboHandler(req: Request, res: Response, next: NextFunction) {
+  try {
+    const r = await registrarAprobacionCliente(pool, pid(req))
+    if (!r.ok) return next(createError(r.error ?? 'no se pudo registrar', 400))
+    res.json({ data: r })
+  } catch (e) { next(e) }
+}
+// POST /api/ingenieria/proyecto/:id/activar — el PM activa el proyecto (prospecto → activo)
+export async function activarProyectoHandler(req: Request, res: Response, next: NextFunction) {
+  try {
+    const r = await activarProyecto(pool, pid(req))
+    if (!r.ok) return next(createError(r.error ?? 'no se pudo activar', 400))
+    res.json({ data: r })
+  } catch (e) { next(e) }
 }
 
 export async function resumenHandler(_req: Request, res: Response, next: NextFunction) {

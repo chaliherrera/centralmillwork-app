@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { ClipboardList, Inbox, Gauge } from 'lucide-react'
 import MiTrabajo from '@/components/modules/schedule/MiTrabajo'
 import ReservasPendientes from '@/components/modules/estimados/ReservasPendientes'
+import DealsEnCurso from '@/components/modules/estimados/DealsEnCurso'
 import IngenieriaPlan from './IngenieriaPlan'
 
 // Escritorio del PM. El PM es el dueño del recurso Ingeniería: acá tiene su bandeja
@@ -37,6 +38,7 @@ export default function ProjectMgmt() {
       {tab === 'bandeja' ? (
         <div className="max-w-3xl mx-auto space-y-5 mt-4">
           <ReservasPendientes onRevisar={onRevisar} />
+          <DealsEnCurso mode="pm" />
           <MiTrabajo area="pm" emptyMsg="El PM no tiene nada pendiente ahora mismo. 🎉" />
         </div>
       ) : (

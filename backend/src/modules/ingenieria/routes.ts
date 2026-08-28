@@ -6,6 +6,7 @@ import {
   crearTareaHandler, actualizarTareaHandler, avanceTareaHandler, borrarTareaHandler,
   agregarDepHandler, borrarDepHandler,
   reservarHandler, reservasPendientesHandler, confirmarReservaHandler, liberarReservaHandler,
+  dealsEnCursoHandler, enviarClienteHandler, clienteAproboHandler, activarProyectoHandler,
 } from './controllers/ingenieria.controller'
 
 const router = Router()
@@ -39,5 +40,12 @@ router.post('/proyecto/:id/reservar', PM, reservarHandler)
 router.delete('/proyecto/:id/reserva', PM, liberarReservaHandler)
 router.get('/reservas-pendientes', READ, reservasPendientesHandler)
 router.post('/reserva/:proyectoId/confirmar', PM, confirmarReservaHandler)
+
+// Handoff Estimados → Cliente → PM. Estimados y PM comparten roles (ADMIN/PM);
+// la separación es por ubicación en la UI (tracker de Estimados vs bandeja del PM).
+router.get('/deals', READ, dealsEnCursoHandler)
+router.post('/proyecto/:id/enviar-cliente', PM, enviarClienteHandler)
+router.post('/proyecto/:id/cliente-aprobo', PM, clienteAproboHandler)
+router.post('/proyecto/:id/activar', PM, activarProyectoHandler)
 
 export default router

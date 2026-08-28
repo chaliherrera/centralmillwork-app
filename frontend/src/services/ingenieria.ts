@@ -48,6 +48,9 @@ export interface IngTareaCelda {
 export interface IngEtapaCarga { clave: string; nombre: string; orden: number; hito: string | null; counts: number[]; overlay?: number[] }
 export interface IngCargaEtapas { semanas: string[]; etapas: IngEtapaCarga[]; sugerencia?: string }
 export interface IngProyectoEtapa { proyecto_ext: string | null; nombre: string; asignado_nombre: string | null; fecha_inicio: string | null; fecha_fin: string | null }
+// Deal en curso (handoff Estimados → Cliente → PM)
+export type DealEstado = 'borrador' | 'esperando_pm' | 'plan_propuesto' | 'esperando_cliente' | 'aprobado'
+export interface IngDealEnCurso { proyecto_id: number; codigo: string; nombre: string; cliente: string | null; estado: string; deal_estado: DealEstado; fecha_objetivo: string | null; n_tareas: number }
 export interface ReservaTarea { id: number; nombre: string; asignado_nombre: string | null; fecha_inicio: string | null; fecha_fin: string | null; tipo_clave: string | null }
 export interface ReservaProyecto { proyecto_id: number; proyecto_codigo: string; proyecto_nombre: string; proyecto_ext: string | null; fecha_objetivo: string | null; tareas: ReservaTarea[] }
 
@@ -114,6 +117,16 @@ export const ingenieriaService = {
     api.get<ApiResponse<ReservaProyecto[]>>('/ingenieria/reservas-pendientes').then((r) => r.data),
   confirmarReserva: (proyectoId: number, asignaciones?: { id: number; asignado_nombre: string }[]) =>
     api.post<ApiResponse<{ confirmadas: number }>>(`/ingenieria/reserva/${proyectoId}/confirmar`, { asignaciones }).then((r) => r.data),
+
+  // ── Handoff Estimados → Cliente → PM ──
+  dealsEnCurso: () =>
+    api.get<ApiResponse<IngDealEnCurso[]>>('/ingenieria/deals').then((r) => r.data),
+  enviarCliente: (proyectoId: number) =>
+    api.post<ApiResponse<{ ok: boolean }>>(`/ingenieria/proyecto/${proyectoId}/enviar-cliente`).then((r) => r.data),
+  clienteAprobo: (proyectoId: number) =>
+    api.post<ApiResponse<{ ok: boolean }>>(`/ingenieria/proyecto/${proyectoId}/cliente-aprobo`).then((r) => r.data),
+  activarProyecto: (proyectoId: number) =>
+    api.post<ApiResponse<{ ok: boolean }>>(`/ingenieria/proyecto/${proyectoId}/activar`).then((r) => r.data),
   actualizarTarea: (id: number, t: Partial<TareaInput>) =>
     api.patch<ApiResponse<{ ok: boolean }>>(`/ingenieria/tareas/${id}`, t).then((r) => r.data),
   // Ingeniería reporta avance de su tarea (solo estado/comentario)

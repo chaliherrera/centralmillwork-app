@@ -1,5 +1,6 @@
 import { FileSignature } from 'lucide-react'
 import EstimadosWizard from '@/components/modules/estimados/EstimadosWizard'
+import DealsEnCurso from '@/components/modules/estimados/DealsEnCurso'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Escritorio de Estimación — la PUERTA DE ENTRADA del schedule.
@@ -20,6 +21,7 @@ export default function Estimacion() {
         </div>
       </div>
 
+      <DealsEnCurso mode="estimados" />
       <EstimadosWizard />
     </div>
   )
