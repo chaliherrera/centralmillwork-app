@@ -12,14 +12,22 @@ const MES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct
 const DAY = 86400000
 const d = (iso: string) => new Date(iso + 'T00:00:00')
 
-export default function MapaEtapas() {
+// Marca la huella del plan sugerido del proyecto en negociación (prop sugerenciaExt).
+const FOREST = '#2f5e4f'
+
+export default function MapaEtapas({ sugerenciaExt }: { sugerenciaExt?: string } = {}) {
   const [carga, setCarga] = useState<IngCargaEtapas | null>(null)
   const [loading, setLoading] = useState(true)
   const [sel, setSel] = useState<{ etapa: string; nombre: string; sem: string } | null>(null)
   const [detail, setDetail] = useState<IngProyectoEtapa[] | null>(null)
   const [loadingDet, setLoadingDet] = useState(false)
 
-  useEffect(() => { ingenieriaService.getCargaEtapas().then((r) => setCarga(r.data)).catch(() => {}).finally(() => setLoading(false)) }, [])
+  useEffect(() => {
+    setLoading(true)
+    ingenieriaService.getCargaEtapas(sugerenciaExt).then((r) => setCarga(r.data)).catch(() => {}).finally(() => setLoading(false))
+  }, [sugerenciaExt])
+
+  const hayOverlay = !!sugerenciaExt && !!carga?.etapas.some((e) => (e.overlay ?? []).some((v) => v > 0))
 
   const g = useMemo(() => {
     if (!carga || !carga.semanas.length || !carga.etapas.length) return null
@@ -57,7 +65,9 @@ export default function MapaEtapas() {
       <div className="flex items-center gap-2 px-4 py-3 border-b border-stone-100">
         <Layers size={17} className="text-forest-600" />
         <h2 className="font-bold text-stone-800">Portafolio por etapas · cada semana</h2>
-        <span className="ml-auto text-xs text-stone-400">cuántos proyectos hay en cada etapa · click para verlos</span>
+        <span className="ml-auto text-xs text-stone-400">
+          {hayOverlay ? <>el <b className="text-forest-700">borde verde</b> = dónde caería este proyecto</> : 'cuántos proyectos hay en cada etapa · click para verlos'}
+        </span>
       </div>
       <div className="overflow-x-auto"><div className="min-w-[880px]">
         <div className="flex items-stretch border-b border-stone-100 bg-stone-50/60">
@@ -74,11 +84,16 @@ export default function MapaEtapas() {
               {e.hito && <span className="text-[9px] font-mono text-stone-400">{e.hito}</span>}
             </div>
             <div className="flex-1 flex gap-px py-1">
-              {g.semanas.map((wk, i) => { const n = e.counts[i] ?? 0; const c = cell(n); return (
+              {g.semanas.map((wk, i) => { const n = e.counts[i] ?? 0; const ov = e.overlay?.[i] ?? 0; const c = cell(n); return (
                 <button key={i} onClick={() => n > 0 && abrir(e.clave, e.nombre, wk)} disabled={n <= 0}
-                  title={`${e.nombre} · ${fmtW(wk)}: ${n} proyecto${n === 1 ? '' : 's'}${n > 0 ? ' — click para ver' : ''}`}
-                  className={`flex-1 h-6 rounded-sm flex items-center justify-center text-[10px] font-bold transition-shadow ${n > 0 ? 'cursor-pointer hover:ring-2 hover:ring-forest-400' : 'cursor-default'}`}
-                  style={{ background: c.bg, color: c.txt }}>{n > 0 ? n : ''}</button>
+                  title={ov > 0
+                    ? `${e.nombre} · ${fmtW(wk)}: este proyecto caería acá${n > 0 ? ` — encima de ${n} proyecto${n === 1 ? '' : 's'} ya comprometido${n === 1 ? '' : 's'}` : ' (semana libre)'}`
+                    : `${e.nombre} · ${fmtW(wk)}: ${n} proyecto${n === 1 ? '' : 's'}${n > 0 ? ' — click para ver' : ''}`}
+                  className={`relative flex-1 h-6 rounded-sm flex items-center justify-center text-[10px] font-bold transition-shadow ${n > 0 ? 'cursor-pointer hover:ring-2 hover:ring-forest-400' : 'cursor-default'}`}
+                  style={{ background: c.bg, color: c.txt, boxShadow: ov > 0 ? `inset 0 0 0 2px ${FOREST}` : undefined }}>
+                  {n > 0 ? n : ''}
+                  {ov > 0 && <span className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full ring-2 ring-white" style={{ background: FOREST }} />}
+                </button>
               ) })}
             </div>
           </div>
@@ -89,6 +104,7 @@ export default function MapaEtapas() {
         <span className="inline-flex items-center gap-1.5"><span className="w-3.5 h-3.5 rounded-sm inline-block" style={{ background: '#bbf7d0' }} /> 1-2 proyectos</span>
         <span className="inline-flex items-center gap-1.5"><span className="w-3.5 h-3.5 rounded-sm inline-block" style={{ background: '#fde68a' }} /> 3-4</span>
         <span className="inline-flex items-center gap-1.5"><span className="w-3.5 h-3.5 rounded-sm inline-block" style={{ background: '#fecaca' }} /> 5+ (congestión)</span>
+        {hayOverlay && <span className="inline-flex items-center gap-1.5"><span className="w-3.5 h-3.5 rounded-sm inline-block ring-1 ring-white" style={{ background: '#f5f5f4', boxShadow: `inset 0 0 0 2px ${FOREST}` }} /> este proyecto (sugerido)</span>}
         <span className="italic text-stone-400">El número es cuántos proyectos están en esa etapa esa semana.</span>
       </div>
 

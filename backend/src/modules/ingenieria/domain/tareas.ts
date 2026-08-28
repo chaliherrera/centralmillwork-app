@@ -156,37 +156,76 @@ export async function getTareasDeCelda(runner: QueryRunner, ingeniero: string, s
 // ── Mapa de calor de ETAPAS del portafolio (herramienta de negociación de Estimados) ──
 // Cuántos proyectos están en cada etapa cada semana. Solo planes REALES (Excel + aceptados
 // por el PM); las sugerencias (deals sin confirmar) no cuentan.
-export interface EtapaCarga { clave: string; nombre: string; orden: number; hito: string | null; counts: number[] }
-export interface CargaEtapasResult { semanas: string[]; etapas: EtapaCarga[] }
+export interface EtapaCarga { clave: string; nombre: string; orden: number; hito: string | null; counts: number[]; overlay?: number[] }
+export interface CargaEtapasResult { semanas: string[]; etapas: EtapaCarga[]; sugerencia?: string }
 
-export async function getCargaPorEtapa(runner: QueryRunner): Promise<CargaEtapasResult> {
+// Rango de semanas = plan FIRME (import_excel/app) + el plan SUGERIDO del proyecto en
+// negociación (si se pasa), para que el overlay tenga columnas donde caer aunque el
+// proyecto nuevo se agende más allá del portafolio actual. $1 = proyecto_ext sugerido (o null).
+const BOUNDS_CTE = `
+  base_span AS (
+    SELECT fecha_inicio, fecha_fin FROM ing_tareas
+     WHERE fecha_inicio IS NOT NULL AND origen IN ('import_excel','app')
+    UNION ALL
+    SELECT fecha_inicio, fecha_fin FROM ing_tareas
+     WHERE fecha_inicio IS NOT NULL AND origen = 'sugerencia' AND proyecto_ext = $1
+  ),
+  bounds AS (SELECT date_trunc('week', min(fecha_inicio))::date AS d0, max(fecha_fin)::date AS d1 FROM base_span),
+  semanas AS (SELECT generate_series((SELECT d0 FROM bounds), (SELECT d1 FROM bounds), interval '7 day')::date AS wk)`
+
+export async function getCargaPorEtapa(runner: QueryRunner, opts?: { sugerenciaExt?: string }): Promise<CargaEtapasResult> {
+  const sug = opts?.sugerenciaExt ?? null
+
   const { rows: sem } = await runner.query<{ wk: string }>(
-    `WITH bounds AS (SELECT date_trunc('week', min(fecha_inicio))::date AS d0, max(fecha_fin)::date AS d1
-                       FROM ing_tareas WHERE fecha_inicio IS NOT NULL AND origen IN ('import_excel','app'))
-     SELECT to_char(generate_series((SELECT d0 FROM bounds), (SELECT d1 FROM bounds), interval '7 day')::date,'YYYY-MM-DD') AS wk`)
+    `WITH ${BOUNDS_CTE} SELECT to_char(wk,'YYYY-MM-DD') AS wk FROM semanas`, [sug])
   const semanas = sem.map((s) => s.wk)
   const wkIdx = new Map(semanas.map((w, i) => [w, i]))
 
+  // Carga base = proyectos FIRMES en cada etapa/semana (lo que ya está comprometido).
   const { rows } = await runner.query<{ clave: string; nombre: string; orden: number; hito: string | null; wk: string; n: string }>(
-    `WITH bounds AS (SELECT date_trunc('week', min(fecha_inicio))::date AS d0, max(fecha_fin)::date AS d1
-                       FROM ing_tareas WHERE fecha_inicio IS NOT NULL AND origen IN ('import_excel','app')),
-     semanas AS (SELECT generate_series((SELECT d0 FROM bounds), (SELECT d1 FROM bounds), interval '7 day')::date AS wk)
+    `WITH ${BOUNDS_CTE}
      SELECT tt.clave, tt.nombre, tt.orden, tt.hito_codigo AS hito, to_char(s.wk,'YYYY-MM-DD') AS wk,
             COUNT(DISTINCT t.proyecto_ext) AS n
        FROM ing_tareas t
        JOIN ing_tarea_tipos tt ON tt.id = t.tipo_id
        JOIN semanas s ON t.fecha_inicio <= s.wk + 6 AND t.fecha_fin >= s.wk
       WHERE t.estado <> 'hecha' AND t.origen IN ('import_excel','app')
-      GROUP BY tt.clave, tt.nombre, tt.orden, tt.hito_codigo, s.wk`)
+      GROUP BY tt.clave, tt.nombre, tt.orden, tt.hito_codigo, s.wk`, [sug])
 
   const byE = new Map<string, EtapaCarga>()
+  const ensure = (clave: string, nombre: string, orden: number, hito: string | null): EtapaCarga => {
+    let g = byE.get(clave)
+    if (!g) {
+      g = { clave, nombre, orden, hito, counts: new Array(semanas.length).fill(0) }
+      if (sug) g.overlay = new Array(semanas.length).fill(0)
+      byE.set(clave, g)
+    }
+    return g
+  }
   for (const r of rows) {
-    let g = byE.get(r.clave)
-    if (!g) { g = { clave: r.clave, nombre: r.nombre, orden: r.orden, hito: r.hito, counts: new Array(semanas.length).fill(0) }; byE.set(r.clave, g) }
+    const g = ensure(r.clave, r.nombre, r.orden, r.hito)
     const i = wkIdx.get(r.wk); if (i !== undefined) g.counts[i] = +r.n
   }
+
+  // Overlay = huella del plan SUGERIDO del proyecto en negociación (dónde caería, encima de lo firme).
+  if (sug) {
+    const { rows: ov } = await runner.query<{ clave: string; nombre: string; orden: number; hito: string | null; wk: string; n: string }>(
+      `WITH ${BOUNDS_CTE}
+       SELECT tt.clave, tt.nombre, tt.orden, tt.hito_codigo AS hito, to_char(s.wk,'YYYY-MM-DD') AS wk,
+              COUNT(DISTINCT t.id) AS n
+         FROM ing_tareas t
+         JOIN ing_tarea_tipos tt ON tt.id = t.tipo_id
+         JOIN semanas s ON t.fecha_inicio <= s.wk + 6 AND t.fecha_fin >= s.wk
+        WHERE t.estado <> 'hecha' AND t.origen = 'sugerencia' AND t.proyecto_ext = $1
+        GROUP BY tt.clave, tt.nombre, tt.orden, tt.hito_codigo, s.wk`, [sug])
+    for (const r of ov) {
+      const g = ensure(r.clave, r.nombre, r.orden, r.hito)
+      const i = wkIdx.get(r.wk); if (i !== undefined && g.overlay) g.overlay[i] = +r.n
+    }
+  }
+
   const etapas = [...byE.values()].sort((a, b) => a.orden - b.orden)
-  return { semanas, etapas }
+  return { semanas, etapas, sugerencia: sug ?? undefined }
 }
 
 /** Proyectos en una etapa una semana (detalle al hacer click en el heatmap de etapas). */

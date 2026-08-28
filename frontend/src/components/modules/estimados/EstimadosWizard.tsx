@@ -198,7 +198,7 @@ export default function EstimadosWizard() {
             }} />
             <div className="pt-1">
               <div className="text-[11px] uppercase tracking-wider text-stone-400 font-semibold mb-2">Portafolio — dónde hay lugar en la agenda</div>
-              <MapaEtapas />
+              <MapaEtapas sugerenciaExt={sel?.codigo} />
             </div>
             {factRes && (
               <div className="rounded-xl border border-forest-200 bg-forest-50/40 p-4">
@@ -233,8 +233,14 @@ export default function EstimadosWizard() {
                 {enviandoPM ? <Loader2 className="animate-spin" size={16} /> : <Send size={15} />} Enviar al PM
               </button>
             ) : (
-              <div className="rounded-lg bg-emerald-50 border border-emerald-200 px-3 py-2.5 text-sm text-emerald-800 flex items-center gap-2">
-                <CheckCircle2 size={16} /> Enviado. El PM acepta la fecha y confirma la reserva en su bandeja. Continuá cuando quieras.
+              <div className="space-y-3">
+                <div className="rounded-lg bg-emerald-50 border border-emerald-200 px-3 py-2.5 text-sm text-emerald-800 flex items-center gap-2">
+                  <CheckCircle2 size={16} /> Enviado. El PM acepta la fecha y confirma la reserva en su bandeja. Continuá cuando quieras.
+                </div>
+                <div>
+                  <div className="text-[11px] uppercase tracking-wider text-stone-400 font-semibold mb-2">Así queda tu proyecto sobre el portafolio</div>
+                  <MapaEtapas sugerenciaExt={sel.codigo} />
+                </div>
               </div>
             )}
             {error && <div className="rounded-lg bg-rose-50 border border-rose-200 px-3 py-2 text-sm text-rose-700">{error}</div>}

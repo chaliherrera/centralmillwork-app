@@ -88,8 +88,12 @@ export async function cargaDetalleHandler(req: Request, res: Response, next: Nex
 }
 
 // GET /api/ingenieria/carga-etapas — mapa de calor de etapas del portafolio
-export async function cargaEtapasHandler(_req: Request, res: Response, next: NextFunction) {
-  try { res.json({ data: await getCargaPorEtapa(pool) }) } catch (e) { next(e) }
+// ?sugerencia=<proyecto_ext> superpone la huella del plan sugerido de ese proyecto.
+export async function cargaEtapasHandler(req: Request, res: Response, next: NextFunction) {
+  try {
+    const sug = typeof req.query.sugerencia === 'string' && req.query.sugerencia ? req.query.sugerencia : undefined
+    res.json({ data: await getCargaPorEtapa(pool, { sugerenciaExt: sug }) })
+  } catch (e) { next(e) }
 }
 // GET /api/ingenieria/carga-etapas/detalle?etapa=<clave>&semana=<YYYY-MM-DD>
 export async function etapaDetalleHandler(req: Request, res: Response, next: NextFunction) {
