@@ -118,6 +118,25 @@ export async function actualizarTareaHandler(req: Request, res: Response, next: 
   } catch (e) { next(e) }
 }
 
+// PATCH /api/ingenieria/tareas/:id/avance — Ingeniería reporta avance de SU tarea.
+// Solo toca estado/comentario (ejecución); la estructura del plan es del PM.
+const avanceSchema = z.object({
+  estado: z.enum(['pendiente', 'en_curso', 'hecha', 'na']).optional(),
+  comentario: z.string().max(1000).nullish(),
+})
+export async function avanceTareaHandler(req: Request, res: Response, next: NextFunction) {
+  const id = parseInt(String(req.params.id), 10)
+  if (Number.isNaN(id)) return next(createError('id inválido', 400))
+  const parsed = avanceSchema.safeParse(req.body)
+  if (!parsed.success || (parsed.data.estado === undefined && parsed.data.comentario === undefined))
+    return next(createError('Datos inválidos', 400))
+  try {
+    const ok = await actualizarTarea(pool, id, parsed.data as any)
+    if (!ok) return next(createError('tarea no encontrada', 404))
+    res.json({ data: { ok: true } })
+  } catch (e) { next(e) }
+}
+
 export async function borrarTareaHandler(req: Request, res: Response, next: NextFunction) {
   const id = parseInt(String(req.params.id), 10)
   if (Number.isNaN(id)) return next(createError('id inválido', 400))

@@ -108,6 +108,9 @@ export const ingenieriaService = {
     api.post<ApiResponse<{ confirmadas: number }>>(`/ingenieria/reserva/${proyectoId}/confirmar`, { asignaciones }).then((r) => r.data),
   actualizarTarea: (id: number, t: Partial<TareaInput>) =>
     api.patch<ApiResponse<{ ok: boolean }>>(`/ingenieria/tareas/${id}`, t).then((r) => r.data),
+  // Ingeniería reporta avance de su tarea (solo estado/comentario)
+  avanceTarea: (id: number, data: { estado?: string; comentario?: string | null }) =>
+    api.patch<ApiResponse<{ ok: boolean }>>(`/ingenieria/tareas/${id}/avance`, data).then((r) => r.data),
   borrarTarea: (id: number) =>
     api.delete<ApiResponse<{ ok: boolean; reconectadas: number }>>(`/ingenieria/tareas/${id}`).then((r) => r.data),
 
