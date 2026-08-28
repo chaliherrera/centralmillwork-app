@@ -338,6 +338,22 @@ export async function actualizarTarea(runner: QueryRunner, id: number, t: TareaI
   return (rowCount ?? 0) > 0
 }
 
+/** Reporte de AVANCE (Ingeniería): toca SOLO estado/comentario, con updates
+ *  parciales — nunca pisa asignado_nombre, fechas, allocation ni dur (eso es
+ *  estructura del plan, del PM). Distinto de actualizarTarea (edición completa). */
+export async function reportarAvance(
+  runner: QueryRunner, id: number, data: { estado?: string; comentario?: string | null }
+): Promise<boolean> {
+  const sets: string[] = []
+  const vals: unknown[] = [id]
+  if (data.estado !== undefined) { vals.push(data.estado); sets.push(`estado = $${vals.length}`) }
+  if (data.comentario !== undefined) { vals.push(data.comentario); sets.push(`comentario = $${vals.length}`) }
+  if (!sets.length) return false
+  sets.push('updated_at = NOW()')
+  const { rowCount } = await runner.query(`UPDATE ing_tareas SET ${sets.join(', ')} WHERE id = $1`, vals)
+  return (rowCount ?? 0) > 0
+}
+
 /**
  * Borra una tarea RECONECTANDO la cadena: cada sucesor pasa a depender de cada
  * predecesor de la tarea borrada (lag 0). Así, borrar "Muestras" no rompe la

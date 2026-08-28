@@ -8,7 +8,7 @@ import { createError } from '../../../middleware/errorHandler'
 import {
   getResumen, listProyectos, listTareas, getCargaPorIngeniero, getTareasDeCelda,
   getCargaPorEtapa, getProyectosDeEtapa,
-  crearTarea, actualizarTarea, getPlanProyecto,
+  crearTarea, actualizarTarea, reportarAvance, getPlanProyecto,
   borrarTareaConReconexion, agregarDep, borrarDep,
 } from '../domain/tareas'
 import { listReservasPendientes, liberarReserva } from '../domain/reservas'
@@ -193,7 +193,7 @@ export async function avanceTareaHandler(req: Request, res: Response, next: Next
   if (!parsed.success || (parsed.data.estado === undefined && parsed.data.comentario === undefined))
     return next(createError('Datos inválidos', 400))
   try {
-    const ok = await actualizarTarea(pool, id, parsed.data as any)
+    const ok = await reportarAvance(pool, id, parsed.data)
     if (!ok) return next(createError('tarea no encontrada', 404))
     res.json({ data: { ok: true } })
   } catch (e) { next(e) }
