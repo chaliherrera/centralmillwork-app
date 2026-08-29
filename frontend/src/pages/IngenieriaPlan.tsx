@@ -82,6 +82,7 @@ export default function IngenieriaPlan({ embedded, initialProyecto, initialMode 
             : <VistaCarga all={all} proyectos={proyectos} selEng={selEng} setSelEng={setSelEng} onEdit={setEdit} />}
 
       {edit && <EditModal tarea={edit === 'new' ? null : edit} proyecto={selProj}
+        engineers={[...new Set(all.map((t) => t.asignado_nombre).filter(Boolean) as string[])].sort((a, b) => a.localeCompare(b))}
         planTareas={mode === 'proyecto' ? plan?.tareas ?? null : null} aristas={mode === 'proyecto' ? plan?.aristas ?? null : null}
         onClose={() => setEdit(null)} onSaved={async () => { setEdit(null); await Promise.all([loadAll(), loadPlan()]) }} />}
     </div>
@@ -529,12 +530,16 @@ function Stat({ icon, n, l }: { icon: React.ReactNode; n: number; l: string }) {
   return <div><div className="flex items-center justify-center gap-1 text-stone-400">{icon}</div><div className="text-xl font-bold text-stone-900 tabular-nums leading-none mt-0.5">{n}</div><div className="text-[10px] uppercase tracking-wide text-stone-400">{l}</div></div>
 }
 
-function EditModal({ tarea, proyecto, planTareas, aristas, onClose, onSaved }: { tarea: IngTarea | null; proyecto: string; planTareas: IngTareaPlan[] | null; aristas: IngArista[] | null; onClose: () => void; onSaved: () => void }) {
+function EditModal({ tarea, proyecto, engineers, planTareas, aristas, onClose, onSaved }: { tarea: IngTarea | null; proyecto: string; engineers: string[]; planTareas: IngTareaPlan[] | null; aristas: IngArista[] | null; onClose: () => void; onSaved: () => void }) {
   const [f, setF] = useState<TareaInput>({
     proyecto_ext: tarea?.proyecto_ext ?? proyecto, nombre: tarea?.nombre ?? '', asignado_nombre: tarea?.asignado_nombre ?? '',
     allocation_pct: tarea?.allocation_pct ?? 1, dur_dias: tarea?.dur_dias ?? 1,
     fecha_inicio: tarea?.fecha_inicio ?? '', fecha_fin: tarea?.fecha_fin ?? '', estado: tarea?.estado ?? 'pendiente', comentario: tarea?.comentario ?? '',
   })
+  // Responsable por desplegable (evita nombres partidos por tipeo). "Otro…" abre texto libre
+  // solo para dar de alta un ingeniero genuinamente nuevo.
+  const asignActual = tarea?.asignado_nombre ?? ''
+  const [nuevoIng, setNuevoIng] = useState(!!asignActual && !engineers.includes(asignActual))
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState<string | null>(null)
   const set = (k: keyof TareaInput, v: any) => setF((p) => ({ ...p, [k]: v }))
@@ -573,7 +578,20 @@ function EditModal({ tarea, proyecto, planTareas, aristas, onClose, onSaved }: {
         <div className="space-y-3">
           <L t="Tarea"><input value={f.nombre} onChange={(e) => set('nombre', e.target.value)} className="inp" /></L>
           <div className="grid grid-cols-2 gap-3">
-            <L t="Responsable"><input value={f.asignado_nombre ?? ''} onChange={(e) => set('asignado_nombre', e.target.value)} className="inp" /></L>
+            <L t="Responsable">
+              {nuevoIng ? (
+                <div className="flex items-center gap-1.5">
+                  <input value={f.asignado_nombre ?? ''} onChange={(e) => set('asignado_nombre', e.target.value)} placeholder="Nombre del ingeniero" className="inp" autoFocus />
+                  <button type="button" onClick={() => { setNuevoIng(false); set('asignado_nombre', '') }} title="Elegir de la lista" className="text-[11px] text-stone-400 hover:text-stone-700 whitespace-nowrap">↩ lista</button>
+                </div>
+              ) : (
+                <select value={f.asignado_nombre ?? ''} onChange={(e) => { if (e.target.value === '__nuevo__') { setNuevoIng(true); set('asignado_nombre', '') } else set('asignado_nombre', e.target.value) }} className="inp">
+                  <option value="">— sin asignar —</option>
+                  {engineers.map((n) => <option key={n} value={n}>{n}</option>)}
+                  <option value="__nuevo__">+ Otro…</option>
+                </select>
+              )}
+            </L>
             <L t="Estado"><select value={f.estado} onChange={(e) => set('estado', e.target.value)} className="inp"><option value="pendiente">Pendiente</option><option value="en_curso">En curso</option><option value="hecha">Completada</option><option value="na">No aplica</option></select></L>
           </div>
           <div className="grid grid-cols-2 gap-3">

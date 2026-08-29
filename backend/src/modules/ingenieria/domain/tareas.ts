@@ -312,16 +312,33 @@ export interface TareaInput {
   estado?: string; comentario?: string | null
 }
 
+/** Normaliza el nombre del ingeniero: trim + reusa la forma canónica ya existente si
+ *  hay un match sin distinguir mayúsculas ("ADRIANA MENDEZ" → "Adriana Mendez"). Evita
+ *  que un ingeniero quede partido en dos por diferencias de tipeo. */
+async function canonicalIngeniero(runner: QueryRunner, nombre: string | null | undefined): Promise<string | null> {
+  const n = (nombre ?? '').trim()
+  if (!n) return null
+  const { rows } = await runner.query<{ asignado_nombre: string }>(
+    `SELECT asignado_nombre FROM ing_tareas
+      WHERE asignado_nombre IS NOT NULL AND lower(asignado_nombre) = lower($1)
+      GROUP BY asignado_nombre
+      ORDER BY count(*) DESC, asignado_nombre
+      LIMIT 1`, [n])
+  return rows[0]?.asignado_nombre ?? n
+}
+
 export async function crearTarea(runner: QueryRunner, t: TareaInput): Promise<{ id: number }> {
+  const asignado = await canonicalIngeniero(runner, t.asignado_nombre)
   const { rows } = await runner.query<{ id: number }>(
     `INSERT INTO ing_tareas (proyecto_ext, nombre, asignado_nombre, allocation_pct, dur_dias, fecha_inicio, fecha_fin, estado, comentario, origen)
        VALUES ($1,$2,$3,COALESCE($4,1.0),COALESCE($5,1),$6,$7,COALESCE($8,'pendiente'),$9,'manual') RETURNING id`,
-    [t.proyecto_ext ?? null, t.nombre, t.asignado_nombre ?? null, t.allocation_pct ?? null, t.dur_dias ?? null,
+    [t.proyecto_ext ?? null, t.nombre, asignado, t.allocation_pct ?? null, t.dur_dias ?? null,
      t.fecha_inicio ?? null, t.fecha_fin ?? null, t.estado ?? null, t.comentario ?? null])
   return rows[0]
 }
 
 export async function actualizarTarea(runner: QueryRunner, id: number, t: TareaInput): Promise<boolean> {
+  const asignado = await canonicalIngeniero(runner, t.asignado_nombre)
   const { rowCount } = await runner.query(
     `UPDATE ing_tareas SET
         nombre = COALESCE($2, nombre),
@@ -333,7 +350,7 @@ export async function actualizarTarea(runner: QueryRunner, id: number, t: TareaI
         comentario = $9,
         updated_at = NOW()
       WHERE id = $1`,
-    [id, t.nombre ?? null, t.asignado_nombre ?? null, t.allocation_pct ?? null, t.dur_dias ?? null,
+    [id, t.nombre ?? null, asignado, t.allocation_pct ?? null, t.dur_dias ?? null,
      t.fecha_inicio ?? null, t.fecha_fin ?? null, t.estado ?? null, t.comentario ?? null])
   return (rowCount ?? 0) > 0
 }

@@ -13,7 +13,7 @@
 import type { PoolClient } from 'pg'
 import pool from '../../../db/pool'
 import { calcularHolgura, TareaCPM, AristaCPM } from './holgura'
-import { proponerIngeniero } from './reservas'
+import { proponerIngeniero, RESERVA_CLAVES } from './reservas'
 import { loadFeriados } from '../../schedule/domain/calendario'
 
 type QueryRunner = PoolClient | typeof pool
@@ -101,8 +101,10 @@ export async function generarPlanIngenieria(
     }
   } catch { /* ciclo improbable: el plan queda sin fechas, pero existe */ }
 
-  // Proponer ingeniero por tarea (según su ventana) — el PM confirma o cambia
-  for (const [, id] of idPorClave) {
+  // Proponer ingeniero SOLO en las etapas de ingeniería (shop drawings + cnc, como el
+  // Excel real). El resto queda sin asignar: son de otras áreas. El PM confirma o cambia.
+  for (const [clave, id] of idPorClave) {
+    if (!RESERVA_CLAVES.includes(clave)) continue
     const { rows: f } = await runner.query<{ fi: string | null; ff: string | null }>(
       `SELECT to_char(fecha_inicio,'YYYY-MM-DD') fi, to_char(fecha_fin,'YYYY-MM-DD') ff FROM ing_tareas WHERE id=$1`, [id])
     const ing = await proponerIngeniero(runner, f[0]?.fi ?? fechaInicio, f[0]?.ff ?? fecha_objetivo)

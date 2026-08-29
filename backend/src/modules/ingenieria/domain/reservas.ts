@@ -17,8 +17,11 @@ import { loadFeriados, subBusinessDays, ISODate } from '../../schedule/domain/ca
 
 type QueryRunner = PoolClient | typeof pool
 
-// Tipos de tarea que se reservan (el esfuerzo de Ingeniería que consume capacidad).
-const RESERVA_CLAVES = ['shop_drawings', 'cnc']
+// Tipos de tarea que son ESFUERZO DE INGENIERÍA (consumen capacidad de un ingeniero).
+// Son las ÚNICAS etapas que llevan ingeniero asignado — coincide con el Excel real,
+// donde solo shop_drawings y cnc traen ingeniero; el resto (fabricación, envío,
+// instalación, compras…) es de otras áreas y va sin ingeniero.
+export const RESERVA_CLAVES = ['shop_drawings', 'cnc']
 
 async function dryRun(runner: QueryRunner, plantillaId: number, fecha: string): Promise<Map<string, ISODate>> {
   const { rows: h } = await runner.query<{ codigo: string; dur_dias_default: number; es_ancla: boolean }>(
