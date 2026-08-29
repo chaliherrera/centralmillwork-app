@@ -47,6 +47,16 @@ export default function IngenieriaPlan({ embedded, initialProyecto, initialMode 
   }
   useEffect(() => { if (mode === 'proyecto') loadPlan() }, [selProj, mode])
 
+  // #8: precargar el ingeniero PROPUESTO del proyecto en foco (el más asignado en su
+  // plan), una sola vez, para que "Carga por ingeniero" abra en él y no en el alfabético.
+  useEffect(() => {
+    if (selEng || !selProj || !all.length) return
+    const freq = new Map<string, number>()
+    for (const t of all) if (t.proyecto_ext === selProj && t.asignado_nombre) freq.set(t.asignado_nombre, (freq.get(t.asignado_nombre) ?? 0) + 1)
+    const propuesto = [...freq.entries()].sort((a, b) => b[1] - a[1])[0]?.[0]
+    if (propuesto) setSelEng(propuesto)
+  }, [selProj, all, selEng])
+
   if (loading) return <div className="py-20 text-center text-stone-400">Cargando plan de Ingeniería…</div>
 
   return (

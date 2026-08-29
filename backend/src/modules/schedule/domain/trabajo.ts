@@ -36,8 +36,10 @@ export interface TrabajoProyecto {
   hitos: TrabajoHito[]
 }
 
-/** Devuelve el trabajo pendiente del área, agrupado por proyecto. */
-export async function getTrabajoPorArea(runner: QueryRunner, area: string): Promise<TrabajoProyecto[]> {
+/** Devuelve el trabajo pendiente del área, agrupado por proyecto.
+ *  Horizonte: los PENDIENTES solo si vencen dentro de `horizonteDias` (evita el ruido
+ *  de hitos a meses vista); los en_riesgo/vencido siempre se muestran. */
+export async function getTrabajoPorArea(runner: QueryRunner, area: string, horizonteDias = 30): Promise<TrabajoProyecto[]> {
   const { rows } = await runner.query<{
     proyecto_id: number; proyecto_codigo: string; proyecto_nombre: string; fecha_objetivo: string | null
     codigo: string; nombre: string; rol_responsable: string | null; fecha_planeada: string | null
@@ -56,7 +58,9 @@ export async function getTrabajoPorArea(runner: QueryRunner, area: string): Prom
       WHERE sp.scope = 'proyecto'
         AND ph.fuente_dato = 'manual_futuro'
         AND sh.estado IN ('pendiente','en_riesgo','vencido')
-      ORDER BY sh.holgura_dias NULLS LAST, sp.proyecto_id, ph.orden`)
+        AND (sh.estado <> 'pendiente' OR sh.fecha_planeada IS NULL
+             OR sh.fecha_planeada <= CURRENT_DATE + make_interval(days => $1))
+      ORDER BY sh.holgura_dias NULLS LAST, sp.proyecto_id, ph.orden`, [horizonteDias])
 
   const porProyecto = new Map<number, TrabajoProyecto>()
   for (const r of rows) {
