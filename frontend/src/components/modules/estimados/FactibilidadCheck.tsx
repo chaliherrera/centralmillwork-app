@@ -1,7 +1,6 @@
 import { useState } from 'react'
 import { CalendarClock, Loader2, CheckCircle2, XCircle, AlertTriangle, ArrowRight } from 'lucide-react'
 import { scheduleService, type FactibilidadResult } from '@/services/schedule'
-import MapaCargaIngenieria from './MapaCargaIngenieria'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Chequeo de factibilidad — Estimados ingresa una fecha y el sistema responde si
@@ -70,11 +69,6 @@ export default function FactibilidadCheck({ onResult, fechaInicial }: { onResult
                 </div>
               </div>
             )}
-
-            {/* el porqué: mapa de carga de Ingeniería */}
-            <div className="rounded-xl border border-stone-100 bg-stone-50/50 p-3">
-              <MapaCargaIngenieria marcarFecha={r.fecha_pedida} />
-            </div>
 
             <div className="flex items-start gap-2 text-[11px] text-amber-700 bg-amber-50/60 border border-amber-200 rounded-lg px-3 py-2">
               <AlertTriangle size={13} className="shrink-0 mt-0.5" />

@@ -5,6 +5,7 @@ import { proyectosService } from '@/services/proyectos'
 import { scheduleService, type FactibilidadResult } from '@/services/schedule'
 import { ingenieriaService } from '@/services/ingenieria'
 import ProyectoForm from '@/components/modules/proyectos/ProyectoForm'
+import StatusBadge from '@/components/ui/StatusBadge'
 import FactibilidadCheck from './FactibilidadCheck'
 import MapaEtapas from '@/components/modules/ingenieria/MapaEtapas'
 import type { Proyecto } from '@/types'
@@ -179,8 +180,13 @@ export default function EstimadosWizard() {
                 <button onClick={() => setPaso(5)} className="ml-1 underline font-semibold text-forest-700">retomar para firmar el contrato</button>.
               </div>
             )}
-            {sel && sel.items_qty != null && (
-              <div className="text-xs text-stone-500">Intake: <b>{sel.items_qty}</b> ítems{sel.presupuesto ? ` · Project Total $${Number(sel.presupuesto).toLocaleString()}` : ''}{sel.fecha_entrega_solicitada ? ` · Millwork Date ${fmt(sel.fecha_entrega_solicitada.slice(0,10))}` : ''}.</div>
+            {sel && (
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
+                <span className="inline-flex items-center gap-1.5 text-sm text-stone-700"><b className="font-mono text-[12px] text-forest-700">{sel.codigo}</b> <StatusBadge status={sel.estado} /></span>
+                {sel.items_qty != null && (
+                  <span className="text-xs text-stone-500">Intake: <b>{sel.items_qty}</b> ítems{sel.presupuesto ? ` · Project Total $${Number(sel.presupuesto).toLocaleString()}` : ''}{sel.fecha_entrega_solicitada ? ` · Millwork Date ${fmt(sel.fecha_entrega_solicitada.slice(0,10))}` : ''}.</span>
+                )}
+              </div>
             )}
           </div>
         )}
@@ -190,7 +196,7 @@ export default function EstimadosWizard() {
           <div className="space-y-4">
             <div>
               <h3 className="font-bold text-stone-800">¿Se puede cumplir la fecha?</h3>
-              <p className="text-sm text-stone-500">Ingresá la fecha que pide el cliente. El sistema revisa la carga de Ingeniería y te dice si es factible. Es tu elemento de negociación.</p>
+              <p className="text-sm text-stone-500">Ingresá la fecha que pide el cliente: el sistema te dice si entra y el mapa de etapas te muestra dónde hay lugar en la agenda. Es tu elemento de negociación.</p>
             </div>
             <FactibilidadCheck fechaInicial={fechaSolicitada || sel?.fecha_entrega_solicitada?.slice(0, 10) || ''} onResult={(f, r) => {
               setFechaSolicitada(f); setFactRes(r)

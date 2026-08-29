@@ -21,7 +21,7 @@ const CHIP: Record<string, { label: string; cls: string }> = {
   aprobado:          { label: 'cliente aprobó',      cls: 'text-blue-700 bg-blue-100' },
 }
 
-export default function DealsEnCurso({ mode }: { mode: 'estimados' | 'pm' }) {
+export default function DealsEnCurso({ mode, emptyHint }: { mode: 'estimados' | 'pm'; emptyHint?: string }) {
   const [deals, setDeals] = useState<IngDealEnCurso[]>([])
   const [busy, setBusy] = useState<number | null>(null)
   const [loading, setLoading] = useState(true)
@@ -42,7 +42,10 @@ export default function DealsEnCurso({ mode }: { mode: 'estimados' | 'pm' }) {
     finally { setBusy(null) }
   }
 
-  if (loading || !visibles.length) return null
+  if (loading) return null
+  if (!visibles.length) return emptyHint
+    ? <div className="rounded-2xl border border-dashed border-stone-200 bg-white/50 px-4 py-10 text-center text-sm text-stone-400">{emptyHint}</div>
+    : null
 
   const esPM = mode === 'pm'
   return (

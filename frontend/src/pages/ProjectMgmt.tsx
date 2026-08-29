@@ -3,6 +3,7 @@ import { ClipboardList, Inbox, Gauge } from 'lucide-react'
 import MiTrabajo from '@/components/modules/schedule/MiTrabajo'
 import ReservasPendientes from '@/components/modules/estimados/ReservasPendientes'
 import DealsEnCurso from '@/components/modules/estimados/DealsEnCurso'
+import MapaEtapas from '@/components/modules/ingenieria/MapaEtapas'
 import IngenieriaPlan from './IngenieriaPlan'
 
 // Escritorio del PM. El PM es el dueño del recurso Ingeniería: acá tiene su bandeja
@@ -42,7 +43,15 @@ export default function ProjectMgmt() {
           <MiTrabajo area="pm" emptyMsg="El PM no tiene nada pendiente ahora mismo. 🎉" />
         </div>
       ) : (
-        <div className="mt-4"><IngenieriaPlan embedded initialProyecto={revisarProy} initialMode={revisarProy ? 'proyecto' : undefined} /></div>
+        <div className="mt-4 space-y-4">
+          {revisarProy && (
+            <div className="max-w-[1180px] mx-auto">
+              <div className="text-[11px] uppercase tracking-wider text-stone-400 font-semibold mb-2">La propuesta del sistema · cómo cae este proyecto sobre el portafolio</div>
+              <MapaEtapas sugerenciaExt={revisarProy} />
+            </div>
+          )}
+          <IngenieriaPlan embedded initialProyecto={revisarProy} initialMode={revisarProy ? 'proyecto' : undefined} />
+        </div>
       )}
     </div>
   )
