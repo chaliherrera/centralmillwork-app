@@ -5,29 +5,42 @@ SRC = sys.argv[1] if len(sys.argv) > 1 else r"C:\Users\chali\OneDrive - Central 
 OUT = "import_ing.sql"
 
 # Catálogo canónico: (clave, nombre, hito, tipico, min, max, orden, [aliases])
+# ESPEJO EXACTO de la migración 061 (la ruta real). Esta lista solo alimenta el
+# resolvedor de nombres del Excel (alias -> clave); el catálogo en DB lo OWNea la
+# migración 061 (rol, es_gate_cliente, dias_por_item incluidos). El INSERT de abajo
+# usa ON CONFLICT DO NOTHING, así que NUNCA revierte la migración.
 TIPOS = [
- ("field_measurements","Field Measurements","E-03",1,1,1,10,["field measurements","field measurement","vif","field measurements "]),
- ("samples","Samples Process","E-05",12,10,15,20,["samples process","samples","architect/designer review and samp"]),
- ("shop_drawings","Shop Drawings Process","E-06",10,5,15,30,["shop drawings process","shop drawings","shop drawings process rev0","shop drawings process","sd update/final production set","update/final production set","sd update / final production set","sd update/final prod","sd update/final production set "]),
- ("client_review","Architect/Designer Review","E-07",10,1,30,40,["architect/designer review drawings","architect/designer review","architec/designer review drawings","meeting with designer to review pr","meeting with vantage to review pro","architect/designer review and samp"]),
- ("release","Release to Production","E-10",0,0,0,50,["release to production","release to productio","release to production "]),
- ("cnc","CNC Engineering","E-11",5,1,8,60,["cnc engineering"]),
- ("long_leads","Long Lead Material Procurement","M-03",20,15,25,25,["long lead time material procuremen","long lead time material procurement"]),
- ("material_proc","Material Procurement","M-04",5,1,10,26,["material procurement"]),
- ("fabrication","Millwork Fabrication","P-05",15,5,25,70,["millwork fabrication"]),
- ("installation","Millwork Installation","I-04",7,1,15,80,["millwork installation","milwork installation"]),
- ("shipment","Millwork Shipment","S-04",0,0,0,75,["milwork shipment","millwork shipment"]),
- ("stone_measure","Stone Countertop Measuring","E-03",1,1,1,81,["stone countertop measuring and tem","stone countertop measuring and temp"]),
- ("stone_fab","Stone Countertops Fabrication","P-05",7,5,10,82,["stone countertops fabrication","stone countertop fabrication"]),
- ("stone_install","Stone Countertops Installation","I-04",2,1,3,83,["stone countertops installation"]),
+ ("po_execution","PO Execution","C-03",0,0,0,1,["po execution"]),
+ ("meeting_designer","Meeting with Designer to Review Project","E-01",1,1,1,2,["meeting with designer to review project","meeting with designer to review pr","meeting with vantage to review project","meeting with vantage to review pro"]),
+ ("material_deposit","Receipt of Material Deposit","C-04",0,0,0,3,["receipt of material deposit"]),
+ ("long_leads","Long Lead Material Procurement","M-03",10,5,25,4,["long lead time material procuremen","long lead time material procurement","long lead material procurement","phase 2-long lead time material procurement"]),
+ ("shop_drawings","Shop Drawings Process","E-06",10,2,31,5,["shop drawings process","shop drawings","shop drawings process rev0","shop drawings process rev1"]),
+ ("samples","Samples Process","E-04",10,10,15,6,["samples process","samples","sample process"]),
+ ("client_review","Architect/Designer Review",None,10,1,33,7,["architect/designer review drawings and samples","architect/designer review drawings","architect/designer review","architec/designer review drawings","architect/designer review rev1","architect/designer review rev","shop drawings review","shop drawings review ph1","architect/designer review and samples","architec/designer review drawings and samples","vantage shop drawings review for release","vantage shop drawings review for release phase 1"]),
+ ("approval","Shop Drawings and Samples Approval","E-07",0,0,0,8,["shop drawings and samples approval","shop drawings and samples approv","shop drawings approval","shop drawings and samples approval ","receipt of vantage approved shop drawings","receip of vantage approved shop drawings"]),
+ ("material_proc","Material Procurement","M-04",10,1,10,9,["material procurement","material procuremen"]),
+ ("field_measurements","Field Measurements","E-03",1,1,1,10,["field measurements","field measurement","vif"]),
+ ("sd_update","SD update / Final production set","E-08",5,1,10,11,["sd update/final production set","update/final production set","sd update / final production set","sd update/final prod","sd update/production set","sd_update/production set","final production set"]),
+ ("release","Release to Production","E-10",0,0,0,12,["release to production","release to productio","release for production"]),
+ ("cnc","CNC Engineering","E-11",10,1,15,13,["cnc engineering"]),
+ ("fabrication","Millwork Fabrication","P-05",20,5,25,14,["millwork fabrication"]),
+ ("installation","Millwork Installation","I-04",5,1,15,15,["millwork installation","milwork installation"]),
+ ("stone_measure","Stone Countertop Measuring",None,1,1,1,16,["stone countertop measuring and template","stone countertop measuring and tem","stone countertop measuring and temp"]),
+ ("stone_fab","Stone Countertops Fabrication",None,5,5,10,17,["stone countertops fabrication","stone countertop fabrication"]),
+ ("stone_install","Stone Countertops Installation",None,2,1,3,18,["stone countertops installation","stone countertop installation"]),
+ ("shipment","Millwork Shipment","S-04",0,0,0,99,["millwork shipment","milwork shipment"]),
 ]
+def _norm(s):
+    # colapsa espacios repetidos y normaliza — tolera typos de espaciado del Excel
+    return re.sub(r'\s+', ' ', (s or "")).strip().lower()
+
 alias2clave={}
 for c,n,h,t,mn,mx,o,al in TIPOS:
-    alias2clave[n.lower().strip()]=c
-    for a in al: alias2clave[a.lower().strip()]=c
+    alias2clave[_norm(n)]=c
+    for a in al: alias2clave[_norm(a)]=c
 
 def resolve(name):
-    return alias2clave.get((name or "").lower().strip())
+    return alias2clave.get(_norm(name))
 
 def sq(v):
     if v is None: return "NULL"
@@ -78,14 +91,15 @@ lines.append("DELETE FROM ing_proyectos WHERE origen='import_excel';")
 # seed catálogo (idempotente)
 for c,n,h,t,mn,mx,o,al in TIPOS:
     arr="ARRAY[" + ",".join(sq(a) for a in al) + "]::text[]"
+    # DO NOTHING: la migración 061 es la fuente de verdad del catálogo. Este INSERT solo
+    # rellena filas ausentes (DB vieja sin migrar); nunca pisa orden/hito/rol/gate/aliases.
     lines.append(f"INSERT INTO ing_tarea_tipos (clave,nombre,hito_codigo,dur_dias_tipico,dur_dias_min,dur_dias_max,orden,aliases) "
                  f"VALUES ({sq(c)},{sq(n)},{sq(h)},{t},{mn},{mx},{o},{arr}) "
-                 f"ON CONFLICT (clave) DO UPDATE SET nombre=EXCLUDED.nombre,hito_codigo=EXCLUDED.hito_codigo,"
-                 f"dur_dias_tipico=EXCLUDED.dur_dias_tipico,dur_dias_min=EXCLUDED.dur_dias_min,dur_dias_max=EXCLUDED.dur_dias_max,aliases=EXCLUDED.aliases;")
-# Regla día-por-ítem (shop drawings ≈ 1 día/ítem). Se setea en cada import para que
-# no se pierda si el catálogo se re-inserta (la migración 057 no alcanza si corre antes
-# de que existan las filas del catálogo).
-lines.append("UPDATE ing_tarea_tipos SET dias_por_item = 1.0 WHERE clave = 'shop_drawings';")
+                 f"ON CONFLICT (clave) DO NOTHING;")
+# Regla día-por-ítem: solo se aplica si la fila fue creada por este import (DB sin migrar).
+# En una DB migrada la 061 ya fijó estos valores; el UPDATE es idempotente (mismos valores).
+lines.append("UPDATE ing_tarea_tipos SET dias_por_item = 1.0 WHERE clave IN ('shop_drawings','cnc');")
+lines.append("UPDATE ing_tarea_tipos SET dias_por_item = 2.0 WHERE clave = 'fabrication';")
 
 cur_proj=None; cur_code=None; cur_phase=None; ntask=0; nproj=0; deps=[]
 for rn,r in enumerate(ws.iter_rows(min_row=2,values_only=True),start=2):
