@@ -62,7 +62,15 @@ export interface IngTareaPlan extends IngTarea {
   holgura_dias: number | null
   critico: boolean
 }
-export interface IngArista { tarea_id: number; depende_de_id: number; tipo: string; lag_dias: number }
+export interface IngArista { tarea_id: number; depende_de_id: number; tipo: string; lag_dias: number; ignorada_at?: string | null }
+export interface EstadoDeposito {
+  confirmado_finanzas: boolean
+  fecha_confirmacion: string | null
+  override_pm: boolean
+  override_por: string | null
+  override_at: string | null
+  abierto: boolean
+}
 export interface IngPlan {
   proyecto_ext: string
   fecha_inicio: string | null
@@ -73,6 +81,7 @@ export interface IngPlan {
   fin_proyectado: string | null
   holgura_proyecto: number
   en_riesgo: boolean
+  deposito: EstadoDeposito
   tareas: IngTareaPlan[]
   aristas: IngArista[]
 }
@@ -105,6 +114,9 @@ export const ingenieriaService = {
     api.get<ApiResponse<IngProyectoEtapa[]>>('/ingenieria/carga-etapas/detalle', { params: { etapa, semana } }).then((r) => r.data),
   getPlan: (proyecto: string) =>
     api.get<ApiResponse<IngPlan>>('/ingenieria/plan', { params: { proyecto } }).then((r) => r.data),
+  // Gate del depósito: el PM lo abre/cierra a mano (la confirmación de Finanzas se lee sola)
+  overrideDeposito: (proyectoExt: string, abrir: boolean) =>
+    api.post<ApiResponse<EstadoDeposito>>(`/ingenieria/proyecto/${encodeURIComponent(proyectoExt)}/deposito`, { abrir }).then((r) => r.data),
   crearTarea: (t: TareaInput) =>
     api.post<ApiResponse<{ id: number }>>('/ingenieria/tareas', t).then((r) => r.data),
 

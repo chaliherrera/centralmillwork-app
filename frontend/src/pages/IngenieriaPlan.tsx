@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Users, Layers, ClipboardList, Plus, X, Loader2, Trash2, Gauge, Check, FolderKanban, Activity, AlertTriangle } from 'lucide-react'
+import { Users, Layers, ClipboardList, Plus, X, Loader2, Trash2, Gauge, Check, FolderKanban, Activity, AlertTriangle, Wallet, Lock, LockOpen } from 'lucide-react'
 import { ingenieriaService, type IngProyecto, type IngTarea, type TareaInput, type IngPlan, type IngTareaPlan, type IngArista, type IngCarga, type IngTareaCelda } from '@/services/ingenieria'
 import MapaEtapas from '@/components/modules/ingenieria/MapaEtapas'
 
@@ -86,7 +86,7 @@ export default function IngenieriaPlan({ embedded, initialProyecto, initialMode 
       {mode === 'disponibilidad'
         ? <VistaDisponibilidad carga={carga} />
         : mode === 'proyecto'
-          ? <VistaProyecto proyectos={proyectos} all={all} plan={plan} planLoading={planLoading} sel={selProj} setSel={setSelProj} onEdit={setEdit} />
+          ? <VistaProyecto proyectos={proyectos} all={all} plan={plan} planLoading={planLoading} sel={selProj} setSel={setSelProj} onEdit={setEdit} onRefresh={loadPlan} />
           : mode === 'etapas'
             ? <MapaEtapas />
             : <VistaCarga all={all} proyectos={proyectos} selEng={selEng} setSelEng={setSelEng} onEdit={setEdit} />}
@@ -227,8 +227,14 @@ function VistaDisponibilidad({ carga }: { carga: IngCarga | null }) {
 }
 
 // ── Vista PRINCIPAL: Gantt del proyecto con holgura/riesgo (CPM sobre fecha fija) ──
-function VistaProyecto({ proyectos, all, plan, planLoading, sel, setSel, onEdit }: { proyectos: IngProyecto[]; all: IngTarea[]; plan: IngPlan | null; planLoading: boolean; sel: string; setSel: (s: string) => void; onEdit: (t: IngTarea | 'new') => void }) {
+function VistaProyecto({ proyectos, all, plan, planLoading, sel, setSel, onEdit, onRefresh }: { proyectos: IngProyecto[]; all: IngTarea[]; plan: IngPlan | null; planLoading: boolean; sel: string; setSel: (s: string) => void; onEdit: (t: IngTarea | 'new') => void; onRefresh: () => void }) {
   const loadingPlan = planLoading
+  const [depBusy, setDepBusy] = useState(false)
+  async function toggleDeposito(abrir: boolean) {
+    if (!sel) return
+    setDepBusy(true)
+    try { await ingenieriaService.overrideDeposito(sel, abrir); await onRefresh() } catch { /* noop */ } finally { setDepBusy(false) }
+  }
   // color por ingeniero (estable en todo el sistema)
   const engColor = useMemo(() => { const m = new Map<string, string>(); [...new Set(all.map((t) => t.asignado_nombre).filter(Boolean))].forEach((e, i) => m.set(e as string, PAL[i % PAL.length])); return m }, [all])
   const tareas = plan?.tareas ?? []
@@ -320,6 +326,40 @@ function VistaProyecto({ proyectos, all, plan, planLoading, sel, setSel, onEdit 
           </div>
         </div>
       )}
+
+      {/* Gate del depósito: la confirmación de Finanzas se LEE; el PM puede abrirlo a mano */}
+      {plan && tareas.some((t) => t.tipo_clave === 'material_deposit') && (() => {
+        const dep = plan.deposito
+        if (dep.confirmado_finanzas) return (
+          <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-2.5 flex items-center gap-2.5 text-sm">
+            <Wallet size={17} className="text-emerald-600 shrink-0" />
+            <span className="font-semibold text-emerald-800">Depósito confirmado por Finanzas</span>
+            <span className="text-emerald-700">· {fmtD(dep.fecha_confirmacion)} · compras habilitadas</span>
+          </div>
+        )
+        if (dep.override_pm) return (
+          <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-2.5 flex flex-wrap items-center gap-2.5 text-sm">
+            <LockOpen size={17} className="text-amber-600 shrink-0" />
+            <span className="font-semibold text-amber-800">Gate abierto a mano</span>
+            <span className="text-amber-700">· por {dep.override_por ?? '—'}{dep.override_at ? ` · ${fmtD(dep.override_at)}` : ''} · las compras avanzan sin esperar el depósito</span>
+            <button onClick={() => toggleDeposito(false)} disabled={depBusy}
+              className="ml-auto inline-flex items-center gap-1.5 rounded-lg border border-amber-300 bg-white hover:bg-amber-100 text-amber-800 text-xs font-semibold px-2.5 py-1 disabled:opacity-50">
+              {depBusy ? <Loader2 size={13} className="animate-spin" /> : <Lock size={13} />} Cerrar gate
+            </button>
+          </div>
+        )
+        return (
+          <div className="rounded-2xl border border-stone-200 bg-stone-50 px-4 py-2.5 flex flex-wrap items-center gap-2.5 text-sm">
+            <Lock size={17} className="text-stone-400 shrink-0" />
+            <span className="font-semibold text-stone-700">Depósito pendiente</span>
+            <span className="text-stone-500">· Finanzas aún no lo confirmó · long leads y compra de materiales frenados</span>
+            <button onClick={() => toggleDeposito(true)} disabled={depBusy}
+              className="ml-auto inline-flex items-center gap-1.5 rounded-lg border border-stone-300 bg-white hover:bg-stone-100 text-stone-700 text-xs font-semibold px-2.5 py-1 disabled:opacity-50">
+              {depBusy ? <Loader2 size={13} className="animate-spin" /> : <LockOpen size={13} />} Abrir gate igual
+            </button>
+          </div>
+        )
+      })()}
 
       <div className="rounded-2xl border border-stone-200 bg-white overflow-hidden">
         {loadingPlan && !plan ? <div className="py-16 text-center text-stone-400"><Loader2 className="animate-spin inline" size={22} /></div> : (
