@@ -16,6 +16,7 @@ import {
   generarPlanIngenieria, aceptarPlanPM,
   enviarAClienteDeal, registrarAprobacionCliente, activarProyecto, listDealsEnCurso,
 } from '../domain/plan_inicial'
+import { estadoDeposito, overrideGate } from '../domain/deposito'
 
 function pid(req: Request): number {
   const id = parseInt(String(req.params.id ?? req.params.proyectoId), 10)
@@ -235,4 +236,25 @@ export async function borrarDepHandler(req: Request, res: Response, next: NextFu
     await borrarDep(pool, id, dep)
     res.json({ data: { ok: true } })
   } catch (e) { next(e) }
+}
+
+// ── Gate del depósito ──
+// POST /api/ingenieria/proyecto/:ext/deposito   { abrir: boolean }
+// El PM abre/cierra el gate a mano (candado). La confirmación de Finanzas se LEE aparte.
+const depositoSchema = z.object({ abrir: z.boolean() })
+export async function overrideDepositoHandler(req: Request, res: Response, next: NextFunction) {
+  const proyectoExt = String(req.params.ext ?? '')
+  if (!proyectoExt) return next(createError('proyecto inválido', 400))
+  let abrir: boolean
+  try { ({ abrir } = depositoSchema.parse(req.body ?? {})) }
+  catch { return next(createError('datos inválidos', 400)) }
+  const usuarioId = req.user?.id ?? null
+  const client = await pool.connect()
+  try {
+    await client.query('BEGIN')
+    await overrideGate(client, proyectoExt, 'material_deposit', abrir, usuarioId)
+    const estado = await estadoDeposito(client, proyectoExt)
+    await client.query('COMMIT')
+    res.json({ data: estado, message: abrir ? 'Gate del depósito abierto' : 'Gate del depósito cerrado' })
+  } catch (e) { await client.query('ROLLBACK').catch(() => {}); next(e) } finally { client.release() }
 }

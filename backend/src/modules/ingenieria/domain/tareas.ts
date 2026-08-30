@@ -11,6 +11,7 @@ import type { PoolClient } from 'pg'
 import pool from '../../../db/pool'
 import { loadFeriados } from '../../schedule/domain/calendario'
 import { calcularHolgura, type TareaCPM, type AristaCPM } from './holgura'
+import { estadoDeposito, type EstadoDeposito } from './deposito'
 
 type QueryRunner = PoolClient | typeof pool
 
@@ -248,7 +249,7 @@ export interface TareaPlan extends Tarea {
   holgura_dias: number | null
   critico: boolean
 }
-export interface AristaPlan { tarea_id: number; depende_de_id: number; tipo: string; lag_dias: number }
+export interface AristaPlan { tarea_id: number; depende_de_id: number; tipo: string; lag_dias: number; ignorada_at?: string | null }
 export interface PlanProyecto {
   proyecto_ext: string
   fecha_inicio: string | null   // inicio del proyecto (ancla hacia adelante)
@@ -259,6 +260,7 @@ export interface PlanProyecto {
   fin_proyectado: string | null // cuándo termina la cadena
   holgura_proyecto: number      // días hábiles de holgura del proyecto (< 0 = riesgo)
   en_riesgo: boolean
+  deposito: EstadoDeposito       // gate del depósito: confirmación de Finanzas + candado del PM
   tareas: TareaPlan[]
   aristas: AristaPlan[]
 }
@@ -275,7 +277,8 @@ export async function getPlanProyecto(runner: QueryRunner, proyectoExt: string):
   const ids = tareas.map((t) => t.id)
   const { rows: deps } = ids.length
     ? await runner.query<AristaPlan>(
-        `SELECT tarea_id, depende_de_id, tipo, lag_dias FROM ing_tarea_deps
+        `SELECT tarea_id, depende_de_id, tipo, lag_dias, to_char(ignorada_at,'YYYY-MM-DD') AS ignorada_at
+           FROM ing_tarea_deps
           WHERE tarea_id = ANY($1) AND depende_de_id = ANY($1)`, [ids])
     : { rows: [] as AristaPlan[] }
 
@@ -285,7 +288,11 @@ export async function getPlanProyecto(runner: QueryRunner, proyectoExt: string):
   if (h.ini && h.entrega) {
     const feriados = await loadFeriados(runner)
     const cpmTareas: TareaCPM[] = tareas.map((t) => ({ id: t.id, dur: t.dur_dias }))
-    const cpmAristas: AristaCPM[] = deps.map((d) => ({ tareaId: d.tarea_id, dependeDeId: d.depende_de_id, lag: d.lag_dias, tipo: d.tipo === 'SS' ? 'SS' : 'FS' }))
+    // El candado del PM (ignorada_at) SACA la arista del cálculo: un gate abierto ya no
+    // frena al sucesor. La dep se sigue devolviendo (abajo) para dibujarla marcada en la UI.
+    const cpmAristas: AristaCPM[] = deps
+      .filter((d) => !d.ignorada_at)
+      .map((d) => ({ tareaId: d.tarea_id, dependeDeId: d.depende_de_id, lag: d.lag_dias, tipo: d.tipo === 'SS' ? 'SS' : 'FS' }))
     try {
       const r = calcularHolgura(cpmTareas, cpmAristas, h.ini, h.entrega, feriados)
       finProyectado = r.finProyectado; holguraProyecto = r.holguraProyecto; enRiesgo = r.enRiesgo
@@ -297,11 +304,13 @@ export async function getPlanProyecto(runner: QueryRunner, proyectoExt: string):
     } catch { /* ciclo en dependencias: se devuelve el plan sin holgura */ }
   }
 
+  const deposito = await estadoDeposito(runner, proyectoExt)
+
   return {
     proyecto_ext: proyectoExt, fecha_inicio: h.ini, fecha_entrega: h.entrega, status_ext: h.status,
     n_items: h.n_items, presupuesto: h.presupuesto != null ? +h.presupuesto : null,
     fin_proyectado: finProyectado, holgura_proyecto: holguraProyecto, en_riesgo: enRiesgo,
-    tareas: holgura, aristas: deps,
+    deposito, tareas: holgura, aristas: deps,
   }
 }
 

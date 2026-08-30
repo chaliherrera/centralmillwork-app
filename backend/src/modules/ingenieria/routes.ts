@@ -7,6 +7,7 @@ import {
   agregarDepHandler, borrarDepHandler,
   reservarHandler, reservasPendientesHandler, confirmarReservaHandler, liberarReservaHandler,
   dealsEnCursoHandler, enviarClienteHandler, clienteAproboHandler, activarProyectoHandler,
+  overrideDepositoHandler,
 } from './controllers/ingenieria.controller'
 
 const router = Router()
@@ -34,6 +35,9 @@ router.post('/tareas/:id/dep', PM, agregarDepHandler)
 router.delete('/tareas/:id/dep/:depId', PM, borrarDepHandler)
 // Ejecución = reportar avance de la tarea (Ingeniería) — solo estado/comentario
 router.patch('/tareas/:id/avance', EXEC, avanceTareaHandler)
+
+// Gate del depósito: el PM lo abre/cierra a mano (la confirmación de Finanzas se lee sola)
+router.post('/proyecto/:ext/deposito', PM, overrideDepositoHandler)
 
 // Reserva de capacidad (la dispara Estimados/PM)
 router.post('/proyecto/:id/reservar', PM, reservarHandler)
