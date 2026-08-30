@@ -56,8 +56,17 @@ async function duracionesPara(runner: QueryRunner, _presupuesto: number | null, 
 /** Propone el ingeniero MENOS cargado en la ventana [inicio, fin] (incluye a los
  *  que están totalmente libres). Es una propuesta: el PM la confirma o la cambia. */
 export async function proponerIngeniero(runner: QueryRunner, inicio: string, fin: string): Promise<string | null> {
+  // Fuente canónica de ingenieros = ing_ingenieros (activo). Fallback al pool histórico
+  // (DISTINCT asignado_nombre) si la tabla estuviera vacía. Elige al MENOS cargado en la
+  // ventana [inicio, fin]. Es una propuesta: el PM confirma o cambia.
   const { rows } = await runner.query<{ nombre: string }>(
-    `WITH engs AS (SELECT DISTINCT asignado_nombre AS nombre FROM ing_tareas WHERE asignado_nombre IS NOT NULL)
+    `WITH engs AS (
+        SELECT nombre FROM ing_ingenieros WHERE activo
+        UNION
+        SELECT DISTINCT asignado_nombre FROM ing_tareas
+         WHERE asignado_nombre IS NOT NULL
+           AND NOT EXISTS (SELECT 1 FROM ing_ingenieros)
+     )
      SELECT e.nombre
        FROM engs e
        LEFT JOIN ing_tareas t ON t.asignado_nombre = e.nombre AND t.estado NOT IN ('hecha','na')

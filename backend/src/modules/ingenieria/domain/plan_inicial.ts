@@ -13,7 +13,7 @@
 import type { PoolClient } from 'pg'
 import pool from '../../../db/pool'
 import { calcularHolgura, TareaCPM, AristaCPM } from './holgura'
-import { proponerIngeniero, RESERVA_CLAVES } from './reservas'
+import { proponerIngeniero } from './reservas'
 import { loadFeriados } from '../../schedule/domain/calendario'
 
 type QueryRunner = PoolClient | typeof pool
@@ -38,6 +38,11 @@ export async function generarPlanIngenieria(
   const hayStone = stone_total != null && Number(stone_total) > 0
   const fechaInicio = opts?.fechaInicio || hoyISO()
 
+  // ¿El proyecto lleva instalación? (paso 15 condicional; Digney York = false)
+  const { rows: instRows } = await runner.query<{ incluye: boolean }>(
+    `SELECT COALESCE(incluye_instalacion, TRUE) AS incluye FROM proyectos WHERE id = $1`, [proyectoId])
+  const incluyeInstalacion = instRows[0]?.incluye ?? true
+
   // No pisar un plan REAL ya existente (importado del Excel o aceptado por el PM = 'app')
   const { rows: ex } = await runner.query<{ n: number }>(
     `SELECT count(*)::int AS n FROM ing_tareas WHERE proyecto_ext = $1 AND origen IN ('import_excel','app')`, [proyectoExt])
@@ -46,11 +51,17 @@ export async function generarPlanIngenieria(
   // Idempotente: borra el plan BLANDO previo (sugerencia/reserva); nunca toca 'app'/'import_excel'
   await runner.query(`DELETE FROM ing_tareas WHERE proyecto_ext = $1 AND origen IN ('sugerencia','reserva')`, [proyectoExt])
 
-  // Tipos a generar (stone solo si hay piedra)
-  const { rows: tipos } = await runner.query<{ id: number; clave: string; nombre: string; dur_dias_tipico: number | null; dias_por_item: number | null }>(
-    `SELECT id, clave, nombre, dur_dias_tipico, dias_por_item FROM ing_tarea_tipos`)
-  const incluir = tipos.filter((t) => hayStone || !STONE_CLAVES.includes(t.clave))
+  // Tipos a generar. Reglas de inclusión:
+  //  · shipment: NUNCA (parqueado orden 99, fuera de la ruta real)
+  //  · stone_*: solo si el proyecto tiene piedra (stone_total > 0)
+  //  · installation: solo si el proyecto lleva instalación
+  const { rows: tipos } = await runner.query<{ id: number; clave: string; nombre: string; rol: string | null; dur_dias_tipico: number | null; dias_por_item: number | null }>(
+    `SELECT id, clave, nombre, rol, dur_dias_tipico, dias_por_item FROM ing_tarea_tipos WHERE clave <> 'shipment'`)
+  const incluir = tipos.filter((t) =>
+    (hayStone || !STONE_CLAVES.includes(t.clave)) &&
+    (incluyeInstalacion || t.clave !== 'installation'))
   if (!incluir.length) return { creadas: 0, error: 'catálogo de tipos vacío' }
+  const rolPorClave = new Map(incluir.map((t) => [t.clave, t.rol]))
 
   // Encabezado del proyecto de ingeniería (fecha fija + inicio provisional = original)
   await runner.query(
@@ -65,7 +76,9 @@ export async function generarPlanIngenieria(
   const idPorClave = new Map<string, number>()
   const durPorClave = new Map<string, number>()
   for (const t of incluir) {
-    let dur = Math.max(1, t.dur_dias_tipico ?? 3)
+    // Milestones (dur_dias_tipico = 0: PO, depósito, aprobación, release) quedan en 0
+    // días = mismo día (el CPM lo soporta). Las tareas con días-por-ítem ≥ 1.
+    let dur = Math.max(0, t.dur_dias_tipico ?? 3)
     if (items_qty != null && items_qty > 0 && t.dias_por_item != null && Number(t.dias_por_item) > 0)
       dur = Math.max(1, Math.round(items_qty * Number(t.dias_por_item)))
     const { rows } = await runner.query<{ id: number }>(
@@ -101,14 +114,18 @@ export async function generarPlanIngenieria(
     }
   } catch { /* ciclo improbable: el plan queda sin fechas, pero existe */ }
 
-  // Proponer ingeniero SOLO en las etapas de ingeniería (shop drawings + cnc, como el
-  // Excel real). El resto queda sin asignar: son de otras áreas. El PM confirma o cambia.
-  for (const [clave, id] of idPorClave) {
-    if (!RESERVA_CLAVES.includes(clave)) continue
-    const { rows: f } = await runner.query<{ fi: string | null; ff: string | null }>(
-      `SELECT to_char(fecha_inicio,'YYYY-MM-DD') fi, to_char(fecha_fin,'YYYY-MM-DD') ff FROM ing_tareas WHERE id=$1`, [id])
-    const ing = await proponerIngeniero(runner, f[0]?.fi ?? fechaInicio, f[0]?.ff ?? fecha_objetivo)
-    if (ing) await runner.query(`UPDATE ing_tareas SET asignado_nombre=$2 WHERE id=$1`, [id, ing])
+  // UN SOLO INGENIERO por proyecto (decisión de Chali): todas las tareas de rol
+  // 'ingenieria' las hace el mismo ingeniero, propuesto una vez sobre la ventana
+  // completa de ingeniería. El PM confirma o cambia. Las tareas de otras áreas
+  // (compras, field, producción, instalación, externo) quedan sin asignar.
+  const clavesIng = [...idPorClave.keys()].filter((c) => rolPorClave.get(c) === 'ingenieria')
+  if (clavesIng.length) {
+    const idsIng = clavesIng.map((c) => idPorClave.get(c)!)
+    const { rows: span } = await runner.query<{ ini: string | null; fin: string | null }>(
+      `SELECT to_char(MIN(fecha_inicio),'YYYY-MM-DD') ini, to_char(MAX(fecha_fin),'YYYY-MM-DD') fin
+         FROM ing_tareas WHERE id = ANY($1)`, [idsIng])
+    const ing = await proponerIngeniero(runner, span[0]?.ini ?? fechaInicio, span[0]?.fin ?? fecha_objetivo)
+    if (ing) await runner.query(`UPDATE ing_tareas SET asignado_nombre=$2 WHERE id = ANY($1)`, [idsIng, ing])
   }
 
   return { creadas: incluir.length }
