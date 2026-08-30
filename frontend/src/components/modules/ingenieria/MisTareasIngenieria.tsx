@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Loader2, CircleDot, Circle, CheckCircle2, MinusCircle, StickyNote } from 'lucide-react'
+import { Loader2, CircleDot, Circle, CheckCircle2, MinusCircle, StickyNote, CalendarClock, CalendarCheck } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { useAuth } from '@/context/AuthContext'
 import { ingenieriaService, type IngTarea } from '@/services/ingenieria'
@@ -13,6 +13,7 @@ import { ingenieriaService, type IngTarea } from '@/services/ingenieria'
 
 const MES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic']
 const fmt = (iso: string | null) => { if (!iso) return '—'; const d = new Date(iso + 'T00:00:00'); return `${d.getDate()} ${MES[d.getMonth()]}` }
+const diasEntre = (a: string, b: string) => Math.round((new Date(b + 'T00:00:00').getTime() - new Date(a + 'T00:00:00').getTime()) / 86400000)
 
 const ESTADOS: { key: string; label: string; icon: typeof Circle; cls: string }[] = [
   { key: 'pendiente', label: 'Pendiente', icon: Circle,       cls: 'text-stone-500 bg-stone-100' },
@@ -72,6 +73,19 @@ export default function MisTareasIngenieria() {
     finally { setBusy(null) }
   }
 
+  // Patrón "comprometida + cumplida": el ingeniero programa cuándo hará la tarea
+  // (compromiso) y registra cuándo la cumplió. El gap es la señal para el PM.
+  const setFecha = async (t: IngTarea, campo: 'fecha_compromiso' | 'fecha_fin_real', val: string) => {
+    const nuevo = val || null
+    if ((t[campo] ?? null) === nuevo) return
+    setBusy(t.id)
+    try {
+      await ingenieriaService.avanceTarea(t.id, { [campo]: nuevo })
+      setTareas((prev) => prev.map((x) => x.id === t.id ? { ...x, [campo]: nuevo } : x))
+    } catch (e: any) { toast.error(e?.response?.data?.message || 'No se pudo guardar la fecha') }
+    finally { setBusy(null) }
+  }
+
   const guardarNota = async (t: IngTarea) => {
     const val = notaVal.trim()
     setNotaOpen(null)
@@ -120,7 +134,30 @@ export default function MisTareasIngenieria() {
                     <div className="flex items-start gap-2 flex-wrap">
                       <div className="flex-1 min-w-[180px]">
                         <div className="text-sm font-medium text-stone-800">{t.nombre}</div>
-                        <div className="text-[11px] text-stone-400">{fmt(t.fecha_inicio)} → {fmt(t.fecha_fin)}{t.tipo_clave ? ` · ${t.tipo_clave}` : ''}</div>
+                        <div className="text-[11px] text-stone-400">plan: {fmt(t.fecha_inicio)} → {fmt(t.fecha_fin)}{t.tipo_clave ? ` · ${t.tipo_clave}` : ''}</div>
+                        {/* Patrón "comprometida + cumplida": el ingeniero programa y registra */}
+                        <div className="mt-1.5 flex items-center gap-x-3 gap-y-1 flex-wrap text-[11px] text-stone-500">
+                          <label className="inline-flex items-center gap-1" title="¿Cuándo la vas a hacer? (tu compromiso)">
+                            <CalendarClock size={12} className="text-stone-400" />
+                            <span className="hidden sm:inline">Comprometida</span>
+                            <input type="date" value={t.fecha_compromiso ?? ''} disabled={busy === t.id}
+                              onChange={(e) => setFecha(t, 'fecha_compromiso', e.target.value)}
+                              className="rounded border border-stone-200 bg-white px-1.5 py-0.5 text-[11px] text-stone-700 focus:outline-none focus:ring-1 focus:ring-forest-300" />
+                          </label>
+                          <label className="inline-flex items-center gap-1" title="¿Cuándo la cumpliste? (fecha real)">
+                            <CalendarCheck size={12} className="text-stone-400" />
+                            <span className="hidden sm:inline">Cumplida</span>
+                            <input type="date" value={t.fecha_fin_real ?? ''} disabled={busy === t.id}
+                              onChange={(e) => setFecha(t, 'fecha_fin_real', e.target.value)}
+                              className="rounded border border-stone-200 bg-white px-1.5 py-0.5 text-[11px] text-stone-700 focus:outline-none focus:ring-1 focus:ring-forest-300" />
+                          </label>
+                          {t.fecha_compromiso && t.fecha_fin_real && (() => {
+                            const g = diasEntre(t.fecha_compromiso, t.fecha_fin_real)
+                            return g > 0
+                              ? <span className="inline-flex items-center rounded-full bg-amber-100 text-amber-700 font-semibold px-1.5 py-0.5">{g} d tarde</span>
+                              : <span className="inline-flex items-center rounded-full bg-emerald-100 text-emerald-700 font-semibold px-1.5 py-0.5">a tiempo</span>
+                          })()}
+                        </div>
                         {t.comentario && notaOpen !== t.id && (
                           <div className="text-[11px] text-stone-500 mt-1 flex items-start gap-1"><StickyNote size={12} className="mt-0.5 shrink-0" /> {t.comentario}</div>
                         )}

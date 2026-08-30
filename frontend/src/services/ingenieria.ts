@@ -20,6 +20,8 @@ export interface IngTarea {
   dur_dias: number
   fecha_inicio: string | null
   fecha_fin: string | null
+  fecha_compromiso: string | null   // "comprometida + cumplida": cuándo se hará
+  fecha_fin_real: string | null     // cuándo se cumplió
   estado: string
   status_ext: string | null
   comentario: string | null
@@ -142,7 +144,7 @@ export const ingenieriaService = {
   actualizarTarea: (id: number, t: Partial<TareaInput>) =>
     api.patch<ApiResponse<{ ok: boolean }>>(`/ingenieria/tareas/${id}`, t).then((r) => r.data),
   // Ingeniería reporta avance de su tarea (solo estado/comentario)
-  avanceTarea: (id: number, data: { estado?: string; comentario?: string | null }) =>
+  avanceTarea: (id: number, data: { estado?: string; comentario?: string | null; fecha_compromiso?: string | null; fecha_fin_real?: string | null }) =>
     api.patch<ApiResponse<{ ok: boolean }>>(`/ingenieria/tareas/${id}/avance`, data).then((r) => r.data),
   borrarTarea: (id: number) =>
     api.delete<ApiResponse<{ ok: boolean; reconectadas: number }>>(`/ingenieria/tareas/${id}`).then((r) => r.data),
