@@ -27,6 +27,8 @@ export interface Tarea {
   dur_dias: number
   fecha_inicio: string | null
   fecha_fin: string | null
+  fecha_compromiso: string | null   // patrón "comprometida + cumplida": cuándo se hará
+  fecha_fin_real: string | null     // cuándo se cumplió realmente
   estado: string
   status_ext: string | null
   comentario: string | null
@@ -74,6 +76,8 @@ export async function listTareas(runner: QueryRunner, proyectoExt?: string): Pro
             t.nombre, t.asignado_nombre, t.allocation_pct, t.dur_dias,
             to_char(t.fecha_inicio,'YYYY-MM-DD') AS fecha_inicio,
             to_char(t.fecha_fin,'YYYY-MM-DD') AS fecha_fin,
+            to_char(t.fecha_compromiso,'YYYY-MM-DD') AS fecha_compromiso,
+            to_char(t.fecha_fin_real,'YYYY-MM-DD') AS fecha_fin_real,
             t.estado, t.status_ext, t.comentario
        FROM ing_tareas t
        LEFT JOIN ing_tarea_tipos tt ON tt.id = t.tipo_id
@@ -368,12 +372,16 @@ export async function actualizarTarea(runner: QueryRunner, id: number, t: TareaI
  *  parciales — nunca pisa asignado_nombre, fechas, allocation ni dur (eso es
  *  estructura del plan, del PM). Distinto de actualizarTarea (edición completa). */
 export async function reportarAvance(
-  runner: QueryRunner, id: number, data: { estado?: string; comentario?: string | null }
+  runner: QueryRunner, id: number,
+  data: { estado?: string; comentario?: string | null; fecha_compromiso?: string | null; fecha_fin_real?: string | null }
 ): Promise<boolean> {
   const sets: string[] = []
   const vals: unknown[] = [id]
   if (data.estado !== undefined) { vals.push(data.estado); sets.push(`estado = $${vals.length}`) }
   if (data.comentario !== undefined) { vals.push(data.comentario); sets.push(`comentario = $${vals.length}`) }
+  // Patrón "comprometida + cumplida": ambas parciales, aceptan null para limpiar.
+  if (data.fecha_compromiso !== undefined) { vals.push(data.fecha_compromiso); sets.push(`fecha_compromiso = $${vals.length}`) }
+  if (data.fecha_fin_real !== undefined) { vals.push(data.fecha_fin_real); sets.push(`fecha_fin_real = $${vals.length}`) }
   if (!sets.length) return false
   sets.push('updated_at = NOW()')
   const { rowCount } = await runner.query(`UPDATE ing_tareas SET ${sets.join(', ')} WHERE id = $1`, vals)

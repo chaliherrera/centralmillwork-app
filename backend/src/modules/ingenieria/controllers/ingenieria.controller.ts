@@ -182,16 +182,20 @@ export async function actualizarTareaHandler(req: Request, res: Response, next: 
 }
 
 // PATCH /api/ingenieria/tareas/:id/avance — Ingeniería reporta avance de SU tarea.
-// Solo toca estado/comentario (ejecución); la estructura del plan es del PM.
+// Ejecución: estado/comentario + fechas de compromiso y cumplimiento (patrón
+// "comprometida + cumplida", ej. field measurements). La estructura del plan es del PM.
+const fechaOpt = z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullish()
 const avanceSchema = z.object({
   estado: z.enum(['pendiente', 'en_curso', 'hecha', 'na']).optional(),
   comentario: z.string().max(1000).nullish(),
+  fecha_compromiso: fechaOpt,
+  fecha_fin_real: fechaOpt,
 })
 export async function avanceTareaHandler(req: Request, res: Response, next: NextFunction) {
   const id = parseInt(String(req.params.id), 10)
   if (Number.isNaN(id)) return next(createError('id inválido', 400))
   const parsed = avanceSchema.safeParse(req.body)
-  if (!parsed.success || (parsed.data.estado === undefined && parsed.data.comentario === undefined))
+  if (!parsed.success || Object.keys(parsed.data).length === 0)
     return next(createError('Datos inválidos', 400))
   try {
     const ok = await reportarAvance(pool, id, parsed.data)

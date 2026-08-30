@@ -114,11 +114,12 @@ export async function generarPlanIngenieria(
     }
   } catch { /* ciclo improbable: el plan queda sin fechas, pero existe */ }
 
-  // UN SOLO INGENIERO por proyecto (decisión de Chali): todas las tareas de rol
-  // 'ingenieria' las hace el mismo ingeniero, propuesto una vez sobre la ventana
-  // completa de ingeniería. El PM confirma o cambia. Las tareas de otras áreas
-  // (compras, field, producción, instalación, externo) quedan sin asignar.
-  const clavesIng = [...idPorClave.keys()].filter((c) => rolPorClave.get(c) === 'ingenieria')
+  // UN SOLO INGENIERO por proyecto (decisión de Chali): el mismo ingeniero hace las
+  // tareas de ingeniería y PROGRAMA la medición de campo (paso 10, rol 'field', dentro
+  // de su ventana 2-13). Propuesto una vez sobre esa ventana. El PM confirma o cambia.
+  // Las demás áreas (compras, producción, instalación, externo) quedan sin asignar.
+  const ROLES_INGENIERO = new Set(['ingenieria', 'field'])
+  const clavesIng = [...idPorClave.keys()].filter((c) => ROLES_INGENIERO.has(rolPorClave.get(c) ?? ''))
   if (clavesIng.length) {
     const idsIng = clavesIng.map((c) => idPorClave.get(c)!)
     const { rows: span } = await runner.query<{ ini: string | null; fin: string | null }>(
