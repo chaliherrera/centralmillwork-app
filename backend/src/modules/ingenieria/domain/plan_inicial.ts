@@ -86,7 +86,7 @@ export async function generarPlanIngenieria(
       await runner.query(
         `INSERT INTO ing_tarea_deps (tarea_id, depende_de_id, tipo, lag_dias) VALUES ($1,$2,$3,$4) ON CONFLICT (tarea_id,depende_de_id) DO NOTHING`,
         [tId, dId, dep.tipo, dep.lag_dias])
-      aristas.push({ tareaId: tId, dependeDeId: dId, lag: dep.lag_dias })
+      aristas.push({ tareaId: tId, dependeDeId: dId, lag: dep.lag_dias, tipo: dep.tipo === 'SS' ? 'SS' : 'FS' })
     }
   }
 

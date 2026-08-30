@@ -35,6 +35,10 @@ export interface AristaCPM {
   dependeDeId: number
   /** lag en días hábiles (FS+Nd). Puede ser negativo (adelanto). */
   lag: number
+  /** tipo de dependencia. 'FS' (finish-to-start, default) o 'SS' (start-to-start:
+   *  el sucesor arranca cuando arranca el predecesor + lag). El Excel real usa SS
+   *  para Samples (corre en paralelo a Shop Drawings). FF/SF no se usan hoy. */
+  tipo?: 'FS' | 'SS'
 }
 
 export interface HolguraTarea {
@@ -72,14 +76,16 @@ export function calcularHolgura(
   const dur = new Map<number, number>()
   for (const t of tareas) dur.set(t.id, Math.max(0, Math.round(t.dur)))
 
-  // pred[x] = [{de, lag}] de qué depende x ; succ[x] = [{a, lag}] quiénes dependen de x
-  const pred = new Map<number, { id: number; lag: number }[]>()
-  const succ = new Map<number, { id: number; lag: number }[]>()
+  // pred[x] = [{de, lag, tipo}] de qué depende x ; succ[x] = quiénes dependen de x
+  type Link = { id: number; lag: number; tipo: 'FS' | 'SS' }
+  const pred = new Map<number, Link[]>()
+  const succ = new Map<number, Link[]>()
   for (const t of tareas) { pred.set(t.id, []); succ.set(t.id, []) }
   for (const a of aristas) {
     if (!pred.has(a.tareaId) || !pred.has(a.dependeDeId)) continue  // aristas colgadas: ignorar
-    pred.get(a.tareaId)!.push({ id: a.dependeDeId, lag: a.lag })
-    succ.get(a.dependeDeId)!.push({ id: a.tareaId, lag: a.lag })
+    const tipo = a.tipo === 'SS' ? 'SS' : 'FS'
+    pred.get(a.tareaId)!.push({ id: a.dependeDeId, lag: a.lag, tipo })
+    succ.get(a.dependeDeId)!.push({ id: a.tareaId, lag: a.lag, tipo })
   }
 
   // Orden topológico (Kahn). indegree = cantidad de predecesores.
@@ -112,6 +118,8 @@ export function calcularHolgura(
   const gapDe = (d: number) => (d <= 0 ? 0 : 1)
 
   // ── Pasada HACIA ADELANTE: ES/EF desde la fecha de inicio ──
+  //   FS: el sucesor arranca tras el FIN del predecesor + gap + lag.
+  //   SS: el sucesor arranca con el INICIO del predecesor + lag (sin gap, no espera el fin).
   const ES = new Map<number, ISODate>()
   const EF = new Map<number, ISODate>()
   for (const n of topo) {
@@ -119,7 +127,9 @@ export function calcularHolgura(
     const gap = gapDe(dur.get(n) ?? 0)
     let es = fechaInicio
     for (const p of preds) {
-      const cand = shift(EF.get(p.id)!, gap + p.lag)   // fin del predecesor + gap del sucesor + lag
+      const cand = p.tipo === 'SS'
+        ? shift(ES.get(p.id)!, p.lag)          // SS: inicio del predecesor + lag
+        : shift(EF.get(p.id)!, gap + p.lag)    // FS: fin del predecesor + gap del sucesor + lag
       if (cand > es) es = cand
     }
     ES.set(n, es)
@@ -127,19 +137,26 @@ export function calcularHolgura(
   }
 
   // ── Pasada HACIA ATRÁS: LS/LF desde la entrega FIJA (topo inverso) ──
+  //   Todo se resuelve como cota sobre el LATE START del predecesor:
+  //   · sin sucesores → debe terminar para la entrega: LS ≤ inicioDe(entrega).
+  //   · sucesor FS → LF(pred) ≤ LS(succ) − gap − lag  ⇒  LS(pred) ≤ inicioDe(esa LF).
+  //   · sucesor SS → LS(pred) ≤ LS(succ) − lag (directo).
+  //   LS(pred) = la más apretada de todas; LF(pred) = finDe(LS(pred)).
   const LS = new Map<number, ISODate>()
   const LF = new Map<number, ISODate>()
   for (let i = topo.length - 1; i >= 0; i--) {
     const n = topo[i]
+    const d = dur.get(n) ?? 0
     const succs = succ.get(n)!
-    let lf = fechaEntrega
-    let first = true
+    let ls = inicioDe(fechaEntrega, d)   // cota por defecto: terminar para la entrega
     for (const s of succs) {
-      const cand = unshift(LS.get(s.id)!, gapDe(dur.get(s.id) ?? 0) + s.lag)   // simétrico: gap según el sucesor + lag
-      if (first || cand < lf) { lf = cand; first = false }
+      const candLs = s.tipo === 'SS'
+        ? unshift(LS.get(s.id)!, s.lag)                                       // SS: LS(pred) ≤ LS(succ) − lag
+        : inicioDe(unshift(LS.get(s.id)!, gapDe(dur.get(s.id) ?? 0) + s.lag), d)  // FS: vía LF(pred)
+      if (candLs < ls) ls = candLs
     }
-    LF.set(n, lf)
-    LS.set(n, inicioDe(lf, dur.get(n) ?? 0))
+    LS.set(n, ls)
+    LF.set(n, finDe(ls, d))
   }
 
   // ── Holgura por tarea + estado del proyecto ──

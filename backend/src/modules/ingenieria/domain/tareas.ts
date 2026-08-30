@@ -285,7 +285,7 @@ export async function getPlanProyecto(runner: QueryRunner, proyectoExt: string):
   if (h.ini && h.entrega) {
     const feriados = await loadFeriados(runner)
     const cpmTareas: TareaCPM[] = tareas.map((t) => ({ id: t.id, dur: t.dur_dias }))
-    const cpmAristas: AristaCPM[] = deps.map((d) => ({ tareaId: d.tarea_id, dependeDeId: d.depende_de_id, lag: d.lag_dias }))
+    const cpmAristas: AristaCPM[] = deps.map((d) => ({ tareaId: d.tarea_id, dependeDeId: d.depende_de_id, lag: d.lag_dias, tipo: d.tipo === 'SS' ? 'SS' : 'FS' }))
     try {
       const r = calcularHolgura(cpmTareas, cpmAristas, h.ini, h.entrega, feriados)
       finProyectado = r.finProyectado; holguraProyecto = r.holguraProyecto; enRiesgo = r.enRiesgo
