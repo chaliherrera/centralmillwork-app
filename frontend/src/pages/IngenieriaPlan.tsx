@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Users, Layers, ClipboardList, Plus, X, Loader2, Trash2, Gauge, Check, FolderKanban, Activity, AlertTriangle, Wallet, Lock, LockOpen, FlaskConical } from 'lucide-react'
+import { Users, Layers, ClipboardList, Plus, X, Loader2, Trash2, Gauge, Check, FolderKanban, Activity, AlertTriangle, Wallet, Lock, LockOpen, FlaskConical, Package } from 'lucide-react'
 import { ingenieriaService, type IngProyecto, type IngTarea, type TareaInput, type IngPlan, type IngTareaPlan, type IngArista, type IngCarga, type IngTareaCelda } from '@/services/ingenieria'
 import MapaEtapas from '@/components/modules/ingenieria/MapaEtapas'
 
@@ -375,6 +375,33 @@ function VistaProyecto({ proyectos, all, plan, planLoading, sel, setSel, onEdit,
             <span className="opacity-90">· {m.aprobadas} aprobada{m.aprobadas === 1 ? '' : 's'}{m.pendientes > 0 ? ` · ${m.pendientes} en curso` : ''}{m.rechazadas > 0 ? ` · ${m.rechazadas} rechazada${m.rechazadas === 1 ? '' : 's'}` : ''}</span>
             {m.todas_aprobadas && m.fecha_aprobacion && <span className="opacity-90">· aprobadas {fmtD(m.fecha_aprobacion)}</span>}
             <span className="ml-auto text-[11px] opacity-70 italic">no bloquea el flujo · corre en paralelo</span>
+          </div>
+        )
+      })()}
+
+      {/* Compras: 5 hitos leídos del módulo (MTO → cotización → precio → OC → recepción) */}
+      {plan && plan.compras.hay && (() => {
+        const c = plan.compras
+        const completo = c.n_materiales > 0 && (c.recibidos + c.en_stock) >= c.n_materiales
+        const cls = completo ? 'border-emerald-200 bg-emerald-50 text-emerald-800' : 'border-sky-200 bg-sky-50 text-sky-800'
+        const paso = (n: number, label: string, done: boolean) => (
+          <span className={done ? 'font-semibold' : 'opacity-60'}>{n} {label}</span>
+        )
+        return (
+          <div className={`rounded-2xl border px-4 py-2.5 flex flex-wrap items-center gap-x-2.5 gap-y-1 text-sm ${cls}`}>
+            <Package size={17} className={`shrink-0 ${completo ? 'text-emerald-600' : 'text-sky-600'}`} />
+            <span className="font-semibold">Compras</span>
+            {c.fecha_mto && <span className="opacity-90">· MTO {fmtD(c.fecha_mto)}</span>}
+            <span className="opacity-60">·</span>
+            {paso(c.n_materiales, 'mat.', true)}
+            <span className="opacity-40">→</span>
+            {paso(c.con_precio, 'c/precio', c.con_precio > 0)}
+            <span className="opacity-40">→</span>
+            {paso(c.en_oc, 'en OC', c.en_oc > 0)}
+            <span className="opacity-40">→</span>
+            {paso(c.recibidos, 'recibidos', c.recibidos > 0)}
+            {c.en_stock > 0 && <span className="opacity-75">(+{c.en_stock} stock)</span>}
+            <span className={`ml-auto inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-bold ${completo ? 'bg-emerald-600 text-white' : 'bg-sky-600 text-white'}`}>{Math.round(c.pct_disponible * 100)}% disponible</span>
           </div>
         )
       })()}

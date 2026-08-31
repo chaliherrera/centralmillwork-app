@@ -83,6 +83,20 @@ export interface EstadoMuestras {
   fecha_solicitud: string | null
   fecha_aprobacion: string | null
 }
+export interface EstadoCompras {
+  hay: boolean
+  fecha_mto: string | null
+  n_materiales: number
+  solicitudes: number
+  fecha_solicitud: string | null
+  con_precio: number
+  en_oc: number
+  recibidos: number
+  en_stock: number
+  fecha_primera_oc: string | null
+  fecha_ultima_recepcion: string | null
+  pct_disponible: number
+}
 export interface IngPlan {
   proyecto_ext: string
   fecha_inicio: string | null
@@ -95,6 +109,7 @@ export interface IngPlan {
   en_riesgo: boolean
   deposito: EstadoDeposito
   muestras: EstadoMuestras
+  compras: EstadoCompras
   tareas: IngTareaPlan[]
   aristas: IngArista[]
 }
