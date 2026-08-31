@@ -26,6 +26,10 @@ export interface TareaCPM {
   id: number
   /** duración en días hábiles */
   dur: number
+  /** piso "no antes de": la tarea no puede arrancar antes de esta fecha (hecho real,
+   *  ej. la fecha en que Finanzas confirmó el depósito). Empuja hacia adelante y a los
+   *  sucesores; nunca adelanta. Opcional — sin ella, el CPM calcula como siempre. */
+  noAntesDe?: ISODate
 }
 
 export interface AristaCPM {
@@ -75,6 +79,9 @@ export function calcularHolgura(
 ): HolguraProyecto {
   const dur = new Map<number, number>()
   for (const t of tareas) dur.set(t.id, Math.max(0, Math.round(t.dur)))
+  // Piso "no antes de" por tarea (hechos reales que empujan el plan).
+  const noAntes = new Map<number, ISODate>()
+  for (const t of tareas) if (t.noAntesDe) noAntes.set(t.id, t.noAntesDe)
 
   // pred[x] = [{de, lag, tipo}] de qué depende x ; succ[x] = quiénes dependen de x
   type Link = { id: number; lag: number; tipo: 'FS' | 'SS' }
@@ -132,6 +139,9 @@ export function calcularHolgura(
         : shift(EF.get(p.id)!, gap + p.lag)    // FS: fin del predecesor + gap del sucesor + lag
       if (cand > es) es = cand
     }
+    // Piso "no antes de" (hecho real): nunca arranca antes de esa fecha.
+    const piso = noAntes.get(n)
+    if (piso && piso > es) es = piso
     ES.set(n, es)
     EF.set(n, finDe(es, dur.get(n) ?? 0))
   }

@@ -14,6 +14,7 @@ import { crearToken, revocarToken } from '../domain/portal'
 import { registrarHito } from '../domain/registro'
 import { getTrabajoPorArea } from '../domain/trabajo'
 import { chequearFactibilidad } from '../domain/factibilidad'
+import { recomputarYGuardar } from '../../ingenieria/domain/tareas'
 
 // POST /api/schedule/factibilidad  { fecha_pedida: 'YYYY-MM-DD' }  (read-only, dry-run)
 export async function factibilidadHandler(req: Request, res: Response, next: NextFunction) {
@@ -228,6 +229,12 @@ export async function registrarHitoHandler(req: Request, res: Response, next: Ne
     const usuarioNombre = (req as any).user?.email ?? null
     await client.query('BEGIN')
     const r = await registrarHito(client, proyectoId, codigo, fecha, nota ?? null, usuarioNombre, importe ?? null)
+    // El depósito (C-04) es piso "no antes de" de material_deposit: al confirmarlo,
+    // recalcular el plan de ingeniería para que las fechas guardadas reflejen la fecha real.
+    if (r.ok && codigo === 'C-04') {
+      const { rows } = await client.query<{ codigo: string }>(`SELECT codigo FROM proyectos WHERE id = $1`, [proyectoId])
+      if (rows[0]) await recomputarYGuardar(client, rows[0].codigo)
+    }
     await client.query('COMMIT')
     if (!r.ok) return next(createError(r.error ?? 'no se pudo registrar', 400))
     res.json({ data: { ok: true } })

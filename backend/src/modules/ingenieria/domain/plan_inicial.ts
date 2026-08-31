@@ -14,6 +14,7 @@ import type { PoolClient } from 'pg'
 import pool from '../../../db/pool'
 import { calcularHolgura, TareaCPM, AristaCPM } from './holgura'
 import { proponerIngeniero } from './reservas'
+import { recomputarYGuardar } from './tareas'
 import { loadFeriados } from '../../schedule/domain/calendario'
 
 type QueryRunner = PoolClient | typeof pool
@@ -202,9 +203,8 @@ export async function listDealsEnCurso(runner: QueryRunner): Promise<DealEnCurso
 /** Re-ancla el día cero del plan de ingeniería a la firma del contrato y recalcula.
  *  Guarda el inicio original la primera vez; el delta documenta la demora del cliente. */
 export async function reanclarPlanAFirma(runner: QueryRunner, proyectoId: number, fechaFirma: string): Promise<{ ok: boolean }> {
-  const { rows } = await runner.query<{ proyecto_ext: string; entrega: string | null }>(
-    `SELECT proyecto_ext, to_char(fecha_entrega,'YYYY-MM-DD') AS entrega
-       FROM ing_proyectos WHERE proyecto_id = $1 AND origen = 'app'`, [proyectoId])
+  const { rows } = await runner.query<{ proyecto_ext: string }>(
+    `SELECT proyecto_ext FROM ing_proyectos WHERE proyecto_id = $1 AND origen = 'app'`, [proyectoId])
   if (!rows[0]) return { ok: false }
   await runner.query(
     `UPDATE ing_proyectos
@@ -213,30 +213,6 @@ export async function reanclarPlanAFirma(runner: QueryRunner, proyectoId: number
       WHERE proyecto_id = $1 AND origen = 'app'`, [proyectoId, fechaFirma])
   // Mover el día cero desincroniza las fechas GUARDADAS de las tareas (que lee el heatmap
   // de carga) del Gantt (que recalcula al vuelo). Recalcular y guardar deja todo en sync.
-  await recalcularFechasGuardadas(runner, rows[0].proyecto_ext, fechaFirma, rows[0].entrega)
+  await recomputarYGuardar(runner, rows[0].proyecto_ext)
   return { ok: true }
-}
-
-/** Recalcula el CPM desde el ancla y GUARDA las fechas de cada tarea. Se usa al re-anclar
- *  (o en cualquier operación que mueva el día cero de un plan ya materializado). Filtra las
- *  aristas con candado (ignorada_at) igual que el motor. */
-async function recalcularFechasGuardadas(runner: QueryRunner, proyectoExt: string, fechaInicio: string, fechaEntrega: string | null): Promise<void> {
-  if (!fechaEntrega) return
-  const { rows: tareas } = await runner.query<{ id: number; dur_dias: string }>(
-    `SELECT id, dur_dias FROM ing_tareas WHERE proyecto_ext = $1`, [proyectoExt])
-  if (!tareas.length) return
-  const ids = tareas.map((t) => t.id)
-  const { rows: deps } = await runner.query<{ tarea_id: number; depende_de_id: number; tipo: string; lag_dias: number }>(
-    `SELECT tarea_id, depende_de_id, tipo, lag_dias FROM ing_tarea_deps
-      WHERE tarea_id = ANY($1) AND depende_de_id = ANY($1) AND ignorada_at IS NULL`, [ids])
-  const feriados = await loadFeriados(runner)
-  const cpmTareas: TareaCPM[] = tareas.map((t) => ({ id: t.id, dur: Number(t.dur_dias) }))
-  const aristas: AristaCPM[] = deps.map((d) => ({ tareaId: d.tarea_id, dependeDeId: d.depende_de_id, lag: d.lag_dias, tipo: d.tipo === 'SS' ? 'SS' : 'FS' }))
-  try {
-    const r = calcularHolgura(cpmTareas, aristas, fechaInicio, fechaEntrega, feriados)
-    for (const t of tareas) {
-      const c = r.tareas.get(t.id)
-      if (c) await runner.query(`UPDATE ing_tareas SET fecha_inicio = $2, fecha_fin = $3 WHERE id = $1`, [t.id, c.earlyStart, c.earlyFinish])
-    }
-  } catch { /* ciclo improbable: se deja como está */ }
 }

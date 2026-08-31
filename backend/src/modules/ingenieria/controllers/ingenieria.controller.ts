@@ -9,7 +9,7 @@ import {
   getResumen, listProyectos, listTareas, getCargaPorIngeniero, getTareasDeCelda,
   getCargaPorEtapa, getProyectosDeEtapa,
   crearTarea, actualizarTarea, reportarAvance, getPlanProyecto,
-  borrarTareaConReconexion, agregarDep, borrarDep, listReprogramaciones,
+  borrarTareaConReconexion, agregarDep, borrarDep, listReprogramaciones, recomputarYGuardar,
 } from '../domain/tareas'
 import { listReservasPendientes, liberarReserva } from '../domain/reservas'
 import {
@@ -269,6 +269,7 @@ export async function overrideDepositoHandler(req: Request, res: Response, next:
   try {
     await client.query('BEGIN')
     await overrideGate(client, proyectoExt, 'material_deposit', abrir, usuarioId)
+    await recomputarYGuardar(client, proyectoExt)   // el candado mueve el schedule → sync fechas guardadas
     const estado = await estadoDeposito(client, proyectoExt)
     await client.query('COMMIT')
     res.json({ data: estado, message: abrir ? 'Gate del depósito abierto' : 'Gate del depósito cerrado' })
