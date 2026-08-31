@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Users, Layers, ClipboardList, Plus, X, Loader2, Trash2, Gauge, Check, FolderKanban, Activity, AlertTriangle, Wallet, Lock, LockOpen, FlaskConical, Package, Wrench } from 'lucide-react'
+import { Users, Layers, ClipboardList, Plus, X, Loader2, Trash2, Gauge, Check, FolderKanban, Activity, AlertTriangle, Wallet, Lock, LockOpen, FlaskConical, Package, Wrench, CalendarClock } from 'lucide-react'
 import { ingenieriaService, type IngProyecto, type IngTarea, type TareaInput, type IngPlan, type IngTareaPlan, type IngArista, type IngCarga, type IngTareaCelda } from '@/services/ingenieria'
 import MapaEtapas from '@/components/modules/ingenieria/MapaEtapas'
 
@@ -450,7 +450,9 @@ function VistaProyecto({ proyectos, all, plan, planLoading, sel, setSel, onEdit,
                       <div key={i} onClick={() => onEdit(t)} className="px-4 border-b border-stone-50 border-r border-stone-100 hover:bg-forest-50/30 cursor-pointer flex flex-col justify-center" style={{ height: ROW_H }}>
                         <div className="flex items-center gap-1.5">
                           {difExcel(t) && <span className="shrink-0 flex" title={`No coincide con el Excel\nExcel: ${fmtD(t.fecha_fin)} · app: ${fmtD(t.early_finish)}\n(revisá dependencias)`}><AlertTriangle size={12} className="text-amber-500" /></span>}
+                          {t.reprogramacion_pedida && <span className="shrink-0 flex" title="El ingeniero pidió reprogramación"><CalendarClock size={12} className="text-amber-600" /></span>}
                           <div className="text-[12.5px] text-stone-800 truncate flex-1">{t.nombre}</div>
+                          {t.decision && <span className={`shrink-0 rounded px-1 text-[9px] font-bold ${t.decision === 'aprobado' ? 'bg-emerald-100 text-emerald-700' : t.decision === 'rechazado' ? 'bg-rose-100 text-rose-700' : 'bg-amber-100 text-amber-700'}`} title={`Cliente: ${t.decision}`}>{t.decision === 'aprobado' ? 'APROB' : t.decision === 'rechazado' ? 'RECH' : 'COMENT'}</span>}
                           {holg !== null && (
                             <span className={`text-[10px] font-bold rounded px-1 py-0.5 tabular-nums shrink-0 ${t.critico ? 'bg-forest-100 text-forest-700' : holg < 0 ? 'bg-rose-100 text-rose-700' : 'bg-stone-100 text-stone-500'}`}>
                               {t.critico ? 'crítico' : (holg < 0 ? holg : '+' + holg) + 'd'}
@@ -682,6 +684,17 @@ function EditModal({ tarea, proyecto, engineers, planTareas, aristas, onClose, o
     } catch (e: any) { setErr(e?.response?.data?.message || 'No se pudo guardar'); setBusy(false) }
   }
   const del = async () => { if (!tarea) return; setBusy(true); try { const r = await ingenieriaService.borrarTarea(tarea.id); onSaved(); if (r.data.reconectadas) { /* cadena reconectada */ } } catch (e: any) { setErr(e?.response?.data?.message || 'No se pudo borrar'); setBusy(false) } }
+  // #7 Revisión: el PM registra la respuesta del cliente (aprobado abre el gate #8).
+  const setDecision = async (d: string) => {
+    if (!tarea) return; setBusy(true)
+    try { await ingenieriaService.avanceTarea(tarea.id, { decision: tarea.decision === d ? null : d }); onSaved() }
+    catch (e: any) { setErr(e?.response?.data?.message || 'No se pudo registrar'); setBusy(false) }
+  }
+  const DEC_OPTS = [
+    { k: 'aprobado', label: 'Aprobado', on: 'bg-emerald-100 border-emerald-300 text-emerald-800' },
+    { k: 'con_comentarios', label: 'Con comentarios', on: 'bg-amber-100 border-amber-300 text-amber-800' },
+    { k: 'rechazado', label: 'Rechazado', on: 'bg-rose-100 border-rose-300 text-rose-800' },
+  ]
   return (
     <div className="fixed inset-0 bg-black/30 flex items-center justify-center p-4 z-50" onClick={() => !busy && onClose()}>
       <div className="bg-white rounded-2xl max-w-lg w-full p-5 shadow-xl" onClick={(e) => e.stopPropagation()}>
@@ -691,6 +704,15 @@ function EditModal({ tarea, proyecto, engineers, planTareas, aristas, onClose, o
           <button onClick={onClose} className="ml-auto text-stone-400 hover:text-stone-700"><X size={18} /></button>
         </div>
         <div className="space-y-3">
+          {tarea?.reprogramacion_pedida && (
+            <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 flex items-center gap-2 text-[12.5px] text-amber-800">
+              <CalendarClock size={15} className="text-amber-600 shrink-0" />
+              <span className="font-semibold">El ingeniero pidió reprogramación.</span>
+              <span className="text-amber-700">Ajustá las fechas y</span>
+              <button type="button" onClick={async () => { if (!tarea) return; setBusy(true); try { await ingenieriaService.avanceTarea(tarea.id, { reprogramacion_pedida: false }); onSaved() } catch (e: any) { setErr(e?.response?.data?.message || 'Error'); setBusy(false) } }}
+                disabled={busy} className="ml-auto rounded-md border border-amber-300 bg-white hover:bg-amber-100 px-2 py-0.5 text-[11px] font-semibold">marcar atendido</button>
+            </div>
+          )}
           <L t="Tarea"><input value={f.nombre} onChange={(e) => set('nombre', e.target.value)} className="inp" /></L>
           <div className="grid grid-cols-2 gap-3">
             <L t="Responsable">
@@ -709,6 +731,20 @@ function EditModal({ tarea, proyecto, engineers, planTareas, aristas, onClose, o
             </L>
             <L t="Estado"><select value={f.estado} onChange={(e) => set('estado', e.target.value)} className="inp"><option value="pendiente">Pendiente</option><option value="en_curso">En curso</option><option value="hecha">Completada</option><option value="na">No aplica</option></select></L>
           </div>
+
+          {/* #7 Revisión del cliente: decisión que abre (o no) el gate de aprobación */}
+          {tarea?.tipo_clave === 'client_review' && (
+            <L t="Decisión del cliente">
+              <div className="flex gap-2">
+                {DEC_OPTS.map((o) => (
+                  <button type="button" key={o.k} onClick={() => setDecision(o.k)} disabled={busy}
+                    className={`flex-1 rounded-lg border px-2 py-1.5 text-[12px] font-semibold transition ${tarea.decision === o.k ? o.on : 'border-stone-200 text-stone-500 hover:bg-stone-50'}`}>
+                    {o.label}
+                  </button>
+                ))}
+              </div>
+            </L>
+          )}
           <div className="grid grid-cols-2 gap-3">
             <L t="% de asignación"><input type="number" step="0.1" min="0" value={f.allocation_pct} onChange={(e) => set('allocation_pct', Number(e.target.value))} className="inp" /></L>
             <L t="Duración (días)"><input type="number" step="0.5" min="0" value={f.dur_dias} onChange={(e) => set('dur_dias', Number(e.target.value))} className="inp" /></L>

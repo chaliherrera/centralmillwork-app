@@ -22,8 +22,19 @@ const ESTADOS: { key: string; label: string; icon: typeof Circle; cls: string }[
   { key: 'na',        label: 'N/A',       icon: MinusCircle,  cls: 'text-stone-400 bg-stone-50' },
 ]
 
+// La fecha de cumplimiento cambia de nombre según el paso: enviar al cliente (#5),
+// enviar CNC a taller (#13), etc. Mismo dato (fecha_fin_real), etiqueta clara.
+const CUMPLIDA_LABEL: Record<string, string> = {
+  shop_drawings: 'Enviada al cliente',
+  cnc: 'CNC a taller',
+  sd_update: 'Set final listo',
+  field_measurements: 'Medida',
+}
+const cumplidaLabel = (clave: string | null) => CUMPLIDA_LABEL[clave ?? ''] ?? 'Cumplida'
+
 export default function MisTareasIngenieria() {
   const { user } = useAuth()
+  const esIngeniero = user?.rol === 'ENGINEERING'   // ve solo lo suyo; ADMIN/PM supervisan a todos
   const [tareas, setTareas] = useState<IngTarea[]>([])
   const [loading, setLoading] = useState(true)
   const [ing, setIng] = useState<string>('')
@@ -47,8 +58,10 @@ export default function MisTareasIngenieria() {
     const mine = user?.nombre && ingenieros.find((n) =>
       n.toLowerCase().includes(user.nombre.toLowerCase().split(' ')[0]) ||
       user.nombre.toLowerCase().includes(n.toLowerCase().split(' ')[0]))
-    setIng(mine || ingenieros[0])
-  }, [ingenieros, user, ing])
+    // El ingeniero SOLO ve lo suyo: si no matchea, su nombre (bandeja vacía), NUNCA otro.
+    // ADMIN/PM supervisan: caen al primero de la lista.
+    setIng(mine || (esIngeniero ? (user?.nombre ?? '') : ingenieros[0]))
+  }, [ingenieros, user, ing, esIngeniero])
 
   const mias = useMemo(() => tareas
     .filter((t) => t.asignado_nombre === ing)
@@ -86,6 +99,18 @@ export default function MisTareasIngenieria() {
     finally { setBusy(null) }
   }
 
+  // El ingeniero no mueve fechas; si no puede cumplir, PIDE reprogramación al PM (#2).
+  const pedirReprogramacion = async (t: IngTarea) => {
+    const nuevo = !t.reprogramacion_pedida
+    setBusy(t.id)
+    try {
+      await ingenieriaService.avanceTarea(t.id, { reprogramacion_pedida: nuevo })
+      setTareas((prev) => prev.map((x) => x.id === t.id ? { ...x, reprogramacion_pedida: nuevo } : x))
+      toast.success(nuevo ? 'Le avisamos al PM que necesitás reprogramar' : 'Pedido de reprogramación cancelado')
+    } catch (e: any) { toast.error(e?.response?.data?.message || 'No se pudo enviar el pedido') }
+    finally { setBusy(null) }
+  }
+
   const guardarNota = async (t: IngTarea) => {
     const val = notaVal.trim()
     setNotaOpen(null)
@@ -107,10 +132,16 @@ export default function MisTareasIngenieria() {
         <span className="text-xs text-stone-400">reportá tu avance · no edita el plan (eso es del PM)</span>
         <div className="ml-auto flex items-center gap-2">
           <label className="text-[11px] uppercase tracking-wide text-stone-400 font-semibold">Ingeniero</label>
-          <select value={ing} onChange={(e) => setIng(e.target.value)}
-            className="rounded-lg border border-stone-300 px-2.5 py-1.5 text-sm text-stone-800 bg-white focus:outline-none focus:ring-2 focus:ring-forest-300">
-            {ingenieros.map((n) => <option key={n} value={n}>{n}</option>)}
-          </select>
+          {esIngeniero ? (
+            // El ingeniero ve SOLO lo suyo (no puede cambiar de ingeniero).
+            <span className="rounded-lg border border-stone-200 bg-stone-50 px-2.5 py-1.5 text-sm font-semibold text-stone-700">{ing || user?.nombre}</span>
+          ) : (
+            // ADMIN/PM supervisan: pueden ver el escritorio de cualquiera.
+            <select value={ing} onChange={(e) => setIng(e.target.value)}
+              className="rounded-lg border border-stone-300 px-2.5 py-1.5 text-sm text-stone-800 bg-white focus:outline-none focus:ring-2 focus:ring-forest-300">
+              {ingenieros.map((n) => <option key={n} value={n}>{n}</option>)}
+            </select>
+          )}
         </div>
       </div>
 
@@ -146,7 +177,7 @@ export default function MisTareasIngenieria() {
                           </label>
                           <label className="inline-flex items-center gap-1" title="¿Cuándo la cumpliste? (fecha real)">
                             <CalendarCheck size={12} className="text-stone-400" />
-                            <span className="hidden sm:inline">Cumplida</span>
+                            <span className="hidden sm:inline">{cumplidaLabel(t.tipo_clave)}</span>
                             <input type="date" value={t.fecha_fin_real ?? ''} disabled={busy === t.id}
                               onChange={(e) => setFecha(t, 'fecha_fin_real', e.target.value)}
                               className="rounded border border-stone-200 bg-white px-1.5 py-0.5 text-[11px] text-stone-700 focus:outline-none focus:ring-1 focus:ring-forest-300" />
@@ -158,6 +189,9 @@ export default function MisTareasIngenieria() {
                               : <span className="inline-flex items-center rounded-full bg-emerald-100 text-emerald-700 font-semibold px-1.5 py-0.5">a tiempo</span>
                           })()}
                         </div>
+                        {t.reprogramacion_pedida && (
+                          <div className="text-[11px] text-amber-700 mt-1 inline-flex items-center gap-1 font-semibold"><CalendarClock size={12} /> Reprogramación pedida al PM</div>
+                        )}
                         {t.comentario && notaOpen !== t.id && (
                           <div className="text-[11px] text-stone-500 mt-1 flex items-start gap-1"><StickyNote size={12} className="mt-0.5 shrink-0" /> {t.comentario}</div>
                         )}
@@ -177,6 +211,11 @@ export default function MisTareasIngenieria() {
                         <button onClick={() => { setNotaOpen(t.id); setNotaVal(t.comentario ?? '') }}
                           title="Nota" className="inline-flex items-center rounded-md px-1.5 py-1 text-stone-400 hover:bg-stone-100">
                           <StickyNote size={13} />
+                        </button>
+                        <button onClick={() => pedirReprogramacion(t)} disabled={busy === t.id}
+                          title={t.reprogramacion_pedida ? 'Cancelar pedido de reprogramación' : 'Pedir reprogramación al PM'}
+                          className={`inline-flex items-center rounded-md px-1.5 py-1 ${t.reprogramacion_pedida ? 'text-amber-600 bg-amber-50' : 'text-stone-400 hover:bg-stone-100'}`}>
+                          <CalendarClock size={13} />
                         </button>
                       </div>
                     </div>

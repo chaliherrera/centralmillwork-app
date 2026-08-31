@@ -25,6 +25,8 @@ export interface IngTarea {
   estado: string
   status_ext: string | null
   comentario: string | null
+  reprogramacion_pedida: boolean    // el ingeniero pidió reprogramación al PM (#2)
+  decision: string | null           // respuesta del cliente en la revisión (#7)
 }
 export interface IngCargaIngeniero {
   nombre: string
@@ -181,7 +183,7 @@ export const ingenieriaService = {
   actualizarTarea: (id: number, t: Partial<TareaInput>) =>
     api.patch<ApiResponse<{ ok: boolean }>>(`/ingenieria/tareas/${id}`, t).then((r) => r.data),
   // Ingeniería reporta avance de su tarea (solo estado/comentario)
-  avanceTarea: (id: number, data: { estado?: string; comentario?: string | null; fecha_compromiso?: string | null; fecha_fin_real?: string | null }) =>
+  avanceTarea: (id: number, data: { estado?: string; comentario?: string | null; fecha_compromiso?: string | null; fecha_fin_real?: string | null; reprogramacion_pedida?: boolean; decision?: string | null }) =>
     api.patch<ApiResponse<{ ok: boolean }>>(`/ingenieria/tareas/${id}/avance`, data).then((r) => r.data),
   borrarTarea: (id: number) =>
     api.delete<ApiResponse<{ ok: boolean; reconectadas: number }>>(`/ingenieria/tareas/${id}`).then((r) => r.data),
