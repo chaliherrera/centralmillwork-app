@@ -36,6 +36,7 @@ export interface Tarea {
   status_ext: string | null
   comentario: string | null
   reprogramacion_pedida: boolean    // el ingeniero pidió reprogramación al PM (#2)
+  reprogramacion_motivo: string | null  // por qué / cuándo podría
   decision: string | null           // respuesta del cliente en la revisión (#7): aprobado|rechazado|con_comentarios
 }
 
@@ -83,7 +84,7 @@ export async function listTareas(runner: QueryRunner, proyectoExt?: string): Pro
             to_char(t.fecha_fin,'YYYY-MM-DD') AS fecha_fin,
             to_char(t.fecha_compromiso,'YYYY-MM-DD') AS fecha_compromiso,
             to_char(t.fecha_fin_real,'YYYY-MM-DD') AS fecha_fin_real,
-            t.estado, t.status_ext, t.comentario, t.reprogramacion_pedida, t.decision
+            t.estado, t.status_ext, t.comentario, t.reprogramacion_pedida, t.reprogramacion_motivo, t.decision
        FROM ing_tareas t
        LEFT JOIN ing_tarea_tipos tt ON tt.id = t.tipo_id
       WHERE ($1::text IS NULL OR t.proyecto_ext = $1)
@@ -386,7 +387,7 @@ export async function reportarAvance(
   runner: QueryRunner, id: number,
   data: {
     estado?: string; comentario?: string | null; fecha_compromiso?: string | null; fecha_fin_real?: string | null
-    reprogramacion_pedida?: boolean; decision?: string | null
+    reprogramacion_pedida?: boolean; reprogramacion_motivo?: string | null; decision?: string | null
   }
 ): Promise<boolean> {
   const sets: string[] = []
@@ -398,11 +399,35 @@ export async function reportarAvance(
   if (data.fecha_fin_real !== undefined) { vals.push(data.fecha_fin_real); sets.push(`fecha_fin_real = $${vals.length}`) }
   // Cierre de capturas: pedido de reprogramación (#2) y decisión del cliente (#7).
   if (data.reprogramacion_pedida !== undefined) { vals.push(data.reprogramacion_pedida); sets.push(`reprogramacion_pedida = $${vals.length}`) }
+  if (data.reprogramacion_motivo !== undefined) { vals.push(data.reprogramacion_motivo); sets.push(`reprogramacion_motivo = $${vals.length}`) }
   if (data.decision !== undefined) { vals.push(data.decision); sets.push(`decision = $${vals.length}`) }
   if (!sets.length) return false
   sets.push('updated_at = NOW()')
   const { rowCount } = await runner.query(`UPDATE ing_tareas SET ${sets.join(', ')} WHERE id = $1`, vals)
   return (rowCount ?? 0) > 0
+}
+
+export interface Reprogramacion {
+  id: number
+  proyecto_ext: string | null
+  nombre: string
+  tipo_clave: string | null
+  asignado_nombre: string | null
+  motivo: string | null
+  fecha_inicio: string | null
+}
+
+/** Tareas que piden reprogramación, en todos los proyectos — para la bandeja del PM. */
+export async function listReprogramaciones(runner: QueryRunner): Promise<Reprogramacion[]> {
+  const { rows } = await runner.query<Reprogramacion>(
+    `SELECT t.id, t.proyecto_ext, t.nombre, tt.clave AS tipo_clave, t.asignado_nombre,
+            t.reprogramacion_motivo AS motivo,
+            to_char(t.fecha_inicio,'YYYY-MM-DD') AS fecha_inicio
+       FROM ing_tareas t
+       LEFT JOIN ing_tarea_tipos tt ON tt.id = t.tipo_id
+      WHERE t.reprogramacion_pedida = TRUE
+      ORDER BY t.fecha_inicio NULLS LAST, t.proyecto_ext`)
+  return rows
 }
 
 /**

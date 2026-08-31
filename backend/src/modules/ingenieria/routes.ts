@@ -7,7 +7,7 @@ import {
   agregarDepHandler, borrarDepHandler,
   reservarHandler, reservasPendientesHandler, confirmarReservaHandler, liberarReservaHandler,
   dealsEnCursoHandler, enviarClienteHandler, clienteAproboHandler, activarProyectoHandler,
-  overrideDepositoHandler,
+  overrideDepositoHandler, reprogramacionesHandler,
 } from './controllers/ingenieria.controller'
 
 const router = Router()
@@ -27,6 +27,7 @@ router.get('/carga/detalle', READ, cargaDetalleHandler)
 router.get('/carga-etapas', READ, cargaEtapasHandler)
 router.get('/carga-etapas/detalle', READ, etapaDetalleHandler)
 router.get('/plan', READ, planHandler)
+router.get('/reprogramaciones', READ, reprogramacionesHandler)  // pedidos del ingeniero → bandeja del PM
 // Estructura del plan = PM (gestión de recursos)
 router.post('/tareas', PM, crearTareaHandler)
 router.patch('/tareas/:id', PM, actualizarTareaHandler)

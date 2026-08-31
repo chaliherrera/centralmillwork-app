@@ -9,7 +9,7 @@ import {
   getResumen, listProyectos, listTareas, getCargaPorIngeniero, getTareasDeCelda,
   getCargaPorEtapa, getProyectosDeEtapa,
   crearTarea, actualizarTarea, reportarAvance, getPlanProyecto,
-  borrarTareaConReconexion, agregarDep, borrarDep,
+  borrarTareaConReconexion, agregarDep, borrarDep, listReprogramaciones,
 } from '../domain/tareas'
 import { listReservasPendientes, liberarReserva } from '../domain/reservas'
 import {
@@ -191,6 +191,7 @@ const avanceSchema = z.object({
   fecha_compromiso: fechaOpt,
   fecha_fin_real: fechaOpt,
   reprogramacion_pedida: z.boolean().optional(),
+  reprogramacion_motivo: z.string().max(500).nullish(),
   decision: z.enum(['aprobado', 'rechazado', 'con_comentarios']).nullish(),
 })
 export async function avanceTareaHandler(req: Request, res: Response, next: NextFunction) {
@@ -241,6 +242,15 @@ export async function borrarDepHandler(req: Request, res: Response, next: NextFu
   try {
     await borrarDep(pool, id, dep)
     res.json({ data: { ok: true } })
+  } catch (e) { next(e) }
+}
+
+// ── Pedidos de reprogramación (bandeja del PM) ──
+// GET /api/ingenieria/reprogramaciones
+export async function reprogramacionesHandler(_req: Request, res: Response, next: NextFunction) {
+  try {
+    const data = await listReprogramaciones(pool)
+    res.json({ data })
   } catch (e) { next(e) }
 }
 
