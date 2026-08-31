@@ -12,6 +12,7 @@ import pool from '../../../db/pool'
 import { loadFeriados } from '../../schedule/domain/calendario'
 import { calcularHolgura, type TareaCPM, type AristaCPM } from './holgura'
 import { estadoDeposito, type EstadoDeposito } from './deposito'
+import { estadoMuestras, type EstadoMuestras } from './muestras'
 
 type QueryRunner = PoolClient | typeof pool
 
@@ -265,6 +266,7 @@ export interface PlanProyecto {
   holgura_proyecto: number      // días hábiles de holgura del proyecto (< 0 = riesgo)
   en_riesgo: boolean
   deposito: EstadoDeposito       // gate del depósito: confirmación de Finanzas + candado del PM
+  muestras: EstadoMuestras       // estado del módulo de Muestras (señal E-05, no bloquea)
   tareas: TareaPlan[]
   aristas: AristaPlan[]
 }
@@ -309,12 +311,13 @@ export async function getPlanProyecto(runner: QueryRunner, proyectoExt: string):
   }
 
   const deposito = await estadoDeposito(runner, proyectoExt)
+  const muestras = await estadoMuestras(runner, proyectoExt)
 
   return {
     proyecto_ext: proyectoExt, fecha_inicio: h.ini, fecha_entrega: h.entrega, status_ext: h.status,
     n_items: h.n_items, presupuesto: h.presupuesto != null ? +h.presupuesto : null,
     fin_proyectado: finProyectado, holgura_proyecto: holguraProyecto, en_riesgo: enRiesgo,
-    deposito, tareas: holgura, aristas: deps,
+    deposito, muestras, tareas: holgura, aristas: deps,
   }
 }
 
