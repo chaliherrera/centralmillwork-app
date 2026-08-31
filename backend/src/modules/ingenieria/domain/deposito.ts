@@ -7,8 +7,10 @@
 // es la decisión del PM de ABRIR el gate a mano antes de que el pago llegue
 // (candado ing_tarea_deps.ignorada_at/por) — nadie más dueña ese hecho.
 //
-// El motor (holgura, en tareas.ts) ya excluye del cálculo las aristas con
-// ignorada_at: abrir el gate suelta a long_leads/material_proc del depósito.
+// El motor usa la fecha de RESOLUCIÓN (pago o apertura del candado) como piso
+// "no antes de" de material_deposit: un depósito tardío empuja las compras, y abrir
+// el candado hace seguir DESDE la apertura (no desde el pasado). Los días día-cero→
+// resolución quedan como atribuibles al cliente (justificativo), abra o no el candado.
 // ─────────────────────────────────────────────────────────────────────────────
 
 import type { PoolClient } from 'pg'
@@ -17,27 +19,34 @@ import pool from '../../../db/pool'
 type QueryRunner = PoolClient | typeof pool
 
 export interface EstadoDeposito {
-  confirmado_finanzas: boolean   // Finanzas registró el hito C-04
+  confirmado_finanzas: boolean   // Finanzas registró el hito C-04 (pago recibido)
   fecha_confirmacion: string | null
-  override_pm: boolean           // el PM abrió el gate a mano
+  override_pm: boolean           // el PM abrió el gate a mano (seguir sin el pago)
   override_por: string | null    // nombre/email de quién lo abrió
   override_at: string | null
-  abierto: boolean               // confirmado por finanzas O abierto por el PM
+  abierto: boolean               // pagado por Finanzas O abierto por el PM
+  // Fecha en que el depósito DEJÓ de frenar = la más temprana entre pago y apertura. Es el
+  // piso "no antes de" de material_deposit: al abrir el candado seguimos desde acá, no del pasado.
+  fecha_resolucion: string | null
+  // Días que el depósito estuvo pendiente (día cero → resolución) = ATRIBUIBLES AL CLIENTE.
+  // Se conservan aunque el PM abra el candado — justificativo si la entrega queda en riesgo.
+  dias_atribuibles_cliente: number | null
 }
 
 /** Lee el estado del gate del depósito de un proyecto (dato de Finanzas + candado del PM). */
 export async function estadoDeposito(runner: QueryRunner, proyectoExt: string): Promise<EstadoDeposito> {
-  // (1) Confirmación de Finanzas: hito C-04 del plan de schedule de este proyecto.
-  const { rows: fin } = await runner.query<{ fecha: string | null }>(
-    `SELECT to_char(h.fecha_real,'YYYY-MM-DD') AS fecha
+  // (1) Día cero (arranca la cuenta de días del cliente) + confirmación de Finanzas (C-04).
+  const { rows: fin } = await runner.query<{ dia_cero: string | null; fecha: string | null }>(
+    `SELECT to_char(ip.fecha_inicio,'YYYY-MM-DD') AS dia_cero,
+            to_char(h.fecha_real,'YYYY-MM-DD') AS fecha
        FROM ing_proyectos ip
        JOIN schedule_planes sp ON sp.proyecto_id = ip.proyecto_id AND sp.scope = 'proyecto'
        JOIN schedule_hitos  h  ON h.plan_id = sp.id AND h.codigo = 'C-04'
-      WHERE ip.proyecto_ext = $1 AND h.fecha_real IS NOT NULL
-      ORDER BY h.fecha_real ASC
+      WHERE ip.proyecto_ext = $1
       LIMIT 1`, [proyectoExt])
-  const confirmado = fin.length > 0
+  const diaCero = fin[0]?.dia_cero ?? null
   const fechaConf = fin[0]?.fecha ?? null
+  const confirmado = !!fechaConf
 
   // (2) Candado del PM: alguna arista que depende de material_deposit está ignorada.
   const { rows: ov } = await runner.query<{ at: string | null; por: string | null }>(
@@ -50,15 +59,54 @@ export async function estadoDeposito(runner: QueryRunner, proyectoExt: string): 
       ORDER BY d.ignorada_at ASC
       LIMIT 1`, [proyectoExt])
   const overridePm = ov.length > 0
+  const overrideAt = ov[0]?.at ?? null
+
+  // Resolución = lo que primero destrabó el depósito (pago o apertura del candado).
+  const cand = [fechaConf, overrideAt].filter((x): x is string => !!x).sort()
+  const resolucion = cand.length ? cand[0] : null
+  const dias = (resolucion && diaCero)
+    ? Math.max(0, Math.round((Date.parse(resolucion) - Date.parse(diaCero)) / 86400000))
+    : null
 
   return {
     confirmado_finanzas: confirmado,
     fecha_confirmacion: fechaConf,
     override_pm: overridePm,
     override_por: ov[0]?.por ?? null,
-    override_at: ov[0]?.at ?? null,
+    override_at: overrideAt,
     abierto: confirmado || overridePm,
+    fecha_resolucion: resolucion,
+    dias_atribuibles_cliente: dias,
   }
+}
+
+export interface DepositoBloqueando {
+  proyecto_ext: string
+  nombre: string | null
+  dias_pendiente: number | null   // días que el depósito lleva sin pagar (día cero → hoy)
+}
+
+/** Proyectos donde las compras están LISTAS (aprobación #8 hecha) pero el depósito NO se
+ *  resolvió (ni pagado ni candado abierto). Es la alerta para la bandeja del PM: el
+ *  ingeniero llegó al paso 9 y el pago no está — el PM decide abrir el candado o frenar. */
+export async function listDepositosBloqueando(runner: QueryRunner): Promise<DepositoBloqueando[]> {
+  const { rows } = await runner.query<DepositoBloqueando>(
+    `SELECT ip.proyecto_ext, p.nombre,
+            GREATEST(0, (CURRENT_DATE - ip.fecha_inicio))::int AS dias_pendiente
+       FROM ing_proyectos ip
+       JOIN proyectos p ON p.id = ip.proyecto_id
+      WHERE EXISTS (SELECT 1 FROM ing_tareas t JOIN ing_tarea_tipos tt ON tt.id = t.tipo_id
+                     WHERE t.proyecto_ext = ip.proyecto_ext AND tt.clave = 'approval' AND t.estado = 'hecha')
+        AND NOT EXISTS (SELECT 1 FROM schedule_planes sp JOIN schedule_hitos h ON h.plan_id = sp.id
+                         WHERE sp.proyecto_id = ip.proyecto_id AND sp.scope = 'proyecto'
+                           AND h.codigo = 'C-04' AND h.fecha_real IS NOT NULL)
+        AND NOT EXISTS (SELECT 1 FROM ing_tarea_deps d
+                          JOIN ing_tareas t ON t.id = d.depende_de_id
+                          JOIN ing_tarea_tipos tt ON tt.id = t.tipo_id
+                         WHERE t.proyecto_ext = ip.proyecto_ext AND tt.clave = 'material_deposit'
+                           AND d.ignorada_at IS NOT NULL)
+      ORDER BY dias_pendiente DESC, ip.proyecto_ext`)
+  return rows
 }
 
 /** El PM abre (o cierra) el gate del depósito a mano: pone/saca el candado en TODAS las

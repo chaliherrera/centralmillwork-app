@@ -16,7 +16,7 @@ import {
   generarPlanIngenieria, aceptarPlanPM,
   enviarAClienteDeal, registrarAprobacionCliente, activarProyecto, listDealsEnCurso,
 } from '../domain/plan_inicial'
-import { estadoDeposito, overrideGate } from '../domain/deposito'
+import { estadoDeposito, overrideGate, listDepositosBloqueando } from '../domain/deposito'
 
 function pid(req: Request): number {
   const id = parseInt(String(req.params.id ?? req.params.proyectoId), 10)
@@ -250,6 +250,15 @@ export async function borrarDepHandler(req: Request, res: Response, next: NextFu
 export async function reprogramacionesHandler(_req: Request, res: Response, next: NextFunction) {
   try {
     const data = await listReprogramaciones(pool)
+    res.json({ data })
+  } catch (e) { next(e) }
+}
+
+// ── Depósitos que bloquean compras (bandeja del PM) ──
+// GET /api/ingenieria/depositos-bloqueando
+export async function depositosBloqueandoHandler(_req: Request, res: Response, next: NextFunction) {
+  try {
+    const data = await listDepositosBloqueando(pool)
     res.json({ data })
   } catch (e) { next(e) }
 }

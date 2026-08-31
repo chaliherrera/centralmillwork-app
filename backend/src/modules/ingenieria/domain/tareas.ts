@@ -308,10 +308,10 @@ export async function getPlanProyecto(runner: QueryRunner, proyectoExt: string):
     // El depósito confirmado por Finanzas manda sobre el plan: material_deposit no puede
     // caer antes de esa fecha real (reusable para otros hechos: medición, CNC, etc.).
     const cpmTareas: TareaCPM[] = tareas.map((t) => ({ id: t.id, dur: t.dur_dias, noAntesDe: pisoDeposito(depClave.get(t.id) ?? null, deposito) }))
-    // El candado del PM (ignorada_at) SACA la arista del cálculo: un gate abierto ya no
-    // frena al sucesor. La dep se sigue devolviendo (abajo) para dibujarla marcada en la UI.
+    // Las aristas se mantienen SIEMPRE; el candado del PM actúa por el piso "no antes de"
+    // de material_deposit (fecha de apertura), no borrando la dependencia. La marca
+    // ignorada_at se sigue devolviendo (abajo) para dibujar el gate abierto en la UI.
     const cpmAristas: AristaCPM[] = deps
-      .filter((d) => !d.ignorada_at)
       .map((d) => ({ tareaId: d.tarea_id, dependeDeId: d.depende_de_id, lag: d.lag_dias, tipo: d.tipo === 'SS' ? 'SS' : 'FS' }))
     try {
       const r = calcularHolgura(cpmTareas, cpmAristas, h.ini, h.entrega, feriados)
@@ -336,11 +336,12 @@ export async function getPlanProyecto(runner: QueryRunner, proyectoExt: string):
   }
 }
 
-/** Piso "no antes de" de material_deposit = la fecha real en que Finanzas confirmó el
- *  depósito. Único punto para el mapeo hecho→piso (reusable para otros hechos a futuro). */
+/** Piso "no antes de" de material_deposit = la fecha de RESOLUCIÓN del depósito: pago de
+ *  Finanzas o apertura del candado por el PM, lo que primero destrabó. Así un depósito
+ *  tardío empuja las compras, y abrir el candado hace seguir desde la apertura (no del
+ *  pasado). Único punto del mapeo hecho→piso (reusable para otros hechos a futuro). */
 function pisoDeposito(tipoClave: string | null, deposito: EstadoDeposito): string | undefined {
-  return tipoClave === 'material_deposit' && deposito.confirmado_finanzas
-    ? (deposito.fecha_confirmacion ?? undefined) : undefined
+  return tipoClave === 'material_deposit' ? (deposito.fecha_resolucion ?? undefined) : undefined
 }
 
 /** Recalcula el CPM (con candado del PM + piso del depósito) y GUARDA fecha_inicio/fin de
@@ -357,7 +358,7 @@ export async function recomputarYGuardar(runner: QueryRunner, proyectoExt: strin
   const ids = tareas.map((t) => t.id)
   const { rows: deps } = await runner.query<{ tarea_id: number; depende_de_id: number; tipo: string; lag_dias: number }>(
     `SELECT tarea_id, depende_de_id, tipo, lag_dias FROM ing_tarea_deps
-      WHERE tarea_id = ANY($1) AND depende_de_id = ANY($1) AND ignorada_at IS NULL`, [ids])
+      WHERE tarea_id = ANY($1) AND depende_de_id = ANY($1)`, [ids])
   const deposito = await estadoDeposito(runner, proyectoExt)
   const clave = new Map(tareas.map((t) => [t.id, t.tipo_clave]))
   const feriados = await loadFeriados(runner)
