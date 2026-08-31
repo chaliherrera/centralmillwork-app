@@ -190,6 +190,8 @@ const avanceSchema = z.object({
   comentario: z.string().max(1000).nullish(),
   fecha_compromiso: fechaOpt,
   fecha_fin_real: fechaOpt,
+  reprogramacion_pedida: z.boolean().optional(),
+  decision: z.enum(['aprobado', 'rechazado', 'con_comentarios']).nullish(),
 })
 export async function avanceTareaHandler(req: Request, res: Response, next: NextFunction) {
   const id = parseInt(String(req.params.id), 10)

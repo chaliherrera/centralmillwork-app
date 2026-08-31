@@ -35,6 +35,8 @@ export interface Tarea {
   estado: string
   status_ext: string | null
   comentario: string | null
+  reprogramacion_pedida: boolean    // el ingeniero pidió reprogramación al PM (#2)
+  decision: string | null           // respuesta del cliente en la revisión (#7): aprobado|rechazado|con_comentarios
 }
 
 export interface ProyectoResumen {
@@ -81,7 +83,7 @@ export async function listTareas(runner: QueryRunner, proyectoExt?: string): Pro
             to_char(t.fecha_fin,'YYYY-MM-DD') AS fecha_fin,
             to_char(t.fecha_compromiso,'YYYY-MM-DD') AS fecha_compromiso,
             to_char(t.fecha_fin_real,'YYYY-MM-DD') AS fecha_fin_real,
-            t.estado, t.status_ext, t.comentario
+            t.estado, t.status_ext, t.comentario, t.reprogramacion_pedida, t.decision
        FROM ing_tareas t
        LEFT JOIN ing_tarea_tipos tt ON tt.id = t.tipo_id
       WHERE ($1::text IS NULL OR t.proyecto_ext = $1)
@@ -382,7 +384,10 @@ export async function actualizarTarea(runner: QueryRunner, id: number, t: TareaI
  *  estructura del plan, del PM). Distinto de actualizarTarea (edición completa). */
 export async function reportarAvance(
   runner: QueryRunner, id: number,
-  data: { estado?: string; comentario?: string | null; fecha_compromiso?: string | null; fecha_fin_real?: string | null }
+  data: {
+    estado?: string; comentario?: string | null; fecha_compromiso?: string | null; fecha_fin_real?: string | null
+    reprogramacion_pedida?: boolean; decision?: string | null
+  }
 ): Promise<boolean> {
   const sets: string[] = []
   const vals: unknown[] = [id]
@@ -391,6 +396,9 @@ export async function reportarAvance(
   // Patrón "comprometida + cumplida": ambas parciales, aceptan null para limpiar.
   if (data.fecha_compromiso !== undefined) { vals.push(data.fecha_compromiso); sets.push(`fecha_compromiso = $${vals.length}`) }
   if (data.fecha_fin_real !== undefined) { vals.push(data.fecha_fin_real); sets.push(`fecha_fin_real = $${vals.length}`) }
+  // Cierre de capturas: pedido de reprogramación (#2) y decisión del cliente (#7).
+  if (data.reprogramacion_pedida !== undefined) { vals.push(data.reprogramacion_pedida); sets.push(`reprogramacion_pedida = $${vals.length}`) }
+  if (data.decision !== undefined) { vals.push(data.decision); sets.push(`decision = $${vals.length}`) }
   if (!sets.length) return false
   sets.push('updated_at = NOW()')
   const { rowCount } = await runner.query(`UPDATE ing_tareas SET ${sets.join(', ')} WHERE id = $1`, vals)
