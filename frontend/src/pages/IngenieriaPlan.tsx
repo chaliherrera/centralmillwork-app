@@ -335,13 +335,14 @@ function VistaProyecto({ proyectos, all, plan, planLoading, sel, setSel, onEdit,
             <Wallet size={17} className="text-emerald-600 shrink-0" />
             <span className="font-semibold text-emerald-800">Depósito confirmado por Finanzas</span>
             <span className="text-emerald-700">· {fmtD(dep.fecha_confirmacion)} · compras habilitadas</span>
+            {(dep.dias_atribuibles_cliente ?? 0) > 0 && <span className="ml-auto inline-flex items-center rounded-full bg-emerald-100 text-emerald-700 text-[11px] font-semibold px-2 py-0.5" title="Días que el cliente tardó en pagar el depósito — justificativo si la entrega queda en riesgo">{dep.dias_atribuibles_cliente} d del cliente</span>}
           </div>
         )
         if (dep.override_pm) return (
           <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-2.5 flex flex-wrap items-center gap-2.5 text-sm">
             <LockOpen size={17} className="text-amber-600 shrink-0" />
             <span className="font-semibold text-amber-800">Gate abierto a mano</span>
-            <span className="text-amber-700">· por {dep.override_por ?? '—'}{dep.override_at ? ` · ${fmtD(dep.override_at)}` : ''} · las compras avanzan sin esperar el depósito</span>
+            <span className="text-amber-700">· por {dep.override_por ?? '—'}{dep.override_at ? ` · ${fmtD(dep.override_at)}` : ''} · las compras siguen desde acá{(dep.dias_atribuibles_cliente ?? 0) > 0 ? ` · ${dep.dias_atribuibles_cliente} d atribuibles al cliente` : ''}</span>
             <button onClick={() => toggleDeposito(false)} disabled={depBusy}
               className="ml-auto inline-flex items-center gap-1.5 rounded-lg border border-amber-300 bg-white hover:bg-amber-100 text-amber-800 text-xs font-semibold px-2.5 py-1 disabled:opacity-50">
               {depBusy ? <Loader2 size={13} className="animate-spin" /> : <Lock size={13} />} Cerrar gate

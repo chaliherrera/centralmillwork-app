@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Loader2, CircleDot, Circle, CheckCircle2, MinusCircle, StickyNote, CalendarClock, CalendarCheck } from 'lucide-react'
+import { Loader2, CircleDot, Circle, CheckCircle2, MinusCircle, StickyNote, CalendarClock, CalendarCheck, AlertTriangle } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { useAuth } from '@/context/AuthContext'
 import { ingenieriaService, type IngTarea } from '@/services/ingenieria'
@@ -44,11 +44,18 @@ export default function MisTareasIngenieria() {
   const [reprogOpen, setReprogOpen] = useState<number | null>(null)
   const [reprogVal, setReprogVal] = useState('')
   const [verHechas, setVerHechas] = useState(false)
+  const [depBloqueado, setDepBloqueado] = useState<Set<string>>(new Set())  // proyectos con depósito impago
 
   const cargar = () => ingenieriaService.getTareas()
     .then((r) => setTareas(r.data ?? []))
     .catch(() => {}).finally(() => setLoading(false))
   useEffect(() => { cargar() }, [])
+  // Proyectos donde el depósito bloquea las compras (para avisar en el paso #9).
+  useEffect(() => {
+    ingenieriaService.depositosBloqueando()
+      .then((r) => setDepBloqueado(new Set((r.data ?? []).map((d) => d.proyecto_ext))))
+      .catch(() => {})
+  }, [])
 
   // Ingenieros disponibles (nombres asignados en el plan).
   const ingenieros = useMemo(() =>
@@ -204,6 +211,9 @@ export default function MisTareasIngenieria() {
                         </div>
                         {t.reprogramacion_pedida && (
                           <div className="text-[11px] text-amber-700 mt-1 flex items-start gap-1 font-semibold"><CalendarClock size={12} className="mt-0.5 shrink-0" /> <span>Reprogramación pedida al PM{t.reprogramacion_motivo ? <span className="font-normal">: {t.reprogramacion_motivo}</span> : ''}</span></div>
+                        )}
+                        {t.tipo_clave === 'material_proc' && t.proyecto_ext && depBloqueado.has(t.proyecto_ext) && (
+                          <div className="text-[11px] text-rose-700 mt-1 flex items-start gap-1 font-semibold"><AlertTriangle size={12} className="mt-0.5 shrink-0" /> <span>El depósito no está pagado — el PM debe abrir el candado o esperar el pago antes de enviar el MTO</span></div>
                         )}
                         {t.comentario && notaOpen !== t.id && (
                           <div className="text-[11px] text-stone-500 mt-1 flex items-start gap-1"><StickyNote size={12} className="mt-0.5 shrink-0" /> {t.comentario}</div>

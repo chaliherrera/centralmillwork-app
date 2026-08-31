@@ -4,6 +4,7 @@ import MiTrabajo from '@/components/modules/schedule/MiTrabajo'
 import ReservasPendientes from '@/components/modules/estimados/ReservasPendientes'
 import DealsEnCurso from '@/components/modules/estimados/DealsEnCurso'
 import ReprogramacionesPendientes from '@/components/modules/ingenieria/ReprogramacionesPendientes'
+import DepositosBloqueando from '@/components/modules/ingenieria/DepositosBloqueando'
 import MapaEtapas from '@/components/modules/ingenieria/MapaEtapas'
 import IngenieriaPlan from './IngenieriaPlan'
 
@@ -39,6 +40,7 @@ export default function ProjectMgmt() {
 
       {tab === 'bandeja' ? (
         <div className="max-w-3xl mx-auto space-y-5 mt-4">
+          <DepositosBloqueando onRevisar={onRevisar} />
           <ReprogramacionesPendientes onRevisar={onRevisar} />
           <ReservasPendientes onRevisar={onRevisar} />
           <DealsEnCurso mode="pm" />

@@ -38,6 +38,11 @@ export interface Reprogramacion {
   motivo: string | null
   fecha_inicio: string | null
 }
+export interface DepositoBloqueando {
+  proyecto_ext: string
+  nombre: string | null
+  dias_pendiente: number | null
+}
 export interface IngCargaIngeniero {
   nombre: string
   cargas: number[]
@@ -84,6 +89,8 @@ export interface EstadoDeposito {
   override_por: string | null
   override_at: string | null
   abierto: boolean
+  fecha_resolucion: string | null
+  dias_atribuibles_cliente: number | null
 }
 export interface EstadoMuestras {
   hay: boolean
@@ -197,6 +204,8 @@ export const ingenieriaService = {
     api.patch<ApiResponse<{ ok: boolean }>>(`/ingenieria/tareas/${id}/avance`, data).then((r) => r.data),
   reprogramaciones: () =>
     api.get<ApiResponse<Reprogramacion[]>>('/ingenieria/reprogramaciones').then((r) => r.data),
+  depositosBloqueando: () =>
+    api.get<ApiResponse<DepositoBloqueando[]>>('/ingenieria/depositos-bloqueando').then((r) => r.data),
   borrarTarea: (id: number) =>
     api.delete<ApiResponse<{ ok: boolean; reconectadas: number }>>(`/ingenieria/tareas/${id}`).then((r) => r.data),
 
