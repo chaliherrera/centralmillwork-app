@@ -3,6 +3,7 @@ import { ClipboardList, Inbox, Gauge } from 'lucide-react'
 import MiTrabajo from '@/components/modules/schedule/MiTrabajo'
 import ReservasPendientes from '@/components/modules/estimados/ReservasPendientes'
 import DealsEnCurso from '@/components/modules/estimados/DealsEnCurso'
+import ReprogramacionesPendientes from '@/components/modules/ingenieria/ReprogramacionesPendientes'
 import MapaEtapas from '@/components/modules/ingenieria/MapaEtapas'
 import IngenieriaPlan from './IngenieriaPlan'
 
@@ -38,6 +39,7 @@ export default function ProjectMgmt() {
 
       {tab === 'bandeja' ? (
         <div className="max-w-3xl mx-auto space-y-5 mt-4">
+          <ReprogramacionesPendientes onRevisar={onRevisar} />
           <ReservasPendientes onRevisar={onRevisar} />
           <DealsEnCurso mode="pm" />
           <MiTrabajo area="pm" emptyMsg="El PM no tiene nada pendiente ahora mismo. 🎉" />

@@ -705,12 +705,15 @@ function EditModal({ tarea, proyecto, engineers, planTareas, aristas, onClose, o
         </div>
         <div className="space-y-3">
           {tarea?.reprogramacion_pedida && (
-            <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 flex items-center gap-2 text-[12.5px] text-amber-800">
-              <CalendarClock size={15} className="text-amber-600 shrink-0" />
-              <span className="font-semibold">El ingeniero pidió reprogramación.</span>
-              <span className="text-amber-700">Ajustá las fechas y</span>
-              <button type="button" onClick={async () => { if (!tarea) return; setBusy(true); try { await ingenieriaService.avanceTarea(tarea.id, { reprogramacion_pedida: false }); onSaved() } catch (e: any) { setErr(e?.response?.data?.message || 'Error'); setBusy(false) } }}
-                disabled={busy} className="ml-auto rounded-md border border-amber-300 bg-white hover:bg-amber-100 px-2 py-0.5 text-[11px] font-semibold">marcar atendido</button>
+            <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 flex items-start gap-2 text-[12.5px] text-amber-800">
+              <CalendarClock size={15} className="text-amber-600 shrink-0 mt-0.5" />
+              <div className="flex-1">
+                <span className="font-semibold">El ingeniero pidió reprogramación.</span>
+                {tarea.reprogramacion_motivo && <div className="text-amber-700 italic mt-0.5">“{tarea.reprogramacion_motivo}”</div>}
+                <span className="text-amber-700">Ajustá las fechas y marcá atendido.</span>
+              </div>
+              <button type="button" onClick={async () => { if (!tarea) return; setBusy(true); try { await ingenieriaService.avanceTarea(tarea.id, { reprogramacion_pedida: false, reprogramacion_motivo: null }); onSaved() } catch (e: any) { setErr(e?.response?.data?.message || 'Error'); setBusy(false) } }}
+                disabled={busy} className="shrink-0 rounded-md border border-amber-300 bg-white hover:bg-amber-100 px-2 py-0.5 text-[11px] font-semibold self-center">marcar atendido</button>
             </div>
           )}
           <L t="Tarea"><input value={f.nombre} onChange={(e) => set('nombre', e.target.value)} className="inp" /></L>

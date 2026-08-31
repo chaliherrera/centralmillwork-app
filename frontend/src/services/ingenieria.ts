@@ -26,7 +26,17 @@ export interface IngTarea {
   status_ext: string | null
   comentario: string | null
   reprogramacion_pedida: boolean    // el ingeniero pidió reprogramación al PM (#2)
+  reprogramacion_motivo: string | null
   decision: string | null           // respuesta del cliente en la revisión (#7)
+}
+export interface Reprogramacion {
+  id: number
+  proyecto_ext: string | null
+  nombre: string
+  tipo_clave: string | null
+  asignado_nombre: string | null
+  motivo: string | null
+  fecha_inicio: string | null
 }
 export interface IngCargaIngeniero {
   nombre: string
@@ -183,8 +193,10 @@ export const ingenieriaService = {
   actualizarTarea: (id: number, t: Partial<TareaInput>) =>
     api.patch<ApiResponse<{ ok: boolean }>>(`/ingenieria/tareas/${id}`, t).then((r) => r.data),
   // Ingeniería reporta avance de su tarea (solo estado/comentario)
-  avanceTarea: (id: number, data: { estado?: string; comentario?: string | null; fecha_compromiso?: string | null; fecha_fin_real?: string | null; reprogramacion_pedida?: boolean; decision?: string | null }) =>
+  avanceTarea: (id: number, data: { estado?: string; comentario?: string | null; fecha_compromiso?: string | null; fecha_fin_real?: string | null; reprogramacion_pedida?: boolean; reprogramacion_motivo?: string | null; decision?: string | null }) =>
     api.patch<ApiResponse<{ ok: boolean }>>(`/ingenieria/tareas/${id}/avance`, data).then((r) => r.data),
+  reprogramaciones: () =>
+    api.get<ApiResponse<Reprogramacion[]>>('/ingenieria/reprogramaciones').then((r) => r.data),
   borrarTarea: (id: number) =>
     api.delete<ApiResponse<{ ok: boolean; reconectadas: number }>>(`/ingenieria/tareas/${id}`).then((r) => r.data),
 

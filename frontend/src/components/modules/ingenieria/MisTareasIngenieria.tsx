@@ -41,6 +41,8 @@ export default function MisTareasIngenieria() {
   const [busy, setBusy] = useState<number | null>(null)
   const [notaOpen, setNotaOpen] = useState<number | null>(null)
   const [notaVal, setNotaVal] = useState('')
+  const [reprogOpen, setReprogOpen] = useState<number | null>(null)
+  const [reprogVal, setReprogVal] = useState('')
   const [verHechas, setVerHechas] = useState(false)
 
   const cargar = () => ingenieriaService.getTareas()
@@ -99,15 +101,26 @@ export default function MisTareasIngenieria() {
     finally { setBusy(null) }
   }
 
-  // El ingeniero no mueve fechas; si no puede cumplir, PIDE reprogramación al PM (#2).
-  const pedirReprogramacion = async (t: IngTarea) => {
-    const nuevo = !t.reprogramacion_pedida
+  // El ingeniero no mueve fechas; si no puede cumplir, PIDE reprogramación al PM (#2)
+  // con un motivo opcional. El pedido aparece en la bandeja del PM.
+  const enviarReprogramacion = async (t: IngTarea) => {
+    const motivo = reprogVal.trim() || null
+    setReprogOpen(null)
     setBusy(t.id)
     try {
-      await ingenieriaService.avanceTarea(t.id, { reprogramacion_pedida: nuevo })
-      setTareas((prev) => prev.map((x) => x.id === t.id ? { ...x, reprogramacion_pedida: nuevo } : x))
-      toast.success(nuevo ? 'Le avisamos al PM que necesitás reprogramar' : 'Pedido de reprogramación cancelado')
+      await ingenieriaService.avanceTarea(t.id, { reprogramacion_pedida: true, reprogramacion_motivo: motivo })
+      setTareas((prev) => prev.map((x) => x.id === t.id ? { ...x, reprogramacion_pedida: true, reprogramacion_motivo: motivo } : x))
+      toast.success('Le avisamos al PM')
     } catch (e: any) { toast.error(e?.response?.data?.message || 'No se pudo enviar el pedido') }
+    finally { setBusy(null) }
+  }
+  const cancelarReprogramacion = async (t: IngTarea) => {
+    setBusy(t.id)
+    try {
+      await ingenieriaService.avanceTarea(t.id, { reprogramacion_pedida: false, reprogramacion_motivo: null })
+      setTareas((prev) => prev.map((x) => x.id === t.id ? { ...x, reprogramacion_pedida: false, reprogramacion_motivo: null } : x))
+      toast.success('Pedido de reprogramación cancelado')
+    } catch (e: any) { toast.error(e?.response?.data?.message || 'No se pudo cancelar') }
     finally { setBusy(null) }
   }
 
@@ -190,7 +203,7 @@ export default function MisTareasIngenieria() {
                           })()}
                         </div>
                         {t.reprogramacion_pedida && (
-                          <div className="text-[11px] text-amber-700 mt-1 inline-flex items-center gap-1 font-semibold"><CalendarClock size={12} /> Reprogramación pedida al PM</div>
+                          <div className="text-[11px] text-amber-700 mt-1 flex items-start gap-1 font-semibold"><CalendarClock size={12} className="mt-0.5 shrink-0" /> <span>Reprogramación pedida al PM{t.reprogramacion_motivo ? <span className="font-normal">: {t.reprogramacion_motivo}</span> : ''}</span></div>
                         )}
                         {t.comentario && notaOpen !== t.id && (
                           <div className="text-[11px] text-stone-500 mt-1 flex items-start gap-1"><StickyNote size={12} className="mt-0.5 shrink-0" /> {t.comentario}</div>
@@ -212,7 +225,7 @@ export default function MisTareasIngenieria() {
                           title="Nota" className="inline-flex items-center rounded-md px-1.5 py-1 text-stone-400 hover:bg-stone-100">
                           <StickyNote size={13} />
                         </button>
-                        <button onClick={() => pedirReprogramacion(t)} disabled={busy === t.id}
+                        <button onClick={() => t.reprogramacion_pedida ? cancelarReprogramacion(t) : (setReprogOpen(t.id), setReprogVal(''))} disabled={busy === t.id}
                           title={t.reprogramacion_pedida ? 'Cancelar pedido de reprogramación' : 'Pedir reprogramación al PM'}
                           className={`inline-flex items-center rounded-md px-1.5 py-1 ${t.reprogramacion_pedida ? 'text-amber-600 bg-amber-50' : 'text-stone-400 hover:bg-stone-100'}`}>
                           <CalendarClock size={13} />
@@ -227,6 +240,17 @@ export default function MisTareasIngenieria() {
                           className="flex-1 rounded-lg border border-stone-300 px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-forest-300" />
                         <button onClick={() => guardarNota(t)} className="text-sm font-semibold text-forest-700 hover:text-forest-800 px-2">Guardar</button>
                         <button onClick={() => setNotaOpen(null)} className="text-sm text-stone-400 hover:text-stone-600 px-1">Cancelar</button>
+                      </div>
+                    )}
+                    {reprogOpen === t.id && (
+                      <div className="mt-2 flex items-center gap-2">
+                        <CalendarClock size={14} className="text-amber-600 shrink-0" />
+                        <input autoFocus value={reprogVal} onChange={(e) => setReprogVal(e.target.value)}
+                          onKeyDown={(e) => { if (e.key === 'Enter') enviarReprogramacion(t); if (e.key === 'Escape') setReprogOpen(null) }}
+                          placeholder="Motivo / cuándo podrías (opcional)…"
+                          className="flex-1 rounded-lg border border-amber-300 px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-amber-300" />
+                        <button onClick={() => enviarReprogramacion(t)} className="text-sm font-semibold text-amber-700 hover:text-amber-800 px-2 whitespace-nowrap">Pedir al PM</button>
+                        <button onClick={() => setReprogOpen(null)} className="text-sm text-stone-400 hover:text-stone-600 px-1">Cancelar</button>
                       </div>
                     )}
                   </div>
