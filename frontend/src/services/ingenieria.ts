@@ -73,6 +73,16 @@ export interface EstadoDeposito {
   override_at: string | null
   abierto: boolean
 }
+export interface EstadoMuestras {
+  hay: boolean
+  total: number
+  aprobadas: number
+  rechazadas: number
+  pendientes: number
+  todas_aprobadas: boolean
+  fecha_solicitud: string | null
+  fecha_aprobacion: string | null
+}
 export interface IngPlan {
   proyecto_ext: string
   fecha_inicio: string | null
@@ -84,6 +94,7 @@ export interface IngPlan {
   holgura_proyecto: number
   en_riesgo: boolean
   deposito: EstadoDeposito
+  muestras: EstadoMuestras
   tareas: IngTareaPlan[]
   aristas: IngArista[]
 }

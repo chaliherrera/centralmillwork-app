@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Users, Layers, ClipboardList, Plus, X, Loader2, Trash2, Gauge, Check, FolderKanban, Activity, AlertTriangle, Wallet, Lock, LockOpen } from 'lucide-react'
+import { Users, Layers, ClipboardList, Plus, X, Loader2, Trash2, Gauge, Check, FolderKanban, Activity, AlertTriangle, Wallet, Lock, LockOpen, FlaskConical } from 'lucide-react'
 import { ingenieriaService, type IngProyecto, type IngTarea, type TareaInput, type IngPlan, type IngTareaPlan, type IngArista, type IngCarga, type IngTareaCelda } from '@/services/ingenieria'
 import MapaEtapas from '@/components/modules/ingenieria/MapaEtapas'
 
@@ -357,6 +357,24 @@ function VistaProyecto({ proyectos, all, plan, planLoading, sel, setSel, onEdit,
               className="ml-auto inline-flex items-center gap-1.5 rounded-lg border border-stone-300 bg-white hover:bg-stone-100 text-stone-700 text-xs font-semibold px-2.5 py-1 disabled:opacity-50">
               {depBusy ? <Loader2 size={13} className="animate-spin" /> : <LockOpen size={13} />} Abrir gate igual
             </button>
+          </div>
+        )
+      })()}
+
+      {/* Estado de Muestras (leído del módulo de Muestras) — señal E-05, NO bloquea */}
+      {plan && plan.muestras.hay && (() => {
+        const m = plan.muestras
+        const cls = m.todas_aprobadas ? 'border-emerald-200 bg-emerald-50 text-emerald-800'
+          : m.rechazadas > 0 ? 'border-rose-200 bg-rose-50 text-rose-800'
+          : 'border-sky-200 bg-sky-50 text-sky-800'
+        const iconCls = m.todas_aprobadas ? 'text-emerald-600' : m.rechazadas > 0 ? 'text-rose-500' : 'text-sky-600'
+        return (
+          <div className={`rounded-2xl border px-4 py-2.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm ${cls}`}>
+            <FlaskConical size={17} className={`shrink-0 ${iconCls}`} />
+            <span className="font-semibold">Muestras: {m.total}</span>
+            <span className="opacity-90">· {m.aprobadas} aprobada{m.aprobadas === 1 ? '' : 's'}{m.pendientes > 0 ? ` · ${m.pendientes} en curso` : ''}{m.rechazadas > 0 ? ` · ${m.rechazadas} rechazada${m.rechazadas === 1 ? '' : 's'}` : ''}</span>
+            {m.todas_aprobadas && m.fecha_aprobacion && <span className="opacity-90">· aprobadas {fmtD(m.fecha_aprobacion)}</span>}
+            <span className="ml-auto text-[11px] opacity-70 italic">no bloquea el flujo · corre en paralelo</span>
           </div>
         )
       })()}
