@@ -454,6 +454,9 @@ function VistaProyecto({ proyectos, all, plan, planLoading, sel, setSel, onEdit,
                           {t.reprogramacion_pedida && <span className="shrink-0 flex" title="El ingeniero pidió reprogramación"><CalendarClock size={12} className="text-amber-600" /></span>}
                           <div className="text-[12.5px] text-stone-800 truncate flex-1">{t.nombre}</div>
                           {t.decision && <span className={`shrink-0 rounded px-1 text-[9px] font-bold ${t.decision === 'aprobado' ? 'bg-emerald-100 text-emerald-700' : t.decision === 'rechazado' ? 'bg-rose-100 text-rose-700' : 'bg-amber-100 text-amber-700'}`} title={`Cliente: ${t.decision}`}>{t.decision === 'aprobado' ? 'APROB' : t.decision === 'rechazado' ? 'RECH' : 'COMENT'}</span>}
+                          {t.tipo_clave === 'long_leads' && (plan?.compras?.fecha_primera_oc
+                            ? <span className="shrink-0 rounded px-1 text-[9px] font-bold bg-emerald-100 text-emerald-700" title={`Long leads ordenados (1ª OC en Compras) el ${fmtD(plan.compras.fecha_primera_oc)}`}>ORDENADO</span>
+                            : <span className="shrink-0 rounded px-1 text-[9px] font-bold bg-stone-100 text-stone-500" title="Compras aún no emitió ninguna OC">sin OC</span>)}
                           {holg !== null && (
                             <span className={`text-[10px] font-bold rounded px-1 py-0.5 tabular-nums shrink-0 ${t.critico ? 'bg-forest-100 text-forest-700' : holg < 0 ? 'bg-rose-100 text-rose-700' : 'bg-stone-100 text-stone-500'}`}>
                               {t.critico ? 'crítico' : (holg < 0 ? holg : '+' + holg) + 'd'}

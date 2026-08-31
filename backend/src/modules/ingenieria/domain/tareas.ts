@@ -295,9 +295,10 @@ export async function getPlanProyecto(runner: QueryRunner, proyectoExt: string):
           WHERE tarea_id = ANY($1) AND depende_de_id = ANY($1)`, [ids])
     : { rows: [] as AristaPlan[] }
 
-  // El estado del depósito se lee ANTES del CPM: la fecha real en que Finanzas lo confirmó
-  // es un piso "no antes de" para material_deposit (un depósito tardío empuja las compras).
+  // Los hechos reales de los módulos con dueño se leen ANTES del CPM: son pisos "no antes
+  // de" (depósito confirmado por Finanzas, long leads ordenados en Compras…) que empujan.
   const deposito = await estadoDeposito(runner, proyectoExt)
+  const compras = await estadoCompras(runner, proyectoExt)
   const depClave = new Map(tareas.map((t) => [t.id, t.tipo_clave]))
 
   // Holgura: solo si el proyecto tiene inicio + entrega (ancla en ambas puntas).
@@ -305,9 +306,7 @@ export async function getPlanProyecto(runner: QueryRunner, proyectoExt: string):
   let finProyectado: string | null = null, holguraProyecto = 0, enRiesgo = false
   if (h.ini && h.entrega) {
     const feriados = await loadFeriados(runner)
-    // El depósito confirmado por Finanzas manda sobre el plan: material_deposit no puede
-    // caer antes de esa fecha real (reusable para otros hechos: medición, CNC, etc.).
-    const cpmTareas: TareaCPM[] = tareas.map((t) => ({ id: t.id, dur: t.dur_dias, noAntesDe: pisoDeposito(depClave.get(t.id) ?? null, deposito) }))
+    const cpmTareas: TareaCPM[] = tareas.map((t) => ({ id: t.id, dur: t.dur_dias, noAntesDe: pisoTarea(depClave.get(t.id) ?? null, deposito, compras) }))
     // Las aristas se mantienen SIEMPRE; el candado del PM actúa por el piso "no antes de"
     // de material_deposit (fecha de apertura), no borrando la dependencia. La marca
     // ignorada_at se sigue devolviendo (abajo) para dibujar el gate abierto en la UI.
@@ -325,7 +324,6 @@ export async function getPlanProyecto(runner: QueryRunner, proyectoExt: string):
   }
 
   const muestras = await estadoMuestras(runner, proyectoExt)
-  const compras = await estadoCompras(runner, proyectoExt)
   const instalacion = await estadoInstalacion(runner, proyectoExt)
 
   return {
@@ -336,12 +334,15 @@ export async function getPlanProyecto(runner: QueryRunner, proyectoExt: string):
   }
 }
 
-/** Piso "no antes de" de material_deposit = la fecha de RESOLUCIÓN del depósito: pago de
- *  Finanzas o apertura del candado por el PM, lo que primero destrabó. Así un depósito
- *  tardío empuja las compras, y abrir el candado hace seguir desde la apertura (no del
- *  pasado). Único punto del mapeo hecho→piso (reusable para otros hechos a futuro). */
-function pisoDeposito(tipoClave: string | null, deposito: EstadoDeposito): string | undefined {
-  return tipoClave === 'material_deposit' ? (deposito.fecha_resolucion ?? undefined) : undefined
+/** Piso "no antes de" por tarea = el HECHO real que la ancla, leído de los módulos con dueño.
+ *  Único punto del mapeo hecho→piso (reusable para cada tarea que se maneje sola):
+ *   · material_deposit → resolución del depósito (pago de Finanzas o apertura del candado).
+ *   · long_leads       → fecha de la 1ª OC emitida (long leads ORDENADOS, del módulo de
+ *     Compras). Si se ordena tarde, empuja; si aún no se ordenó, no ancla (plan estimado). */
+function pisoTarea(tipoClave: string | null, deposito: EstadoDeposito, compras: EstadoCompras): string | undefined {
+  if (tipoClave === 'material_deposit') return deposito.fecha_resolucion ?? undefined
+  if (tipoClave === 'long_leads') return compras.fecha_primera_oc ?? undefined
+  return undefined
 }
 
 /** Recalcula el CPM (con candado del PM + piso del depósito) y GUARDA fecha_inicio/fin de
@@ -360,9 +361,10 @@ export async function recomputarYGuardar(runner: QueryRunner, proyectoExt: strin
     `SELECT tarea_id, depende_de_id, tipo, lag_dias FROM ing_tarea_deps
       WHERE tarea_id = ANY($1) AND depende_de_id = ANY($1)`, [ids])
   const deposito = await estadoDeposito(runner, proyectoExt)
+  const compras = await estadoCompras(runner, proyectoExt)
   const clave = new Map(tareas.map((t) => [t.id, t.tipo_clave]))
   const feriados = await loadFeriados(runner)
-  const cpmTareas: TareaCPM[] = tareas.map((t) => ({ id: t.id, dur: t.dur_dias, noAntesDe: pisoDeposito(clave.get(t.id) ?? null, deposito) }))
+  const cpmTareas: TareaCPM[] = tareas.map((t) => ({ id: t.id, dur: t.dur_dias, noAntesDe: pisoTarea(clave.get(t.id) ?? null, deposito, compras) }))
   const aristas: AristaCPM[] = deps.map((d) => ({ tareaId: d.tarea_id, dependeDeId: d.depende_de_id, lag: d.lag_dias, tipo: d.tipo === 'SS' ? 'SS' : 'FS' }))
   try {
     const r = calcularHolgura(cpmTareas, aristas, h.ini, h.entrega, feriados)
