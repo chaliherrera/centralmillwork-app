@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Users, Layers, ClipboardList, Plus, X, Loader2, Trash2, Gauge, Check, FolderKanban, Activity, AlertTriangle, Wallet, Lock, LockOpen, FlaskConical, Package } from 'lucide-react'
+import { Users, Layers, ClipboardList, Plus, X, Loader2, Trash2, Gauge, Check, FolderKanban, Activity, AlertTriangle, Wallet, Lock, LockOpen, FlaskConical, Package, Wrench } from 'lucide-react'
 import { ingenieriaService, type IngProyecto, type IngTarea, type TareaInput, type IngPlan, type IngTareaPlan, type IngArista, type IngCarga, type IngTareaCelda } from '@/services/ingenieria'
 import MapaEtapas from '@/components/modules/ingenieria/MapaEtapas'
 
@@ -402,6 +402,26 @@ function VistaProyecto({ proyectos, all, plan, planLoading, sel, setSel, onEdit,
             {paso(c.recibidos, 'recibidos', c.recibidos > 0)}
             {c.en_stock > 0 && <span className="opacity-75">(+{c.en_stock} stock)</span>}
             <span className={`ml-auto inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-bold ${completo ? 'bg-emerald-600 text-white' : 'bg-sky-600 text-white'}`}>{Math.round(c.pct_disponible * 100)}% disponible</span>
+          </div>
+        )
+      })()}
+
+      {/* Instalación (leída del módulo de campo) — solo si el proyecto lleva instalación */}
+      {plan && plan.instalacion.hay && tareas.some((t) => t.tipo_clave === 'installation') && (() => {
+        const i = plan.instalacion
+        const cls = i.completa ? 'border-emerald-200 bg-emerald-50 text-emerald-800'
+          : i.punch_abiertos > 0 ? 'border-amber-200 bg-amber-50 text-amber-800'
+          : 'border-sky-200 bg-sky-50 text-sky-800'
+        const iconCls = i.completa ? 'text-emerald-600' : i.punch_abiertos > 0 ? 'text-amber-600' : 'text-sky-600'
+        return (
+          <div className={`rounded-2xl border px-4 py-2.5 flex flex-wrap items-center gap-x-2.5 gap-y-1 text-sm ${cls}`}>
+            <Wrench size={17} className={`shrink-0 ${iconCls}`} />
+            <span className="font-semibold">Instalación</span>
+            <span className="opacity-90">· {i.instalados} de {i.total} instalados</span>
+            {i.fecha_ultima && <span className="opacity-75">· última {fmtD(i.fecha_ultima)}</span>}
+            {i.punch_abiertos > 0 && <span className="font-semibold">· {i.punch_abiertos} punch abierto{i.punch_abiertos === 1 ? '' : 's'}</span>}
+            {i.completa && <span className="font-semibold">· lista ✓</span>}
+            <span className={`ml-auto inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-bold ${i.completa ? 'bg-emerald-600 text-white' : 'bg-sky-600 text-white'}`}>{Math.round(i.pct * 100)}%</span>
           </div>
         )
       })()}

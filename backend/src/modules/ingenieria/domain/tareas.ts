@@ -14,6 +14,7 @@ import { calcularHolgura, type TareaCPM, type AristaCPM } from './holgura'
 import { estadoDeposito, type EstadoDeposito } from './deposito'
 import { estadoMuestras, type EstadoMuestras } from './muestras'
 import { estadoCompras, type EstadoCompras } from './compras'
+import { estadoInstalacion, type EstadoInstalacion } from './instalacion'
 
 type QueryRunner = PoolClient | typeof pool
 
@@ -269,6 +270,7 @@ export interface PlanProyecto {
   deposito: EstadoDeposito       // gate del depósito: confirmación de Finanzas + candado del PM
   muestras: EstadoMuestras       // estado del módulo de Muestras (señal E-05, no bloquea)
   compras: EstadoCompras         // 5 hitos del módulo de Compras (MTO→cotiz→precio→OC→recepción)
+  instalacion: EstadoInstalacion // avance del módulo de instalación de campo (I-04/I-07)
   tareas: TareaPlan[]
   aristas: AristaPlan[]
 }
@@ -315,12 +317,13 @@ export async function getPlanProyecto(runner: QueryRunner, proyectoExt: string):
   const deposito = await estadoDeposito(runner, proyectoExt)
   const muestras = await estadoMuestras(runner, proyectoExt)
   const compras = await estadoCompras(runner, proyectoExt)
+  const instalacion = await estadoInstalacion(runner, proyectoExt)
 
   return {
     proyecto_ext: proyectoExt, fecha_inicio: h.ini, fecha_entrega: h.entrega, status_ext: h.status,
     n_items: h.n_items, presupuesto: h.presupuesto != null ? +h.presupuesto : null,
     fin_proyectado: finProyectado, holgura_proyecto: holguraProyecto, en_riesgo: enRiesgo,
-    deposito, muestras, compras, tareas: holgura, aristas: deps,
+    deposito, muestras, compras, instalacion, tareas: holgura, aristas: deps,
   }
 }
 

@@ -97,6 +97,16 @@ export interface EstadoCompras {
   fecha_ultima_recepcion: string | null
   pct_disponible: number
 }
+export interface EstadoInstalacion {
+  hay: boolean
+  total: number
+  instalados: number
+  pct: number
+  fecha_ultima: string | null
+  punch_total: number
+  punch_abiertos: number
+  completa: boolean
+}
 export interface IngPlan {
   proyecto_ext: string
   fecha_inicio: string | null
@@ -110,6 +120,7 @@ export interface IngPlan {
   deposito: EstadoDeposito
   muestras: EstadoMuestras
   compras: EstadoCompras
+  instalacion: EstadoInstalacion
   tareas: IngTareaPlan[]
   aristas: IngArista[]
 }
