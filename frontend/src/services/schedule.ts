@@ -22,6 +22,7 @@ export interface ScheduleHito {
   semaforo: Semaforo
   holgura_dias: number | null
   atribucion_atraso: string | null
+  desde_gantt?: boolean   // la fecha viene de la tarea del Gantt (ruta de ingeniería)
 }
 
 export interface SchedulePlan {

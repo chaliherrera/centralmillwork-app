@@ -427,7 +427,14 @@ export default function ScheduleTab({ proyectoId }: { proyectoId: number }) {
         <div style={{ minWidth: 132 + N * 116 }}>
           {/* header de fases */}
           <div className="grid bg-[#faf8f2] rounded-t-2xl" style={gridCols}>
-            <div className="p-3 text-[10px] uppercase tracking-wider text-stone-400 font-bold flex items-end">Recorrido →</div>
+            <div className="p-3 text-[10px] uppercase tracking-wider text-stone-400 font-bold flex flex-col items-start justify-end gap-1">
+              <span>Recorrido →</span>
+              {(data?.hitos ?? []).some((h) => h.desde_gantt) && (
+                <span className="inline-flex items-center gap-1 normal-case tracking-normal font-medium text-[10px] text-forest-700 bg-forest-50 rounded-full px-1.5 py-0.5" title="Las fechas de los hitos de la ruta las calcula el Gantt de ingeniería (fuente única).">
+                  <RefreshCw size={9} /> Fechas del Gantt
+                </span>
+              )}
+            </div>
             {fases.map((f) => {
               const meta = FASES.find((x) => x.key === f.key)!; const c = ST_COLOR[f.estado]
               const isSel = f.key === selected

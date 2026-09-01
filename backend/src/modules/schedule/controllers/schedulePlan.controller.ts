@@ -104,6 +104,23 @@ export async function getPlan(req: Request, res: Response, next: NextFunction) {
         WHERE sp.proyecto_id = $1 AND sp.scope = 'proyecto'
         ORDER BY ph.orden`, [proyectoId])
 
+    // El Gantt (ruta de ingeniería) es la ÚNICA fuente de fecha de los hitos que mapean
+    // a un paso: los leemos por proyecto_ext = código y su fecha del Gantt (fecha_fin de
+    // la tarea) pisa la planeada/proyectada del hito. Un dato con dueño se LEE, no se copia.
+    const { rows: codRows } = await pool.query<{ codigo: string }>(`SELECT codigo FROM proyectos WHERE id = $1`, [proyectoId])
+    const codigo = codRows[0]?.codigo
+    if (codigo) {
+      const { rows: gantt } = await pool.query<{ codigo: string; fin: string | null }>(
+        `SELECT tt.hito_codigo AS codigo, to_char(t.fecha_fin,'YYYY-MM-DD') AS fin
+           FROM ing_tareas t JOIN ing_tarea_tipos tt ON tt.id = t.tipo_id
+          WHERE t.proyecto_ext = $1 AND tt.hito_codigo IS NOT NULL AND t.fecha_fin IS NOT NULL`, [codigo])
+      const ganttFecha = new Map(gantt.map((g) => [g.codigo, g.fin]))
+      for (const h of hitos) {
+        const gf = ganttFecha.get(h.codigo)
+        if (gf) { h.fecha_planeada = gf; h.fecha_proyectada = gf; (h as any).desde_gantt = true }
+      }
+    }
+
     res.json({ data: { plan: planRows[0], hitos } })
   } catch (err) { next(err) }
 }
