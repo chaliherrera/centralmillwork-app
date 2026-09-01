@@ -53,6 +53,14 @@ export interface MuestrasProyecto {
   pendientes: number
   todas_aprobadas: boolean
 }
+export interface ComprasProyecto {
+  proyecto_ext: string
+  n_materiales: number
+  con_precio: number
+  en_oc: number
+  recibidos: number
+  fecha_mto: string | null
+}
 export interface IngCargaIngeniero {
   nombre: string
   cargas: number[]
@@ -218,6 +226,8 @@ export const ingenieriaService = {
     api.get<ApiResponse<DepositoBloqueando[]>>('/ingenieria/depositos-bloqueando').then((r) => r.data),
   muestrasEstado: () =>
     api.get<ApiResponse<MuestrasProyecto[]>>('/ingenieria/muestras-estado').then((r) => r.data),
+  comprasEstado: () =>
+    api.get<ApiResponse<ComprasProyecto[]>>('/ingenieria/compras-estado').then((r) => r.data),
   borrarTarea: (id: number) =>
     api.delete<ApiResponse<{ ok: boolean; reconectadas: number }>>(`/ingenieria/tareas/${id}`).then((r) => r.data),
 

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Loader2, CircleDot, Circle, CheckCircle2, MinusCircle, StickyNote, CalendarClock, CalendarCheck, AlertTriangle, FlaskConical } from 'lucide-react'
+import { Loader2, CircleDot, Circle, CheckCircle2, MinusCircle, StickyNote, CalendarClock, CalendarCheck, AlertTriangle, FlaskConical, Package } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { useAuth } from '@/context/AuthContext'
 import { ingenieriaService, type IngTarea } from '@/services/ingenieria'
@@ -46,6 +46,7 @@ export default function MisTareasIngenieria() {
   const [verHechas, setVerHechas] = useState(false)
   const [depBloqueado, setDepBloqueado] = useState<Set<string>>(new Set())  // proyectos con depósito impago
   const [muestrasProy, setMuestrasProy] = useState<Record<string, { total: number; aprobadas: number; pendientes: number; rechazadas: number; todas_aprobadas: boolean }>>({})
+  const [comprasProy, setComprasProy] = useState<Record<string, { n_materiales: number; con_precio: number; en_oc: number; recibidos: number; fecha_mto: string | null }>>({})
 
   const cargar = () => ingenieriaService.getTareas()
     .then((r) => setTareas(r.data ?? []))
@@ -61,6 +62,12 @@ export default function MisTareasIngenieria() {
   useEffect(() => {
     ingenieriaService.muestrasEstado()
       .then((r) => setMuestrasProy(Object.fromEntries((r.data ?? []).map((m) => [m.proyecto_ext, m]))))
+      .catch(() => {})
+  }, [])
+  // Estado de compras por proyecto (para el badge del paso #9).
+  useEffect(() => {
+    ingenieriaService.comprasEstado()
+      .then((r) => setComprasProy(Object.fromEntries((r.data ?? []).map((c) => [c.proyecto_ext, c]))))
       .catch(() => {})
   }, [])
 
@@ -244,6 +251,19 @@ export default function MisTareasIngenieria() {
                         {t.tipo_clave === 'material_proc' && t.proyecto_ext && depBloqueado.has(t.proyecto_ext) && (
                           <div className="text-[11px] text-rose-700 mt-1 flex items-start gap-1 font-semibold"><AlertTriangle size={12} className="mt-0.5 shrink-0" /> <span>El depósito no está pagado — el PM debe abrir el candado o esperar el pago antes de enviar el MTO</span></div>
                         )}
+                        {t.tipo_clave === 'material_proc' && (() => {
+                          const c = t.proyecto_ext ? comprasProy[t.proyecto_ext] : null
+                          const done = c && c.recibidos >= c.n_materiales
+                          return (
+                            <div className="text-[11px] mt-1 flex items-center gap-1.5 flex-wrap">
+                              <Package size={12} className="text-sky-500 shrink-0" />
+                              {c
+                                ? <span className={done ? 'text-emerald-700 font-semibold' : 'text-sky-700'}>MTO {c.fecha_mto ? fmt(c.fecha_mto) : ''} · {c.n_materiales} mat. · {c.con_precio} c/precio · {c.en_oc} en OC · {c.recibidos} recibidos</span>
+                                : <span className="text-stone-400">Sin MTO importado todavía</span>}
+                              <a href="/ordenes-compra" className="text-forest-600 hover:text-forest-800 font-semibold">{c ? 'ver en Compras →' : 'ir a Compras →'}</a>
+                            </div>
+                          )
+                        })()}
                         {t.tipo_clave === 'samples' && (() => {
                           const mu = t.proyecto_ext ? muestrasProy[t.proyecto_ext] : null
                           return (

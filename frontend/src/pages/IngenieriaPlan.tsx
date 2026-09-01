@@ -460,6 +460,9 @@ function VistaProyecto({ proyectos, all, plan, planLoading, sel, setSel, onEdit,
                           {t.tipo_clave === 'samples' && (plan?.muestras?.hay
                             ? <span className={`shrink-0 rounded px-1 text-[9px] font-bold ${plan.muestras.todas_aprobadas ? 'bg-emerald-100 text-emerald-700' : plan.muestras.rechazadas > 0 ? 'bg-rose-100 text-rose-700' : 'bg-sky-100 text-sky-700'}`} title={`Muestras: ${plan.muestras.aprobadas}/${plan.muestras.total} aprobadas (módulo de Muestras)`}>{plan.muestras.aprobadas}/{plan.muestras.total}</span>
                             : <span className="shrink-0 rounded px-1 text-[9px] font-bold bg-stone-100 text-stone-500" title="Sin muestras solicitadas en el módulo">sin muestras</span>)}
+                          {t.tipo_clave === 'material_proc' && (plan?.compras?.hay
+                            ? <span className={`shrink-0 rounded px-1 text-[9px] font-bold ${(plan.compras.recibidos + plan.compras.en_stock) >= plan.compras.n_materiales ? 'bg-emerald-100 text-emerald-700' : 'bg-sky-100 text-sky-700'}`} title={`Compras: ${plan.compras.recibidos}/${plan.compras.n_materiales} recibidos · ${plan.compras.en_oc} en OC`}>{Math.round(plan.compras.pct_disponible * 100)}%</span>
+                            : <span className="shrink-0 rounded px-1 text-[9px] font-bold bg-stone-100 text-stone-500" title="Sin MTO importado en Compras">sin MTO</span>)}
                           {holg !== null && (
                             <span className={`text-[10px] font-bold rounded px-1 py-0.5 tabular-nums shrink-0 ${t.critico ? 'bg-forest-100 text-forest-700' : holg < 0 ? 'bg-rose-100 text-rose-700' : 'bg-stone-100 text-stone-500'}`}>
                               {t.critico ? 'crítico' : (holg < 0 ? holg : '+' + holg) + 'd'}
