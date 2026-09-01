@@ -666,6 +666,7 @@ function EditModal({ tarea, proyecto, engineers, planTareas, aristas, onClose, o
   const [nuevoIng, setNuevoIng] = useState(!!asignActual && !engineers.includes(asignActual))
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState<string | null>(null)
+  const [decComent, setDecComent] = useState(tarea?.decision_comentarios ?? '')
   const set = (k: keyof TareaInput, v: any) => setF((p) => ({ ...p, [k]: v }))
 
   // Predecesores (solo en la vista por proyecto, donde tenemos el plan)
@@ -691,11 +692,20 @@ function EditModal({ tarea, proyecto, engineers, planTareas, aristas, onClose, o
     } catch (e: any) { setErr(e?.response?.data?.message || 'No se pudo guardar'); setBusy(false) }
   }
   const del = async () => { if (!tarea) return; setBusy(true); try { const r = await ingenieriaService.borrarTarea(tarea.id); onSaved(); if (r.data.reconectadas) { /* cadena reconectada */ } } catch (e: any) { setErr(e?.response?.data?.message || 'No se pudo borrar'); setBusy(false) } }
-  // #7 Revisión: el PM registra la respuesta del cliente (aprobado abre el gate #8).
+  // #7 Revisión: el PM registra la respuesta del cliente (decisión + comentarios + fecha).
+  // Aprobado abre el gate #8; Rechazado reabre shop_drawings (el backend lo hace).
   const setDecision = async (d: string) => {
     if (!tarea) return; setBusy(true)
-    try { await ingenieriaService.avanceTarea(tarea.id, { decision: tarea.decision === d ? null : d }); onSaved() }
-    catch (e: any) { setErr(e?.response?.data?.message || 'No se pudo registrar'); setBusy(false) }
+    const nuevo = tarea.decision === d ? null : d
+    const hoy = new Date().toISOString().slice(0, 10)
+    try {
+      await ingenieriaService.avanceTarea(tarea.id, {
+        decision: nuevo,
+        decision_comentarios: nuevo ? (decComent.trim() || null) : null,
+        ...(nuevo ? { fecha_fin_real: hoy } : {}),   // fecha de la decisión = cierre de la revisión
+      })
+      onSaved()
+    } catch (e: any) { setErr(e?.response?.data?.message || 'No se pudo registrar'); setBusy(false) }
   }
   const DEC_OPTS = [
     { k: 'aprobado', label: 'Aprobado', on: 'bg-emerald-100 border-emerald-300 text-emerald-800' },
@@ -742,16 +752,23 @@ function EditModal({ tarea, proyecto, engineers, planTareas, aristas, onClose, o
             <L t="Estado"><select value={f.estado} onChange={(e) => set('estado', e.target.value)} className="inp"><option value="pendiente">Pendiente</option><option value="en_curso">En curso</option><option value="hecha">Completada</option><option value="na">No aplica</option></select></L>
           </div>
 
-          {/* #7 Revisión del cliente: decisión que abre (o no) el gate de aprobación */}
+          {/* #7 Revisión del cliente: decisión + comentarios. Aprobado abre el gate #8;
+              Rechazado reabre shop_drawings (el ingeniero re-dibuja, el PM ajusta los días). */}
           {tarea?.tipo_clave === 'client_review' && (
             <L t="Decisión del cliente">
-              <div className="flex gap-2">
-                {DEC_OPTS.map((o) => (
-                  <button type="button" key={o.k} onClick={() => setDecision(o.k)} disabled={busy}
-                    className={`flex-1 rounded-lg border px-2 py-1.5 text-[12px] font-semibold transition ${tarea.decision === o.k ? o.on : 'border-stone-200 text-stone-500 hover:bg-stone-50'}`}>
-                    {o.label}
-                  </button>
-                ))}
+              <div className="space-y-2">
+                <textarea value={decComent} onChange={(e) => setDecComent(e.target.value)} rows={2}
+                  placeholder="Comentarios del cliente (qué pidió / por qué rechazó)…"
+                  className="inp resize-none text-[12.5px]" />
+                <div className="flex gap-2">
+                  {DEC_OPTS.map((o) => (
+                    <button type="button" key={o.k} onClick={() => setDecision(o.k)} disabled={busy}
+                      className={`flex-1 rounded-lg border px-2 py-1.5 text-[12px] font-semibold transition ${tarea.decision === o.k ? o.on : 'border-stone-200 text-stone-500 hover:bg-stone-50'}`}>
+                      {o.label}
+                    </button>
+                  ))}
+                </div>
+                {tarea.decision === 'rechazado' && <p className="text-[11px] text-rose-600">Al rechazar, Shop Drawings vuelve a pendiente para re-dibujar. Ajustá sus días para mover el schedule.</p>}
               </div>
             </L>
           )}
