@@ -17,6 +17,7 @@ import {
   enviarAClienteDeal, registrarAprobacionCliente, activarProyecto, listDealsEnCurso,
 } from '../domain/plan_inicial'
 import { estadoDeposito, overrideGate, listDepositosBloqueando } from '../domain/deposito'
+import { listMuestrasPorProyecto } from '../domain/muestras'
 
 function pid(req: Request): number {
   const id = parseInt(String(req.params.id ?? req.params.proyectoId), 10)
@@ -251,6 +252,15 @@ export async function borrarDepHandler(req: Request, res: Response, next: NextFu
 export async function reprogramacionesHandler(_req: Request, res: Response, next: NextFunction) {
   try {
     const data = await listReprogramaciones(pool)
+    res.json({ data })
+  } catch (e) { next(e) }
+}
+
+// ── Estado de muestras por proyecto (escritorio del ingeniero, paso #6) ──
+// GET /api/ingenieria/muestras-estado
+export async function muestrasEstadoHandler(_req: Request, res: Response, next: NextFunction) {
+  try {
+    const data = await listMuestrasPorProyecto(pool)
     res.json({ data })
   } catch (e) { next(e) }
 }

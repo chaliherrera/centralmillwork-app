@@ -26,6 +26,35 @@ export interface EstadoMuestras {
   fecha_aprobacion: string | null  // la más tardía (aprobación del cliente)
 }
 
+export interface MuestrasProyecto {
+  proyecto_ext: string
+  total: number
+  aprobadas: number
+  rechazadas: number
+  pendientes: number
+  todas_aprobadas: boolean
+}
+
+/** Estado de muestras por proyecto (para el escritorio del ingeniero: badge en el paso #6).
+ *  Solo proyectos que tienen muestras cargadas en el módulo. */
+export async function listMuestrasPorProyecto(runner: QueryRunner): Promise<MuestrasProyecto[]> {
+  const { rows } = await runner.query<{ proyecto_ext: string; total: string; aprobadas: string; rechazadas: string; pendientes: string }>(
+    `SELECT ip.proyecto_ext,
+            count(*) FILTER (WHERE m.estado <> 'ARCHIVADA')::int AS total,
+            count(*) FILTER (WHERE m.estado = 'APROBADA')::int AS aprobadas,
+            count(*) FILTER (WHERE m.estado = 'RECHAZADA')::int AS rechazadas,
+            count(*) FILTER (WHERE m.estado IN ('SOLICITADA','EN_FABRICACION','EN_QC','ENVIADA'))::int AS pendientes
+       FROM muestras m
+       JOIN ing_proyectos ip ON ip.proyecto_id = m.proyecto_id
+      GROUP BY ip.proyecto_ext
+     HAVING count(*) FILTER (WHERE m.estado <> 'ARCHIVADA') > 0`)
+  return rows.map((r) => ({
+    proyecto_ext: r.proyecto_ext,
+    total: +r.total, aprobadas: +r.aprobadas, rechazadas: +r.rechazadas, pendientes: +r.pendientes,
+    todas_aprobadas: +r.total > 0 && +r.aprobadas === +r.total,
+  }))
+}
+
 /** Lee el estado agregado de las muestras de un proyecto (dato del módulo de Muestras). */
 export async function estadoMuestras(runner: QueryRunner, proyectoExt: string): Promise<EstadoMuestras> {
   const { rows } = await runner.query<{
