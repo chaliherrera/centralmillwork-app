@@ -19,6 +19,7 @@ import {
 } from '../domain/plan_inicial'
 import { estadoDeposito, overrideGate, listDepositosBloqueando } from '../domain/deposito'
 import { listMuestrasPorProyecto } from '../domain/muestras'
+import { listComprasPorProyecto } from '../domain/compras'
 
 function pid(req: Request): number {
   const id = parseInt(String(req.params.id ?? req.params.proyectoId), 10)
@@ -271,6 +272,15 @@ export async function reprogramacionesHandler(_req: Request, res: Response, next
 export async function muestrasEstadoHandler(_req: Request, res: Response, next: NextFunction) {
   try {
     const data = await listMuestrasPorProyecto(pool)
+    res.json({ data })
+  } catch (e) { next(e) }
+}
+
+// ── Estado de compras por proyecto (escritorio del ingeniero, paso #9) ──
+// GET /api/ingenieria/compras-estado
+export async function comprasEstadoHandler(_req: Request, res: Response, next: NextFunction) {
+  try {
+    const data = await listComprasPorProyecto(pool)
     res.json({ data })
   } catch (e) { next(e) }
 }

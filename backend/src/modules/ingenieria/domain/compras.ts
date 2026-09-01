@@ -34,6 +34,37 @@ export interface EstadoCompras {
   pct_disponible: number       // (recibidos + en_stock) / n_materiales, 0..1
 }
 
+export interface ComprasProyecto {
+  proyecto_ext: string
+  n_materiales: number
+  con_precio: number
+  en_oc: number
+  recibidos: number
+  fecha_mto: string | null
+}
+
+/** Estado de compras por proyecto (para el escritorio del ingeniero: badge del paso #9).
+ *  Solo proyectos con MTO importado. Funnel de materiales_mto (el detalle está en la tarjeta). */
+export async function listComprasPorProyecto(runner: QueryRunner): Promise<ComprasProyecto[]> {
+  const { rows } = await runner.query<{ proyecto_ext: string; n: string; con_precio: string; en_oc: string; recibidos: string; fecha_mto: string | null }>(
+    `SELECT ip.proyecto_ext,
+            count(*)::int AS n,
+            count(*) FILTER (WHERE m.estado_cotiz <> 'PENDIENTE')::int AS con_precio,
+            count(*) FILTER (WHERE m.estado_cotiz IN ('ORDENADO','RECIBIDO'))::int AS en_oc,
+            count(*) FILTER (WHERE m.estado_cotiz = 'RECIBIDO')::int AS recibidos,
+            to_char(min(m.fecha_importacion),'YYYY-MM-DD') AS fecha_mto
+       FROM materiales_mto m
+       JOIN ing_proyectos ip ON ip.proyecto_id = m.proyecto_id
+      WHERE m.activo AND COALESCE(m.cotizar,'SI') <> 'NO'
+      GROUP BY ip.proyecto_ext
+     HAVING count(*) > 0`)
+  return rows.map((r) => ({
+    proyecto_ext: r.proyecto_ext,
+    n_materiales: +r.n, con_precio: +r.con_precio, en_oc: +r.en_oc, recibidos: +r.recibidos,
+    fecha_mto: r.fecha_mto,
+  }))
+}
+
 /** Lee el estado agregado del flujo de compras de un proyecto (5 hitos). */
 export async function estadoCompras(runner: QueryRunner, proyectoExt: string): Promise<EstadoCompras> {
   // (1) Materiales del MTO por estado (la máquina de estados vive en estado_cotiz).
