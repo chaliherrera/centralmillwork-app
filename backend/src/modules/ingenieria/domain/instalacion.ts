@@ -13,6 +13,8 @@
 
 import type { PoolClient } from 'pg'
 import pool from '../../../db/pool'
+import { listInstallItems, type InstallItem } from '../../schedule/domain/installitems'
+import { listPunch, type PunchItem } from '../../schedule/domain/field'
 
 type QueryRunner = PoolClient | typeof pool
 
@@ -60,4 +62,19 @@ export async function estadoInstalacion(runner: QueryRunner, proyectoExt: string
     punch_abiertos: punchAbiertos,
     completa: total > 0 && instalados === total && punchAbiertos === 0,
   }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Detalle ítem×ítem + punch list para el panel del PM (#15). Solo lectura: lee del
+// módulo de campo (installitems + field), sin duplicar nada. El PM lo abre desde su
+// Gantt para ver el mismo avance que el instalador captura en el móvil.
+export interface DetalleInstalacion { items: InstallItem[]; punch: PunchItem[] }
+
+export async function detalleInstalacion(runner: QueryRunner, proyectoExt: string): Promise<DetalleInstalacion> {
+  const { rows } = await runner.query<{ proyecto_id: number }>(
+    `SELECT proyecto_id FROM ing_proyectos WHERE proyecto_ext = $1`, [proyectoExt])
+  const pid = rows[0]?.proyecto_id
+  if (!pid) return { items: [], punch: [] }
+  const [items, punch] = await Promise.all([listInstallItems(runner, pid), listPunch(runner, pid)])
+  return { items, punch }
 }

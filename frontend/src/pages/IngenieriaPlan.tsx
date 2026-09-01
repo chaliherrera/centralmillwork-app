@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Users, Layers, ClipboardList, Plus, X, Loader2, Trash2, Gauge, Check, FolderKanban, Activity, AlertTriangle, Wallet, Lock, LockOpen, FlaskConical, Package, Wrench, CalendarClock } from 'lucide-react'
-import { ingenieriaService, type IngProyecto, type IngTarea, type TareaInput, type IngPlan, type IngTareaPlan, type IngArista, type IngCarga, type IngTareaCelda } from '@/services/ingenieria'
+import { ingenieriaService, type IngProyecto, type IngTarea, type TareaInput, type IngPlan, type IngTareaPlan, type IngArista, type IngCarga, type IngTareaCelda, type InstalacionDetalle } from '@/services/ingenieria'
 import MapaEtapas from '@/components/modules/ingenieria/MapaEtapas'
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -235,6 +235,16 @@ function VistaProyecto({ proyectos, all, plan, planLoading, sel, setSel, onEdit,
     setDepBusy(true)
     try { await ingenieriaService.overrideDeposito(sel, abrir); await onRefresh() } catch { /* noop */ } finally { setDepBusy(false) }
   }
+  // Panel de detalle de instalación (#15): ítem×ítem + punch, leído del módulo de campo.
+  const [instOpen, setInstOpen] = useState(false)
+  const [instDet, setInstDet] = useState<InstalacionDetalle | null>(null)
+  const [instBusy, setInstBusy] = useState(false)
+  async function abrirInstalacion() {
+    if (!sel) return
+    setInstOpen(true); setInstBusy(true); setInstDet(null)
+    try { setInstDet((await ingenieriaService.instalacionDetalle(sel)).data) }
+    catch { setInstDet({ items: [], punch: [] }) } finally { setInstBusy(false) }
+  }
   // color por ingeniero (estable en todo el sistema)
   const engColor = useMemo(() => { const m = new Map<string, string>(); [...new Set(all.map((t) => t.asignado_nombre).filter(Boolean))].forEach((e, i) => m.set(e as string, PAL[i % PAL.length])); return m }, [all])
   const tareas = plan?.tareas ?? []
@@ -415,15 +425,17 @@ function VistaProyecto({ proyectos, all, plan, planLoading, sel, setSel, onEdit,
           : 'border-sky-200 bg-sky-50 text-sky-800'
         const iconCls = i.completa ? 'text-emerald-600' : i.punch_abiertos > 0 ? 'text-amber-600' : 'text-sky-600'
         return (
-          <div className={`rounded-2xl border px-4 py-2.5 flex flex-wrap items-center gap-x-2.5 gap-y-1 text-sm ${cls}`}>
+          <button type="button" onClick={abrirInstalacion}
+            className={`w-full text-left rounded-2xl border px-4 py-2.5 flex flex-wrap items-center gap-x-2.5 gap-y-1 text-sm hover:brightness-[0.97] transition ${cls}`}>
             <Wrench size={17} className={`shrink-0 ${iconCls}`} />
             <span className="font-semibold">Instalación</span>
             <span className="opacity-90">· {i.instalados} de {i.total} instalados</span>
             {i.fecha_ultima && <span className="opacity-75">· última {fmtD(i.fecha_ultima)}</span>}
             {i.punch_abiertos > 0 && <span className="font-semibold">· {i.punch_abiertos} punch abierto{i.punch_abiertos === 1 ? '' : 's'}</span>}
             {i.completa && <span className="font-semibold">· lista ✓</span>}
+            <span className="opacity-70 text-[12px]">· ver detalle →</span>
             <span className={`ml-auto inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-bold ${i.completa ? 'bg-emerald-600 text-white' : 'bg-sky-600 text-white'}`}>{Math.round(i.pct * 100)}%</span>
-          </div>
+          </button>
         )
       })()}
 
@@ -543,6 +555,92 @@ function VistaProyecto({ proyectos, all, plan, planLoading, sel, setSel, onEdit,
           <span className="inline-flex items-center gap-1"><span className="w-0.5 h-3.5 bg-rose-400 inline-block" /> hoy</span>
           <span className="inline-flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-stone-400 inline-block" /> = ingeniero</span>
           <span className="italic text-stone-400">Barras = fechas calculadas (CPM). Editá una tarea y la holgura se recalcula.</span>
+        </div>
+      </div>
+
+      {instOpen && <InstalacionPanel det={instDet} busy={instBusy} proyecto={sel} onClose={() => setInstOpen(false)} />}
+    </div>
+  )
+}
+
+// ── Panel de detalle de instalación (#15): solo lectura para el PM ──
+// Lee el avance ítem×ítem + punch list del módulo de campo (el instalador lo captura
+// en el móvil). No edita nada: el dueño del dato sigue siendo Instalación.
+function InstalacionPanel({ det, busy, proyecto, onClose }: { det: InstalacionDetalle | null; busy: boolean; proyecto: string; onClose: () => void }) {
+  const items = det?.items ?? []
+  const punch = det?.punch ?? []
+  const inst = items.filter((i) => i.instalado).length
+  return (
+    <div className="fixed inset-0 bg-black/30 flex items-center justify-center p-4 z-50" onClick={onClose}>
+      <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl max-h-[85vh] overflow-hidden flex flex-col" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center gap-2 px-5 py-3.5 border-b border-stone-100">
+          <Wrench size={18} className="text-sky-600" />
+          <div>
+            <div className="font-bold text-stone-800 text-sm">Instalación · {shortProj(proyecto)}</div>
+            <div className="text-[11px] text-stone-400">Avance del módulo de campo (solo lectura)</div>
+          </div>
+          <button onClick={onClose} className="ml-auto text-stone-400 hover:text-stone-700"><X size={20} /></button>
+        </div>
+
+        <div className="overflow-y-auto px-5 py-4 space-y-5">
+          {busy ? <div className="py-14 text-center text-stone-400"><Loader2 className="animate-spin inline" size={22} /></div> : (
+          <>
+            {/* Muebles a instalar */}
+            <div>
+              <div className="flex items-center gap-2 mb-2">
+                <span className="text-xs font-bold uppercase tracking-wide text-stone-500">Muebles</span>
+                <span className="text-[11px] text-stone-400">{inst} de {items.length} instalados</span>
+              </div>
+              {items.length === 0 ? <div className="text-sm text-stone-400 italic">Todavía no hay muebles en producción.</div> : (
+                <div className="space-y-1.5">
+                  {items.map((it) => (
+                    <div key={it.op_id} className={`flex items-center gap-2.5 rounded-lg border px-3 py-2 ${it.instalado ? 'border-emerald-200 bg-emerald-50/60' : 'border-stone-200 bg-white'}`}>
+                      {it.instalado
+                        ? <Check size={16} className="shrink-0 text-emerald-600" />
+                        : <span className="shrink-0 w-4 h-4 rounded-full border-2 border-stone-300 inline-block" />}
+                      <div className="min-w-0">
+                        <div className="text-sm font-semibold text-stone-800 truncate">{it.numero_orden} · ítem {it.numero_item}</div>
+                        <div className="text-[11px] text-stone-400">
+                          {it.instalado ? `Instalado ${fmtD(it.instalado_at)}` : it.op_status}
+                          {it.nota ? ` · ${it.nota}` : ''}
+                        </div>
+                      </div>
+                      {it.foto_url && <a href={it.foto_url} target="_blank" rel="noreferrer" className="ml-auto shrink-0"><img src={it.foto_url} alt="foto" className="w-11 h-11 rounded object-cover border border-stone-200" /></a>}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Punch list */}
+            <div>
+              <div className="flex items-center gap-2 mb-2">
+                <span className="text-xs font-bold uppercase tracking-wide text-stone-500">Punch list</span>
+                {punch.length > 0 && <span className="text-[11px] text-stone-400">{punch.filter((p) => p.estado !== 'resuelto').length} abierto(s) · {punch.length} total</span>}
+              </div>
+              {punch.length === 0 ? <div className="text-sm text-stone-400 italic">Sin pendientes.</div> : (
+                <div className="space-y-1.5">
+                  {punch.map((p) => {
+                    const resuelto = p.estado === 'resuelto'
+                    return (
+                      <div key={p.id} className={`flex items-center gap-2.5 rounded-lg border px-3 py-2 ${resuelto ? 'border-emerald-200 bg-emerald-50/60' : 'border-amber-200 bg-amber-50/60'}`}>
+                        <span className={`shrink-0 inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-bold ${resuelto ? 'bg-emerald-600 text-white' : 'bg-amber-500 text-white'}`}>{resuelto ? 'resuelto' : 'abierto'}</span>
+                        <div className="min-w-0">
+                          <div className="text-sm font-medium text-stone-800 truncate">{p.descripcion}</div>
+                          <div className="text-[11px] text-stone-400">{p.area ? `${p.area} · ` : ''}{fmtD(p.created_at)}</div>
+                        </div>
+                        <div className="ml-auto shrink-0 flex gap-1">
+                          {p.foto_problema_url && <a href={p.foto_problema_url} target="_blank" rel="noreferrer"><img src={p.foto_problema_url} alt="problema" className="w-11 h-11 rounded object-cover border border-stone-200" /></a>}
+                          {p.foto_resuelto_url && <a href={p.foto_resuelto_url} target="_blank" rel="noreferrer"><img src={p.foto_resuelto_url} alt="resuelto" className="w-11 h-11 rounded object-cover border border-emerald-300" /></a>}
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+          </>
+          )}
         </div>
       </div>
     </div>

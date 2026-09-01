@@ -144,6 +144,16 @@ export interface EstadoInstalacion {
   punch_abiertos: number
   completa: boolean
 }
+// Detalle ítem×ítem + punch para el panel del PM (#15) — leído del módulo de campo.
+export interface InstalacionItem {
+  op_id: number; numero_orden: string; numero_item: string; cantidad: number; unidad: string | null
+  op_status: string; instalado: boolean; foto_url: string | null; nota: string | null; instalado_at: string | null
+}
+export interface InstalacionPunch {
+  id: number; descripcion: string; area: string | null; estado: string
+  foto_problema_url: string | null; foto_resuelto_url: string | null; created_at: string
+}
+export interface InstalacionDetalle { items: InstalacionItem[]; punch: InstalacionPunch[] }
 export interface IngPlan {
   proyecto_ext: string
   fecha_inicio: string | null
@@ -228,6 +238,8 @@ export const ingenieriaService = {
     api.get<ApiResponse<MuestrasProyecto[]>>('/ingenieria/muestras-estado').then((r) => r.data),
   comprasEstado: () =>
     api.get<ApiResponse<ComprasProyecto[]>>('/ingenieria/compras-estado').then((r) => r.data),
+  instalacionDetalle: (proyectoExt: string) =>
+    api.get<ApiResponse<InstalacionDetalle>>(`/ingenieria/proyecto/${encodeURIComponent(proyectoExt)}/instalacion-detalle`).then((r) => r.data),
   borrarTarea: (id: number) =>
     api.delete<ApiResponse<{ ok: boolean; reconectadas: number }>>(`/ingenieria/tareas/${id}`).then((r) => r.data),
 

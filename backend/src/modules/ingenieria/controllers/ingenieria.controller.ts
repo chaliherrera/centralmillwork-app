@@ -20,6 +20,7 @@ import {
 import { estadoDeposito, overrideGate, listDepositosBloqueando } from '../domain/deposito'
 import { listMuestrasPorProyecto } from '../domain/muestras'
 import { listComprasPorProyecto } from '../domain/compras'
+import { detalleInstalacion } from '../domain/instalacion'
 
 function pid(req: Request): number {
   const id = parseInt(String(req.params.id ?? req.params.proyectoId), 10)
@@ -284,6 +285,15 @@ export async function muestrasEstadoHandler(_req: Request, res: Response, next: 
 export async function comprasEstadoHandler(_req: Request, res: Response, next: NextFunction) {
   try {
     const data = await listComprasPorProyecto(pool)
+    res.json({ data })
+  } catch (e) { next(e) }
+}
+
+// ── Detalle de instalación ítem×ítem + punch (panel del PM, paso #15) ──
+// GET /api/ingenieria/proyecto/:ext/instalacion-detalle
+export async function instalacionDetalleHandler(req: Request, res: Response, next: NextFunction) {
+  try {
+    const data = await detalleInstalacion(pool, String(req.params.ext))
     res.json({ data })
   } catch (e) { next(e) }
 }
