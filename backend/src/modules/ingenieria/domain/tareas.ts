@@ -38,6 +38,7 @@ export interface Tarea {
   reprogramacion_pedida: boolean    // el ingeniero pidió reprogramación al PM (#2)
   reprogramacion_motivo: string | null  // por qué / cuándo podría
   decision: string | null           // respuesta del cliente en la revisión (#7): aprobado|rechazado|con_comentarios
+  decision_comentarios: string | null  // qué dijo el cliente en la revisión
   envio_metodo: string | null       // cómo se envió al cliente (#5): correo|portal|ambos
 }
 
@@ -85,7 +86,8 @@ export async function listTareas(runner: QueryRunner, proyectoExt?: string): Pro
             to_char(t.fecha_fin,'YYYY-MM-DD') AS fecha_fin,
             to_char(t.fecha_compromiso,'YYYY-MM-DD') AS fecha_compromiso,
             to_char(t.fecha_fin_real,'YYYY-MM-DD') AS fecha_fin_real,
-            t.estado, t.status_ext, t.comentario, t.reprogramacion_pedida, t.reprogramacion_motivo, t.decision, t.envio_metodo
+            t.estado, t.status_ext, t.comentario, t.reprogramacion_pedida, t.reprogramacion_motivo,
+            t.decision, t.decision_comentarios, t.envio_metodo
        FROM ing_tareas t
        LEFT JOIN ing_tarea_tipos tt ON tt.id = t.tipo_id
       WHERE ($1::text IS NULL OR t.proyecto_ext = $1)
@@ -434,7 +436,7 @@ export async function reportarAvance(
   data: {
     estado?: string; comentario?: string | null; fecha_compromiso?: string | null; fecha_fin_real?: string | null
     reprogramacion_pedida?: boolean; reprogramacion_motivo?: string | null; decision?: string | null
-    envio_metodo?: string | null
+    decision_comentarios?: string | null; envio_metodo?: string | null
   }
 ): Promise<boolean> {
   const sets: string[] = []
@@ -448,10 +450,27 @@ export async function reportarAvance(
   if (data.reprogramacion_pedida !== undefined) { vals.push(data.reprogramacion_pedida); sets.push(`reprogramacion_pedida = $${vals.length}`) }
   if (data.reprogramacion_motivo !== undefined) { vals.push(data.reprogramacion_motivo); sets.push(`reprogramacion_motivo = $${vals.length}`) }
   if (data.decision !== undefined) { vals.push(data.decision); sets.push(`decision = $${vals.length}`) }
+  if (data.decision_comentarios !== undefined) { vals.push(data.decision_comentarios); sets.push(`decision_comentarios = $${vals.length}`) }
   if (data.envio_metodo !== undefined) { vals.push(data.envio_metodo); sets.push(`envio_metodo = $${vals.length}`) }
   if (!sets.length) return false
   sets.push('updated_at = NOW()')
   const { rowCount } = await runner.query(`UPDATE ing_tareas SET ${sets.join(', ')} WHERE id = $1`, vals)
+  return (rowCount ?? 0) > 0
+}
+
+/** Reject-loop del paso #7: cuando el cliente RECHAZA la revisión, shop_drawings vuelve a
+ *  "pendiente" (hay que re-dibujar), con el motivo del rechazo, para que el ingeniero lo vea
+ *  en su escritorio. El PM extiende los días de shop_drawings/review → el schedule recalcula. */
+export async function reabrirShopDrawingsPorRechazo(runner: QueryRunner, clientReviewId: number, comentarios: string | null): Promise<boolean> {
+  const { rows } = await runner.query<{ ext: string | null }>(
+    `SELECT proyecto_ext AS ext FROM ing_tareas WHERE id = $1`, [clientReviewId])
+  const ext = rows[0]?.ext
+  if (!ext) return false
+  const motivo = comentarios ? `Cliente rechazó la revisión: ${comentarios}` : 'Cliente rechazó la revisión — re-dibujar'
+  const { rowCount } = await runner.query(
+    `UPDATE ing_tareas t SET estado = 'pendiente', fecha_fin_real = NULL, comentario = $2, updated_at = NOW()
+       FROM ing_tarea_tipos tt
+      WHERE t.tipo_id = tt.id AND tt.clave = 'shop_drawings' AND t.proyecto_ext = $1`, [ext, motivo])
   return (rowCount ?? 0) > 0
 }
 

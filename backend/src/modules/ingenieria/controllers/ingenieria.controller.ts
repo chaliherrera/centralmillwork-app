@@ -10,6 +10,7 @@ import {
   getCargaPorEtapa, getProyectosDeEtapa,
   crearTarea, actualizarTarea, reportarAvance, getPlanProyecto,
   borrarTareaConReconexion, agregarDep, borrarDep, listReprogramaciones, recomputarYGuardar,
+  reabrirShopDrawingsPorRechazo,
 } from '../domain/tareas'
 import { listReservasPendientes, liberarReserva } from '../domain/reservas'
 import {
@@ -194,6 +195,7 @@ const avanceSchema = z.object({
   reprogramacion_pedida: z.boolean().optional(),
   reprogramacion_motivo: z.string().max(500).nullish(),
   decision: z.enum(['aprobado', 'rechazado', 'con_comentarios']).nullish(),
+  decision_comentarios: z.string().max(1000).nullish(),
   envio_metodo: z.enum(['correo', 'portal', 'ambos']).nullish(),
 })
 export async function avanceTareaHandler(req: Request, res: Response, next: NextFunction) {
@@ -205,7 +207,12 @@ export async function avanceTareaHandler(req: Request, res: Response, next: Next
   try {
     const ok = await reportarAvance(pool, id, parsed.data)
     if (!ok) return next(createError('tarea no encontrada', 404))
-    res.json({ data: { ok: true } })
+    // Reject-loop (#7): si el cliente RECHAZA la revisión, shop_drawings vuelve a "pendiente"
+    // con el motivo — el ingeniero re-dibuja y el PM extiende los días (el schedule recalcula).
+    let reabierto = false
+    if (parsed.data.decision === 'rechazado')
+      reabierto = await reabrirShopDrawingsPorRechazo(pool, id, parsed.data.decision_comentarios ?? null)
+    res.json({ data: { ok: true, shop_drawings_reabierto: reabierto } })
   } catch (e) { next(e) }
 }
 
