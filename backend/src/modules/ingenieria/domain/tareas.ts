@@ -474,6 +474,21 @@ export async function reabrirShopDrawingsPorRechazo(runner: QueryRunner, clientR
   return (rowCount ?? 0) > 0
 }
 
+/** Gate del cliente (#8): cuando el cliente APRUEBA la revisión, se cierra el gate
+ *  approval (E-07) con la fecha de aprobación — el hito queda cumplido y (por la
+ *  dependencia) arrancan 9-13. Solo lo abre la aprobación de SD; las muestras no bloquean. */
+export async function cerrarGatePorAprobacion(runner: QueryRunner, clientReviewId: number, fechaAprobacion: string | null): Promise<boolean> {
+  const { rows } = await runner.query<{ ext: string | null }>(
+    `SELECT proyecto_ext AS ext FROM ing_tareas WHERE id = $1`, [clientReviewId])
+  const ext = rows[0]?.ext
+  if (!ext) return false
+  const { rowCount } = await runner.query(
+    `UPDATE ing_tareas t SET estado = 'hecha', fecha_fin_real = COALESCE($2::date, CURRENT_DATE), updated_at = NOW()
+       FROM ing_tarea_tipos tt
+      WHERE t.tipo_id = tt.id AND tt.clave = 'approval' AND t.proyecto_ext = $1`, [ext, fechaAprobacion])
+  return (rowCount ?? 0) > 0
+}
+
 export interface Reprogramacion {
   id: number
   proyecto_ext: string | null

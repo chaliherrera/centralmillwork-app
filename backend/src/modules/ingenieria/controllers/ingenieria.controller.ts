@@ -10,7 +10,7 @@ import {
   getCargaPorEtapa, getProyectosDeEtapa,
   crearTarea, actualizarTarea, reportarAvance, getPlanProyecto,
   borrarTareaConReconexion, agregarDep, borrarDep, listReprogramaciones, recomputarYGuardar,
-  reabrirShopDrawingsPorRechazo,
+  reabrirShopDrawingsPorRechazo, cerrarGatePorAprobacion,
 } from '../domain/tareas'
 import { listReservasPendientes, liberarReserva } from '../domain/reservas'
 import {
@@ -207,12 +207,15 @@ export async function avanceTareaHandler(req: Request, res: Response, next: Next
   try {
     const ok = await reportarAvance(pool, id, parsed.data)
     if (!ok) return next(createError('tarea no encontrada', 404))
-    // Reject-loop (#7): si el cliente RECHAZA la revisión, shop_drawings vuelve a "pendiente"
-    // con el motivo — el ingeniero re-dibuja y el PM extiende los días (el schedule recalcula).
-    let reabierto = false
+    // Espejo de la decisión del cliente en la revisión (#7):
+    //  · RECHAZADO → shop_drawings vuelve a "pendiente" (re-dibujar; el PM ajusta los días).
+    //  · APROBADO  → se cierra el gate del cliente (#8) y arrancan 9-13 por la dependencia.
+    let reabierto = false, gateCerrado = false
     if (parsed.data.decision === 'rechazado')
       reabierto = await reabrirShopDrawingsPorRechazo(pool, id, parsed.data.decision_comentarios ?? null)
-    res.json({ data: { ok: true, shop_drawings_reabierto: reabierto } })
+    else if (parsed.data.decision === 'aprobado')
+      gateCerrado = await cerrarGatePorAprobacion(pool, id, parsed.data.fecha_fin_real ?? null)
+    res.json({ data: { ok: true, shop_drawings_reabierto: reabierto, gate_cerrado: gateCerrado } })
   } catch (e) { next(e) }
 }
 
