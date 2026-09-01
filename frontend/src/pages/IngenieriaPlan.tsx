@@ -877,10 +877,16 @@ function EditModal({ tarea, proyecto, engineers, planTareas, aristas, onClose, o
             <L t="% de asignación"><input type="number" step="0.1" min="0" value={f.allocation_pct} onChange={(e) => set('allocation_pct', Number(e.target.value))} className="inp" /></L>
             <L t="Duración (días)"><input type="number" step="0.5" min="0" value={f.dur_dias} onChange={(e) => set('dur_dias', Number(e.target.value))} className="inp" /></L>
           </div>
-          <div className="grid grid-cols-2 gap-3">
-            <L t="Inicio"><input type="date" value={f.fecha_inicio ?? ''} onChange={(e) => set('fecha_inicio', e.target.value)} className="inp" /></L>
-            <L t="Fin"><input type="date" value={f.fecha_fin ?? ''} onChange={(e) => set('fecha_fin', e.target.value)} className="inp" /></L>
-          </div>
+          {/* Las fechas las calcula el CPM (duración + predecesores + entrega fija). Solo lectura:
+              el PM mueve el schedule ajustando la DURACIÓN y los predecesores, no tipeando fechas. */}
+          <L t="Fechas (calculadas)">
+            <div className="text-sm text-stone-600 bg-stone-50 border border-stone-200 rounded-lg px-3 py-2">
+              {tarea?.fecha_inicio && tarea?.fecha_fin
+                ? <><span className="font-semibold">{fmtD(tarea.fecha_inicio)}</span> → <span className="font-semibold">{fmtD(tarea.fecha_fin)}</span></>
+                : <span className="text-stone-400 italic">se calculan al guardar</span>}
+              <span className="block text-[11px] text-stone-400 mt-0.5">El sistema las recalcula desde la duración y los predecesores.</span>
+            </div>
+          </L>
 
           {/* Predecesores — esta tarea empieza después de… (recalcula holgura al guardar) */}
           {planTareas && (
