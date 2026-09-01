@@ -169,6 +169,7 @@ export async function crearTareaHandler(req: Request, res: Response, next: NextF
   if (!parsed.success) return next(createError('Datos inválidos', 400))
   try {
     const r = await crearTarea(pool, parsed.data)
+    if (parsed.data.proyecto_ext) await recomputarYGuardar(pool, parsed.data.proyecto_ext)
     res.status(201).json({ data: r })
   } catch (e) { next(e) }
 }
@@ -181,6 +182,11 @@ export async function actualizarTareaHandler(req: Request, res: Response, next: 
   try {
     const ok = await actualizarTarea(pool, id, parsed.data as any)
     if (!ok) return next(createError('tarea no encontrada', 404))
+    // El PM ajusta duración/deps/allocation → el CPM manda: recalculamos y PERSISTIMOS
+    // las fechas de todo el proyecto para que el heatmap (lee fechas guardadas) siga al
+    // Gantt (recalcula en vivo). Mismo patrón que re-anclaje/depósito/candado.
+    const { rows } = await pool.query<{ ext: string | null }>(`SELECT proyecto_ext AS ext FROM ing_tareas WHERE id = $1`, [id])
+    if (rows[0]?.ext) await recomputarYGuardar(pool, rows[0].ext)
     res.json({ data: { ok: true } })
   } catch (e) { next(e) }
 }
@@ -230,7 +236,10 @@ export async function borrarTareaHandler(req: Request, res: Response, next: Next
   const client = await pool.connect()
   try {
     await client.query('BEGIN')
+    const { rows: er } = await client.query<{ ext: string | null }>(`SELECT proyecto_ext AS ext FROM ing_tareas WHERE id = $1`, [id])
+    const ext = er[0]?.ext ?? null
     const r = await borrarTareaConReconexion(client, id)  // reconecta la cadena antes de borrar
+    if (r.ok && ext) await recomputarYGuardar(client, ext)  // el borrado + reconexión mueve el schedule
     await client.query('COMMIT')
     if (!r.ok) return next(createError('tarea no encontrada', 404))
     res.json({ data: r })
@@ -248,6 +257,8 @@ export async function agregarDepHandler(req: Request, res: Response, next: NextF
   try {
     const r = await agregarDep(pool, id, dep, lag, tipo)
     if (!r.ok) return next(createError(r.error ?? 'no se pudo agregar', 400))
+    const { rows } = await pool.query<{ ext: string | null }>(`SELECT proyecto_ext AS ext FROM ing_tareas WHERE id = $1`, [id])
+    if (rows[0]?.ext) await recomputarYGuardar(pool, rows[0].ext)
     res.status(201).json({ data: { ok: true } })
   } catch (e) { next(e) }
 }
@@ -258,6 +269,8 @@ export async function borrarDepHandler(req: Request, res: Response, next: NextFu
   if (Number.isNaN(id) || Number.isNaN(dep)) return next(createError('ids inválidos', 400))
   try {
     await borrarDep(pool, id, dep)
+    const { rows } = await pool.query<{ ext: string | null }>(`SELECT proyecto_ext AS ext FROM ing_tareas WHERE id = $1`, [id])
+    if (rows[0]?.ext) await recomputarYGuardar(pool, rows[0].ext)
     res.json({ data: { ok: true } })
   } catch (e) { next(e) }
 }
