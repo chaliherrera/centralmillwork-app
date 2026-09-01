@@ -25,8 +25,6 @@ const ACCION: Record<string, { tipo: 'submittal' | 'archivo' | 'registro' | 'pag
   'E-10': { tipo: 'registro', label: 'Release a producción' },
   'C-04': { tipo: 'pago', label: 'Registrar pago' },   // down payment
   'X-03': { tipo: 'pago', label: 'Registrar pago' },   // pago final
-  'S-03': { tipo: 'archivo', label: 'Subir BOL' },     // despacho
-  'S-04': { tipo: 'archivo', label: 'Registrar despacho' },
 }
 const accionDe = (codigo: string) => ACCION[codigo] ?? { tipo: 'registro' as const, label: 'Registrar' }
 

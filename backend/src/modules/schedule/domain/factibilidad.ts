@@ -52,7 +52,7 @@ function primerHueco(busy: Intervalo[], dur: number, desde: ISODate, feriados: S
 }
 
 // hitos que resumimos como "ventanas" del proyecto (para la pantalla)
-const VENTANA_HITOS = ['E-06', 'E-11', 'P-06', 'QC-02', 'S-04', 'I-07']
+const VENTANA_HITOS = ['E-06', 'E-11', 'P-06', 'QC-02', 'I-07']
 
 export async function chequearFactibilidad(
   runner: QueryRunner,

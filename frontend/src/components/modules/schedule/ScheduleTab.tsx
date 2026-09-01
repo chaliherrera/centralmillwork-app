@@ -15,7 +15,6 @@ const FASES = [
   { key: 'MATERIALS',   label: 'Materiales', owner: 'Compras',      oc: 'bg-amber-50 text-amber-700' },
   { key: 'PRODUCTION',  label: 'Producción', owner: 'Taller',       oc: 'bg-emerald-50 text-emerald-700' },
   { key: 'QC',          label: 'QC',         owner: 'Taller / QC',  oc: 'bg-teal-50 text-teal-700' },
-  { key: 'SHIPPING',    label: 'Despacho',   owner: 'Logística',    oc: 'bg-sky-50 text-sky-700' },
   { key: 'INSTALL',     label: 'Instalación', owner: 'Field',       oc: 'bg-fuchsia-50 text-fuchsia-700' },
   { key: 'COMPLETED',   label: 'Cierre',     owner: 'PM / Finanzas', oc: 'bg-gray-100 text-gray-600' },
 ] as const
@@ -23,11 +22,11 @@ const FASES = [
 // Hitos clave a destacar en el carril "Hitos" (el resto vive en el detalle)
 const KEY_HITOS: Record<string, string[]> = {
   CONTRACT: ['C-03'], ENGINEERING: ['E-05', 'E-07', 'E-10'], MATERIALS: ['M-05', 'M-07'],
-  PRODUCTION: ['P-01'], QC: ['QC-02'], SHIPPING: ['S-04'], INSTALL: ['I-03', 'I-07'], COMPLETED: ['X-03'],
+  PRODUCTION: ['P-01'], QC: ['QC-02'], INSTALL: ['I-04', 'I-07'], COMPLETED: ['X-03'],
 }
 // Momentos con el cliente (touchpoints del portal), por código de hito
 const CLIENT_TP: Record<string, string> = {
-  'C-03': 'Firma contrato', 'E-01b': 'Aprueba compra anticipada', 'E-05': 'Aprueba muestras',
+  'C-03': 'Firma contrato', 'E-05': 'Aprueba muestras',
   'E-07': 'Aprueba planos', 'I-07': 'Firma / sign-off',
 }
 
@@ -60,18 +59,13 @@ const ACCION_HITO: Record<string, { label: string; tipo: 'submittal' | 'archivo'
   'E-06': { label: 'Subir planos', tipo: 'submittal' },
   'E-08': { label: 'Subir planos', tipo: 'submittal' },
   'E-11': { label: 'Subir archivos CNC', tipo: 'archivo' },
-  'S-03': { label: 'Subir BOL', tipo: 'archivo' },
-  'S-04': { label: 'Registrar despacho', tipo: 'archivo' },
   'X-03': { label: 'Registrar pago final', tipo: 'pago' },
 }
 const REGISTRO_LABEL: Record<string, string> = {
-  'C-05': 'Validar MTO', 'C-06': 'Validar budget', 'C-07': 'Enviar announcement',
-  'C-08': 'Registrar kickoff', 'C-09': 'Transferir POC',
   'E-09': 'Liberar MTO', 'E-10': 'Release to Production',
-  'S-01': 'Registrar packaging', 'S-02': 'Emitir delivery request', 'S-05': 'Coordinar recepción',
 }
 // Etiqueta del campo de dato opcional en la subida de archivo, por hito.
-const ARCHIVO_NOTA: Record<string, string> = { 'S-04': 'Número de precinto', 'S-03': 'N° de BOL' }
+const ARCHIVO_NOTA: Record<string, string> = {}
 
 function fmt(d: string | null): string {
   if (!d) return '—'
