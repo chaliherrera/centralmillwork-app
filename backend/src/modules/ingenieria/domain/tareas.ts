@@ -375,7 +375,37 @@ export async function recomputarYGuardar(runner: QueryRunner, proyectoExt: strin
       const c = r.tareas.get(t.id)
       if (c) await runner.query(`UPDATE ing_tareas SET fecha_inicio = $2, fecha_fin = $3 WHERE id = $1`, [t.id, c.earlyStart, c.earlyFinish])
     }
+    // Proyección al journey map (opción A de Chali): el journey es un REFLEJO del Gantt.
+    // Escribimos las fechas de los hitos mapeados + la salud del proyecto en schedule_hitos/
+    // schedule_planes, para que TODOS los consumidores del journey (lista, detalle, portal)
+    // sean coherentes con el Gantt. Es un cache derivado, refrescado en cada recompute —
+    // nunca se edita solo, así que sigue habiendo una sola fuente de verdad (el Gantt).
+    await sincronizarJourney(runner, proyectoExt, r.holguraProyecto)
   } catch { /* ciclo improbable: se deja como está */ }
+}
+
+/** Refresca el journey map de un proyecto con las fechas y la salud del Gantt (opción A).
+ *  Solo toca los hitos que MAPEAN a un paso (ing_tarea_tipos.hito_codigo); los demás
+ *  (señales de módulos, manuales) quedan como están. No-op si el proyecto no tiene journey. */
+async function sincronizarJourney(runner: QueryRunner, proyectoExt: string, holguraProyecto: number): Promise<void> {
+  const { rows: pr } = await runner.query<{ proyecto_id: number | null }>(
+    `SELECT proyecto_id FROM ing_proyectos WHERE proyecto_ext = $1`, [proyectoExt])
+  const pid = pr[0]?.proyecto_id
+  if (!pid) return
+  // Fechas: cada hito mapeado toma la fecha_fin de su tarea del Gantt.
+  await runner.query(
+    `UPDATE schedule_hitos sh
+        SET fecha_planeada = t.fecha_fin, fecha_proyectada = t.fecha_fin
+       FROM ing_tareas t
+       JOIN ing_tarea_tipos tt ON tt.id = t.tipo_id
+       JOIN schedule_planes sp ON sp.proyecto_id = t.proyecto_id AND sp.scope = 'proyecto'
+      WHERE t.proyecto_id = $1 AND tt.hito_codigo IS NOT NULL AND t.fecha_fin IS NOT NULL
+        AND sh.plan_id = sp.id AND sh.codigo = tt.hito_codigo`, [pid])
+  // Salud del plan: holgura + semáforo del Gantt (binario, igual que el Gantt: <0 rojo, si no verde).
+  const semaforo = holguraProyecto < 0 ? 'rojo' : 'verde'
+  await runner.query(
+    `UPDATE schedule_planes SET holgura_dias = $2, semaforo = $3, updated_at = NOW()
+      WHERE proyecto_id = $1 AND scope = 'proyecto'`, [pid, Math.round(holguraProyecto), semaforo])
 }
 
 // ── Edición (MVP: que el creador la pruebe y la corrijamos) ──
