@@ -489,6 +489,25 @@ export async function cerrarGatePorAprobacion(runner: QueryRunner, clientReviewI
   return (rowCount ?? 0) > 0
 }
 
+/** Release to Production (#12, E-10, 0d): AUTO por defecto — cuando el SD update / final set
+ *  (#11) se completa, el release se cierra con la misma fecha (handoff a producción). El
+ *  ingeniero conserva la OPCIÓN MANUAL: puede reabrirlo o marcarlo con los botones de estado
+ *  (no se vuelve a cerrar solo salvo que se re-complete #11). cnc (#13) depende de release. */
+export async function cerrarReleasePorSdUpdate(runner: QueryRunner, sdUpdateTaskId: number): Promise<boolean> {
+  const { rows } = await runner.query<{ ext: string | null; fecha: string | null }>(
+    `SELECT t.proyecto_ext AS ext, to_char(t.fecha_fin_real,'YYYY-MM-DD') AS fecha
+       FROM ing_tareas t JOIN ing_tarea_tipos tt ON tt.id = t.tipo_id
+      WHERE t.id = $1 AND tt.clave = 'sd_update' AND t.estado = 'hecha'`, [sdUpdateTaskId])
+  const ext = rows[0]?.ext
+  if (!ext) return false
+  const { rowCount } = await runner.query(
+    `UPDATE ing_tareas t SET estado = 'hecha', fecha_fin_real = COALESCE($2::date, CURRENT_DATE), updated_at = NOW()
+       FROM ing_tarea_tipos tt
+      WHERE t.tipo_id = tt.id AND tt.clave = 'release' AND t.proyecto_ext = $1 AND t.estado <> 'hecha'`,
+    [ext, rows[0].fecha])
+  return (rowCount ?? 0) > 0
+}
+
 export interface Reprogramacion {
   id: number
   proyecto_ext: string | null

@@ -10,7 +10,7 @@ import {
   getCargaPorEtapa, getProyectosDeEtapa,
   crearTarea, actualizarTarea, reportarAvance, getPlanProyecto,
   borrarTareaConReconexion, agregarDep, borrarDep, listReprogramaciones, recomputarYGuardar,
-  reabrirShopDrawingsPorRechazo, cerrarGatePorAprobacion,
+  reabrirShopDrawingsPorRechazo, cerrarGatePorAprobacion, cerrarReleasePorSdUpdate,
 } from '../domain/tareas'
 import { listReservasPendientes, liberarReserva } from '../domain/reservas'
 import {
@@ -211,12 +211,15 @@ export async function avanceTareaHandler(req: Request, res: Response, next: Next
     // Espejo de la decisión del cliente en la revisión (#7):
     //  · RECHAZADO → shop_drawings vuelve a "pendiente" (re-dibujar; el PM ajusta los días).
     //  · APROBADO  → se cierra el gate del cliente (#8) y arrancan 9-13 por la dependencia.
-    let reabierto = false, gateCerrado = false
+    let reabierto = false, gateCerrado = false, releaseCerrado = false
     if (parsed.data.decision === 'rechazado')
       reabierto = await reabrirShopDrawingsPorRechazo(pool, id, parsed.data.decision_comentarios ?? null)
     else if (parsed.data.decision === 'aprobado')
       gateCerrado = await cerrarGatePorAprobacion(pool, id, parsed.data.fecha_fin_real ?? null)
-    res.json({ data: { ok: true, shop_drawings_reabierto: reabierto, gate_cerrado: gateCerrado } })
+    // Release (#12) AUTO: si se completó el SD update / final set (#11), cerrar el release.
+    if (parsed.data.estado === 'hecha')
+      releaseCerrado = await cerrarReleasePorSdUpdate(pool, id)
+    res.json({ data: { ok: true, shop_drawings_reabierto: reabierto, gate_cerrado: gateCerrado, release_cerrado: releaseCerrado } })
   } catch (e) { next(e) }
 }
 
