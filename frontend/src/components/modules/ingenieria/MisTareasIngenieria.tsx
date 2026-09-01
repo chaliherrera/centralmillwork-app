@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Loader2, CircleDot, Circle, CheckCircle2, MinusCircle, StickyNote, CalendarClock, CalendarCheck, AlertTriangle } from 'lucide-react'
+import { Loader2, CircleDot, Circle, CheckCircle2, MinusCircle, StickyNote, CalendarClock, CalendarCheck, AlertTriangle, FlaskConical } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { useAuth } from '@/context/AuthContext'
 import { ingenieriaService, type IngTarea } from '@/services/ingenieria'
@@ -45,6 +45,7 @@ export default function MisTareasIngenieria() {
   const [reprogVal, setReprogVal] = useState('')
   const [verHechas, setVerHechas] = useState(false)
   const [depBloqueado, setDepBloqueado] = useState<Set<string>>(new Set())  // proyectos con depósito impago
+  const [muestrasProy, setMuestrasProy] = useState<Record<string, { total: number; aprobadas: number; pendientes: number; rechazadas: number; todas_aprobadas: boolean }>>({})
 
   const cargar = () => ingenieriaService.getTareas()
     .then((r) => setTareas(r.data ?? []))
@@ -54,6 +55,12 @@ export default function MisTareasIngenieria() {
   useEffect(() => {
     ingenieriaService.depositosBloqueando()
       .then((r) => setDepBloqueado(new Set((r.data ?? []).map((d) => d.proyecto_ext))))
+      .catch(() => {})
+  }, [])
+  // Estado de muestras por proyecto (para el badge del paso #6).
+  useEffect(() => {
+    ingenieriaService.muestrasEstado()
+      .then((r) => setMuestrasProy(Object.fromEntries((r.data ?? []).map((m) => [m.proyecto_ext, m]))))
       .catch(() => {})
   }, [])
 
@@ -237,6 +244,18 @@ export default function MisTareasIngenieria() {
                         {t.tipo_clave === 'material_proc' && t.proyecto_ext && depBloqueado.has(t.proyecto_ext) && (
                           <div className="text-[11px] text-rose-700 mt-1 flex items-start gap-1 font-semibold"><AlertTriangle size={12} className="mt-0.5 shrink-0" /> <span>El depósito no está pagado — el PM debe abrir el candado o esperar el pago antes de enviar el MTO</span></div>
                         )}
+                        {t.tipo_clave === 'samples' && (() => {
+                          const mu = t.proyecto_ext ? muestrasProy[t.proyecto_ext] : null
+                          return (
+                            <div className="text-[11px] mt-1 flex items-center gap-1.5 flex-wrap">
+                              <FlaskConical size={12} className="text-sky-500 shrink-0" />
+                              {mu
+                                ? <span className={mu.todas_aprobadas ? 'text-emerald-700 font-semibold' : 'text-sky-700'}>Muestras: {mu.total} · {mu.aprobadas} aprobada{mu.aprobadas === 1 ? '' : 's'}{mu.pendientes > 0 ? ` · ${mu.pendientes} en curso` : ''}{mu.rechazadas > 0 ? ` · ${mu.rechazadas} rechazada${mu.rechazadas === 1 ? '' : 's'}` : ''}</span>
+                                : <span className="text-stone-400">Sin muestras solicitadas todavía</span>}
+                              <a href="/muestras" className="text-forest-600 hover:text-forest-800 font-semibold">{mu ? 'ver en Muestras →' : 'solicitar en Muestras →'}</a>
+                            </div>
+                          )
+                        })()}
                         {t.comentario && notaOpen !== t.id && (
                           <div className="text-[11px] text-stone-500 mt-1 flex items-start gap-1"><StickyNote size={12} className="mt-0.5 shrink-0" /> {t.comentario}</div>
                         )}
