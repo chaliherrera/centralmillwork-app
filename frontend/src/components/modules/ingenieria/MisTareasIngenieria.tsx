@@ -100,11 +100,24 @@ export default function MisTareasIngenieria() {
   const setFecha = async (t: IngTarea, campo: 'fecha_compromiso' | 'fecha_fin_real', val: string) => {
     const nuevo = val || null
     if ((t[campo] ?? null) === nuevo) return
+    // Registrar la fecha de cumplimiento/envío COMPLETA la tarea (enviar al cliente = completar).
+    const autocompletar = campo === 'fecha_fin_real' && !!nuevo && t.estado !== 'hecha'
+    const payload = autocompletar ? { [campo]: nuevo, estado: 'hecha' } : { [campo]: nuevo }
     setBusy(t.id)
     try {
-      await ingenieriaService.avanceTarea(t.id, { [campo]: nuevo })
-      setTareas((prev) => prev.map((x) => x.id === t.id ? { ...x, [campo]: nuevo } : x))
+      await ingenieriaService.avanceTarea(t.id, payload)
+      setTareas((prev) => prev.map((x) => x.id === t.id ? { ...x, ...payload } : x))
     } catch (e: any) { toast.error(e?.response?.data?.message || 'No se pudo guardar la fecha') }
+    finally { setBusy(null) }
+  }
+  // Método de envío al cliente (#5 shop drawings): correo (manual, hoy) / portal (auto, futuro) / ambos.
+  const setMetodo = async (t: IngTarea, metodo: string) => {
+    const nuevo = t.envio_metodo === metodo ? null : metodo
+    setBusy(t.id)
+    try {
+      await ingenieriaService.avanceTarea(t.id, { envio_metodo: nuevo })
+      setTareas((prev) => prev.map((x) => x.id === t.id ? { ...x, envio_metodo: nuevo } : x))
+    } catch (e: any) { toast.error(e?.response?.data?.message || 'No se pudo guardar') }
     finally { setBusy(null) }
   }
 
@@ -208,6 +221,15 @@ export default function MisTareasIngenieria() {
                               ? <span className="inline-flex items-center rounded-full bg-amber-100 text-amber-700 font-semibold px-1.5 py-0.5">{g} d tarde</span>
                               : <span className="inline-flex items-center rounded-full bg-emerald-100 text-emerald-700 font-semibold px-1.5 py-0.5">a tiempo</span>
                           })()}
+                          {t.tipo_clave === 'shop_drawings' && (
+                            <span className="inline-flex items-center gap-1" title="Cómo se envió al cliente. Hoy: correo (a mano). Cuando el portal esté al 100%, lo marca solo.">
+                              <span className="text-stone-400">envío:</span>
+                              {['correo', 'portal', 'ambos'].map((m) => (
+                                <button key={m} onClick={() => setMetodo(t, m)} disabled={busy === t.id}
+                                  className={`rounded px-1.5 py-0.5 text-[10px] font-semibold ${t.envio_metodo === m ? 'bg-forest-100 text-forest-700' : 'text-stone-400 hover:bg-stone-100'}`}>{m}</button>
+                              ))}
+                            </span>
+                          )}
                         </div>
                         {t.reprogramacion_pedida && (
                           <div className="text-[11px] text-amber-700 mt-1 flex items-start gap-1 font-semibold"><CalendarClock size={12} className="mt-0.5 shrink-0" /> <span>Reprogramación pedida al PM{t.reprogramacion_motivo ? <span className="font-normal">: {t.reprogramacion_motivo}</span> : ''}</span></div>
