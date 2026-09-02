@@ -25,10 +25,13 @@ export default function ClientPortal() {
   const [comentario, setComentario] = useState('')
   const [busy, setBusy] = useState(false)
 
-  async function load() {
-    setLoading(true); setError(false)
+  // silent=true refresca los datos SIN blanquear la pantalla con el spinner de carga
+  // (tras aprobar). El full-screen loading solo va en la carga inicial.
+  async function load(silent = false) {
+    if (!silent) setLoading(true)
+    setError(false)
     try { setData((await portalService.getVista(token)).data) }
-    catch { setError(true) } finally { setLoading(false) }
+    catch { if (!silent) setError(true) } finally { if (!silent) setLoading(false) }
   }
   useEffect(() => { load() }, [token])
 
@@ -39,7 +42,7 @@ export default function ClientPortal() {
       await portalService.aprobar(token, action.codigo, action.decision, comentario || undefined)
       toast.success('¡Gracias! Registramos tu respuesta.')
       setAction(null); setComentario('')
-      await load()
+      await load(true)   // refresco silencioso: no blanquea la pantalla
     } catch { /* toast global */ } finally { setBusy(false) }
   }
 
