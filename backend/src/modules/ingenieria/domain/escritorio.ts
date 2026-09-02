@@ -26,6 +26,8 @@ export interface EscritorioTarea {
   fecha_fin: string | null
   dur_dias: number
   estado: string
+  reprogramacion_pedida: boolean
+  reprogramacion_motivo: string | null
 }
 
 // Una tarea está BLOQUEADA si tiene un predecesor (dep no ignorada por el candado) donde:
@@ -60,7 +62,7 @@ export async function getEscritorio(
     `SELECT t.id, t.proyecto_ext, t.nombre, tt.clave AS tipo_clave, tt.rol, t.asignado_nombre,
             to_char(t.fecha_inicio,'YYYY-MM-DD') AS fecha_inicio,
             to_char(t.fecha_fin,'YYYY-MM-DD')    AS fecha_fin,
-            t.dur_dias, t.estado
+            t.dur_dias, t.estado, t.reprogramacion_pedida, t.reprogramacion_motivo
        ${base} AND NOT ${BLOQUEADA}
       ORDER BY t.fecha_inicio NULLS LAST, t.proyecto_ext, tt.orden`, params)
 

@@ -463,7 +463,7 @@ function VistaProyecto({ proyectos, all, plan, planLoading, sel, setSel, onEdit,
                       <div key={i} onClick={() => onEdit(t)} className="px-4 border-b border-stone-50 border-r border-stone-100 hover:bg-forest-50/30 cursor-pointer flex flex-col justify-center" style={{ height: ROW_H }}>
                         <div className="flex items-center gap-1.5">
                           {difExcel(t) && <span className="shrink-0 flex" title={`No coincide con el Excel\nExcel: ${fmtD(t.fecha_fin)} · app: ${fmtD(t.early_finish)}\n(revisá dependencias)`}><AlertTriangle size={12} className="text-amber-500" /></span>}
-                          {t.reprogramacion_pedida && <span className="shrink-0 flex" title="El ingeniero pidió reprogramación"><CalendarClock size={12} className="text-amber-600" /></span>}
+                          {t.reprogramacion_pedida && <span className="shrink-0 flex" title="El ingeniero dejó un aviso"><CalendarClock size={12} className="text-amber-600" /></span>}
                           <div className="text-[12.5px] text-stone-800 truncate flex-1">{t.nombre}</div>
                           {t.decision && <span className={`shrink-0 rounded px-1 text-[9px] font-bold ${t.decision === 'aprobado' ? 'bg-emerald-100 text-emerald-700' : t.decision === 'rechazado' ? 'bg-rose-100 text-rose-700' : 'bg-amber-100 text-amber-700'}`} title={`Cliente: ${t.decision}`}>{t.decision === 'aprobado' ? 'APROB' : t.decision === 'rechazado' ? 'RECH' : 'COMENT'}</span>}
                           {t.tipo_clave === 'long_leads' && (plan?.compras?.fecha_primera_oc
@@ -826,9 +826,9 @@ function EditModal({ tarea, proyecto, engineers, planTareas, aristas, onClose, o
             <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 flex items-start gap-2 text-[12.5px] text-amber-800">
               <CalendarClock size={15} className="text-amber-600 shrink-0 mt-0.5" />
               <div className="flex-1">
-                <span className="font-semibold">El ingeniero pidió reprogramación.</span>
+                <span className="font-semibold">El ingeniero dejó un aviso.</span>
                 {tarea.reprogramacion_motivo && <div className="text-amber-700 italic mt-0.5">“{tarea.reprogramacion_motivo}”</div>}
-                <span className="text-amber-700">Ajustá las fechas y marcá atendido.</span>
+                <span className="text-amber-700">Revisá (ajustá fechas si hace falta) y marcá atendido.</span>
               </div>
               <button type="button" onClick={async () => { if (!tarea) return; setBusy(true); try { await ingenieriaService.avanceTarea(tarea.id, { reprogramacion_pedida: false, reprogramacion_motivo: null }); onSaved() } catch (e: any) { setErr(e?.response?.data?.message || 'Error'); setBusy(false) } }}
                 disabled={busy} className="shrink-0 rounded-md border border-amber-300 bg-white hover:bg-amber-100 px-2 py-0.5 text-[11px] font-semibold self-center">marcar atendido</button>

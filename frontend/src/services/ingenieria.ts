@@ -159,6 +159,7 @@ export interface EscritorioTarea {
   id: number; proyecto_ext: string | null; nombre: string; tipo_clave: string | null
   rol: string | null; asignado_nombre: string | null; fecha_inicio: string | null
   fecha_fin: string | null; dur_dias: number; estado: string
+  reprogramacion_pedida: boolean; reprogramacion_motivo: string | null
 }
 export interface EscritorioResp { tareas: EscritorioTarea[]; bloqueadas: number }
 export interface IngPlan {

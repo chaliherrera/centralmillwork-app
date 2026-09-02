@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Loader2, CheckCircle2, ClipboardList, ChevronDown, ChevronUp, ExternalLink } from 'lucide-react'
+import { Loader2, CheckCircle2, ClipboardList, ChevronDown, ChevronUp, ExternalLink, MessageSquarePlus } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { ingenieriaService, type EscritorioTarea } from '@/services/ingenieria'
 
@@ -41,6 +41,8 @@ export default function Escritorio({ rol, asignado, titulo, subtitulo }: {
   const qc = useQueryClient()
   const [verEspera, setVerEspera] = useState(false)
   const [fechas, setFechas] = useState<Record<number, string>>({})
+  const [avisoOpen, setAvisoOpen] = useState<number | null>(null)
+  const [avisoVal, setAvisoVal] = useState('')
 
   const { data, isLoading } = useQuery({
     queryKey: ['escritorio', rol ?? '', asignado ?? ''],
@@ -54,6 +56,20 @@ export default function Escritorio({ rol, asignado, titulo, subtitulo }: {
       ingenieriaService.avanceTarea(id, { estado: 'hecha', fecha_fin_real: fecha }),
     onSuccess: () => { toast.success('Tarea completada'); qc.invalidateQueries({ queryKey: ['escritorio'] }) },
     onError: (e: any) => toast.error(e?.response?.data?.message ?? 'No se pudo completar'),
+  })
+
+  // "Avisar al PM": el ingeniero no mueve fechas (son del PM, que replanifica 2×/semana);
+  // le deja una señal libre pegada a la tarea — "no llego", "espero la madera", etc. — que el
+  // PM ve en su plan. Reusa el canal reprogramacion_pedida/motivo (ya lo muestra IngenieriaPlan).
+  const avisar = useMutation({
+    mutationFn: ({ id, motivo }: { id: number; motivo: string | null }) =>
+      ingenieriaService.avanceTarea(id, { reprogramacion_pedida: true, reprogramacion_motivo: motivo }),
+    onSuccess: () => { toast.success('Le avisamos al PM'); setAvisoOpen(null); setAvisoVal(''); qc.invalidateQueries({ queryKey: ['escritorio'] }) },
+    onError: (e: any) => toast.error(e?.response?.data?.message ?? 'No se pudo enviar el aviso'),
+  })
+  const quitarAviso = useMutation({
+    mutationFn: (id: number) => ingenieriaService.avanceTarea(id, { reprogramacion_pedida: false, reprogramacion_motivo: null }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['escritorio'] }) },
   })
 
   const tareas = data?.data.tareas ?? []
@@ -90,26 +106,57 @@ export default function Escritorio({ rol, asignado, titulo, subtitulo }: {
                   const link = LINK_MODULO[clave]
                   const fecha = fechas[t.id] ?? hoy()
                   return (
-                    <div key={t.id} className="rounded-lg border border-stone-200 px-3 py-2.5 flex flex-wrap items-center gap-x-3 gap-y-2">
-                      <div className="min-w-0 flex-1">
-                        <div className="text-sm font-semibold text-stone-800">{t.nombre}</div>
-                        <div className="text-[11px] text-stone-400">plan {fmtD(t.fecha_inicio)} → {fmtD(t.fecha_fin)} · {t.dur_dias}d{t.estado === 'en_curso' ? ' · en curso' : ''}</div>
-                      </div>
-                      {esCompletable ? (
-                        <div className="flex items-center gap-1.5 shrink-0">
-                          <input type="date" value={fecha} onChange={(e) => setFechas((f) => ({ ...f, [t.id]: e.target.value }))}
-                            className="text-xs border border-stone-300 rounded-lg px-2 py-1.5" title={CUMPLIDA_LABEL[clave] ?? 'Fecha de cumplimiento'} />
-                          <button onClick={() => completar.mutate({ id: t.id, fecha })} disabled={completar.isPending}
-                            className="inline-flex items-center gap-1 rounded-lg bg-forest-600 hover:bg-forest-700 disabled:opacity-50 text-white text-xs font-semibold px-2.5 py-1.5">
-                            <CheckCircle2 size={13} /> {CUMPLIDA_LABEL[clave] ?? 'Completar'}
-                          </button>
+                    <div key={t.id} className="rounded-lg border border-stone-200 px-3 py-2.5">
+                      <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+                        <div className="min-w-0 flex-1">
+                          <div className="text-sm font-semibold text-stone-800">{t.nombre}</div>
+                          <div className="text-[11px] text-stone-400">plan {fmtD(t.fecha_inicio)} → {fmtD(t.fecha_fin)} · {t.dur_dias}d{t.estado === 'en_curso' ? ' · en curso' : ''}</div>
                         </div>
-                      ) : link ? (
-                        <Link to={link.to} className="inline-flex items-center gap-1 rounded-lg border border-stone-300 hover:bg-stone-50 text-stone-700 text-xs font-semibold px-2.5 py-1.5 shrink-0">
-                          <ExternalLink size={13} /> {link.label}
-                        </Link>
-                      ) : (
-                        <span className="text-[11px] text-stone-400 italic shrink-0">se cierra sola con el módulo</span>
+                        {esCompletable ? (
+                          <div className="flex items-center gap-1.5 shrink-0">
+                            <input type="date" value={fecha} onChange={(e) => setFechas((f) => ({ ...f, [t.id]: e.target.value }))}
+                              className="text-xs border border-stone-300 rounded-lg px-2 py-1.5" title={CUMPLIDA_LABEL[clave] ?? 'Fecha de cumplimiento'} />
+                            <button onClick={() => completar.mutate({ id: t.id, fecha })} disabled={completar.isPending}
+                              className="inline-flex items-center gap-1 rounded-lg bg-forest-600 hover:bg-forest-700 disabled:opacity-50 text-white text-xs font-semibold px-2.5 py-1.5">
+                              <CheckCircle2 size={13} /> {CUMPLIDA_LABEL[clave] ?? 'Completar'}
+                            </button>
+                          </div>
+                        ) : link ? (
+                          <Link to={link.to} className="inline-flex items-center gap-1 rounded-lg border border-stone-300 hover:bg-stone-50 text-stone-700 text-xs font-semibold px-2.5 py-1.5 shrink-0">
+                            <ExternalLink size={13} /> {link.label}
+                          </Link>
+                        ) : (
+                          <span className="text-[11px] text-stone-400 italic shrink-0">se cierra sola con el módulo</span>
+                        )}
+                        {/* Avisar al PM — señal libre, sin mover fechas */}
+                        <button onClick={() => { setAvisoOpen(avisoOpen === t.id ? null : t.id); setAvisoVal(t.reprogramacion_motivo ?? '') }}
+                          title="Avisar al PM (no llego, espero algo, contexto…)"
+                          className={`inline-flex items-center rounded-lg px-1.5 py-1.5 shrink-0 ${t.reprogramacion_pedida ? 'text-amber-600 bg-amber-50' : 'text-stone-400 hover:bg-stone-100'}`}>
+                          <MessageSquarePlus size={15} />
+                        </button>
+                      </div>
+
+                      {/* Aviso ya enviado (colapsado) */}
+                      {t.reprogramacion_pedida && avisoOpen !== t.id && (
+                        <div className="mt-2 flex items-start gap-1.5 rounded-lg bg-amber-50 border border-amber-200 px-2.5 py-1.5 text-[11px] text-amber-800">
+                          <MessageSquarePlus size={13} className="mt-0.5 shrink-0 text-amber-600" />
+                          <span className="flex-1">Aviso al PM{t.reprogramacion_motivo ? <>: <span className="italic">“{t.reprogramacion_motivo}”</span></> : ' enviado'}</span>
+                          <button onClick={() => quitarAviso.mutate(t.id)} className="shrink-0 font-semibold text-amber-700 hover:text-amber-900">quitar</button>
+                        </div>
+                      )}
+
+                      {/* Editor del aviso */}
+                      {avisoOpen === t.id && (
+                        <div className="mt-2 flex items-center gap-2">
+                          <MessageSquarePlus size={14} className="text-amber-600 shrink-0" />
+                          <input autoFocus value={avisoVal} onChange={(e) => setAvisoVal(e.target.value)}
+                            onKeyDown={(e) => { if (e.key === 'Enter') avisar.mutate({ id: t.id, motivo: avisoVal.trim() || null }); if (e.key === 'Escape') setAvisoOpen(null) }}
+                            placeholder="Ej: no llego, movela · espero la madera del cliente…"
+                            className="flex-1 rounded-lg border border-amber-300 px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-amber-300" />
+                          <button onClick={() => avisar.mutate({ id: t.id, motivo: avisoVal.trim() || null })} disabled={avisar.isPending}
+                            className="text-sm font-semibold text-amber-700 hover:text-amber-800 px-2 whitespace-nowrap">Avisar al PM</button>
+                          <button onClick={() => setAvisoOpen(null)} className="text-sm text-stone-400 hover:text-stone-600 px-1">Cancelar</button>
+                        </div>
                       )}
                     </div>
                   )
