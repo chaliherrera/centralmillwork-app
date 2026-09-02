@@ -249,6 +249,12 @@ function OcDetailPanel({
                   OPERATIVA
                 </span>
               )}
+              {oc.flag_long_lead && (
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-bold bg-indigo-400/20 text-indigo-100 border border-indigo-400/40"
+                  title="OC emitida antes de la aprobación del cliente (gate E-07) — material de long lead, se ordenó adelantado">
+                  <Clock size={10} /> LONG LEAD
+                </span>
+              )}
             </div>
             <p className="text-xs text-white/70 truncate">{oc.proyecto?.codigo} · {oc.proyecto?.nombre}</p>
             <p className="text-base font-bold text-gold-300 mt-0.5">{fmt(Number(oc.total))}</p>
@@ -294,8 +300,14 @@ function OcDetailPanel({
         <ItemsPreciosSection ocId={oc.id} />
 
         {/* Flags */}
-        {(oc.flag_vencida || oc.flag_2dias || oc.flag_retraso) && (
+        {(oc.flag_vencida || oc.flag_2dias || oc.flag_retraso || oc.flag_long_lead) && (
           <div className="flex flex-wrap gap-1.5">
+            {oc.flag_long_lead && (
+              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold bg-indigo-100 text-indigo-700 border border-indigo-200"
+                title="OC emitida antes de la aprobación del cliente (gate E-07) — material de long lead">
+                <Clock size={11} /> Long lead
+              </span>
+            )}
             {oc.flag_vencida && (
               <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold bg-red-100 text-red-700 border border-red-200">
                 <AlertCircle size={11} /> ETA Vencida
@@ -405,6 +417,12 @@ function OcCard({ oc, selected, onClick }: { oc: OrdenCompra; selected: boolean;
           )}
           {oc.origen === 'OPERATIVA' && (
             <span className="text-[10px] px-1.5 py-0 rounded font-bold tracking-wide bg-orange-100 text-orange-700">OPERATIVA</span>
+          )}
+          {oc.flag_long_lead && (
+            <span className="text-[10px] px-1.5 py-0 rounded font-bold tracking-wide bg-indigo-100 text-indigo-700 inline-flex items-center gap-0.5"
+              title="OC emitida antes de la aprobación del cliente — long lead">
+              <Clock size={9} /> LONG LEAD
+            </span>
           )}
         </div>
         <div className="flex items-center gap-1">

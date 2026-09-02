@@ -16,7 +16,12 @@ const OC_JOINS = `
     WHERE orden_compra_id = o.id
     ORDER BY fecha_recepcion DESC
     LIMIT 1
-  ) rec ON true`
+  ) rec ON true
+  LEFT JOIN LATERAL (
+    SELECT MIN(sh.fecha_real) AS fecha_aprob, (count(*) > 0) AS tiene_gate
+    FROM schedule_hitos sh JOIN schedule_planes sp ON sp.id = sh.plan_id
+    WHERE sp.proyecto_id = o.proyecto_id AND sp.scope = 'proyecto' AND sh.codigo = 'E-07'
+  ) appr ON true`
 
 // ─── Shared computed SELECT columns ──────────────────────────────────────────
 const OC_COMPUTED = `
@@ -46,7 +51,15 @@ const OC_COMPUTED = `
   (SELECT STRING_AGG(DISTINCT NULLIF(TRIM(m.item), ''), ', ' ORDER BY NULLIF(TRIM(m.item), ''))
    FROM items_orden_compra ioc
    LEFT JOIN materiales_mto m ON m.id = ioc.material_id
-   WHERE ioc.orden_compra_id = o.id) AS items_cubiertos`
+   WHERE ioc.orden_compra_id = o.id) AS items_cubiertos,
+  -- Long lead (idea #5, Chali): una OC emitida ANTES de la aprobación del cliente (hito E-07)
+  -- es por definición un long lead — se ordenó adelantada. Derivado, no se guarda. Solo aplica
+  -- a proyectos del schedule (tiene_gate); si todavía no hay aprobación, toda OC emitida cuenta.
+  CASE WHEN appr.tiene_gate
+            AND o.fecha_emision IS NOT NULL
+            AND o.estado <> 'cancelada'
+            AND (appr.fecha_aprob IS NULL OR o.fecha_emision < appr.fecha_aprob)
+       THEN true ELSE false END AS flag_long_lead`
 
 export async function getOrdenesCompraImportDates(req: Request, res: Response, next: NextFunction) {
   try {

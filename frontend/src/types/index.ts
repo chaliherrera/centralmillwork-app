@@ -132,6 +132,8 @@ export interface OrdenCompra {
   flag_vencida?: boolean
   flag_retraso?: boolean
   flag_2dias?: boolean
+  /** Long lead (idea #5): OC emitida antes de la aprobación del cliente (gate E-07). Informativo. */
+  flag_long_lead?: boolean
   /** Lista comma-separada de items del proyecto cubiertos (ej "1-2, 3-4-7, 11").
    *  Calculado en backend desde materiales_mto.item agrupados por OC.
    *  Útil para distinguir OCs al mismo proveedor de batches MTO distintos. */
