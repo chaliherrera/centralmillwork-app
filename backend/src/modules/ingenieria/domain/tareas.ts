@@ -365,11 +365,11 @@ export async function cerrarTareasAutomaticas(runner: QueryRunner, proyectoExt: 
     `SELECT proyecto_id AS pid FROM ing_proyectos WHERE proyecto_ext = $1`, [proyectoExt])
   const pid = pr[0]?.pid ?? null
 
-  const [deposito, compras, instalacion] = await Promise.all([
-    estadoDeposito(runner, proyectoExt),
-    estadoCompras(runner, proyectoExt),
-    estadoInstalacion(runner, proyectoExt),
-  ])
+  // Secuencial (no Promise.all): con un client en transacción no se pueden correr
+  // queries concurrentes sobre el mismo client.
+  const deposito = await estadoDeposito(runner, proyectoExt)
+  const compras = await estadoCompras(runner, proyectoExt)
+  const instalacion = await estadoInstalacion(runner, proyectoExt)
 
   // Hechos del journey (schedule_hitos): C-03 contrato, E-07 planos aprobados (portal),
   // P-05/P-06 fabricación, I-07 sign-off. Solo si el proyecto tiene journey.
@@ -582,6 +582,60 @@ export async function cerrarGatePorAprobacion(runner: QueryRunner, clientReviewI
        FROM ing_tarea_tipos tt
       WHERE t.tipo_id = tt.id AND tt.clave = 'approval' AND t.proyecto_ext = $1`, [ext, fechaAprobacion])
   return (rowCount ?? 0) > 0
+}
+
+/**
+ * Cableado PORTAL → RUTA (pieza 4): la decisión del cliente en el portal sobre un hito
+ * aprobable (E-07 planos, E-05 muestras) se refleja en la RUTA (el escritorio del rol que
+ * sigue), no solo en el journey.
+ *  · E-07 rechazado → reabre shop_drawings (el ingeniero re-dibuja) + registra la decisión.
+ *  · E-07 aprobado / con comentarios → cierra el gate approval (habilita 9-13); con comentarios
+ *    los copia a sd_update para que el ingeniero los incorpore (Chali: cierra el gate igual,
+ *    el ingeniero trabaja las correcciones camino al paso 11).
+ *  · E-05 muestras aprobadas → avisa al ingeniero (tarea) para que lo registre en Muestras.
+ * Al final reconcilia + recomputa la ruta.
+ */
+export async function sincronizarDecisionCliente(
+  runner: QueryRunner, proyectoId: number, codigo: string,
+  decision: string, comentario: string | null,
+): Promise<void> {
+  const { rows: pe } = await runner.query<{ ext: string | null }>(
+    `SELECT proyecto_ext AS ext FROM ing_proyectos WHERE proyecto_id = $1`, [proyectoId])
+  const ext = pe[0]?.ext
+  if (!ext) return
+
+  if (codigo === 'E-07') {
+    const { rows: cr } = await runner.query<{ id: number }>(
+      `SELECT t.id FROM ing_tareas t JOIN ing_tarea_tipos tt ON tt.id = t.tipo_id
+        WHERE t.proyecto_ext = $1 AND tt.clave = 'client_review'`, [ext])
+    const crId = cr[0]?.id
+    if (decision.includes('rechaz')) {
+      if (crId) {
+        await reabrirShopDrawingsPorRechazo(runner, crId, comentario)
+        await runner.query(`UPDATE ing_tareas SET decision = 'rechazado', decision_comentarios = $2, updated_at = NOW() WHERE id = $1`, [crId, comentario])
+      }
+    } else {
+      const dec = decision.includes('comentarios') ? 'con_comentarios' : 'aprobado'
+      if (crId) {
+        await cerrarGatePorAprobacion(runner, crId, null)
+        await runner.query(`UPDATE ing_tareas SET decision = $2, decision_comentarios = $3, estado = 'hecha', fecha_fin_real = COALESCE(fecha_fin_real, CURRENT_DATE), updated_at = NOW() WHERE id = $1`, [crId, dec, comentario])
+      }
+      if (dec === 'con_comentarios' && comentario) {
+        await runner.query(
+          `UPDATE ing_tareas t SET comentario = concat_ws(' - ', NULLIF(t.comentario, ''), $2::text), updated_at = NOW()
+             FROM ing_tarea_tipos tt WHERE tt.id = t.tipo_id AND t.proyecto_ext = $1 AND tt.clave = 'sd_update'`,
+          [ext, `Cliente aprobo con comentarios: ${comentario}`])
+      }
+    }
+  } else if (codigo === 'E-05' && !decision.includes('rechaz')) {
+    await runner.query(
+      `INSERT INTO tareas (area, title, description, priority, estado, origen)
+       VALUES ('ingenieria', $1, $2, 'medium', 'pendiente', 'sistema')`,
+      [`Cliente aprobó las muestras — ${ext}`,
+       `El cliente aprobó las muestras del proyecto ${ext} desde el portal. Reflejalo en el módulo de Muestras.${comentario ? ' Comentario: ' + comentario : ''}`])
+  }
+
+  await recomputarYGuardar(runner, ext)
 }
 
 /** Release to Production (#12, E-10, 0d): AUTO por defecto — cuando el SD update / final set

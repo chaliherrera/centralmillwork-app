@@ -196,6 +196,14 @@ export async function aplicarAprobacion(
     await marcarRespuestaSubmittal(runner, info.proyectoId, decision, comentario).catch(() => {})
   }
 
+  // Cablear la decisión del cliente a la RUTA de ingeniería (escritorio del rol que sigue):
+  // E-07 aprobado→cierra gate / rechazado→reabre planos / con comentarios→a sd_update;
+  // E-05 muestras→avisa al ingeniero. Import dinámico (evita ciclo schedule↔ingenieria).
+  try {
+    const { sincronizarDecisionCliente } = await import('../../ingenieria/domain/tareas')
+    await sincronizarDecisionCliente(runner, info.proyectoId, codigo, decision, comentario)
+  } catch { /* best-effort: no romper la respuesta del portal */ }
+
   await recomputeScheduleForProyecto(runner, info.proyectoId, 'manual')
   return { ok: true }
 }
