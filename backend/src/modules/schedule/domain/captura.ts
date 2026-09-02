@@ -114,11 +114,15 @@ export async function capturarFechasReales(
       WHERE proyecto_id = $1 AND status <> 'Cancelada'`, [proyectoId])
   set('P-01', p01, { source: 'op_creada' })
 
-  // ── P-05 · Fabricación en curso = primera OP arrancada ─────────────────────
+  // ── P-05 · Fabricación en curso = primera OP que pasó de Pendiente ─────────
+  // fecha_inicio de la OP solo la setea el kiosko al "Iniciar item"; si la OP se
+  // avanza a mano (admin/shop manager, o con la ruta editable) queda NULL. Para que
+  // P-05 no quede vacío mientras P-06 (por status Completada) sí marca, tomamos la
+  // mejor fecha disponible (fecha_inicio, o updated_at) de cualquier OP que ya arrancó.
   const p05 = await scalarDate(runner,
-    `SELECT to_char(MIN(fecha_inicio),'YYYY-MM-DD') AS d
+    `SELECT to_char(MIN(COALESCE(fecha_inicio, updated_at)),'YYYY-MM-DD') AS d
        FROM ordenes_produccion
-      WHERE proyecto_id = $1 AND fecha_inicio IS NOT NULL AND status <> 'Cancelada'`, [proyectoId])
+      WHERE proyecto_id = $1 AND status IN ('En Proceso', 'Pausada', 'Completada')`, [proyectoId])
   set('P-05', p05, { source: 'op_estacion' })
 
   // ── P-06 · Fabricación completa = todas las OPs activas completadas ────────
