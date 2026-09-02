@@ -3,11 +3,12 @@ import { useParams, useNavigate, Link } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   ArrowLeft, ArrowRight, Pause, Play, Ban, Loader2, CheckCircle2, Clock,
-  UserPlus, Paperclip,
+  UserPlus, Paperclip, RotateCcw, Plus, Trash2, Route,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import clsx from 'clsx'
 import Modal from '@/components/ui/Modal'
+import { useAuth } from '@/context/AuthContext'
 import OrdenDocumentos from '@/components/modules/produccion/OrdenDocumentos'
 import OrdenEvolucion from '@/components/produccion/OrdenEvolucion'
 import MaterialesItem from '@/components/produccion/MaterialesItem'
@@ -34,7 +35,12 @@ export default function DetalleOrden() {
   const ordenId = parseInt(id ?? '0')
   const nav = useNavigate()
   const qc  = useQueryClient()
+  const { user } = useAuth()
+  const puedeEditarRuta = user?.rol === 'ADMIN' || user?.rol === 'SHOP_MANAGER'
   const [asignandoEst, setAsignandoEst] = useState<string | null>(null)
+  // Ruta editable: modal abierto + estación pre-seleccionada (cuando venís de "Volver a").
+  const [editarRuta, setEditarRuta] = useState(false)
+  const [volverA, setVolverA] = useState<string | null>(null)
 
   const { data: orden, isLoading } = useQuery({
     queryKey: ['orden-produccion', ordenId],
@@ -97,6 +103,12 @@ export default function DetalleOrden() {
   const cancelar = useMutation({
     mutationFn: (motivo?: string) => produccionService.cancelarOrden(ordenId, motivo),
     onSuccess: () => { toast.success('Orden cancelada'); invalidate() },
+  })
+
+  const quitarProceso = useMutation({
+    mutationFn: (procesoId: number) => produccionService.quitarProceso(ordenId, procesoId),
+    onSuccess: (res) => { toast.success(res.message); invalidate() },
+    onError: (e: any) => toast.error(e?.response?.data?.message ?? 'No se pudo quitar el paso'),
   })
 
   if (isLoading) {
@@ -206,7 +218,17 @@ export default function DetalleOrden() {
         <div className="lg:col-span-2 space-y-4">
           {/* Procesos */}
           <div className="card space-y-3">
-            <h3 className="flex items-center gap-2"><Clock size={16} /> Procesos</h3>
+            <div className="flex items-center justify-between gap-2">
+              <h3 className="flex items-center gap-2"><Clock size={16} /> Procesos</h3>
+              {puedeEditarRuta && orden.status !== 'Cancelada' && (
+                <button
+                  onClick={() => { setVolverA(null); setEditarRuta(true) }}
+                  className="inline-flex items-center gap-1.5 text-xs font-semibold text-forest-700 hover:text-forest-900 border border-forest-200 hover:bg-forest-50 rounded-lg px-2.5 py-1.5"
+                >
+                  <Route size={14} /> Editar ruta
+                </button>
+              )}
+            </div>
             <div className="space-y-2">
               {orden.procesos.map((p) => (
                 <ProcesoRow
@@ -215,6 +237,10 @@ export default function DetalleOrden() {
                   ordenStatus={orden.status}
                   docsCount={docsCountByEstacion[p.estacion] ?? 0}
                   onAsignar={() => setAsignandoEst(p.estacion)}
+                  puedeEditarRuta={puedeEditarRuta}
+                  onVolver={() => { setVolverA(p.estacion); setEditarRuta(true) }}
+                  onQuitar={() => { if (confirm(`¿Quitar el paso "${p.estacion.replace('_', ' ')}" de la ruta?`)) quitarProceso.mutate(p.id) }}
+                  quitando={quitarProceso.isPending}
                 />
               ))}
             </div>
@@ -272,6 +298,16 @@ export default function DetalleOrden() {
           onSaved={invalidate}
         />
       )}
+
+      {/* Modal de edición de ruta (agregar / volver a una estación) */}
+      {editarRuta && (
+        <EditarRutaModal
+          ordenId={ordenId}
+          volverA={volverA}
+          onClose={() => { setEditarRuta(false); setVolverA(null) }}
+          onSaved={() => { setEditarRuta(false); setVolverA(null); invalidate() }}
+        />
+      )}
     </div>
   )
 }
@@ -287,15 +323,24 @@ function Field({ label, value }: { label: string; value: string }) {
 
 function ProcesoRow({
   proceso, esActual, ordenStatus, docsCount, onAsignar,
+  puedeEditarRuta, onVolver, onQuitar, quitando,
 }: {
   proceso: OrdenProceso
   esActual: boolean
   ordenStatus: StatusOrden
   docsCount: number
   onAsignar: () => void
+  puedeEditarRuta?: boolean
+  onVolver?: () => void
+  onQuitar?: () => void
+  quitando?: boolean
 }) {
   const minutosReales = proceso.tiempo_real_minutos
   const ordenTerminada = ordenStatus === 'Completada' || ordenStatus === 'Cancelada'
+  const esReproceso = proceso.origen === 'reproceso' || (proceso.ciclo ?? 1) > 1
+  const esAgregado = proceso.origen === 'agregado'
+  // Se puede QUITAR un paso que no arrancó (no completado, sin fecha_inicio) y no es el actual.
+  const puedeQuitar = puedeEditarRuta && !proceso.completado && !proceso.fecha_inicio && !esActual && !ordenTerminada
   return (
     <div className={clsx(
       'flex items-center gap-3 p-3 rounded-lg border',
@@ -318,6 +363,18 @@ function ProcesoRow({
       <div className="flex-1">
         <div className="font-semibold uppercase text-sm flex items-center gap-2">
           {proceso.estacion.replace('_', ' ')}
+          {esReproceso && (
+            <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-800 text-[10px] font-bold normal-case"
+              title={proceso.motivo ? `Re-trabajo: ${proceso.motivo}` : 'Re-trabajo'}>
+              <RotateCcw size={10} /> {proceso.ciclo ?? 2}ª pasada
+            </span>
+          )}
+          {esAgregado && (
+            <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full bg-sky-100 text-sky-800 text-[10px] font-bold normal-case"
+              title={proceso.motivo ? `Agregado: ${proceso.motivo}` : 'Agregado a la ruta'}>
+              <Plus size={10} /> agregado
+            </span>
+          )}
           {docsCount > 0 && (
             <span
               className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full bg-gold-100 text-gold-800 text-[10px] font-bold normal-case"
@@ -346,15 +403,36 @@ function ProcesoRow({
           )}
         </div>
       </div>
-      {!proceso.completado && !ordenTerminada && (
-        <button
-          onClick={onAsignar}
-          className="p-1.5 text-gray-400 hover:text-forest-700 hover:bg-gray-100 rounded transition-colors"
-          title="Asignar operario"
-        >
-          <UserPlus size={14} />
-        </button>
-      )}
+      <div className="flex items-center gap-1 shrink-0">
+        {puedeEditarRuta && proceso.completado && ordenStatus !== 'Cancelada' && onVolver && (
+          <button
+            onClick={onVolver}
+            className="p-1.5 text-gray-400 hover:text-amber-700 hover:bg-amber-50 rounded transition-colors"
+            title="Volver a esta estación (re-trabajo)"
+          >
+            <RotateCcw size={14} />
+          </button>
+        )}
+        {puedeQuitar && onQuitar && (
+          <button
+            onClick={onQuitar}
+            disabled={quitando}
+            className="p-1.5 text-gray-400 hover:text-red-700 hover:bg-red-50 rounded transition-colors disabled:opacity-50"
+            title="Quitar este paso de la ruta"
+          >
+            <Trash2 size={14} />
+          </button>
+        )}
+        {!proceso.completado && !ordenTerminada && (
+          <button
+            onClick={onAsignar}
+            className="p-1.5 text-gray-400 hover:text-forest-700 hover:bg-gray-100 rounded transition-colors"
+            title="Asignar operario"
+          >
+            <UserPlus size={14} />
+          </button>
+        )}
+      </div>
     </div>
   )
 }
@@ -466,6 +544,95 @@ function AsignarModal({
           <button onClick={() => mut.mutate()} disabled={mut.isPending} className="btn-primary">
             {mut.isPending ? <Loader2 size={16} className="animate-spin" /> : null}
             Guardar
+          </button>
+        </div>
+      </div>
+    </Modal>
+  )
+}
+
+// ── Modal de edición de ruta ─────────────────────────────────────────────────
+// El Shop Manager agrega una estación a la ruta, o VUELVE a una ya completada
+// (re-trabajo). Motivo obligatorio (lista corta + "Otro" texto libre).
+const MOTIVOS_RUTA = ['Error de proceso', 'Reproceso QC', 'Pedido del cliente', 'Otro']
+
+function EditarRutaModal({
+  ordenId, volverA, onClose, onSaved,
+}: {
+  ordenId: number
+  volverA: string | null
+  onClose: () => void
+  onSaved: () => void
+}) {
+  const [estacion, setEstacion] = useState(volverA ?? '')
+  const [motivoTipo, setMotivoTipo] = useState(volverA ? 'Error de proceso' : 'Pedido del cliente')
+  const [motivoTexto, setMotivoTexto] = useState('')
+  const [posicion, setPosicion] = useState<string>(volverA ? 'ahora' : 'al_final')
+
+  const { data: estaciones = [] } = useQuery({
+    queryKey: ['prod-estaciones'],
+    queryFn: () => produccionService.estaciones(),
+  })
+
+  const motivoFinal = motivoTipo === 'Otro' ? motivoTexto.trim() : motivoTipo
+  const puedeGuardar = !!estacion && !!motivoFinal
+
+  const agregar = useMutation({
+    mutationFn: () => produccionService.agregarProceso(ordenId, { estacion, posicion, motivo: motivoFinal }),
+    onSuccess: (res) => { toast.success(res.message); onSaved() },
+    onError: (e: any) => toast.error(e?.response?.data?.message ?? 'No se pudo editar la ruta'),
+  })
+
+  return (
+    <Modal open onClose={onClose} title={volverA ? `Volver a ${volverA.replace('_', ' ').toUpperCase()}` : 'Agregar estación a la ruta'} size="md">
+      <div className="space-y-4">
+        {volverA ? (
+          <p className="text-sm text-gray-600">
+            La orden vuelve a <b className="uppercase">{volverA.replace('_', ' ')}</b> para re-trabajo. Queda como una pasada nueva — el trabajo anterior se conserva como historial.
+          </p>
+        ) : (
+          <div>
+            <label className="text-sm font-semibold text-gray-700">Estación</label>
+            <select value={estacion} onChange={(e) => setEstacion(e.target.value)} className="input w-full mt-1">
+              <option value="">Elegí una estación…</option>
+              {estaciones.filter((e) => e.activa).map((e) => (
+                <option key={e.nombre} value={e.nombre}>{e.nombre.replace('_', ' ')}</option>
+              ))}
+            </select>
+          </div>
+        )}
+
+        <div>
+          <label className="text-sm font-semibold text-gray-700">Motivo</label>
+          <select value={motivoTipo} onChange={(e) => setMotivoTipo(e.target.value)} className="input w-full mt-1">
+            {MOTIVOS_RUTA.map((m) => <option key={m} value={m}>{m}</option>)}
+          </select>
+          {motivoTipo === 'Otro' && (
+            <input value={motivoTexto} onChange={(e) => setMotivoTexto(e.target.value)} placeholder="Escribí el motivo…" className="input w-full mt-2" />
+          )}
+        </div>
+
+        <div>
+          <label className="text-sm font-semibold text-gray-700">Cuándo</label>
+          <div className="flex flex-wrap gap-2 mt-1">
+            {([['ahora', 'Ahora'], ['siguiente', 'Después de la actual'], ['al_final', 'Al final']] as const).map(([v, l]) => (
+              <button key={v} onClick={() => setPosicion(v)}
+                className={clsx('px-3 py-1.5 rounded-lg border text-sm transition-colors',
+                  posicion === v ? 'border-forest-400 bg-forest-50 text-forest-800 font-semibold' : 'border-gray-200 text-gray-600 hover:bg-gray-50')}>
+                {l}
+              </button>
+            ))}
+          </div>
+          {posicion === 'ahora' && (
+            <p className="text-xs text-gray-400 mt-1">La orden salta a esta estación ahora (lo que esté en curso queda pendiente y se retoma después).</p>
+          )}
+        </div>
+
+        <div className="flex justify-end gap-2 pt-2">
+          <button onClick={onClose} className="btn-ghost">Cancelar</button>
+          <button onClick={() => agregar.mutate()} disabled={!puedeGuardar || agregar.isPending} className="btn-primary">
+            {agregar.isPending ? <Loader2 size={16} className="animate-spin" /> : null}
+            {volverA ? 'Volver a la estación' : 'Agregar'}
           </button>
         </div>
       </div>

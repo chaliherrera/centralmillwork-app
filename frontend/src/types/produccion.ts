@@ -54,6 +54,9 @@ export interface OrdenProceso {
   operador_nombre?: string | null
   operador_iniciales?: string | null
   notas: string | null
+  ciclo?: number
+  origen?: 'inicial' | 'agregado' | 'reproceso'
+  motivo?: string | null
 }
 
 export interface OrdenHistorial {

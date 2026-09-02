@@ -4,7 +4,7 @@ import type {
   PersonalTaller, EstacionConStatus, EstacionDetalle, EstacionDistancia,
   RutaCalculada, Prioridad, OrdenDocumento, EventosRecientesResp,
   PersonalActivoReporte, ReportePersonalResp, ReporteSemanalResp, ReporteProyectoResp, ReporteDiarioResp,
-  ItemsDisponiblesResp, EstadoItemDisponible, AvanceFoto,
+  ItemsDisponiblesResp, EstadoItemDisponible, AvanceFoto, OrdenProceso,
 } from '@/types/produccion'
 
 interface OrdenesFilters {
@@ -103,6 +103,13 @@ export const produccionService = {
 
   cancelarOrden: (id: number, motivo?: string) =>
     api.delete<{ message: string }>(`/produccion/ordenes/${id}`, { data: { motivo } }).then((r) => r.data),
+
+  // Ruta editable (Shop Manager/Admin): agregar / volver a / quitar una estación.
+  agregarProceso: (id: number, body: { estacion: string; motivo: string; posicion?: string; operador_id?: number | null }) =>
+    api.post<{ data: OrdenProceso; message: string }>(`/produccion/ordenes/${id}/procesos`, body).then((r) => r.data),
+
+  quitarProceso: (id: number, procesoId: number, motivo?: string) =>
+    api.delete<{ message: string }>(`/produccion/ordenes/${id}/procesos/${procesoId}`, { data: { motivo } }).then((r) => r.data),
 
   // ─── Personal del taller ─────────────────────────────────────────────────
   personal: (filters?: { activo?: boolean; estacion?: string; tipo?: string }) =>

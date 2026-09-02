@@ -94,7 +94,7 @@ export async function getOrden(req: Request, res: Response, next: NextFunction) 
          FROM orden_procesos op
          LEFT JOIN personal_taller pt ON pt.id = op.operador_id
          WHERE op.orden_id = $1
-         ORDER BY op.secuencia`,
+         ORDER BY op.secuencia, op.ciclo`,
         [req.params.id]
       ),
       pool.query(
