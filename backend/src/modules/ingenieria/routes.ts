@@ -33,7 +33,7 @@ router.get('/depositos-bloqueando', READ, depositosBloqueandoHandler)  // depós
 router.get('/muestras-estado', READ, muestrasEstadoHandler)  // estado de muestras por proyecto → escritorio ingeniero (#6)
 router.get('/compras-estado', READ, comprasEstadoHandler)  // estado de compras por proyecto → escritorio ingeniero (#9)
 // Escritorio por rol (todos los roles operativos ven el suyo — Compras/Producción incluidos).
-const ESCRITORIO = requireRole('ADMIN', 'PROJECT_MANAGEMENT', 'ENGINEERING', 'PROCUREMENT', 'PRODUCTION', 'SHOP_MANAGER', 'LOGISTICA', 'CONTABILIDAD')
+const ESCRITORIO = requireRole('ADMIN', 'PROJECT_MANAGEMENT', 'ENGINEERING', 'PROCUREMENT', 'PRODUCTION', 'SHOP_MANAGER', 'LOGISTICA', 'CONTABILIDAD', 'FIELD')
 router.get('/escritorio', ESCRITORIO, escritorioHandler)
 router.get('/proyecto/:ext/instalacion-detalle', READ, instalacionDetalleHandler)  // ítem×ítem + punch → panel del PM (#15)
 // Estructura del plan = PM (gestión de recursos)

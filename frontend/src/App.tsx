@@ -23,6 +23,7 @@ import Schedule from '@/pages/Schedule'
 import ScheduleProyecto from '@/pages/ScheduleProyecto'
 import Finanzas from '@/pages/Finanzas'
 import Logistica from '@/pages/Logistica'
+import Field from '@/pages/Field'
 import KioskApp from '@/pages/kiosk/KioskApp'
 import ClientPortal from '@/pages/portal/ClientPortal'
 import { Loader2 } from 'lucide-react'
@@ -109,6 +110,13 @@ function LogisticaRoute({ children }: { children: React.ReactNode }) {
   return <>{children}</>
 }
 
+function FieldRoute({ children }: { children: React.ReactNode }) {
+  const { user } = useAuth()
+  const allowed = ['ADMIN', 'FIELD', 'ENGINEERING', 'PROJECT_MANAGEMENT']
+  if (!user || !allowed.includes(user.rol)) return <Navigate to="/" replace />
+  return <>{children}</>
+}
+
 // Tareas = buzón de Muestras por rol. Cada rol ve sus tareas (scoping en el backend).
 function TareasRoute({ children }: { children: React.ReactNode }) {
   const { user } = useAuth()
@@ -152,6 +160,7 @@ export default function App() {
         <Route path="pm"               element={<PmRoute><ProjectMgmt /></PmRoute>} />
         <Route path="finanzas"         element={<FinanzasRoute><Finanzas /></FinanzasRoute>} />
         <Route path="logistica"        element={<LogisticaRoute><Logistica /></LogisticaRoute>} />
+        <Route path="field"            element={<FieldRoute><Field /></FieldRoute>} />
         <Route path="tareas"           element={<TareasRoute><Tareas /></TareasRoute>} />
         <Route path="usuarios"         element={<AdminRoute><Usuarios /></AdminRoute>} />
       </Route>

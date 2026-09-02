@@ -13,6 +13,7 @@ const ROL_LABEL: Record<UserRole, string> = {
   SHOP_MANAGER:       'Shop Manager',
   ENGINEERING:        'Engineering',
   LOGISTICA:          'Logística',
+  FIELD:              'Campo',
   VIEWER:             'Viewer',
 }
 

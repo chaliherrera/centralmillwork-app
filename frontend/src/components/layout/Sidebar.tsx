@@ -2,7 +2,7 @@ import { NavLink } from 'react-router-dom'
 import {
   LayoutDashboard, FolderOpen, ShoppingCart,
   Package, Truck, Users, ChevronLeft, ChevronRight, ShieldCheck,
-  Factory, Inbox, Beaker, Layers, FileSignature, DraftingCompass, ClipboardList, Wallet, Send,
+  Factory, Inbox, Beaker, Layers, FileSignature, DraftingCompass, ClipboardList, Wallet, Send, Ruler,
   Route as RouteIcon,
 } from 'lucide-react'
 import { useState } from 'react'
@@ -30,6 +30,7 @@ const NAV_ITEMS: NavItem[] = [
   { to: '/pm',             label: 'PM',                 icon: ClipboardList,   roles: ['ADMIN','PROJECT_MANAGEMENT'] },
   { to: '/finanzas',       label: 'Finanzas',           icon: Wallet,          roles: ['ADMIN','CONTABILIDAD'] },
   { to: '/logistica',      label: 'Logística',          icon: Send,            roles: ['ADMIN','LOGISTICA','PROJECT_MANAGEMENT'] },
+  { to: '/field',          label: 'Campo',              icon: Ruler,           roles: ['ADMIN','FIELD','ENGINEERING','PROJECT_MANAGEMENT'] },
   { to: '/ordenes-compra', label: 'Órdenes de Compra',  icon: ShoppingCart,    roles: ['ADMIN','PROCUREMENT','PROJECT_MANAGEMENT','PRODUCTION','CONTABILIDAD','VIEWER'] },
   { to: '/materiales',     label: 'Materiales MTO',     icon: Package,         roles: ['ADMIN','PROCUREMENT','PROJECT_MANAGEMENT','PRODUCTION','VIEWER'] },
   { to: '/mtos',           label: 'Control MTOs',       icon: Layers,          roles: ['ADMIN','PROCUREMENT','VIEWER'] },

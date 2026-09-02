@@ -16,6 +16,7 @@ const ROLES: { value: UserRole; label: string }[] = [
   { value: 'SHOP_MANAGER',       label: 'Shop Manager' },
   { value: 'ENGINEERING',        label: 'Engineering' },
   { value: 'LOGISTICA',          label: 'Logística' },
+  { value: 'FIELD',              label: 'Campo (Field Specialist)' },
   { value: 'VIEWER',             label: 'Viewer (solo lectura)' },
 ]
 
@@ -28,6 +29,7 @@ const ROL_COLORS: Record<UserRole, string> = {
   SHOP_MANAGER:       'bg-orange-100 text-orange-700',
   ENGINEERING:        'bg-cyan-100 text-cyan-700',
   LOGISTICA:          'bg-teal-100 text-teal-700',
+  FIELD:              'bg-lime-100 text-lime-700',
   VIEWER:             'bg-slate-100 text-slate-600',
 }
 

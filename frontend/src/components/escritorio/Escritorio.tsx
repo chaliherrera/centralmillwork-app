@@ -12,12 +12,13 @@ const CUMPLIDA_LABEL: Record<string, string> = {
   cnc: 'CNC a taller',
   field_measurements: 'Medida',
   sd_update: 'Set final listo',
+  shipment: 'Enviado',
 }
-// Pasos que el propio rol COMPLETA a mano (trabajo interno). Los "de señal" (compras,
-// producción, instalación) se cierran solos por el módulo → link, sin botón de completar.
+// Pasos que el propio rol COMPLETA a mano (trabajo interno + shipment). Los "de señal"
+// (compras, producción, instalación) se cierran solos por el módulo → link, sin botón.
 const COMPLETABLE = new Set([
   'meeting_designer', 'shop_drawings', 'samples', 'client_review',
-  'field_measurements', 'sd_update', 'release', 'cnc',
+  'field_measurements', 'sd_update', 'release', 'cnc', 'shipment',
 ])
 // Deep-links a los módulos para los pasos de señal.
 const LINK_MODULO: Record<string, { to: string; label: string }> = {

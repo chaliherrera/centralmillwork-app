@@ -53,11 +53,11 @@ export async function generarPlanIngenieria(
   await runner.query(`DELETE FROM ing_tareas WHERE proyecto_ext = $1 AND origen IN ('sugerencia','reserva')`, [proyectoExt])
 
   // Tipos a generar. Reglas de inclusión:
-  //  · shipment: NUNCA (parqueado orden 99, fuera de la ruta real)
+  //  · shipment: SÍ (rol logistica, entre fabricación e instalación — reincorporado migr. 071)
   //  · stone_*: solo si el proyecto tiene piedra (stone_total > 0)
   //  · installation: solo si el proyecto lleva instalación
   const { rows: tipos } = await runner.query<{ id: number; clave: string; nombre: string; rol: string | null; dur_dias_tipico: number | null; dias_por_item: number | null }>(
-    `SELECT id, clave, nombre, rol, dur_dias_tipico, dias_por_item FROM ing_tarea_tipos WHERE clave <> 'shipment'`)
+    `SELECT id, clave, nombre, rol, dur_dias_tipico, dias_por_item FROM ing_tarea_tipos`)
   const incluir = tipos.filter((t) =>
     (hayStone || !STONE_CLAVES.includes(t.clave)) &&
     (incluyeInstalacion || t.clave !== 'installation'))

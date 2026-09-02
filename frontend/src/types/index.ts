@@ -9,6 +9,7 @@ export type UserRole =
   | 'SHOP_MANAGER'
   | 'ENGINEERING'
   | 'LOGISTICA'
+  | 'FIELD'
   | 'VIEWER'
 
 export interface User {
