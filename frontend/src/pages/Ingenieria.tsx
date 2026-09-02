@@ -1,6 +1,7 @@
 import { DraftingCompass } from 'lucide-react'
 import MiTrabajo from '@/components/modules/schedule/MiTrabajo'
 import MisTareasIngenieria from '@/components/modules/ingenieria/MisTareasIngenieria'
+import Escritorio from '@/components/escritorio/Escritorio'
 
 // Escritorio de Ingeniería — "lo que le toca a Ingeniería", en todos los proyectos.
 export default function Ingenieria() {
@@ -15,6 +16,7 @@ export default function Ingenieria() {
           <p className="text-sm text-stone-500">Lo que le toca a Ingeniería, en todos los proyectos.</p>
         </div>
       </div>
+      <Escritorio rol="ingenieria,field" titulo="Escritorio de Ingeniería" subtitulo="Solo lo desbloqueado, de todos los proyectos. Completá y aparece lo siguiente." />
       <MisTareasIngenieria />
       <MiTrabajo area="engineering" emptyMsg="Ingeniería no tiene nada pendiente ahora mismo. 🎉" />
     </div>

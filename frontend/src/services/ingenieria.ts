@@ -154,6 +154,13 @@ export interface InstalacionPunch {
   foto_problema_url: string | null; foto_resuelto_url: string | null; created_at: string
 }
 export interface InstalacionDetalle { items: InstalacionItem[]; punch: InstalacionPunch[] }
+// Escritorio por rol: tu próxima tarea desbloqueada, cross-project.
+export interface EscritorioTarea {
+  id: number; proyecto_ext: string | null; nombre: string; tipo_clave: string | null
+  rol: string | null; asignado_nombre: string | null; fecha_inicio: string | null
+  fecha_fin: string | null; dur_dias: number; estado: string
+}
+export interface EscritorioResp { tareas: EscritorioTarea[]; bloqueadas: number }
 export interface IngPlan {
   proyecto_ext: string
   fecha_inicio: string | null
@@ -240,6 +247,8 @@ export const ingenieriaService = {
     api.get<ApiResponse<ComprasProyecto[]>>('/ingenieria/compras-estado').then((r) => r.data),
   instalacionDetalle: (proyectoExt: string) =>
     api.get<ApiResponse<InstalacionDetalle>>(`/ingenieria/proyecto/${encodeURIComponent(proyectoExt)}/instalacion-detalle`).then((r) => r.data),
+  escritorio: (params?: { rol?: string; asignado?: string }) =>
+    api.get<ApiResponse<EscritorioResp>>('/ingenieria/escritorio', { params }).then((r) => r.data),
   borrarTarea: (id: number) =>
     api.delete<ApiResponse<{ ok: boolean; reconectadas: number }>>(`/ingenieria/tareas/${id}`).then((r) => r.data),
 
