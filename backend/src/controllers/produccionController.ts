@@ -292,85 +292,101 @@ export async function agregarProcesoRuta(req: Request, res: Response, next: Next
     if (orden.status === 'Cancelada') { await client.query('ROLLBACK'); return next(createError('La orden está cancelada', 400)) }
     if (orden.tipo === 'MUESTRA') { await client.query('ROLLBACK'); return next(createError('Las órdenes de muestra no se editan acá — una muestra que se reprocesa es porque fue rechazada (usá el flujo de muestras)', 400)) }
 
-    // No permitir agregar si esa estación ya tiene una pasada ABIERTA (pendiente).
-    const { rows: [abierta] } = await client.query(
-      `SELECT id FROM orden_procesos WHERE orden_id = $1 AND estacion = $2 AND completado = false LIMIT 1`,
-      [ordenId, estacion]
-    )
-    if (abierta) { await client.query('ROLLBACK'); return next(createError('Esa estación ya está pendiente en la ruta', 400)) }
-
-    // origen + ciclo: si ya hubo una pasada completada → reproceso; si no → agregado.
-    const { rows: [ag] } = await client.query<{ max_ciclo: number | null; completadas: number }>(
-      `SELECT MAX(ciclo) AS max_ciclo, COUNT(*) FILTER (WHERE completado = true)::int AS completadas
-         FROM orden_procesos WHERE orden_id = $1 AND estacion = $2`,
-      [ordenId, estacion]
-    )
-    const yaEstuvo = (ag?.completadas ?? 0) > 0
-    const origen = yaEstuvo ? 'reproceso' : 'agregado'
-    const ciclo = (ag?.max_ciclo ?? 0) + 1
-    if (!posicion) posicion = yaEstuvo ? 'ahora' : 'al_final'
-
-    // Secuencia de inserción según la posición pedida.
-    const { rows: [maxSec] } = await client.query<{ m: number | null }>(
-      `SELECT MAX(secuencia) AS m FROM orden_procesos WHERE orden_id = $1`, [ordenId])
-    // secuencia del proceso ABIERTO de la estación actual (para 'ahora'/'siguiente').
-    const { rows: [secActual] } = await client.query<{ secuencia: number }>(
-      `SELECT secuencia FROM orden_procesos
-        WHERE orden_id = $1 AND estacion = $2 AND completado = false
-        ORDER BY ciclo DESC, id DESC LIMIT 1`,
-      [ordenId, orden.estacion_actual])
-    let secuenciaNueva: number
-    if (posicion === 'al_final' || !orden.estacion_actual || !secActual) {
-      secuenciaNueva = (maxSec?.m ?? 0) + 1
-    } else if (posicion === 'ahora') {
-      secuenciaNueva = secActual.secuencia          // se mete ANTES de la actual y se vuelve la actual
-      await client.query(`UPDATE orden_procesos SET secuencia = secuencia + 1 WHERE orden_id = $1 AND secuencia >= $2`, [ordenId, secuenciaNueva])
-    } else { // 'siguiente'
-      secuenciaNueva = secActual.secuencia + 1
-      await client.query(`UPDATE orden_procesos SET secuencia = secuencia + 1 WHERE orden_id = $1 AND secuencia >= $2`, [ordenId, secuenciaNueva])
-    }
-
-    const { rows: [nuevo] } = await client.query(
-      `INSERT INTO orden_procesos (orden_id, estacion, secuencia, requerido, operador_id, ciclo, origen, motivo, agregado_por)
-       VALUES ($1,$2,$3,true,$4,$5,$6,$7,$8) RETURNING *`,
-      [ordenId, estacion, secuenciaNueva, operadorId, ciclo, origen, motivo, req.user?.id ?? null]
-    )
-
-    // Si 'ahora': la orden salta a esta estación. Cerrar el segmento abierto del proceso
-    // que estaba en curso (queda pendiente, se retoma por secuencia después), reabrir la
-    // OP si estaba Completada, y apuntar estacion_actual acá.
-    if (posicion === 'ahora' && orden.estacion_actual !== estacion) {
-      await client.query(
-        `UPDATE time_proyectos SET hora_fin = NOW(), completado = false
-          WHERE orden_produccion_id = $1 AND hora_fin IS NULL`, [ordenId])
-      await client.query(
-        `UPDATE ordenes_produccion
-            SET estacion_actual = $1, status = 'En Proceso',
-                fecha_completada = NULL, personal_asignado_id = $2, updated_at = NOW()
-          WHERE id = $3`,
-        [estacion, operadorId, ordenId])
-    } else if (orden.status === 'Completada') {
-      // Se agregó un paso a una OP ya completada → reabrir; la orden pasa por el paso
-      // nuevo cuando le toque por secuencia (o ya, si quedó como el único pendiente).
-      const { rows: [sig] } = await client.query(
-        `SELECT estacion FROM orden_procesos WHERE orden_id = $1 AND completado = false ORDER BY secuencia ASC LIMIT 1`, [ordenId])
-      await client.query(
-        `UPDATE ordenes_produccion SET status = 'En Proceso', fecha_completada = NULL, estacion_actual = $1, updated_at = NOW() WHERE id = $2`,
-        [sig?.estacion ?? estacion, ordenId])
-    }
-
-    await client.query(
-      `INSERT INTO orden_historial (orden_id, estacion_origen, estacion_destino, accion, usuario_id, motivo)
-       VALUES ($1,$2,$3,'ruta_editar',$4,$5)`,
-      [ordenId, orden.estacion_actual, estacion, req.user?.id ?? null,
-       `${origen === 'reproceso' ? 'Volver a' : 'Agregar'} ${estacion}: ${motivo}`])
+    const r = await insertarPasoEnRuta(client, {
+      ordenId, ordenEstacionActual: orden.estacion_actual, ordenStatus: orden.status,
+      estacion, motivo, posicion, operadorId, usuarioId: req.user?.id ?? null,
+    })
 
     await client.query('COMMIT')
     if (orden.proyecto_id) void recomputeScheduleSafe(orden.proyecto_id, 'op')
-    res.status(201).json({ data: nuevo, message: origen === 'reproceso' ? 'Estación reinsertada (re-trabajo)' : 'Estación agregada a la ruta' })
+    res.status(201).json({ data: r.proceso, message: r.origen === 'reproceso' ? 'Estación reinsertada (re-trabajo)' : 'Estación agregada a la ruta' })
   } catch (err) {
     await client.query('ROLLBACK'); next(err)
   } finally { client.release() }
+}
+
+/**
+ * Núcleo reutilizable de la edición de ruta: inserta una PASADA nueva de una estación en
+ * la ruta de una OP (agregado o reproceso). Corre DENTRO de una transacción del caller
+ * (que ya validó la orden). Lo usan agregarProcesoRuta (HTTP) y el QC "Reprocesar".
+ * Tira 400 si la estación ya tiene una pasada abierta.
+ */
+export async function insertarPasoEnRuta(
+  client: import('pg').PoolClient,
+  opts: {
+    ordenId: number; ordenEstacionActual: string | null; ordenStatus: string
+    estacion: string; motivo: string; posicion?: string
+    operadorId?: number | null; usuarioId?: string | null
+  }
+): Promise<{ proceso: any; origen: string }> {
+  const { ordenId, ordenEstacionActual, ordenStatus, estacion, motivo } = opts
+  const operadorId = opts.operadorId ?? null
+  let posicion = opts.posicion || ''
+
+  // No permitir si esa estación ya tiene una pasada ABIERTA (pendiente).
+  const { rows: [abierta] } = await client.query(
+    `SELECT id FROM orden_procesos WHERE orden_id = $1 AND estacion = $2 AND completado = false LIMIT 1`,
+    [ordenId, estacion])
+  if (abierta) throw createError('Esa estación ya está pendiente en la ruta', 400)
+
+  // origen + ciclo: si ya hubo una pasada completada → reproceso; si no → agregado.
+  const { rows: [ag] } = await client.query<{ max_ciclo: number | null; completadas: number }>(
+    `SELECT MAX(ciclo) AS max_ciclo, COUNT(*) FILTER (WHERE completado = true)::int AS completadas
+       FROM orden_procesos WHERE orden_id = $1 AND estacion = $2`,
+    [ordenId, estacion])
+  const yaEstuvo = (ag?.completadas ?? 0) > 0
+  const origen = yaEstuvo ? 'reproceso' : 'agregado'
+  const ciclo = (ag?.max_ciclo ?? 0) + 1
+  if (!posicion) posicion = yaEstuvo ? 'ahora' : 'al_final'
+
+  const { rows: [maxSec] } = await client.query<{ m: number | null }>(
+    `SELECT MAX(secuencia) AS m FROM orden_procesos WHERE orden_id = $1`, [ordenId])
+  const { rows: [secActual] } = await client.query<{ secuencia: number }>(
+    `SELECT secuencia FROM orden_procesos
+      WHERE orden_id = $1 AND estacion = $2 AND completado = false
+      ORDER BY ciclo DESC, id DESC LIMIT 1`,
+    [ordenId, ordenEstacionActual])
+  let secuenciaNueva: number
+  if (posicion === 'al_final' || !ordenEstacionActual || !secActual) {
+    secuenciaNueva = (maxSec?.m ?? 0) + 1
+  } else if (posicion === 'ahora') {
+    secuenciaNueva = secActual.secuencia
+    await client.query(`UPDATE orden_procesos SET secuencia = secuencia + 1 WHERE orden_id = $1 AND secuencia >= $2`, [ordenId, secuenciaNueva])
+  } else {
+    secuenciaNueva = secActual.secuencia + 1
+    await client.query(`UPDATE orden_procesos SET secuencia = secuencia + 1 WHERE orden_id = $1 AND secuencia >= $2`, [ordenId, secuenciaNueva])
+  }
+
+  const { rows: [nuevo] } = await client.query(
+    `INSERT INTO orden_procesos (orden_id, estacion, secuencia, requerido, operador_id, ciclo, origen, motivo, agregado_por)
+     VALUES ($1,$2,$3,true,$4,$5,$6,$7,$8) RETURNING *`,
+    [ordenId, estacion, secuenciaNueva, operadorId, ciclo, origen, motivo, opts.usuarioId ?? null])
+
+  if (posicion === 'ahora' && ordenEstacionActual !== estacion) {
+    await client.query(
+      `UPDATE time_proyectos SET hora_fin = NOW(), completado = false
+        WHERE orden_produccion_id = $1 AND hora_fin IS NULL`, [ordenId])
+    await client.query(
+      `UPDATE ordenes_produccion
+          SET estacion_actual = $1, status = 'En Proceso',
+              fecha_completada = NULL, personal_asignado_id = $2, updated_at = NOW()
+        WHERE id = $3`,
+      [estacion, operadorId, ordenId])
+  } else if (ordenStatus === 'Completada') {
+    const { rows: [sig] } = await client.query(
+      `SELECT estacion FROM orden_procesos WHERE orden_id = $1 AND completado = false ORDER BY secuencia ASC LIMIT 1`, [ordenId])
+    await client.query(
+      `UPDATE ordenes_produccion SET status = 'En Proceso', fecha_completada = NULL, estacion_actual = $1, updated_at = NOW() WHERE id = $2`,
+      [sig?.estacion ?? estacion, ordenId])
+  }
+
+  await client.query(
+    `INSERT INTO orden_historial (orden_id, estacion_origen, estacion_destino, accion, usuario_id, motivo)
+     VALUES ($1,$2,$3,'ruta_editar',$4,$5)`,
+    [ordenId, ordenEstacionActual, estacion, opts.usuarioId ?? null,
+     `${origen === 'reproceso' ? 'Volver a' : 'Agregar'} ${estacion}: ${motivo}`])
+
+  return { proceso: nuevo, origen }
 }
 
 /**

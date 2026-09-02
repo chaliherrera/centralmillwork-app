@@ -103,9 +103,30 @@ export async function createInspeccion(req: Request, res: Response, next: NextFu
       }
     }
 
+    // Bonus (cierra el loop QC↔ruta): si la decisión es "Reprocesar" con estación
+    // destino, mandar la OP de VUELTA a esa estación reusando la ruta editable. Antes QC
+    // solo registraba el reproceso y no pasaba nada. No aplica a OPs de muestra.
+    let reproceso = false
+    if (decision === 'Reprocesar' && estacion_reproceso) {
+      const { rows: [op] } = await client.query(
+        `SELECT estacion_actual, status, tipo FROM ordenes_produccion WHERE id = $1 FOR UPDATE`, [orden_id])
+      const { rows: [pend] } = await client.query(
+        `SELECT id FROM orden_procesos WHERE orden_id = $1 AND estacion = $2 AND completado = false LIMIT 1`,
+        [orden_id, estacion_reproceso])
+      if (op && op.tipo !== 'MUESTRA' && op.status !== 'Cancelada' && !pend) {
+        const { insertarPasoEnRuta } = await import('./produccionController')
+        await insertarPasoEnRuta(client, {
+          ordenId: Number(orden_id), ordenEstacionActual: op.estacion_actual, ordenStatus: op.status,
+          estacion: String(estacion_reproceso), motivo: `Reproceso QC${notas ? ': ' + notas : ''}`,
+          posicion: 'ahora', usuarioId: (req as any).user?.id ?? null,
+        })
+        reproceso = true
+      }
+    }
+
     await client.query('COMMIT')
     void recomputeScheduleForOPSafe(orden_id, 'op') // QC afecta hitos QC-01/02/03
-    res.status(201).json({ data: { ...insp, defectos: defectosInsertados }, message: 'Inspección registrada' })
+    res.status(201).json({ data: { ...insp, defectos: defectosInsertados, reproceso_disparado: reproceso }, message: reproceso ? `Inspección registrada — OP enviada a ${estacion_reproceso} para reproceso` : 'Inspección registrada' })
   } catch (err) {
     await client.query('ROLLBACK')
     next(err)
