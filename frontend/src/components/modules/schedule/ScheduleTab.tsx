@@ -451,7 +451,7 @@ export default function ScheduleTab({ proyectoId }: { proyectoId: number }) {
 
           {/* carril salud */}
           <div className="grid border-t border-[#eee7db]" style={gridCols}>
-            <LaneLabel icon={<Activity size={14} />} text="Salud del proyecto" />
+            <LaneLabel icon={<Activity size={14} />} text="Salud del proyecto" hint="verde = en fecha · no es completado" />
             <div className="relative" style={{ gridColumn: `span ${N}` }}>
               <svg viewBox="0 0 1000 100" preserveAspectRatio="none" className="w-full h-[92px] block">
                 <rect x="0" y="74" width="1000" height="26" fill="#fef2f2" />
@@ -695,11 +695,14 @@ export default function ScheduleTab({ proyectoId }: { proyectoId: number }) {
   )
 }
 
-function LaneLabel({ icon, text }: { icon: React.ReactNode; text: string }) {
+function LaneLabel({ icon, text, hint }: { icon: React.ReactNode; text: string; hint?: string }) {
   return (
-    <div className="p-3 flex items-center gap-2">
-      <span className="text-stone-400">{icon}</span>
-      <span className="text-[12px] font-bold text-stone-600 leading-tight">{text}</span>
+    <div className="p-3 flex items-start gap-2">
+      <span className="text-stone-400 mt-0.5">{icon}</span>
+      <span className="leading-tight">
+        <span className="block text-[12px] font-bold text-stone-600">{text}</span>
+        {hint && <span className="block text-[10px] font-normal text-stone-400 mt-0.5">{hint}</span>}
+      </span>
     </div>
   )
 }

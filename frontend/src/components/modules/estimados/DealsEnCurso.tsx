@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
-import { Loader2, Send, Check, Rocket, CalendarRange, UserCheck } from 'lucide-react'
+import { Link } from 'react-router-dom'
+import { Loader2, Send, Check, Rocket, CalendarRange, UserCheck, Eye } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { ingenieriaService, type IngDealEnCurso } from '@/services/ingenieria'
 
@@ -72,6 +73,11 @@ export default function DealsEnCurso({ mode, emptyHint }: { mode: 'estimados' | 
                 <span><b className="text-stone-700">{d.n_tareas}</b> tarea{d.n_tareas === 1 ? '' : 's'} en el plan</span>
               </div>
               <div className="mt-3 flex items-center gap-2 flex-wrap">
+                {/* Ver el plan que se manda al cliente (revisar antes de enviar / activar). */}
+                <Link to={`/schedule/${d.proyecto_id}`}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-stone-300 hover:bg-stone-50 text-stone-700 text-sm font-semibold px-3 py-2">
+                  <Eye size={15} /> Ver el plan
+                </Link>
                 {mode === 'estimados' && d.deal_estado === 'plan_propuesto' && (
                   <button onClick={() => accion(d, () => ingenieriaService.enviarCliente(d.proyecto_id), 'Schedule enviado al cliente')} disabled={isBusy}
                     className="inline-flex items-center gap-1.5 rounded-lg bg-forest-600 hover:bg-forest-700 disabled:opacity-50 text-white text-sm font-semibold px-3.5 py-2">
