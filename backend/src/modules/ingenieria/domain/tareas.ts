@@ -351,7 +351,72 @@ function pisoTarea(tipoClave: string | null, deposito: EstadoDeposito, compras: 
 /** Recalcula el CPM (con candado del PM + piso del depósito) y GUARDA fecha_inicio/fin de
  *  cada tarea. Se llama en cada mutación que mueve el schedule (re-anclaje, confirmación del
  *  depósito, candado) para que las fechas guardadas —que lee el heatmap— sigan al Gantt. */
+/**
+ * RECONCILIADOR módulo→ruta (el cimiento del escritorio por rol). Las tareas "automáticas"
+ * (po_execution, material_deposit, long_leads, material_proc, approval, fabrication,
+ * installation) NO las cierra nadie a mano: su estado se DERIVA del hecho real del módulo
+ * (OC emitida, material recibido, OP completa, depósito pagado, aprobación del cliente…).
+ * EL MÓDULO GANA (decisión de Chali): el estado se re-deriva en cada recompute, así que
+ * una marca a mano se autocorrige. Reversible (si el hecho desaparece, la tarea vuelve a
+ * pendiente). Preserva 'na'. Sin esto, filtrar el escritorio por predecesores trabaría todo.
+ */
+export async function cerrarTareasAutomaticas(runner: QueryRunner, proyectoExt: string): Promise<void> {
+  const { rows: pr } = await runner.query<{ pid: number | null }>(
+    `SELECT proyecto_id AS pid FROM ing_proyectos WHERE proyecto_ext = $1`, [proyectoExt])
+  const pid = pr[0]?.pid ?? null
+
+  const [deposito, compras, instalacion] = await Promise.all([
+    estadoDeposito(runner, proyectoExt),
+    estadoCompras(runner, proyectoExt),
+    estadoInstalacion(runner, proyectoExt),
+  ])
+
+  // Hechos del journey (schedule_hitos): C-03 contrato, E-07 planos aprobados (portal),
+  // P-05/P-06 fabricación, I-07 sign-off. Solo si el proyecto tiene journey.
+  const hito = new Map<string, string | null>()
+  if (pid) {
+    const { rows } = await runner.query<{ codigo: string; f: string | null }>(
+      `SELECT sh.codigo, to_char(sh.fecha_real,'YYYY-MM-DD') AS f
+         FROM schedule_hitos sh JOIN schedule_planes sp ON sp.id = sh.plan_id
+        WHERE sp.proyecto_id = $1 AND sp.scope = 'proyecto'
+          AND sh.codigo = ANY($2) AND sh.fecha_real IS NOT NULL`,
+      [pid, ['C-03', 'E-07', 'P-05', 'P-06', 'I-07']])
+    for (const r of rows) hito.set(r.codigo, r.f)
+  }
+  // approval también cierra por la vía manual (el ingeniero registró la decisión del cliente).
+  const { rows: cr } = await runner.query<{ decision: string | null }>(
+    `SELECT t.decision FROM ing_tareas t JOIN ing_tarea_tipos tt ON tt.id = t.tipo_id
+      WHERE t.proyecto_ext = $1 AND tt.clave = 'client_review'`, [proyectoExt])
+  const reviewOk = ['aprobado', 'con_comentarios'].includes(cr[0]?.decision ?? '')
+
+  const comprasCompleto = compras.n_materiales > 0 && compras.pct_disponible >= 1
+  // regla por tipo: done (→hecha), enCurso (→en_curso), fecha del hecho
+  const reglas: Record<string, { done: boolean; enCurso?: boolean; fecha: string | null }> = {
+    po_execution:     { done: hito.has('C-03'), fecha: hito.get('C-03') ?? null },
+    material_deposit: { done: !!deposito.fecha_resolucion, fecha: deposito.fecha_resolucion },
+    long_leads:       { done: !!compras.fecha_primera_oc, fecha: compras.fecha_primera_oc },
+    material_proc:    { done: comprasCompleto, fecha: compras.fecha_ultima_recepcion },
+    approval:         { done: hito.has('E-07') || reviewOk, fecha: hito.get('E-07') ?? null },
+    fabrication:      { done: hito.has('P-06'), enCurso: hito.has('P-05'), fecha: hito.get('P-06') ?? hito.get('P-05') ?? null },
+    installation:     { done: instalacion.completa || hito.has('I-07'), fecha: instalacion.fecha_ultima ?? hito.get('I-07') ?? null },
+  }
+
+  for (const [clave, r] of Object.entries(reglas)) {
+    const target = r.done ? 'hecha' : (r.enCurso ? 'en_curso' : 'pendiente')
+    const fecha = r.done ? (r.fecha ?? null) : null
+    await runner.query(
+      `UPDATE ing_tareas t SET estado = $3, fecha_fin_real = $4::date, updated_at = NOW()
+         FROM ing_tarea_tipos tt
+        WHERE tt.id = t.tipo_id AND t.proyecto_ext = $1 AND tt.clave = $2
+          AND t.estado <> 'na' AND t.estado IS DISTINCT FROM $3`,
+      [proyectoExt, clave, target, fecha])
+  }
+}
+
 export async function recomputarYGuardar(runner: QueryRunner, proyectoExt: string): Promise<void> {
+  // Primero reconciliar las tareas auto desde los hechos de módulos (el módulo gana),
+  // así el estado de la ruta refleja la realidad antes de recalcular/leer.
+  await cerrarTareasAutomaticas(runner, proyectoExt)
   const { rows: hdr } = await runner.query<{ ini: string | null; entrega: string | null }>(
     `SELECT to_char(fecha_inicio,'YYYY-MM-DD') AS ini, to_char(fecha_entrega,'YYYY-MM-DD') AS entrega
        FROM ing_proyectos WHERE proyecto_ext = $1`, [proyectoExt])
