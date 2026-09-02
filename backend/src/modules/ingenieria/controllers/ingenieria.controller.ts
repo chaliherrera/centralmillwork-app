@@ -206,6 +206,30 @@ const avanceSchema = z.object({
   decision_comentarios: z.string().max(1000).nullish(),
   envio_metodo: z.enum(['correo', 'portal', 'ambos']).nullish(),
 })
+/**
+ * Opción A (Chali): el escritorio del ingeniero MANDA. Cuando el ingeniero completa una
+ * tarea que mapea a un hito del journey (ing_tarea_tipos.hito_codigo), marcamos ese hito
+ * como cumplido con la fecha de cumplimiento. Así el journey refleja también el completado,
+ * no solo las fechas. Best-effort: si el hito no aplica o lo frena un predecesor, no rompe.
+ */
+async function sincronizarHitoDeTarea(tareaId: number): Promise<boolean> {
+  const { rows } = await pool.query<{ hito: string | null; ext: string | null; estado: string; fin: string | null }>(
+    `SELECT tt.hito_codigo AS hito, t.proyecto_ext AS ext, t.estado,
+            to_char(COALESCE(t.fecha_fin_real, t.fecha_fin), 'YYYY-MM-DD') AS fin
+       FROM ing_tareas t JOIN ing_tarea_tipos tt ON tt.id = t.tipo_id WHERE t.id = $1`, [tareaId])
+  const r = rows[0]
+  if (!r?.hito || r.estado !== 'hecha' || !r.ext || !r.fin) return false
+  const { rows: pr } = await pool.query<{ pid: number | null }>(
+    `SELECT proyecto_id AS pid FROM ing_proyectos WHERE proyecto_ext = $1`, [r.ext])
+  const pid = pr[0]?.pid
+  if (!pid) return false
+  try {
+    const { registrarHito } = await import('../../schedule/domain/registro')
+    const res = await registrarHito(pool, pid, r.hito, r.fin, 'Completado por Ingeniería', 'Ingeniería')
+    return res.ok
+  } catch { return false }
+}
+
 export async function avanceTareaHandler(req: Request, res: Response, next: NextFunction) {
   const id = parseInt(String(req.params.id), 10)
   if (Number.isNaN(id)) return next(createError('id inválido', 400))
@@ -226,7 +250,11 @@ export async function avanceTareaHandler(req: Request, res: Response, next: Next
     // Release (#12) AUTO: si se completó el SD update / final set (#11), cerrar el release.
     if (parsed.data.estado === 'hecha')
       releaseCerrado = await cerrarReleasePorSdUpdate(pool, id)
-    res.json({ data: { ok: true, shop_drawings_reabierto: reabierto, gate_cerrado: gateCerrado, release_cerrado: releaseCerrado } })
+    // Opción A: completar la tarea marca su hito en el journey (el journey refleja el Gantt).
+    let hitoMarcado = false
+    if (parsed.data.estado === 'hecha')
+      hitoMarcado = await sincronizarHitoDeTarea(id)
+    res.json({ data: { ok: true, shop_drawings_reabierto: reabierto, gate_cerrado: gateCerrado, release_cerrado: releaseCerrado, hito_journey_marcado: hitoMarcado } })
   } catch (e) { next(e) }
 }
 
