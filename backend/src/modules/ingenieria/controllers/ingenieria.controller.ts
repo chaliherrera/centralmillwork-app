@@ -21,6 +21,7 @@ import { estadoDeposito, overrideGate, listDepositosBloqueando } from '../domain
 import { listMuestrasPorProyecto } from '../domain/muestras'
 import { listComprasPorProyecto } from '../domain/compras'
 import { detalleInstalacion } from '../domain/instalacion'
+import { getEscritorio, ROLES_RUTA_POR_APP } from '../domain/escritorio'
 
 function pid(req: Request): number {
   const id = parseInt(String(req.params.id ?? req.params.proyectoId), 10)
@@ -344,6 +345,20 @@ export async function comprasEstadoHandler(_req: Request, res: Response, next: N
   try {
     const data = await listComprasPorProyecto(pool)
     res.json({ data })
+  } catch (e) { next(e) }
+}
+
+// ── Escritorio por rol: tu próxima tarea desbloqueada, cross-project ──
+// GET /api/ingenieria/escritorio?rol=<csv>&asignado=<nombre>
+// Deriva los roles-de-ruta del rol del usuario; ?rol y ?asignado son override (selector).
+export async function escritorioHandler(req: Request, res: Response, next: NextFunction) {
+  try {
+    const rolApp = (req as any).user?.rol ?? ''
+    const rolQuery = typeof req.query.rol === 'string' && req.query.rol ? req.query.rol : ''
+    const roles = rolQuery ? rolQuery.split(',').map((s) => s.trim()).filter(Boolean) : (ROLES_RUTA_POR_APP[rolApp] ?? [])
+    if (!roles.length) return res.json({ data: { tareas: [], bloqueadas: 0 } })
+    const asignado = typeof req.query.asignado === 'string' && req.query.asignado ? req.query.asignado : null
+    res.json({ data: await getEscritorio(pool, { roles, asignado }) })
   } catch (e) { next(e) }
 }
 
