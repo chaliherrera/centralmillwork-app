@@ -353,11 +353,22 @@ export async function comprasEstadoHandler(_req: Request, res: Response, next: N
 // Deriva los roles-de-ruta del rol del usuario; ?rol y ?asignado son override (selector).
 export async function escritorioHandler(req: Request, res: Response, next: NextFunction) {
   try {
-    const rolApp = (req as any).user?.rol ?? ''
+    const user = (req as any).user
+    const rolApp = user?.rol ?? ''
     const rolQuery = typeof req.query.rol === 'string' && req.query.rol ? req.query.rol : ''
     const roles = rolQuery ? rolQuery.split(',').map((s) => s.trim()).filter(Boolean) : (ROLES_RUTA_POR_APP[rolApp] ?? [])
     if (!roles.length) return res.json({ data: { tareas: [], bloqueadas: 0 } })
-    const asignado = typeof req.query.asignado === 'string' && req.query.asignado ? req.query.asignado : null
+
+    // Identidad (pieza 7): cada persona ve SOLO lo suyo. Para ENGINEERING/FIELD el asignado se
+    // deriva del usuario logueado (ing_ingenieros linkeado por usuario_id → nombre del ingeniero;
+    // fallback al nombre del usuario). ADMIN/PM ven TODO (sin filtro). ?asignado siempre override
+    // (el selector del PM/admin para mirar el escritorio de un ingeniero puntual).
+    let asignado: string | null = typeof req.query.asignado === 'string' && req.query.asignado ? req.query.asignado : null
+    if (!asignado && (rolApp === 'ENGINEERING' || rolApp === 'FIELD') && user?.id) {
+      const { rows } = await pool.query<{ nombre: string }>(
+        `SELECT nombre FROM ing_ingenieros WHERE usuario_id = $1 AND activo LIMIT 1`, [user.id])
+      asignado = rows[0]?.nombre ?? (user.nombre ?? null)
+    }
     res.json({ data: await getEscritorio(pool, { roles, asignado }) })
   } catch (e) { next(e) }
 }

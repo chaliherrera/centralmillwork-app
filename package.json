@@ -2,7 +2,10 @@
   "name": "centralmillwork-app",
   "version": "1.0.0",
   "private": true,
-  "workspaces": ["frontend", "backend"],
+  "workspaces": [
+    "frontend",
+    "backend"
+  ],
   "scripts": {
     "dev": "concurrently \"npm run dev --workspace=backend\" \"npm run dev --workspace=frontend\"",
     "build": "npm run build --workspace=frontend && npm run build --workspace=backend",
@@ -21,5 +24,11 @@
   "engines": {
     "node": ">=20.0.0",
     "npm": ">=9.0.0"
+  },
+  "dependencies": {
+    "jimp": "^0.22.12",
+    "jszip": "^3.10.1",
+    "pdfkit": "^0.19.1",
+    "sharp": "^0.35.1"
   }
 }

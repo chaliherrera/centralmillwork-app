@@ -1,0 +1,28 @@
+# EAS ignore — qué excluir del project tarball que se sube a EAS Build
+# Funciona como .gitignore: patrones por línea.
+
+# Folders que no son parte del build de la app móvil
+presentations/
+docs/
+.claude/
+backups/
+
+# Sources de la web (mobile no las necesita; reduce tamaño y evita conflicts)
+frontend/
+
+# Backend (mismo motivo)
+backend/
+
+# Archivos sueltos en root
+STATE.md
+CLAUDE.md
+*.sql
+
+# Carpetas que git ya ignora pero por las dudas
+node_modules/
+.git/
+
+# Miscellaneous
+*.log
+.DS_Store
+Thumbs.db

@@ -1,0 +1,89 @@
+{
+  "$schema": "https://developer.microsoft.com/en-us/json-schemas/teams/v1.16/MicrosoftTeams.schema.json",
+  "manifestVersion": "1.16",
+  "version": "1.0.0",
+  "id": "cb9670f3-d72e-45ab-a1b7-5614936049da",
+  "packageName": "com.centralmillwork.bot",
+  "developer": {
+    "name": "Central Millwork",
+    "websiteUrl": "https://centralmillwork-frontend-production.up.railway.app",
+    "privacyUrl": "https://centralmillwork-frontend-production.up.railway.app",
+    "termsOfUseUrl": "https://centralmillwork-frontend-production.up.railway.app"
+  },
+  "icons": {
+    "color": "color.png",
+    "outline": "outline.png"
+  },
+  "name": {
+    "short": "Central Bot",
+    "full": "Central Millwork Bot"
+  },
+  "description": {
+    "short": "Consultas operativas de Central Millwork",
+    "full": "Bot interno que responde consultas sobre proyectos, materiales, órdenes de compra y órdenes de producción. Tipeá \"ayuda\" para ver los comandos disponibles."
+  },
+  "accentColor": "#9B7200",
+  "bots": [
+    {
+      "botId": "cb9670f3-d72e-45ab-a1b7-5614936049da",
+      "scopes": [
+        "personal",
+        "team",
+        "groupchat"
+      ],
+      "isNotificationOnly": false,
+      "supportsFiles": false,
+      "commandLists": [
+        {
+          "scopes": [
+            "personal",
+            "team",
+            "groupchat"
+          ],
+          "commands": [
+            {
+              "title": "ayuda",
+              "description": "Lista los comandos disponibles"
+            },
+            {
+              "title": "proyectos",
+              "description": "Proyectos activos"
+            },
+            {
+              "title": "resumen",
+              "description": "KPIs de un proyecto. Ej: resumen PRY-2026-577"
+            },
+            {
+              "title": "pendientes",
+              "description": "Materiales pendientes. Ej: pendientes PRY-2026-577"
+            },
+            {
+              "title": "recibidos",
+              "description": "Materiales recibidos. Ej: recibidos PRY-2026-577"
+            },
+            {
+              "title": "item",
+              "description": "Materiales del item N. Ej: item PRY-2026-577 5"
+            },
+            {
+              "title": "op",
+              "description": "Estado de una OP. Ej: op OP-26-101"
+            },
+            {
+              "title": "fotos",
+              "description": "Fotos de la estación anterior. Ej: fotos OP-26-101"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "permissions": [
+    "identity",
+    "messageTeamMembers"
+  ],
+  "validDomains": [
+    "centralmillwork-backend-production.up.railway.app",
+    "centralmillwork-frontend-production.up.railway.app"
+  ]
+}
