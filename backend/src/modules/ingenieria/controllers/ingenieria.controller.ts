@@ -237,6 +237,23 @@ export async function avanceTareaHandler(req: Request, res: Response, next: Next
   if (!parsed.success || Object.keys(parsed.data).length === 0)
     return next(createError('Datos inválidos', 400))
   try {
+    // Orden de la ruta: no se puede COMPLETAR una tarea si sus predecesores FS que son
+    // trabajo del ingeniero todavía no están hechos. Cubre el pedido de Chali (field
+    // measurements DEBE estar completo antes de SD update) de forma general y segura
+    // (solo mira predecesores de rol ingeniería/field, no los auto de Compras/Producción).
+    if (parsed.data.estado === 'hecha' || parsed.data.fecha_fin_real) {
+      const { rows: pend } = await pool.query<{ nombre: string }>(
+        `SELECT dd.nombre
+           FROM ing_tarea_deps td
+           JOIN ing_tareas dd ON dd.id = td.depende_de_id
+           JOIN ing_tarea_tipos dtt ON dtt.id = dd.tipo_id
+          WHERE td.tarea_id = $1 AND td.tipo = 'FS'
+            AND dtt.rol IN ('ingenieria', 'field')
+            AND dd.estado NOT IN ('hecha', 'na')`, [id])
+      if (pend.length) {
+        return next(createError(`Falta completar primero: ${pend.map((p) => p.nombre).join(', ')}`, 400))
+      }
+    }
     const ok = await reportarAvance(pool, id, parsed.data)
     if (!ok) return next(createError('tarea no encontrada', 404))
     // Espejo de la decisión del cliente en la revisión (#7):
