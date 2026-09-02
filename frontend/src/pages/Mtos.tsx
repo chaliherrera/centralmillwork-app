@@ -13,6 +13,7 @@ import { ExternalLink, CheckCircle2, Clock, DollarSign, ShoppingCart, Warehouse,
 import clsx from 'clsx'
 import { mtosService, type MtoActivo, type EstadoCotizMto } from '@/services/mtos'
 import PreciosBuscador from '@/components/modules/precios/PreciosBuscador'
+import Escritorio from '@/components/escritorio/Escritorio'
 
 type TabKey = 'activos' | 'precios'
 
@@ -75,6 +76,9 @@ export default function Mtos() {
 
   return (
     <div className="space-y-4">
+      {/* Escritorio de Compras — qué proyecto necesita que arranques la compra ahora. */}
+      <Escritorio rol="compras" titulo="Compras — te toca ahora"
+        subtitulo="Proyectos que necesitan que arranques los long leads / el material, de todos los proyectos. Se cierran solos al emitir la OC." />
       {/* Header con tabs */}
       <div>
         <h1 className="text-2xl font-bold text-forest-900">Control MTO</h1>
