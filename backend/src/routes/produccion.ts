@@ -4,7 +4,7 @@ import {
   getOrdenes, getOrden, getOrdenEvolucion, getOrdenesKpis, getEventosRecientes,
   createOrden, updateOrden,
   asignarOperador, avanzarOrden, pausarOrden, reanudarOrden, cancelarOrden,
-  getItemsDisponibles,
+  getItemsDisponibles, agregarProcesoRuta, quitarProcesoRuta,
 } from '../controllers/produccionController'
 import {
   getPersonalTaller, getPersonalTallerById, createPersonalTaller, updatePersonalTaller,
@@ -48,6 +48,10 @@ router.patch('/ordenes/:id/avanzar',     PROD_WRITE, avanzarOrden)
 router.patch('/ordenes/:id/pausar',      PROD_WRITE, pausarOrden)
 router.patch('/ordenes/:id/reanudar',    PROD_WRITE, reanudarOrden)
 router.delete('/ordenes/:id',            PROD_WRITE, cancelarOrden)
+
+// ─── Ruta editable (Shop Manager): agregar / volver a / quitar una estación ──
+router.post('/ordenes/:id/procesos',             PROD_WRITE, agregarProcesoRuta)
+router.delete('/ordenes/:id/procesos/:procesoId', PROD_WRITE, quitarProcesoRuta)
 
 // ─── Vista cross-project: items disponibles para producir ────────────────────
 router.get('/items-disponibles', requireRole('ADMIN','SHOP_MANAGER'), getItemsDisponibles)
