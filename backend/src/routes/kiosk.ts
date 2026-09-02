@@ -73,12 +73,12 @@ router.post('/ordenes/:id/completar-proceso', async (req, res, next) => {
     // libres (NULL), 3) cualquier otra (que después rechazaremos).
     const { rows: [proceso] } = await pool.query(
       `SELECT id, operador_id FROM orden_procesos
-       WHERE orden_id = $1 AND estacion = $2
+       WHERE orden_id = $1 AND estacion = $2 AND completado = false
        ORDER BY
          CASE WHEN operador_id = $3 THEN 0
               WHEN operador_id IS NULL THEN 1
               ELSE 2 END,
-         id
+         ciclo DESC, id
        LIMIT 1`,
       [ordenId, orden.estacion_actual, personalId]
     )

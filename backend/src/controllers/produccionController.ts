@@ -315,7 +315,7 @@ export async function asignarOperador(req: Request, res: Response, next: NextFun
 
     const { rowCount } = await client.query(
       `UPDATE orden_procesos SET operador_id = $1
-       WHERE orden_id = $2 AND estacion = $3`,
+       WHERE orden_id = $2 AND estacion = $3 AND completado = false`,
       [personal_id || null, req.params.id, estacion]
     )
     if (!rowCount) {
@@ -391,29 +391,31 @@ export async function avanzarOrdenInterno(opts: {
       throw createError('La orden no tiene estación actual', 400)
     }
 
+    // Ruta editable (multi-pasada): resolver EL PROCESO ABIERTO de la estación
+    // actual (completado=false, el ciclo más nuevo). Todo lo de abajo opera sobre
+    // ESTE row puntual — nunca por (orden, estación), que ahora puede matchear más de
+    // un row (pasadas históricas + la actual).
+    const { rows: [procAbierto] } = await client.query(
+      `SELECT id, operador_id FROM orden_procesos
+       WHERE orden_id = $1 AND estacion = $2 AND completado = false
+       ORDER BY ciclo DESC, id DESC LIMIT 1`,
+      [opts.ordenId, orden.estacion_actual]
+    )
+    if (!procAbierto) {
+      await client.query('ROLLBACK')
+      throw createError('La estación actual no tiene un proceso abierto', 400)
+    }
+
     // Fix #10: gate de fotos obligatorias en el CORE compartido. Antes solo
     // estaba en routes/kiosk.ts → admins que llamaban /produccion/ordenes/:id/avanzar
     // se saltaban el check silenciosamente. Ahora la regla aplica a TODOS los
     // callers a menos que se pase explícitamente skipFotoCheck:true.
     if (!opts.skipFotoCheck) {
-      // Resolver procesoId para que el helper cuente fotos por proceso. Si hay
-      // múltiples, preferimos el del operador (kiosk path) o el primero.
-      const { rows: [procActual] } = await client.query(
-        `SELECT id FROM orden_procesos
-         WHERE orden_id = $1 AND estacion = $2
-         ORDER BY
-           CASE WHEN operador_id = $3 THEN 0
-                WHEN operador_id IS NULL THEN 1
-                ELSE 2 END,
-           id
-         LIMIT 1`,
-        [opts.ordenId, orden.estacion_actual, opts.reqKioskPersonalId ?? null]
-      )
       // Import dinámico para evitar dependencia circular controller↔controller.
       // (avancesFotosController ya importa cosas de utils, pero no de producción.)
       const { tieneAvanceFotoSiRequerida } = await import('./avancesFotosController')
       const check = await tieneAvanceFotoSiRequerida(
-        opts.ordenId, orden.estacion_actual, procActual?.id ?? null
+        opts.ordenId, orden.estacion_actual, procAbierto.id
       )
       if (!check.ok) {
         await client.query('ROLLBACK')
@@ -427,28 +429,25 @@ export async function avanzarOrdenInterno(opts: {
     //    Si el llamador es SHOP_MANAGER (no hay kiosk_personal_id), igual cerramos
     //    el segmento del operador asignado al proceso — la jornada de horas
     //    queda consistente sin importar quién dispare el avance.
-    const { rows: [opActual] } = await client.query(
-      `SELECT operador_id FROM orden_procesos
-       WHERE orden_id = $1 AND estacion = $2`,
-      [opts.ordenId, orden.estacion_actual]
-    )
-    const operadorIdResp = opActual?.operador_id ?? null
+    const operadorIdResp = procAbierto.operador_id ?? null
     if (operadorIdResp) {
+      // Cerrar el segmento abierto de ESTE proceso (por proceso_id; fallback a la
+      // estación para segmentos legacy sin proceso_id).
       await client.query(
         `UPDATE time_proyectos SET hora_fin = NOW(), completado = true
          WHERE personal_id = $1
            AND orden_produccion_id = $2
-           AND estacion = $3
+           AND (proceso_id = $3 OR (proceso_id IS NULL AND estacion = $4))
            AND hora_fin IS NULL`,
-        [operadorIdResp, opts.ordenId, orden.estacion_actual]
+        [operadorIdResp, opts.ordenId, procAbierto.id, orden.estacion_actual]
       )
     }
 
-    // 2) Marcar el proceso completado y recalcular tiempo_real_minutos como
-    //    SUM de todos los segmentos cerrados del operador en esta orden+estación.
-    //    Esto da el tiempo REAL trabajado (multi-día friendly): si Victor empezó
-    //    martes 4pm y terminó jueves 10am, NOT (NOW - fecha_inicio) = 42h sino
-    //    SUM(segmentos) = ~16h reales.
+    // 2) Marcar el proceso completado y recalcular tiempo_real_minutos como SUM de
+    //    los segmentos cerrados de ESTE proceso (por proceso_id → cada pasada tiene su
+    //    propio tiempo, la 2ª no hereda las horas de la 1ª). Multi-día friendly: si
+    //    Victor empezó martes 4pm y terminó jueves 10am, NO (NOW - fecha_inicio) = 42h
+    //    sino SUM(segmentos) = ~16h reales.
     const { rows: [procesoActual] } = await client.query(
       `UPDATE orden_procesos
        SET completado = true,
@@ -456,15 +455,14 @@ export async function avanzarOrdenInterno(opts: {
            tiempo_real_minutos = COALESCE((
              SELECT ROUND(SUM(EXTRACT(EPOCH FROM (hora_fin - hora_inicio)) / 60))::INT
              FROM time_proyectos
-             WHERE orden_produccion_id = $1
-               AND estacion = $2
+             WHERE proceso_id = $1
                AND hora_fin IS NOT NULL
-               AND ($4::int IS NULL OR personal_id = $4)
+               AND ($3::int IS NULL OR personal_id = $3)
            ), tiempo_real_minutos),
-           notas = COALESCE($3, notas)
-       WHERE orden_id = $1 AND estacion = $2
+           notas = COALESCE($2, notas)
+       WHERE id = $1
        RETURNING *`,
-      [opts.ordenId, orden.estacion_actual, opts.notas ?? null, operadorIdResp]
+      [procAbierto.id, opts.notas ?? null, operadorIdResp]
     )
 
     // 3) Buscar la siguiente estación pendiente en secuencia
@@ -695,7 +693,8 @@ export async function iniciarItemKiosk(req: Request, res: Response, next: NextFu
     const { rows: [proceso] } = await client.query(
       `SELECT id, fecha_inicio, completado, operador_id
        FROM orden_procesos
-       WHERE orden_id = $1 AND estacion = $2`,
+       WHERE orden_id = $1 AND estacion = $2 AND completado = false
+       ORDER BY ciclo DESC, id DESC LIMIT 1`,
       [ordenId, orden.estacion_actual]
     )
     if (!proceso) {
@@ -758,10 +757,10 @@ export async function iniciarItemKiosk(req: Request, res: Response, next: NextFu
     }
     const { rows: [segmento] } = await client.query(
       `INSERT INTO time_proyectos
-         (registro_id, personal_id, proyecto_id, estacion, orden_produccion_id, hora_inicio, dispositivo)
-       VALUES ($1,$2,$3,$4,$5, NOW(), $6)
+         (registro_id, personal_id, proyecto_id, estacion, orden_produccion_id, proceso_id, hora_inicio, dispositivo)
+       VALUES ($1,$2,$3,$4,$5,$6, NOW(), $7)
        RETURNING *`,
-      [registro.id, personalId, ordenProy.proyecto_id, orden.estacion_actual, ordenId, dispositivo]
+      [registro.id, personalId, ordenProy.proyecto_id, orden.estacion_actual, ordenId, proceso.id, dispositivo]
     )
 
     // 7) Historial
