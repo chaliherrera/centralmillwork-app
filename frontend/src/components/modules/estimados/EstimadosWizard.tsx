@@ -8,7 +8,6 @@ import ProyectoForm from '@/components/modules/proyectos/ProyectoForm'
 import StatusBadge from '@/components/ui/StatusBadge'
 import FactibilidadCheck from './FactibilidadCheck'
 import MapaEtapas from '@/components/modules/ingenieria/MapaEtapas'
-import MapaCargaIngenieria from './MapaCargaIngenieria'
 import type { Proyecto } from '@/types'
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -197,16 +196,12 @@ export default function EstimadosWizard() {
           <div className="space-y-4">
             <div>
               <h3 className="font-bold text-stone-800">¿Se puede cumplir la fecha?</h3>
-              <p className="text-sm text-stone-500">Ingresá la fecha que pide el cliente: el sistema busca un ingeniero con cupo y te dice si entra. El mapa de carga te muestra quién está disponible. Es tu elemento de negociación.</p>
+              <p className="text-sm text-stone-500">Ingresá la fecha que pide el cliente: el sistema busca un ingeniero con cupo y te dice si entra, quién está disponible y su carga. Es tu elemento de negociación.</p>
             </div>
             <FactibilidadCheck proyectoId={sel?.id} fechaInicial={fechaSolicitada || sel?.fecha_entrega_solicitada?.slice(0, 10) || ''} onResult={(f, r) => {
               setFechaSolicitada(f); setFactRes(r)
               setFechaComprometida(r.factible ? f : r.fecha_real_mas_temprana)
             }} />
-            <div className="pt-1">
-              <div className="text-[11px] uppercase tracking-wider text-stone-400 font-semibold mb-2">Carga de los ingenieros — dónde hay disponibilidad</div>
-              <MapaCargaIngenieria marcarFecha={fechaSolicitada || undefined} />
-            </div>
             {factRes && (
               <div className="rounded-xl border border-forest-200 bg-forest-50/40 p-4">
                 <div className="text-[11px] uppercase tracking-wide text-forest-600 font-semibold">Fecha a comprometer con el cliente</div>
