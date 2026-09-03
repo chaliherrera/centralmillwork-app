@@ -22,9 +22,11 @@ type QueryRunner = PoolClient | typeof pool
 // Roles cuyas tareas consumen la capacidad del "un ingeniero" del proyecto.
 const ROLES_INGENIERO = new Set(['ingenieria', 'field'])
 const STONE_CLAVES = ['stone_measure', 'stone_fab', 'stone_install']
-// Umbral de saturación: un ingeniero está "sin cupo" si su carga en la ventana
-// llega o supera este % (suma de allocation_pct de sus tareas solapadas). 100 = lleno.
+// Umbral de saturación: un ingeniero no puede pasar de este % de carga. 100 = lleno.
 const UMBRAL_PCT = 100
+// Cuánto SUMA un proyecto nuevo a la carga del ingeniero (default; el PM lo ajusta por
+// proyecto, como en Smartsheet). Un ingeniero tiene cupo si su carga actual + esto ≤ 100%.
+const CARGA_PROYECTO_PCT = 50
 
 export interface CargaIngeniero { nombre: string; pico_pct: number; disponible: boolean }
 export interface FactibilidadResult {
@@ -150,7 +152,7 @@ export async function chequearFactibilidad(
   // Ranking de disponibilidad en la ventana de ingeniería (el de MÁS cupo primero).
   const w = ventanaIng ?? { inicio: hoy, fin: finProyectado }
   const cargas: CargaIngeniero[] = ingenieros
-    .map((nombre) => { const pico = picoPct(cargaTareas, nombre, w.inicio, w.fin); return { nombre, pico_pct: pico, disponible: pico < UMBRAL_PCT } })
+    .map((nombre) => { const pico = picoPct(cargaTareas, nombre, w.inicio, w.fin); return { nombre, pico_pct: pico, disponible: pico + CARGA_PROYECTO_PCT <= UMBRAL_PCT } })
     .sort((a, b) => a.pico_pct - b.pico_pct || a.nombre.localeCompare(b.nombre))
 
   const propuesto = cargas[0] ?? null
@@ -169,7 +171,7 @@ export async function chequearFactibilidad(
     for (let sem = 1; sem <= 26; sem++) {
       const ini = addBusinessDays(ventanaIng.inicio, sem * 5, feriados)
       const fin = addBusinessDays(ini, dur, feriados)
-      if (picoPct(cargaTareas, propuesto.nombre, ini, fin) < UMBRAL_PCT) { corr = sem * 5; break }
+      if (picoPct(cargaTareas, propuesto.nombre, ini, fin) + CARGA_PROYECTO_PCT <= UMBRAL_PCT) { corr = sem * 5; break }
     }
     const fechaCap = addBusinessDays(fechaPedida, corr || 5, feriados)
     if (fechaCap > fechaReal) { fechaReal = fechaCap; motivo = 'capacidad' }

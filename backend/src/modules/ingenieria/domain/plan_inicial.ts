@@ -82,9 +82,11 @@ export async function generarPlanIngenieria(
     let dur = Math.max(0, t.dur_dias_tipico ?? 3)
     if (items_qty != null && items_qty > 0 && t.dias_por_item != null && Number(t.dias_por_item) > 0)
       dur = Math.max(1, Math.round(items_qty * Number(t.dias_por_item)))
+    // allocation_pct default = 0.5 (50%): un ingeniero puede llevar ~2 proyectos a la vez.
+    // Es un BORRADOR — el PM lo ajusta por tarea según el tamaño real (como en Smartsheet).
     const { rows } = await runner.query<{ id: number }>(
       `INSERT INTO ing_tareas (proyecto_ext, proyecto_id, tipo_id, nombre, allocation_pct, dur_dias, estado, origen)
-         VALUES ($1,$2,$3,$4,1.0,$5,'pendiente',$6) RETURNING id`,
+         VALUES ($1,$2,$3,$4,0.5,$5,'pendiente',$6) RETURNING id`,
       [proyectoExt, proyectoId, t.id, t.nombre, dur, origen])
     idPorClave.set(t.clave, rows[0].id)
     durPorClave.set(t.clave, dur)
