@@ -75,6 +75,7 @@ export default function ProjectMgmt() {
 function HeatIngenieroPropuesto({ proyectoExt }: { proyectoExt: string }) {
   const [carga, setCarga] = useState<IngCarga | null>(null)
   const [propuesto, setPropuesto] = useState<string | undefined>()
+  const [ruta, setRuta] = useState<boolean[] | undefined>()
   const [loading, setLoading] = useState(true)
   useEffect(() => {
     let live = true
@@ -84,15 +85,29 @@ function HeatIngenieroPropuesto({ proyectoExt }: { proyectoExt: string }) {
         const [c, t] = await Promise.all([ingenieriaService.getCarga(), ingenieriaService.getTareas(proyectoExt)])
         if (!live) return
         setCarga(c.data)
+        // El propuesto = el más asignado en el plan de este proyecto.
         const freq = new Map<string, number>()
         for (const tarea of t.data ?? []) if (tarea.asignado_nombre) freq.set(tarea.asignado_nombre, (freq.get(tarea.asignado_nombre) ?? 0) + 1)
-        setPropuesto([...freq.entries()].sort((a, b) => b[1] - a[1])[0]?.[0])
-      } catch { if (live) { setCarga(null); setPropuesto(undefined) } }
+        const prop = [...freq.entries()].sort((a, b) => b[1] - a[1])[0]?.[0]
+        setPropuesto(prop)
+        // Ruta tentativa: qué semanas ocupan las tareas del propuesto en ESTE proyecto,
+        // alineadas a las mismas semanas del heatmap (para sobreponerlas a su carga).
+        const semanas = c.data?.semanas ?? []
+        const suyas = (t.data ?? []).filter((x) => x.asignado_nombre === prop && x.fecha_inicio && x.fecha_fin)
+        const DAY = 86400000
+        setRuta(semanas.map((w) => {
+          const ws = new Date(w + 'T00:00:00').getTime(), we = ws + 6 * DAY
+          return suyas.some((x) => {
+            const ti = new Date(x.fecha_inicio! + 'T00:00:00').getTime(), tf = new Date(x.fecha_fin! + 'T00:00:00').getTime()
+            return ti <= we && tf >= ws
+          })
+        }))
+      } catch { if (live) { setCarga(null); setPropuesto(undefined); setRuta(undefined) } }
       finally { if (live) setLoading(false) }
     })()
     return () => { live = false }
   }, [proyectoExt])
 
   if (loading) return <div className="rounded-2xl border border-stone-200 bg-white py-16 text-center text-stone-400"><Loader2 className="animate-spin inline" size={20} /></div>
-  return <VistaDisponibilidad carga={carga} foco={propuesto} />
+  return <VistaDisponibilidad carga={carga} foco={propuesto} ruta={ruta} />
 }

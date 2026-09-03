@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { Fragment, useEffect, useMemo, useState } from 'react'
 import { Users, Layers, ClipboardList, Plus, X, Loader2, Trash2, Gauge, Check, FolderKanban, Activity, AlertTriangle, Wallet, Lock, LockOpen, FlaskConical, Package, Wrench, CalendarClock, ChevronUp, ChevronDown } from 'lucide-react'
 import { ingenieriaService, type IngProyecto, type IngTarea, type TareaInput, type IngPlan, type IngTareaPlan, type IngArista, type IngCarga, type IngTareaCelda, type InstalacionDetalle } from '@/services/ingenieria'
 import MapaEtapas from '@/components/modules/ingenieria/MapaEtapas'
@@ -102,7 +102,9 @@ export default function IngenieriaPlan({ embedded, initialProyecto, initialMode 
 // ── Vista de arranque: DISPONIBILIDAD — heatmap de CANTIDAD DE TAREAS por ingeniero/semana ──
 // `foco` = nombre del ingeniero propuesto: cuando viene, la vista arranca mostrando SOLO
 // su fila (resaltada) y ofrece un botón para desplegar a todos (buscar alternativa).
-export function VistaDisponibilidad({ carga, foco }: { carga: IngCarga | null; foco?: string }) {
+// `ruta` = por semana, si ESTE proyecto ocupa al propuesto — se dibuja como banda debajo
+// de su fila (la ruta tentativa sobrepuesta a su carga).
+export function VistaDisponibilidad({ carga, foco, ruta }: { carga: IngCarga | null; foco?: string; ruta?: boolean[] }) {
   const [sel, setSel] = useState<{ ing: string; sem: string } | null>(null)
   const [detail, setDetail] = useState<IngTareaCelda[] | null>(null)
   const [loadingDet, setLoadingDet] = useState(false)
@@ -175,7 +177,8 @@ export function VistaDisponibilidad({ carga, foco }: { carga: IngCarga | null; f
           )}
           {/* una fila por ingeniero — heatmap de cantidad de tareas */}
           {(mostrarTodos ? g.ingenieros : g.ingenieros.filter((e) => e.nombre === foco)).map((e) => { const picoN = Math.max(0, ...e.n_tareas); const esFoco = e.nombre === foco; return (
-            <div key={e.nombre} className={`flex items-center border-b border-stone-50 ${esFoco ? 'bg-forest-50/60 ring-1 ring-inset ring-forest-200' : 'hover:bg-stone-50/40'}`}>
+            <Fragment key={e.nombre}>
+            <div className={`flex items-center border-b border-stone-50 ${esFoco ? 'bg-forest-50/60 ring-1 ring-inset ring-forest-200' : 'hover:bg-stone-50/40'}`}>
               <div className="shrink-0 px-3 py-1.5 flex items-center gap-1.5" style={{ width: GUT }}>
                 <span className={`text-[12.5px] truncate flex-1 ${esFoco ? 'font-bold text-forest-800' : 'font-semibold text-stone-700'}`}>{e.nombre}</span>
                 {esFoco && <span className="text-[9px] font-bold uppercase tracking-wide text-forest-600 bg-forest-100 rounded-full px-1.5 py-0.5 shrink-0">propuesto</span>}
@@ -192,6 +195,15 @@ export function VistaDisponibilidad({ carga, foco }: { carga: IngCarga | null; f
                 ) })}
               </div>
             </div>
+            {esFoco && ruta && ruta.some(Boolean) && (
+              <div className="flex items-stretch border-b border-stone-100 bg-forest-50/30">
+                <div className="shrink-0 px-3 py-1 text-[10px] font-semibold text-forest-700 flex items-center gap-1" style={{ width: GUT }}><span className="w-2 h-2 rounded-sm bg-forest-500 inline-block" /> ruta de este proyecto</div>
+                <div className="flex-1 flex gap-px py-1.5 items-center">
+                  {g.semanas.map((_, i) => <div key={i} title={ruta[i] ? 'este proyecto ocupa esta semana' : ''} className={`flex-1 h-2 rounded-sm ${ruta[i] ? 'bg-forest-500' : 'bg-transparent'}`} />)}
+                </div>
+              </div>
+            )}
+            </Fragment>
           ) })}
         </div></div>
         {foco && (
