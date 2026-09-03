@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { CalendarClock, Loader2, CheckCircle2, XCircle, AlertTriangle, ArrowRight } from 'lucide-react'
+import { CalendarClock, Loader2, CheckCircle2, XCircle, AlertTriangle, ArrowRight, User } from 'lucide-react'
 import { scheduleService, type FactibilidadResult } from '@/services/schedule'
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -11,7 +11,7 @@ import { scheduleService, type FactibilidadResult } from '@/services/schedule'
 const MES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic']
 const fmt = (iso: string | null) => { if (!iso) return '—'; const d = new Date(iso + 'T00:00:00'); return `${d.getDate()} ${MES[d.getMonth()]} ${d.getFullYear()}` }
 
-export default function FactibilidadCheck({ onResult, fechaInicial }: { onResult?: (fecha: string, r: FactibilidadResult) => void; fechaInicial?: string }) {
+export default function FactibilidadCheck({ onResult, fechaInicial, proyectoId }: { onResult?: (fecha: string, r: FactibilidadResult) => void; fechaInicial?: string; proyectoId?: number }) {
   const [fecha, setFecha] = useState(fechaInicial ?? '')
   const [busy, setBusy] = useState(false)
   const [r, setR] = useState<FactibilidadResult | null>(null)
@@ -21,7 +21,7 @@ export default function FactibilidadCheck({ onResult, fechaInicial }: { onResult
     if (!fecha) return
     setBusy(true); setErr(null); setR(null)
     try {
-      const res = (await scheduleService.getFactibilidad(fecha)).data
+      const res = (await scheduleService.getFactibilidad(fecha, proyectoId)).data
       setR(res)
       onResult?.(fecha, res)
     } catch (e: any) { setErr(e?.response?.data?.message || 'No se pudo verificar') } finally { setBusy(false) }
@@ -61,7 +61,14 @@ export default function FactibilidadCheck({ onResult, fechaInicial }: { onResult
               <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 flex flex-wrap items-center gap-4">
                 <div className="flex items-center gap-3">
                   <XCircle size={26} className="text-rose-600 shrink-0" />
-                  <div className="font-bold text-rose-800">No factible para el {fmt(r.fecha_pedida)}</div>
+                  <div>
+                    <div className="font-bold text-rose-800">No factible para el {fmt(r.fecha_pedida)}</div>
+                    <div className="text-xs text-rose-700/90 mt-0.5">
+                      {r.motivo === 'cadena'
+                        ? 'La cadena de tareas no entra en ese plazo arrancando hoy.'
+                        : 'Ingeniería está saturada — ningún ingeniero tiene cupo para esa ventana.'}
+                    </div>
+                  </div>
                 </div>
                 <div className="ml-auto text-center bg-white rounded-lg border border-emerald-300 px-5 py-2">
                   <div className="text-[10px] uppercase tracking-wide text-emerald-600 font-semibold">Fecha factible</div>
@@ -70,9 +77,42 @@ export default function FactibilidadCheck({ onResult, fechaInicial }: { onResult
               </div>
             )}
 
-            <div className="flex items-start gap-2 text-[11px] text-amber-700 bg-amber-50/60 border border-amber-200 rounded-lg px-3 py-2">
-              <AlertTriangle size={13} className="shrink-0 mt-0.5" />
-              <span><b>Provisional.</b> Usa duraciones estándar; se afina al calibrar con el histórico. Es herramienta de decisión, no promesa.</span>
+            {/* Ingeniero propuesto (un ingeniero por proyecto) */}
+            {r.ingeniero_propuesto && (
+              <div className="flex items-center gap-2.5 rounded-xl border border-stone-200 bg-stone-50 px-4 py-2.5">
+                <User size={16} className="text-forest-600 shrink-0" />
+                <span className="text-sm text-stone-700">Ingeniero propuesto:</span>
+                <span className="text-sm font-bold text-stone-900">{r.ingeniero_propuesto}</span>
+                <span className={`ml-auto text-xs font-semibold px-2 py-0.5 rounded-full ${r.capacidad_ok ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>
+                  {r.capacidad_ok ? `con cupo · ${r.carga_pct}% de carga` : `sin cupo · ${r.carga_pct}% de carga`}
+                </span>
+              </div>
+            )}
+
+            {/* Ranking de carga por ingeniero en la ventana (como el Workload Schedule) */}
+            {r.cargas.length > 0 && (
+              <div className="rounded-xl border border-stone-200 overflow-hidden">
+                <div className="px-3 py-2 bg-stone-50 border-b border-stone-100 text-[11px] uppercase tracking-wide text-stone-400 font-semibold">
+                  Carga de ingeniería en la ventana{r.ventana_ing ? ` (${fmt(r.ventana_ing.inicio)} → ${fmt(r.ventana_ing.fin)})` : ''}
+                </div>
+                <div className="divide-y divide-stone-100">
+                  {r.cargas.map((c) => (
+                    <div key={c.nombre} className="flex items-center gap-3 px-3 py-1.5">
+                      <span className="text-sm text-stone-700 w-40 truncate">{c.nombre}</span>
+                      <div className="flex-1 h-2.5 rounded-full bg-stone-100 overflow-hidden">
+                        <div className={`h-full rounded-full ${c.disponible ? 'bg-emerald-400' : c.pico_pct >= 200 ? 'bg-rose-400' : 'bg-amber-400'}`}
+                          style={{ width: `${Math.min(100, c.pico_pct / 2)}%` }} />
+                      </div>
+                      <span className={`text-xs font-semibold w-14 text-right ${c.disponible ? 'text-emerald-700' : c.pico_pct >= 200 ? 'text-rose-700' : 'text-amber-700'}`}>{c.pico_pct}%</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <div className="flex items-start gap-2 text-[11px] text-stone-500 bg-stone-50 border border-stone-200 rounded-lg px-3 py-2">
+              <AlertTriangle size={13} className="shrink-0 mt-0.5 text-amber-600" />
+              <span>Propuesta del sistema (un ingeniero por proyecto, una tarea a la vez). El PM ve el plan completo y ajusta fechas y duraciones antes de proponerlo.</span>
             </div>
           </div>
         )}

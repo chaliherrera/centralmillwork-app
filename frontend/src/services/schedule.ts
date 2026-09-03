@@ -57,14 +57,18 @@ export interface TrabajoProyecto {
   hitos: TrabajoHito[]
 }
 
+export interface CargaIngeniero { nombre: string; pico_pct: number; disponible: boolean }
 export interface FactibilidadResult {
   fecha_pedida: string
   factible: boolean
   fecha_real_mas_temprana: string
   dias_slip: number
-  cuello: { recurso: string; tarea: string; ocupado_hasta: string; libre_para_bloque: string } | null
-  fecha_inicio_requerida: string | null
-  ventanas: { codigo: string; nombre: string; fase: string; fecha: string | null }[]
+  ingeniero_propuesto: string | null
+  carga_pct: number | null
+  capacidad_ok: boolean
+  ventana_ing: { inicio: string; fin: string } | null
+  cargas: CargaIngeniero[]
+  motivo: 'ok' | 'cadena' | 'capacidad'
   provisional: true
 }
 
@@ -95,9 +99,10 @@ export const scheduleService = {
   getPlan: (proyectoId: number) =>
     api.get<ApiResponse<ScheduleData>>(`/schedule/proyecto/${proyectoId}`).then((r) => r.data),
 
-  // Chequeo de factibilidad (read-only): ¿se puede entregar para tal fecha?
-  getFactibilidad: (fecha_pedida: string) =>
-    api.post<ApiResponse<FactibilidadResult>>(`/schedule/factibilidad`, { fecha_pedida }).then((r) => r.data),
+  // Chequeo de factibilidad (read-only): ¿se puede entregar para tal fecha? + ingeniero disponible.
+  // proyecto_id escala las duraciones por ítem (mismo criterio que el generador).
+  getFactibilidad: (fecha_pedida: string, proyecto_id?: number) =>
+    api.post<ApiResponse<FactibilidadResult>>(`/schedule/factibilidad`, { fecha_pedida, proyecto_id }).then((r) => r.data),
 
   // Escritorio por área: la frontera del equipo a través de todos los proyectos.
   getMiTrabajo: (area: string) =>

@@ -198,7 +198,7 @@ export default function EstimadosWizard() {
               <h3 className="font-bold text-stone-800">¿Se puede cumplir la fecha?</h3>
               <p className="text-sm text-stone-500">Ingresá la fecha que pide el cliente: el sistema te dice si entra y el mapa de etapas te muestra dónde hay lugar en la agenda. Es tu elemento de negociación.</p>
             </div>
-            <FactibilidadCheck fechaInicial={fechaSolicitada || sel?.fecha_entrega_solicitada?.slice(0, 10) || ''} onResult={(f, r) => {
+            <FactibilidadCheck proyectoId={sel?.id} fechaInicial={fechaSolicitada || sel?.fecha_entrega_solicitada?.slice(0, 10) || ''} onResult={(f, r) => {
               setFechaSolicitada(f); setFactRes(r)
               setFechaComprometida(r.factible ? f : r.fecha_real_mas_temprana)
             }} />
