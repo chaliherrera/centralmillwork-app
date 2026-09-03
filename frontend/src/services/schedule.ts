@@ -57,18 +57,17 @@ export interface TrabajoProyecto {
   hitos: TrabajoHito[]
 }
 
-export interface CargaIngeniero { nombre: string; pico_pct: number; disponible: boolean }
+export interface RankingIng { nombre: string; hace_cnc: boolean; disponible_desde: string; n_pendientes: number; fin_proyectado: string; entra: boolean }
 export interface FactibilidadResult {
   fecha_pedida: string
   factible: boolean
   fecha_real_mas_temprana: string
   dias_slip: number
   ingeniero_propuesto: string | null
-  carga_pct: number | null
-  capacidad_ok: boolean
+  disponible_desde: string
   ventana_ing: { inicio: string; fin: string } | null
-  cargas: CargaIngeniero[]
-  motivo: 'ok' | 'cadena' | 'capacidad'
+  ranking: RankingIng[]
+  motivo: 'ok' | 'cadena' | 'capacidad' | 'sin_ingenieros'
   provisional: true
 }
 

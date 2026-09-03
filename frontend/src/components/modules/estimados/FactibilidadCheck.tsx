@@ -65,8 +65,10 @@ export default function FactibilidadCheck({ onResult, fechaInicial, proyectoId }
                     <div className="font-bold text-rose-800">No factible para el {fmt(r.fecha_pedida)}</div>
                     <div className="text-xs text-rose-700/90 mt-0.5">
                       {r.motivo === 'cadena'
-                        ? 'La cadena de tareas no entra en ese plazo arrancando hoy.'
-                        : 'Ingeniería está saturada — ningún ingeniero tiene cupo para esa ventana.'}
+                        ? 'La cadena de tareas no entra en ese plazo, ni con un ingeniero libre hoy.'
+                        : r.motivo === 'sin_ingenieros'
+                          ? 'No hay ingenieros activos para asignar.'
+                          : 'Los ingenieros están ocupados — el que se libera antes no llega a esa fecha.'}
                     </div>
                   </div>
                 </div>
@@ -77,33 +79,33 @@ export default function FactibilidadCheck({ onResult, fechaInicial, proyectoId }
               </div>
             )}
 
-            {/* Ingeniero propuesto (un ingeniero por proyecto) */}
+            {/* Ingeniero propuesto (un ingeniero por proyecto): el que se libera antes */}
             {r.ingeniero_propuesto && (
               <div className="flex items-center gap-2.5 rounded-xl border border-stone-200 bg-stone-50 px-4 py-2.5">
                 <User size={16} className="text-forest-600 shrink-0" />
                 <span className="text-sm text-stone-700">Ingeniero propuesto:</span>
                 <span className="text-sm font-bold text-stone-900">{r.ingeniero_propuesto}</span>
-                <span className={`ml-auto text-xs font-semibold px-2 py-0.5 rounded-full ${r.capacidad_ok ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>
-                  {r.capacidad_ok ? `con cupo · ${r.carga_pct}% de carga` : `sin cupo · ${r.carga_pct}% de carga`}
+                <span className="ml-auto text-xs font-semibold px-2 py-0.5 rounded-full bg-forest-100 text-forest-700">
+                  se libera el {fmt(r.disponible_desde)}
                 </span>
               </div>
             )}
 
-            {/* Ranking de carga por ingeniero en la ventana (como el Workload Schedule) */}
-            {r.cargas.length > 0 && (
+            {/* Ranking: quién se libera antes (la cola de cada ingeniero) */}
+            {r.ranking.length > 0 && (
               <div className="rounded-xl border border-stone-200 overflow-hidden">
                 <div className="px-3 py-2 bg-stone-50 border-b border-stone-100 text-[11px] uppercase tracking-wide text-stone-400 font-semibold">
-                  Carga de ingeniería en la ventana{r.ventana_ing ? ` (${fmt(r.ventana_ing.inicio)} → ${fmt(r.ventana_ing.fin)})` : ''}
+                  Ingenieros — quién se libera antes
                 </div>
                 <div className="divide-y divide-stone-100">
-                  {r.cargas.map((c) => (
-                    <div key={c.nombre} className="flex items-center gap-3 px-3 py-1.5">
-                      <span className="text-sm text-stone-700 w-40 truncate">{c.nombre}</span>
-                      <div className="flex-1 h-2.5 rounded-full bg-stone-100 overflow-hidden">
-                        <div className={`h-full rounded-full ${c.disponible ? 'bg-emerald-400' : c.pico_pct >= 200 ? 'bg-rose-400' : 'bg-amber-400'}`}
-                          style={{ width: `${Math.min(100, c.pico_pct / 2)}%` }} />
-                      </div>
-                      <span className={`text-xs font-semibold w-14 text-right ${c.disponible ? 'text-emerald-700' : c.pico_pct >= 200 ? 'text-rose-700' : 'text-amber-700'}`}>{c.pico_pct}%</span>
+                  {r.ranking.map((e, i) => (
+                    <div key={e.nombre} className={`flex items-center gap-3 px-3 py-1.5 ${i === 0 ? 'bg-forest-50/40' : ''}`}>
+                      <span className="text-sm text-stone-800 flex-1 truncate">{e.nombre}{i === 0 ? ' · propuesto' : ''}</span>
+                      <span className="text-xs text-stone-500 w-28 text-right">se libera {fmt(e.disponible_desde)}</span>
+                      <span className="text-[11px] text-stone-400 w-20 text-right">{e.n_pendientes} pend.</span>
+                      <span className={`text-[11px] font-semibold w-16 text-center rounded-full px-1.5 py-0.5 ${e.entra ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>
+                        {e.entra ? 'entra' : 'no entra'}
+                      </span>
                     </div>
                   ))}
                 </div>
