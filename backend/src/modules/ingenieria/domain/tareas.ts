@@ -32,6 +32,7 @@ export interface Tarea {
   fecha_fin: string | null
   fecha_compromiso: string | null   // patrón "comprometida + cumplida": cuándo se hará
   fecha_fin_real: string | null     // cuándo se cumplió realmente
+  no_antes_de: string | null        // piso explícito (planificador: disponibilidad del ingeniero)
   estado: string
   status_ext: string | null
   comentario: string | null
@@ -86,6 +87,7 @@ export async function listTareas(runner: QueryRunner, proyectoExt?: string): Pro
             to_char(t.fecha_fin,'YYYY-MM-DD') AS fecha_fin,
             to_char(t.fecha_compromiso,'YYYY-MM-DD') AS fecha_compromiso,
             to_char(t.fecha_fin_real,'YYYY-MM-DD') AS fecha_fin_real,
+            to_char(t.no_antes_de,'YYYY-MM-DD') AS no_antes_de,
             t.estado, t.status_ext, t.comentario, t.reprogramacion_pedida, t.reprogramacion_motivo,
             t.decision, t.decision_comentarios, t.envio_metodo
        FROM ing_tareas t
@@ -309,7 +311,7 @@ export async function getPlanProyecto(runner: QueryRunner, proyectoExt: string):
   let finProyectado: string | null = null, holguraProyecto = 0, enRiesgo = false
   if (h.ini && h.entrega) {
     const feriados = await loadFeriados(runner)
-    const cpmTareas: TareaCPM[] = tareas.map((t) => ({ id: t.id, dur: t.dur_dias, noAntesDe: pisoTarea(depClave.get(t.id) ?? null, deposito, compras) }))
+    const cpmTareas: TareaCPM[] = tareas.map((t) => ({ id: t.id, dur: t.dur_dias, noAntesDe: pisoTarea(depClave.get(t.id) ?? null, deposito, compras, t.no_antes_de) }))
     // Las aristas se mantienen SIEMPRE; el candado del PM actúa por el piso "no antes de"
     // de material_deposit (fecha de apertura), no borrando la dependencia. La marca
     // ignorada_at se sigue devolviendo (abajo) para dibujar el gate abierto en la UI.
@@ -342,10 +344,14 @@ export async function getPlanProyecto(runner: QueryRunner, proyectoExt: string):
  *   · material_deposit → resolución del depósito (pago de Finanzas o apertura del candado).
  *   · long_leads       → fecha de la 1ª OC emitida (long leads ORDENADOS, del módulo de
  *     Compras). Si se ordena tarde, empuja; si aún no se ordenó, no ancla (plan estimado). */
-function pisoTarea(tipoClave: string | null, deposito: EstadoDeposito, compras: EstadoCompras): string | undefined {
-  if (tipoClave === 'material_deposit') return deposito.fecha_resolucion ?? undefined
-  if (tipoClave === 'long_leads') return compras.fecha_primera_oc ?? undefined
-  return undefined
+function pisoTarea(tipoClave: string | null, deposito: EstadoDeposito, compras: EstadoCompras, noAntesDe?: string | null): string | undefined {
+  // Puede haber más de un piso (hecho del módulo + piso explícito de la cola del
+  // ingeniero). Gana el MÁS TARDÍO (comparación de fechas ISO = orden lexicográfico).
+  const pisos: string[] = []
+  if (tipoClave === 'material_deposit' && deposito.fecha_resolucion) pisos.push(deposito.fecha_resolucion)
+  if (tipoClave === 'long_leads' && compras.fecha_primera_oc) pisos.push(compras.fecha_primera_oc)
+  if (noAntesDe) pisos.push(noAntesDe)
+  return pisos.length ? pisos.reduce((a, b) => (a > b ? a : b)) : undefined
 }
 
 /** Recalcula el CPM (con candado del PM + piso del depósito) y GUARDA fecha_inicio/fin de
@@ -432,7 +438,7 @@ export async function recomputarYGuardar(runner: QueryRunner, proyectoExt: strin
   const compras = await estadoCompras(runner, proyectoExt)
   const clave = new Map(tareas.map((t) => [t.id, t.tipo_clave]))
   const feriados = await loadFeriados(runner)
-  const cpmTareas: TareaCPM[] = tareas.map((t) => ({ id: t.id, dur: t.dur_dias, noAntesDe: pisoTarea(clave.get(t.id) ?? null, deposito, compras) }))
+  const cpmTareas: TareaCPM[] = tareas.map((t) => ({ id: t.id, dur: t.dur_dias, noAntesDe: pisoTarea(clave.get(t.id) ?? null, deposito, compras, t.no_antes_de) }))
   const aristas: AristaCPM[] = deps.map((d) => ({ tareaId: d.tarea_id, dependeDeId: d.depende_de_id, lag: d.lag_dias, tipo: d.tipo === 'SS' ? 'SS' : 'FS' }))
   try {
     const r = calcularHolgura(cpmTareas, aristas, h.ini, h.entrega, feriados)
