@@ -12,37 +12,32 @@
 
 import type { PoolClient } from 'pg'
 import pool from '../../../db/pool'
-import { calcularHolgura, TareaCPM, AristaCPM } from './holgura'
-import { proponerIngeniero } from './reservas'
 import { recomputarYGuardar } from './tareas'
 import { loadFeriados } from '../../schedule/domain/calendario'
+import { cargarPlantillaRuta, cargarColaIngenieros, ubicarProyecto, ROLES_INGENIERO, type Ubicacion } from './planificador'
 
 type QueryRunner = PoolClient | typeof pool
-const STONE_CLAVES = ['stone_measure', 'stone_fab', 'stone_install']
 
 function hoyISO(): string { return new Date().toISOString().slice(0, 10) }
 
 export async function generarPlanIngenieria(
-  runner: QueryRunner, proyectoId: number, opts?: { origen?: string; fechaInicio?: string }
-): Promise<{ creadas: number; error?: string }> {
+  runner: QueryRunner, proyectoId: number, opts?: { origen?: string }
+): Promise<{ creadas: number; error?: string; ubicacion?: Ubicacion }> {
   const origen = opts?.origen ?? 'app'
-  const { rows: pr } = await runner.query<{ codigo: string; items_qty: number | null; presupuesto: number | null; stone_total: number | null; fecha_objetivo: string | null }>(
+  const { rows: pr } = await runner.query<{ codigo: string; items_qty: number | null; presupuesto: number | null; stone_total: number | null; incluye: boolean; fecha_objetivo: string | null }>(
     `SELECT p.codigo, p.items_qty, p.presupuesto, p.stone_total,
+            COALESCE(p.incluye_instalacion, TRUE) AS incluye,
             to_char(sp.fecha_objetivo,'YYYY-MM-DD') AS fecha_objetivo
        FROM proyectos p
        LEFT JOIN schedule_planes sp ON sp.proyecto_id = p.id AND sp.scope = 'proyecto'
       WHERE p.id = $1`, [proyectoId])
   if (!pr[0]) return { creadas: 0, error: 'proyecto no encontrado' }
-  const { codigo, items_qty, presupuesto, stone_total, fecha_objetivo } = pr[0]
+  const { codigo, items_qty, presupuesto, stone_total, incluye, fecha_objetivo } = pr[0]
   if (!fecha_objetivo) return { creadas: 0, error: 'el proyecto no tiene fecha comprometida' }
   const proyectoExt = codigo
   const hayStone = stone_total != null && Number(stone_total) > 0
-  const fechaInicio = opts?.fechaInicio || hoyISO()
-
-  // ¿El proyecto lleva instalación? (paso 15 condicional; Digney York = false)
-  const { rows: instRows } = await runner.query<{ incluye: boolean }>(
-    `SELECT COALESCE(incluye_instalacion, TRUE) AS incluye FROM proyectos WHERE id = $1`, [proyectoId])
-  const incluyeInstalacion = instRows[0]?.incluye ?? true
+  const incluyeInstalacion = incluye ?? true
+  const diaCero = hoyISO()   // provisional; se re-ancla a la firma del contrato
 
   // No pisar un plan REAL ya existente (importado del Excel o aceptado por el PM = 'app')
   const { rows: ex } = await runner.query<{ n: number }>(
@@ -52,87 +47,46 @@ export async function generarPlanIngenieria(
   // Idempotente: borra el plan BLANDO previo (sugerencia/reserva); nunca toca 'app'/'import_excel'
   await runner.query(`DELETE FROM ing_tareas WHERE proyecto_ext = $1 AND origen IN ('sugerencia','reserva')`, [proyectoExt])
 
-  // Tipos a generar. Reglas de inclusión:
-  //  · shipment: SÍ (rol logistica, entre fabricación e instalación — reincorporado migr. 071)
-  //  · stone_*: solo si el proyecto tiene piedra (stone_total > 0)
-  //  · installation: solo si el proyecto lleva instalación
-  const { rows: tipos } = await runner.query<{ id: number; clave: string; nombre: string; rol: string | null; dur_dias_tipico: number | null; dias_por_item: number | null }>(
-    `SELECT id, clave, nombre, rol, dur_dias_tipico, dias_por_item FROM ing_tarea_tipos`)
-  const incluir = tipos.filter((t) =>
-    (hayStone || !STONE_CLAVES.includes(t.clave)) &&
-    (incluyeInstalacion || t.clave !== 'installation'))
-  if (!incluir.length) return { creadas: 0, error: 'catálogo de tipos vacío' }
-  const rolPorClave = new Map(incluir.map((t) => [t.clave, t.rol]))
+  // ── FUENTE ÚNICA: el planificador decide ingeniero + fechas (misma lógica que la
+  //    factibilidad). El plan de ingeniería arranca cuando el ingeniero se LIBERA (cola
+  //    serial), no hoy; el día cero (contrato) queda en `diaCero` y se persiste el piso.
+  const feriados = await loadFeriados(runner)
+  const plantilla = await cargarPlantillaRuta(runner, { itemsQty: items_qty, hayStone, incluyeInstalacion })
+  if (!plantilla.pasos.length) return { creadas: 0, error: 'catálogo de tipos vacío' }
+  const colas = await cargarColaIngenieros(runner, { excluirProyectoExt: proyectoExt })
+  const u = ubicarProyecto(plantilla, colas, { hoy: diaCero, diaCero, fechaEntrega: fecha_objetivo, feriados })
 
-  // Encabezado del proyecto de ingeniería (fecha fija + inicio provisional = original)
+  // Encabezado (día cero = hoy; fecha_entrega fija). El re-anclaje moverá SOLO el día cero.
   await runner.query(
     `INSERT INTO ing_proyectos (proyecto_ext, proyecto_id, fecha_inicio, fecha_entrega, fecha_inicio_original, n_items, presupuesto, origen)
        VALUES ($1,$2,$3,$4,$3,$5,$6,$7)
      ON CONFLICT (proyecto_ext) DO UPDATE SET proyecto_id=EXCLUDED.proyecto_id, fecha_inicio=EXCLUDED.fecha_inicio,
        fecha_entrega=EXCLUDED.fecha_entrega, fecha_inicio_original=EXCLUDED.fecha_inicio_original,
        n_items=EXCLUDED.n_items, presupuesto=EXCLUDED.presupuesto, origen=EXCLUDED.origen, updated_at=NOW()`,
-    [proyectoExt, proyectoId, fechaInicio, fecha_objetivo, items_qty, presupuesto, origen])
+    [proyectoExt, proyectoId, diaCero, fecha_objetivo, items_qty, presupuesto, origen])
 
-  // Crear las tareas (sin asignado; se propone después con sus fechas)
+  // Tareas con las fechas del planificador. A las de INGENIERÍA (rol ingenieria/field) se
+  // les asigna el ingeniero elegido y su piso `no_antes_de` = cuándo se libera (para que
+  // el recompute reproduzca la ubicación y el re-anclaje no la borre). allocation_pct = 1.0.
   const idPorClave = new Map<string, number>()
-  const durPorClave = new Map<string, number>()
-  for (const t of incluir) {
-    // Milestones (dur_dias_tipico = 0: PO, depósito, aprobación, release) quedan en 0
-    // días = mismo día (el CPM lo soporta). Las tareas con días-por-ítem ≥ 1.
-    let dur = Math.max(0, t.dur_dias_tipico ?? 3)
-    if (items_qty != null && items_qty > 0 && t.dias_por_item != null && Number(t.dias_por_item) > 0)
-      dur = Math.max(1, Math.round(items_qty * Number(t.dias_por_item)))
-    // allocation_pct default = 0.5 (50%): un ingeniero puede llevar ~2 proyectos a la vez.
-    // Es un BORRADOR — el PM lo ajusta por tarea según el tamaño real (como en Smartsheet).
+  for (const fp of u.fechas.values()) {
+    const esIng = ROLES_INGENIERO.has(fp.rol ?? '')
     const { rows } = await runner.query<{ id: number }>(
-      `INSERT INTO ing_tareas (proyecto_ext, proyecto_id, tipo_id, nombre, allocation_pct, dur_dias, estado, origen)
-         VALUES ($1,$2,$3,$4,0.5,$5,'pendiente',$6) RETURNING id`,
-      [proyectoExt, proyectoId, t.id, t.nombre, dur, origen])
-    idPorClave.set(t.clave, rows[0].id)
-    durPorClave.set(t.clave, dur)
+      `INSERT INTO ing_tareas (proyecto_ext, proyecto_id, tipo_id, nombre, asignado_nombre, allocation_pct, dur_dias, fecha_inicio, fecha_fin, no_antes_de, estado, origen)
+         VALUES ($1,$2,$3,$4,$5,1.0,$6,$7,$8,$9,'pendiente',$10) RETURNING id`,
+      [proyectoExt, proyectoId, fp.tipoId, fp.nombre, esIng ? u.ingeniero : null, fp.dur, fp.es, fp.ef, esIng ? u.disponible_desde : null, origen])
+    idPorClave.set(fp.clave, rows[0].id)
   }
 
-  // Dependencias desde la plantilla (solo entre tipos generados)
-  const { rows: tdeps } = await runner.query<{ tipo_clave: string; depende_de_clave: string; tipo: string; lag_dias: number }>(
-    `SELECT tipo_clave, depende_de_clave, tipo, lag_dias FROM ing_tipo_deps`)
-  const aristas: AristaCPM[] = []
-  for (const dep of tdeps) {
-    const tId = idPorClave.get(dep.tipo_clave), dId = idPorClave.get(dep.depende_de_clave)
-    if (tId && dId) {
-      await runner.query(
-        `INSERT INTO ing_tarea_deps (tarea_id, depende_de_id, tipo, lag_dias) VALUES ($1,$2,$3,$4) ON CONFLICT (tarea_id,depende_de_id) DO NOTHING`,
-        [tId, dId, dep.tipo, dep.lag_dias])
-      aristas.push({ tareaId: tId, dependeDeId: dId, lag: dep.lag_dias, tipo: dep.tipo === 'SS' ? 'SS' : 'FS' })
-    }
+  // Dependencias (de la plantilla, solo entre tipos generados)
+  for (const a of plantilla.aristas) {
+    const tId = idPorClave.get(a.clave), dId = idPorClave.get(a.dependeDe)
+    if (tId && dId) await runner.query(
+      `INSERT INTO ing_tarea_deps (tarea_id, depende_de_id, tipo, lag_dias) VALUES ($1,$2,$3,$4) ON CONFLICT (tarea_id,depende_de_id) DO NOTHING`,
+      [tId, dId, a.tipo, a.lag])
   }
 
-  // Fechas por CPM (early schedule) → se guardan para el heatmap
-  const feriados = await loadFeriados(runner)
-  const cpmTareas: TareaCPM[] = [...idPorClave.entries()].map(([clave, id]) => ({ id, dur: durPorClave.get(clave)! }))
-  try {
-    const r = calcularHolgura(cpmTareas, aristas, fechaInicio, fecha_objetivo, feriados)
-    for (const [, id] of idPorClave) {
-      const c = r.tareas.get(id)
-      if (c) await runner.query(`UPDATE ing_tareas SET fecha_inicio=$2, fecha_fin=$3 WHERE id=$1`, [id, c.earlyStart, c.earlyFinish])
-    }
-  } catch { /* ciclo improbable: el plan queda sin fechas, pero existe */ }
-
-  // UN SOLO INGENIERO por proyecto (decisión de Chali): el mismo ingeniero hace las
-  // tareas de ingeniería y PROGRAMA la medición de campo (paso 10, rol 'field', dentro
-  // de su ventana 2-13). Propuesto una vez sobre esa ventana. El PM confirma o cambia.
-  // Las demás áreas (compras, producción, instalación, externo) quedan sin asignar.
-  const ROLES_INGENIERO = new Set(['ingenieria', 'field'])
-  const clavesIng = [...idPorClave.keys()].filter((c) => ROLES_INGENIERO.has(rolPorClave.get(c) ?? ''))
-  if (clavesIng.length) {
-    const idsIng = clavesIng.map((c) => idPorClave.get(c)!)
-    const { rows: span } = await runner.query<{ ini: string | null; fin: string | null }>(
-      `SELECT to_char(MIN(fecha_inicio),'YYYY-MM-DD') ini, to_char(MAX(fecha_fin),'YYYY-MM-DD') fin
-         FROM ing_tareas WHERE id = ANY($1)`, [idsIng])
-    const ing = await proponerIngeniero(runner, span[0]?.ini ?? fechaInicio, span[0]?.fin ?? fecha_objetivo)
-    if (ing) await runner.query(`UPDATE ing_tareas SET asignado_nombre=$2 WHERE id = ANY($1)`, [idsIng, ing])
-  }
-
-  return { creadas: incluir.length }
+  return { creadas: u.fechas.size, ubicacion: u }
 }
 
 /** El PM ACEPTA el plan sugerido: lo endurece (origen 'sugerencia' → 'app') preservando

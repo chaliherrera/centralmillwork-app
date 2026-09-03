@@ -30,7 +30,7 @@ export interface PlantillaRuta { pasos: PasoRuta[]; aristas: AristaRuta[] }
 
 export interface ColaIngeniero { nombre: string; hace_cnc: boolean; n_pendientes: number; fin_ultima: ISODate | null }
 
-export interface FechaPaso { clave: string; es: ISODate; ef: ISODate; rol: string | null; tipoId: number; dur: number }
+export interface FechaPaso { clave: string; nombre: string; es: ISODate; ef: ISODate; rol: string | null; tipoId: number; dur: number }
 export interface RankingIng { nombre: string; hace_cnc: boolean; disponible_desde: ISODate; n_pendientes: number; fin_proyectado: ISODate; entra: boolean }
 export interface Ubicacion {
   ingeniero: string | null            // null si no hay ingenieros activos
@@ -112,7 +112,7 @@ function fechasDe(pasos: PasoRuta[], res: HolguraProyecto, idPorClave: Map<strin
   const m = new Map<string, FechaPaso>()
   for (const x of pasos) {
     const c = res.tareas.get(idPorClave.get(x.clave)!)
-    if (c) m.set(x.clave, { clave: x.clave, es: c.earlyStart, ef: c.earlyFinish, rol: x.rol, tipoId: x.tipoId, dur: x.dur })
+    if (c) m.set(x.clave, { clave: x.clave, nombre: x.nombre, es: c.earlyStart, ef: c.earlyFinish, rol: x.rol, tipoId: x.tipoId, dur: x.dur })
   }
   return m
 }
