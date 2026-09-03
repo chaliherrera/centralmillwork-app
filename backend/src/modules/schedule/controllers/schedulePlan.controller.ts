@@ -16,12 +16,27 @@ import { getTrabajoPorArea } from '../domain/trabajo'
 import { chequearFactibilidad } from '../domain/factibilidad'
 import { recomputarYGuardar } from '../../ingenieria/domain/tareas'
 
-// POST /api/schedule/factibilidad  { fecha_pedida: 'YYYY-MM-DD' }  (read-only, dry-run)
+// POST /api/schedule/factibilidad  { fecha_pedida, proyecto_id? | items_qty? }  (read-only, dry-run)
+// Los ítems escalan las duraciones (mismo criterio que el generador). Si viene
+// proyecto_id, se leen ítems/stone/instalación de la base (fuente única).
 export async function factibilidadHandler(req: Request, res: Response, next: NextFunction) {
   try {
     const fecha = String(req.body?.fecha_pedida ?? '')
     if (!/^\d{4}-\d{2}-\d{2}$/.test(fecha)) return next(createError('fecha_pedida inválida (YYYY-MM-DD)', 400))
-    res.json({ data: await chequearFactibilidad(pool, fecha) })
+    let itemsQty: number | null = req.body?.items_qty != null ? Number(req.body.items_qty) : null
+    let hayStone = !!req.body?.hay_stone
+    let incluyeInstalacion = req.body?.incluye_instalacion !== false
+    const pid = req.body?.proyecto_id != null ? parseInt(String(req.body.proyecto_id), 10) : NaN
+    if (!Number.isNaN(pid)) {
+      const { rows } = await pool.query<{ items_qty: number | null; stone_total: number | null; incluye_instalacion: boolean | null }>(
+        `SELECT items_qty, stone_total, COALESCE(incluye_instalacion, TRUE) AS incluye_instalacion FROM proyectos WHERE id = $1`, [pid])
+      if (rows[0]) {
+        itemsQty = rows[0].items_qty
+        hayStone = rows[0].stone_total != null && Number(rows[0].stone_total) > 0
+        incluyeInstalacion = rows[0].incluye_instalacion ?? true
+      }
+    }
+    res.json({ data: await chequearFactibilidad(pool, fecha, { itemsQty, hayStone, incluyeInstalacion }) })
   } catch (e) { next(e) }
 }
 
