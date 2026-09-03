@@ -162,6 +162,7 @@ export interface EscritorioTarea {
   reprogramacion_pedida: boolean; reprogramacion_motivo: string | null
 }
 export interface EscritorioResp { tareas: EscritorioTarea[]; bloqueadas: number }
+export interface Ingeniero { nombre: string; activo: boolean; hace_cnc: boolean; usuario_id: string | null; tareas_activas: number }
 export interface IngPlan {
   proyecto_ext: string
   fecha_inicio: string | null
@@ -250,6 +251,11 @@ export const ingenieriaService = {
     api.get<ApiResponse<InstalacionDetalle>>(`/ingenieria/proyecto/${encodeURIComponent(proyectoExt)}/instalacion-detalle`).then((r) => r.data),
   escritorio: (params?: { rol?: string; asignado?: string }) =>
     api.get<ApiResponse<EscritorioResp>>('/ingenieria/escritorio', { params }).then((r) => r.data),
+  // Gestión de ingenieros (el PM administra el recurso: activo / hace_cnc).
+  getIngenieros: () =>
+    api.get<ApiResponse<Ingeniero[]>>('/ingenieria/ingenieros').then((r) => r.data),
+  updateIngeniero: (nombre: string, campos: { activo?: boolean; hace_cnc?: boolean }) =>
+    api.patch<ApiResponse<{ ok: boolean }>>('/ingenieria/ingenieros', { nombre, ...campos }).then((r) => r.data),
   borrarTarea: (id: number) =>
     api.delete<ApiResponse<{ ok: boolean; reconectadas: number }>>(`/ingenieria/tareas/${id}`).then((r) => r.data),
 

@@ -9,6 +9,7 @@ import {
   dealsEnCursoHandler, enviarClienteHandler, clienteAproboHandler, activarProyectoHandler,
   overrideDepositoHandler, reprogramacionesHandler, depositosBloqueandoHandler, muestrasEstadoHandler,
   comprasEstadoHandler, instalacionDetalleHandler, escritorioHandler,
+  ingenierosHandler, actualizarIngenieroHandler,
 } from './controllers/ingenieria.controller'
 
 const router = Router()
@@ -36,6 +37,9 @@ router.get('/compras-estado', READ, comprasEstadoHandler)  // estado de compras 
 const ESCRITORIO = requireRole('ADMIN', 'PROJECT_MANAGEMENT', 'ENGINEERING', 'PROCUREMENT', 'PRODUCTION', 'SHOP_MANAGER', 'LOGISTICA', 'CONTABILIDAD', 'FIELD')
 router.get('/escritorio', ESCRITORIO, escritorioHandler)
 router.get('/proyecto/:ext/instalacion-detalle', READ, instalacionDetalleHandler)  // ítem×ítem + punch → panel del PM (#15)
+// Gestión de ingenieros (fuente de verdad de quién está activo). Ver = READ; administrar = PM.
+router.get('/ingenieros', READ, ingenierosHandler)
+router.patch('/ingenieros', PM, actualizarIngenieroHandler)
 // Estructura del plan = PM (gestión de recursos)
 router.post('/tareas', PM, crearTareaHandler)
 router.patch('/tareas/:id', PM, actualizarTareaHandler)

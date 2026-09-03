@@ -1,11 +1,12 @@
 import { useState } from 'react'
-import { ClipboardList, Inbox, Gauge } from 'lucide-react'
+import { ClipboardList, Inbox, Gauge, Users } from 'lucide-react'
 import MiTrabajo from '@/components/modules/schedule/MiTrabajo'
 import ReservasPendientes from '@/components/modules/estimados/ReservasPendientes'
 import DealsEnCurso from '@/components/modules/estimados/DealsEnCurso'
 import ReprogramacionesPendientes from '@/components/modules/ingenieria/ReprogramacionesPendientes'
 import DepositosBloqueando from '@/components/modules/ingenieria/DepositosBloqueando'
 import MapaEtapas from '@/components/modules/ingenieria/MapaEtapas'
+import GestionIngenieros from '@/components/modules/ingenieria/GestionIngenieros'
 import IngenieriaPlan from './IngenieriaPlan'
 
 // Escritorio del PM. El PM es el dueño del recurso Ingeniería: acá tiene su bandeja
@@ -13,7 +14,7 @@ import IngenieriaPlan from './IngenieriaPlan'
 // plan por proyecto, asignación). "Revisar plan" desde la bandeja abre el plan del
 // proyecto para podar/asignar antes de aceptar.
 export default function ProjectMgmt() {
-  const [tab, setTab] = useState<'bandeja' | 'plan'>('bandeja')
+  const [tab, setTab] = useState<'bandeja' | 'plan' | 'ingenieros'>('bandeja')
   const [revisarProy, setRevisarProy] = useState<string | undefined>()
   const goPlan = () => { setRevisarProy(undefined); setTab('plan') }
   const onRevisar = (ext: string) => { setRevisarProy(ext); setTab('plan') }
@@ -35,10 +36,11 @@ export default function ProjectMgmt() {
         <div className="inline-flex rounded-xl border border-stone-200 bg-white p-1 text-sm">
           <button onClick={() => setTab('bandeja')} className={tabCls('bandeja')}><Inbox size={15} /> Bandeja</button>
           <button onClick={goPlan} className={tabCls('plan')}><Gauge size={15} /> Plan de Ingeniería</button>
+          <button onClick={() => setTab('ingenieros')} className={tabCls('ingenieros')}><Users size={15} /> Ingenieros</button>
         </div>
       </div>
 
-      {tab === 'bandeja' ? (
+      {tab === 'bandeja' && (
         <div className="max-w-3xl mx-auto space-y-5 mt-4">
           <DepositosBloqueando onRevisar={onRevisar} />
           <ReprogramacionesPendientes onRevisar={onRevisar} />
@@ -46,7 +48,8 @@ export default function ProjectMgmt() {
           <DealsEnCurso mode="pm" />
           <MiTrabajo area="pm" emptyMsg="El PM no tiene nada pendiente ahora mismo. 🎉" />
         </div>
-      ) : (
+      )}
+      {tab === 'plan' && (
         <div className="mt-4 space-y-4">
           {revisarProy && (
             <div className="max-w-[1180px] mx-auto">
@@ -55,6 +58,11 @@ export default function ProjectMgmt() {
             </div>
           )}
           <IngenieriaPlan embedded initialProyecto={revisarProy} initialMode={revisarProy ? 'proyecto' : undefined} />
+        </div>
+      )}
+      {tab === 'ingenieros' && (
+        <div className="max-w-3xl mx-auto mt-4">
+          <GestionIngenieros />
         </div>
       )}
     </div>

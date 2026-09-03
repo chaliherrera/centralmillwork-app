@@ -13,6 +13,7 @@ import {
   reabrirShopDrawingsPorRechazo, cerrarGatePorAprobacion, cerrarReleasePorSdUpdate,
 } from '../domain/tareas'
 import { listReservasPendientes, liberarReserva } from '../domain/reservas'
+import { listIngenieros, actualizarIngeniero } from '../domain/ingenieros'
 import {
   generarPlanIngenieria, aceptarPlanPM,
   enviarAClienteDeal, registrarAprobacionCliente, activarProyecto, listDealsEnCurso,
@@ -411,4 +412,21 @@ export async function overrideDepositoHandler(req: Request, res: Response, next:
     await client.query('COMMIT')
     res.json({ data: estado, message: abrir ? 'Gate del depósito abierto' : 'Gate del depósito cerrado' })
   } catch (e) { await client.query('ROLLBACK').catch(() => {}); next(e) } finally { client.release() }
+}
+
+// ── Gestión de ingenieros (el PM administra el recurso) ──
+export async function ingenierosHandler(_req: Request, res: Response, next: NextFunction) {
+  try { res.json({ data: await listIngenieros(pool) }) } catch (e) { next(e) }
+}
+export async function actualizarIngenieroHandler(req: Request, res: Response, next: NextFunction) {
+  try {
+    const nombre = typeof req.body?.nombre === 'string' ? req.body.nombre : ''
+    if (!nombre) return next(createError('nombre requerido', 400))
+    const campos: { activo?: boolean; hace_cnc?: boolean } = {}
+    if (typeof req.body?.activo === 'boolean') campos.activo = req.body.activo
+    if (typeof req.body?.hace_cnc === 'boolean') campos.hace_cnc = req.body.hace_cnc
+    const ok = await actualizarIngeniero(pool, nombre, campos)
+    if (!ok) return next(createError('ingeniero no encontrado o sin cambios', 404))
+    res.json({ data: { ok: true }, message: 'Ingeniero actualizado' })
+  } catch (e) { next(e) }
 }
