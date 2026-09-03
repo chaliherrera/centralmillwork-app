@@ -131,7 +131,9 @@ export async function getCargaPorIngeniero(runner: QueryRunner): Promise<CargaRe
             SUM(t.allocation_pct) AS load_pct, COUNT(*) AS n
        FROM ing_tareas t
        JOIN semanas s ON t.fecha_inicio <= s.wk + 6 AND t.fecha_fin >= s.wk
+       LEFT JOIN ing_ingenieros i ON i.nombre = t.asignado_nombre
       WHERE t.asignado_nombre IS NOT NULL AND t.estado <> 'hecha'
+        AND (i.nombre IS NULL OR i.activo = true)
       GROUP BY 1, 2`)
 
   const byIng = new Map<string, CargaIngeniero>()

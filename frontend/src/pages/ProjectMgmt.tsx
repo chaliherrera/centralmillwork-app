@@ -1,13 +1,13 @@
-import { useState } from 'react'
-import { ClipboardList, Inbox, Gauge, Users } from 'lucide-react'
+import { useState, useEffect } from 'react'
+import { ClipboardList, Inbox, Gauge, Users, Loader2 } from 'lucide-react'
 import MiTrabajo from '@/components/modules/schedule/MiTrabajo'
 import ReservasPendientes from '@/components/modules/estimados/ReservasPendientes'
 import DealsEnCurso from '@/components/modules/estimados/DealsEnCurso'
 import ReprogramacionesPendientes from '@/components/modules/ingenieria/ReprogramacionesPendientes'
 import DepositosBloqueando from '@/components/modules/ingenieria/DepositosBloqueando'
-import MapaEtapas from '@/components/modules/ingenieria/MapaEtapas'
 import GestionIngenieros from '@/components/modules/ingenieria/GestionIngenieros'
-import IngenieriaPlan from './IngenieriaPlan'
+import { ingenieriaService, type IngCarga } from '@/services/ingenieria'
+import IngenieriaPlan, { VistaDisponibilidad } from './IngenieriaPlan'
 
 // Escritorio del PM. El PM es el dueño del recurso Ingeniería: acá tiene su bandeja
 // (planes sugeridos a aceptar + lo que le toca) y el Plan de Ingeniería (capacidad,
@@ -53,8 +53,8 @@ export default function ProjectMgmt() {
         <div className="mt-4 space-y-4">
           {revisarProy && (
             <div className="max-w-[1180px] mx-auto">
-              <div className="text-[11px] uppercase tracking-wider text-stone-400 font-semibold mb-2">La propuesta del sistema · cómo cae este proyecto sobre el portafolio</div>
-              <MapaEtapas sugerenciaExt={revisarProy} />
+              <div className="text-[11px] uppercase tracking-wider text-stone-400 font-semibold mb-2">La propuesta del sistema · la carga del ingeniero propuesto</div>
+              <HeatIngenieroPropuesto proyectoExt={revisarProy} />
             </div>
           )}
           <IngenieriaPlan embedded initialProyecto={revisarProy} initialMode={revisarProy ? 'proyecto' : undefined} />
@@ -67,4 +67,32 @@ export default function ProjectMgmt() {
       )}
     </div>
   )
+}
+
+// El PM, al revisar un plan propuesto, ve PRIMERO la carga del ingeniero propuesto (su
+// heat map). El propuesto = el ingeniero más asignado en el plan de este proyecto. Desde
+// el heatmap puede desplegar a todos los ingenieros para buscar una alternativa.
+function HeatIngenieroPropuesto({ proyectoExt }: { proyectoExt: string }) {
+  const [carga, setCarga] = useState<IngCarga | null>(null)
+  const [propuesto, setPropuesto] = useState<string | undefined>()
+  const [loading, setLoading] = useState(true)
+  useEffect(() => {
+    let live = true
+    setLoading(true)
+    ;(async () => {
+      try {
+        const [c, t] = await Promise.all([ingenieriaService.getCarga(), ingenieriaService.getTareas(proyectoExt)])
+        if (!live) return
+        setCarga(c.data)
+        const freq = new Map<string, number>()
+        for (const tarea of t.data ?? []) if (tarea.asignado_nombre) freq.set(tarea.asignado_nombre, (freq.get(tarea.asignado_nombre) ?? 0) + 1)
+        setPropuesto([...freq.entries()].sort((a, b) => b[1] - a[1])[0]?.[0])
+      } catch { if (live) { setCarga(null); setPropuesto(undefined) } }
+      finally { if (live) setLoading(false) }
+    })()
+    return () => { live = false }
+  }, [proyectoExt])
+
+  if (loading) return <div className="rounded-2xl border border-stone-200 bg-white py-16 text-center text-stone-400"><Loader2 className="animate-spin inline" size={20} /></div>
+  return <VistaDisponibilidad carga={carga} foco={propuesto} />
 }

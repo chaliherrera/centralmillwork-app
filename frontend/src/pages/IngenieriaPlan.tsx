@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Users, Layers, ClipboardList, Plus, X, Loader2, Trash2, Gauge, Check, FolderKanban, Activity, AlertTriangle, Wallet, Lock, LockOpen, FlaskConical, Package, Wrench, CalendarClock } from 'lucide-react'
+import { Users, Layers, ClipboardList, Plus, X, Loader2, Trash2, Gauge, Check, FolderKanban, Activity, AlertTriangle, Wallet, Lock, LockOpen, FlaskConical, Package, Wrench, CalendarClock, ChevronUp, ChevronDown } from 'lucide-react'
 import { ingenieriaService, type IngProyecto, type IngTarea, type TareaInput, type IngPlan, type IngTareaPlan, type IngArista, type IngCarga, type IngTareaCelda, type InstalacionDetalle } from '@/services/ingenieria'
 import MapaEtapas from '@/components/modules/ingenieria/MapaEtapas'
 
@@ -100,10 +100,14 @@ export default function IngenieriaPlan({ embedded, initialProyecto, initialMode 
 }
 
 // ── Vista de arranque: DISPONIBILIDAD — heatmap de CANTIDAD DE TAREAS por ingeniero/semana ──
-function VistaDisponibilidad({ carga }: { carga: IngCarga | null }) {
+// `foco` = nombre del ingeniero propuesto: cuando viene, la vista arranca mostrando SOLO
+// su fila (resaltada) y ofrece un botón para desplegar a todos (buscar alternativa).
+export function VistaDisponibilidad({ carga, foco }: { carga: IngCarga | null; foco?: string }) {
   const [sel, setSel] = useState<{ ing: string; sem: string } | null>(null)
   const [detail, setDetail] = useState<IngTareaCelda[] | null>(null)
   const [loadingDet, setLoadingDet] = useState(false)
+  const [verTodos, setVerTodos] = useState(false)
+  const mostrarTodos = !foco || verTodos
 
   const g = useMemo(() => {
     if (!carga || !carga.semanas.length || !carga.ingenieros.length) return null
@@ -144,7 +148,7 @@ function VistaDisponibilidad({ carga }: { carga: IngCarga | null }) {
       <div className="rounded-2xl border border-stone-200 bg-white overflow-hidden">
         <div className="flex items-center gap-2 px-4 py-3 border-b border-stone-100">
           <Activity size={17} className="text-forest-600" />
-          <h2 className="font-bold text-stone-800">Carga por ingeniero · tareas cada semana</h2>
+          <h2 className="font-bold text-stone-800">{foco && !verTodos ? `Carga de ${foco} · el ingeniero propuesto` : 'Carga por ingeniero · tareas cada semana'}</h2>
           <span className="ml-auto text-xs text-stone-400">cuántas tareas tiene encimadas · click en una celda para verlas</span>
         </div>
         <div className="overflow-x-auto"><div className="min-w-[880px]">
@@ -156,18 +160,25 @@ function VistaDisponibilidad({ carga }: { carga: IngCarga | null }) {
               {g.hoyPct !== null && <div className="absolute top-0 bottom-0 border-l-2 border-rose-400 z-10" style={{ left: `${g.hoyPct}%` }}><span className="absolute top-0 left-1 text-[9px] font-bold text-rose-500">hoy</span></div>}
             </div>
           </div>
-          {/* fila resumen: libres */}
+          {/* fila resumen: libres (solo con todos a la vista) */}
+          {mostrarTodos && (
           <div className="flex items-center border-b border-stone-200 bg-stone-50/40">
             <div className="shrink-0 px-3 py-1.5 text-[11px] font-bold text-stone-600" style={{ width: GUT }}>Ingenieros libres</div>
             <div className="flex-1 flex gap-px py-1">
               {g.libres.map((l, i) => <div key={i} title={`${fmtW(g.semanas[i])}: ${l} de ${g.total} libres`} className={`flex-1 h-6 rounded-sm flex items-center justify-center text-[10px] font-bold ${libCls(l)}`}>{l}</div>)}
             </div>
           </div>
+          )}
+          {/* cuando el propuesto no tiene ninguna carga (arranca libre) */}
+          {foco && !g.ingenieros.some((e) => e.nombre === foco) && (
+            <div className="px-4 py-3 text-sm text-stone-500 border-b border-stone-50">{foco} no tiene tareas pendientes registradas — arranca libre.</div>
+          )}
           {/* una fila por ingeniero — heatmap de cantidad de tareas */}
-          {g.ingenieros.map((e) => { const picoN = Math.max(0, ...e.n_tareas); return (
-            <div key={e.nombre} className="flex items-center border-b border-stone-50 hover:bg-stone-50/40">
+          {(mostrarTodos ? g.ingenieros : g.ingenieros.filter((e) => e.nombre === foco)).map((e) => { const picoN = Math.max(0, ...e.n_tareas); const esFoco = e.nombre === foco; return (
+            <div key={e.nombre} className={`flex items-center border-b border-stone-50 ${esFoco ? 'bg-forest-50/60 ring-1 ring-inset ring-forest-200' : 'hover:bg-stone-50/40'}`}>
               <div className="shrink-0 px-3 py-1.5 flex items-center gap-1.5" style={{ width: GUT }}>
-                <span className="text-[12.5px] font-semibold text-stone-700 truncate flex-1">{e.nombre}</span>
+                <span className={`text-[12.5px] truncate flex-1 ${esFoco ? 'font-bold text-forest-800' : 'font-semibold text-stone-700'}`}>{e.nombre}</span>
+                {esFoco && <span className="text-[9px] font-bold uppercase tracking-wide text-forest-600 bg-forest-100 rounded-full px-1.5 py-0.5 shrink-0">propuesto</span>}
                 <span className={`text-[11px] font-bold tabular-nums ${picoN > 2 ? 'text-rose-600' : 'text-stone-400'}`} title="pico: máximo de tareas en una semana">{picoN}</span>
               </div>
               <div className="flex-1 flex gap-px py-1">
@@ -183,6 +194,14 @@ function VistaDisponibilidad({ carga }: { carga: IngCarga | null }) {
             </div>
           ) })}
         </div></div>
+        {foco && (
+          <div className="px-4 py-2 border-t border-stone-100">
+            <button onClick={() => setVerTodos((v) => !v)}
+              className="inline-flex items-center gap-1.5 text-xs font-semibold text-forest-700 hover:text-forest-900">
+              {verTodos ? <><ChevronUp size={14} /> Ver solo el ingeniero propuesto</> : <><ChevronDown size={14} /> Ver la carga de todos los ingenieros ({g.total})</>}
+            </button>
+          </div>
+        )}
         <div className="px-4 py-2 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-stone-500 items-center border-t border-stone-100">
           <span className="inline-flex items-center gap-1.5"><span className="w-3.5 h-3.5 rounded-sm inline-block" style={{ background: '#f5f5f4' }} /> libre</span>
           <span className="inline-flex items-center gap-1.5"><span className="w-3.5 h-3.5 rounded-sm inline-block" style={{ background: '#bbf7d0' }} /> 1 tarea</span>
