@@ -7,7 +7,6 @@ import { ingenieriaService } from '@/services/ingenieria'
 import ProyectoForm from '@/components/modules/proyectos/ProyectoForm'
 import StatusBadge from '@/components/ui/StatusBadge'
 import FactibilidadCheck from './FactibilidadCheck'
-import MapaEtapas from '@/components/modules/ingenieria/MapaEtapas'
 import type { Proyecto } from '@/types'
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -235,14 +234,8 @@ export default function EstimadosWizard() {
                 {enviandoPM ? <Loader2 className="animate-spin" size={16} /> : <Send size={15} />} Enviar al PM
               </button>
             ) : (
-              <div className="space-y-3">
-                <div className="rounded-lg bg-emerald-50 border border-emerald-200 px-3 py-2.5 text-sm text-emerald-800 flex items-center gap-2">
-                  <CheckCircle2 size={16} /> Enviado. El PM acepta la fecha y confirma la reserva en su bandeja. Continuá cuando quieras.
-                </div>
-                <div>
-                  <div className="text-[11px] uppercase tracking-wider text-stone-400 font-semibold mb-2">Así queda tu proyecto sobre el portafolio</div>
-                  <MapaEtapas sugerenciaExt={sel.codigo} />
-                </div>
+              <div className="rounded-lg bg-emerald-50 border border-emerald-200 px-3 py-2.5 text-sm text-emerald-800 flex items-center gap-2">
+                <CheckCircle2 size={16} /> Enviado. El PM lo revisa, ajusta y acepta (o propone otra fecha) en su bandeja. Continuá cuando quieras.
               </div>
             )}
             {error && <div className="rounded-lg bg-rose-50 border border-rose-200 px-3 py-2 text-sm text-rose-700">{error}</div>}
