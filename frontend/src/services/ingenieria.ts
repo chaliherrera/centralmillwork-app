@@ -87,7 +87,7 @@ export interface IngCargaEtapas { semanas: string[]; etapas: IngEtapaCarga[]; su
 export interface IngProyectoEtapa { proyecto_ext: string | null; nombre: string; asignado_nombre: string | null; fecha_inicio: string | null; fecha_fin: string | null }
 // Deal en curso (handoff Estimados → Cliente → PM)
 export type DealEstado = 'borrador' | 'esperando_pm' | 'plan_propuesto' | 'esperando_cliente' | 'aprobado'
-export interface IngDealEnCurso { proyecto_id: number; codigo: string; nombre: string; cliente: string | null; estado: string; deal_estado: DealEstado; fecha_objetivo: string | null; n_tareas: number }
+export interface IngDealEnCurso { proyecto_id: number; codigo: string; nombre: string; cliente: string | null; estado: string; deal_estado: DealEstado; fecha_objetivo: string | null; n_tareas: number; portal_token: string | null }
 export interface ReservaTarea { id: number; nombre: string; asignado_nombre: string | null; fecha_inicio: string | null; fecha_fin: string | null; tipo_clave: string | null }
 export interface ReservaProyecto { proyecto_id: number; proyecto_codigo: string; proyecto_nombre: string; proyecto_ext: string | null; fecha_objetivo: string | null; tareas: ReservaTarea[] }
 

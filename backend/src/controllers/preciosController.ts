@@ -194,6 +194,117 @@ export async function buscarPrecios(req: Request, res: Response, next: NextFunct
   }
 }
 
+// ─── /rankings ───────────────────────────────────────────────────────────────
+// Materiales agregados — cuántas veces se compró cada uno, cuánto se gastó,
+// precio promedio. Agrupamos por LOWER(TRIM(descripcion)) para que
+// variaciones de whitespace/case cuenten como el mismo material.
+//
+// Ordenamiento: 'veces' (default), 'gasto', 'precio_prom'. Filtros mismos
+// que /buscar (categoria, vendor, fecha_desde, fecha_hasta).
+//
+// Devuelve por fila: descripcion display (la más frecuente), veces_comprado,
+// total_gastado, precio_promedio/min/max, primera/ultima_compra,
+// vendors[] distintos, cantidad_total, categoria (moda).
+export async function getRankingsMateriales(req: Request, res: Response, next: NextFunction) {
+  try {
+    const { vendor, categoria, fecha_desde, fecha_hasta, orden = 'veces' } = req.query as Record<string, string | undefined>
+    const limit = Math.min(200, Math.max(1, parseInt((req.query.limit as string) || '50', 10)))
+
+    const conds: string[] = [`oc.estado <> 'cancelada'`, `ioc.descripcion IS NOT NULL`, `TRIM(ioc.descripcion) <> ''`]
+    const vals: any[] = []
+
+    if (vendor && vendor.trim()) {
+      vals.push(vendor.trim())
+      conds.push(`p.nombre = $${vals.length}`)
+    }
+    if (categoria && categoria.trim()) {
+      vals.push(categoria.trim())
+      conds.push(`(m.categoria = $${vals.length} OR oc.categoria = $${vals.length})`)
+    }
+    if (fecha_desde) {
+      vals.push(fecha_desde)
+      conds.push(`oc.fecha_emision >= $${vals.length}`)
+    }
+    if (fecha_hasta) {
+      vals.push(fecha_hasta)
+      conds.push(`oc.fecha_emision <= $${vals.length}`)
+    }
+
+    const orderMap: Record<string, string> = {
+      veces: 'veces_comprado DESC, total_gastado DESC',
+      gasto: 'total_gastado DESC, veces_comprado DESC',
+      precio_prom: 'precio_promedio DESC, veces_comprado DESC',
+    }
+    const orderSql = orderMap[orden] || orderMap.veces
+
+    // Agregación en 2 pasos con CTE:
+    // 1) items → cada fila con su descripcion normalizada
+    // 2) group by clave normalizada
+    // Para el display de descripcion tomamos MODE() — la variante más
+    // frecuente (más natural que MIN/MAX alfabético).
+    const q = await pool.query(`
+      WITH items_norm AS (
+        SELECT
+          LOWER(TRIM(ioc.descripcion))                   AS key,
+          ioc.descripcion                                AS descripcion,
+          ioc.precio_unitario                            AS precio,
+          ioc.cantidad                                   AS cantidad,
+          ioc.subtotal                                   AS subtotal,
+          ioc.unidad                                     AS unidad,
+          oc.fecha_emision                               AS fecha,
+          p.nombre                                       AS vendor,
+          COALESCE(m.categoria, oc.categoria)            AS categoria,
+          m.codigo                                       AS material_codigo
+        FROM items_orden_compra ioc
+        JOIN ordenes_compra oc  ON oc.id = ioc.orden_compra_id
+        JOIN proveedores p       ON p.id = oc.proveedor_id
+        LEFT JOIN materiales_mto m ON m.id = ioc.material_id
+        WHERE ${conds.join(' AND ')}
+      )
+      SELECT
+        MODE() WITHIN GROUP (ORDER BY descripcion)          AS descripcion,
+        COUNT(*)::int                                       AS veces_comprado,
+        SUM(subtotal)::numeric(14,2)                        AS total_gastado,
+        AVG(precio)::numeric(12,4)                          AS precio_promedio,
+        MIN(precio)::numeric(12,4)                          AS precio_min,
+        MAX(precio)::numeric(12,4)                          AS precio_max,
+        MIN(fecha)                                          AS primera_compra,
+        MAX(fecha)                                          AS ultima_compra,
+        SUM(cantidad)::numeric(14,2)                        AS cantidad_total,
+        MODE() WITHIN GROUP (ORDER BY unidad)               AS unidad,
+        MODE() WITHIN GROUP (ORDER BY categoria)            AS categoria,
+        MODE() WITHIN GROUP (ORDER BY material_codigo)      AS material_codigo,
+        COUNT(DISTINCT vendor)::int                         AS vendors_count,
+        ARRAY_AGG(DISTINCT vendor ORDER BY vendor)          AS vendors
+      FROM items_norm
+      GROUP BY key
+      ORDER BY ${orderSql}
+      LIMIT $${vals.length + 1}
+    `, [...vals, limit])
+
+    const rankings = q.rows.map((r) => ({
+      descripcion: r.descripcion,
+      veces_comprado: r.veces_comprado,
+      total_gastado: r.total_gastado !== null ? Number(r.total_gastado) : 0,
+      precio_promedio: r.precio_promedio !== null ? Number(r.precio_promedio) : 0,
+      precio_min: r.precio_min !== null ? Number(r.precio_min) : 0,
+      precio_max: r.precio_max !== null ? Number(r.precio_max) : 0,
+      primera_compra: r.primera_compra,
+      ultima_compra: r.ultima_compra,
+      cantidad_total: r.cantidad_total !== null ? Number(r.cantidad_total) : 0,
+      unidad: r.unidad,
+      categoria: r.categoria,
+      material_codigo: r.material_codigo,
+      vendors_count: r.vendors_count,
+      vendors: r.vendors || [],
+    }))
+
+    res.json({ rankings, total: rankings.length, orden, limit })
+  } catch (err) {
+    next(err)
+  }
+}
+
 // ─── /evolucion ──────────────────────────────────────────────────────────────
 // Serie histórica de precios de un ítem específico. Se puede filtrar por
 // descripcion (ILIKE — fuzzy) y opcionalmente por vendor. Devuelve TODOS los

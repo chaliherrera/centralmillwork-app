@@ -75,7 +75,7 @@ export async function dealsEnCursoHandler(_req: Request, res: Response, next: Ne
 // POST /api/ingenieria/proyecto/:id/enviar-cliente — Estimados manda el schedule al cliente
 export async function enviarClienteHandler(req: Request, res: Response, next: NextFunction) {
   try {
-    const r = await enviarAClienteDeal(pool, pid(req))
+    const r = await enviarAClienteDeal(pool, pid(req), req.user?.id ?? null)
     if (!r.ok) return next(createError(r.error ?? 'no se pudo enviar', 400))
     res.json({ data: r })
   } catch (e) { next(e) }

@@ -14,6 +14,7 @@ import type { PoolClient } from 'pg'
 import pool from '../../../db/pool'
 import { recomputarYGuardar } from './tareas'
 import { loadFeriados } from '../../schedule/domain/calendario'
+import { crearToken } from '../../schedule/domain/portal'
 import { cargarPlantillaRuta, cargarColaIngenieros, ubicarProyecto, ROLES_INGENIERO, type Ubicacion } from './planificador'
 
 type QueryRunner = PoolClient | typeof pool
@@ -116,11 +117,21 @@ export async function aceptarPlanPM(runner: QueryRunner, proyectoId: number): Pr
 // Cada transición valida el estado previo (máquina de estados honesta).
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** Estimados manda el schedule al cliente para su aprobación. */
-export async function enviarAClienteDeal(runner: QueryRunner, proyectoId: number): Promise<{ ok: boolean; error?: string }> {
+/** Estimados manda el schedule al cliente para su aprobación. Deja listo (o reusa) el
+ *  link del portal del cliente para poder verlo/abrirlo/compartirlo desde la bandeja. */
+export async function enviarAClienteDeal(runner: QueryRunner, proyectoId: number, createdBy: string | null = null): Promise<{ ok: boolean; error?: string; token?: string }> {
   const { rowCount } = await runner.query(
     `UPDATE proyectos SET deal_estado = 'esperando_cliente' WHERE id = $1 AND deal_estado = 'plan_propuesto'`, [proyectoId])
-  return rowCount ? { ok: true } : { ok: false, error: 'el plan tiene que estar aceptado por el PM antes de mandarlo al cliente' }
+  if (!rowCount) return { ok: false, error: 'el plan tiene que estar aceptado por el PM antes de mandarlo al cliente' }
+  // Reusa el token activo del proyecto o crea uno (a nombre del cliente).
+  const ex = await runner.query<{ token: string }>(
+    `SELECT token FROM schedule_portal_tokens WHERE proyecto_id = $1 AND activo = true ORDER BY created_at DESC LIMIT 1`, [proyectoId])
+  let token = ex.rows[0]?.token
+  if (!token) {
+    const cli = await runner.query<{ cliente: string | null }>(`SELECT cliente FROM proyectos WHERE id = $1`, [proyectoId])
+    token = (await crearToken(runner, proyectoId, cli.rows[0]?.cliente ?? null, null, createdBy)).token
+  }
+  return { ok: true, token }
 }
 
 /** Estimados registra que el cliente aprobó el schedule. */
@@ -140,6 +151,7 @@ export async function activarProyecto(runner: QueryRunner, proyectoId: number): 
 export interface DealEnCurso {
   proyecto_id: number; codigo: string; nombre: string; cliente: string | null
   estado: string; deal_estado: string; fecha_objetivo: string | null; n_tareas: number
+  portal_token: string | null
 }
 
 /** Deals post-aceptación del PM que siguen en curso (prospecto): esperando el handoff
@@ -148,7 +160,8 @@ export async function listDealsEnCurso(runner: QueryRunner): Promise<DealEnCurso
   const { rows } = await runner.query<DealEnCurso>(
     `SELECT p.id AS proyecto_id, p.codigo, p.nombre, p.cliente, p.estado, p.deal_estado,
             to_char(sp.fecha_objetivo,'YYYY-MM-DD') AS fecha_objetivo,
-            (SELECT count(*)::int FROM ing_tareas t WHERE t.proyecto_id = p.id AND t.origen = 'app') AS n_tareas
+            (SELECT count(*)::int FROM ing_tareas t WHERE t.proyecto_id = p.id AND t.origen = 'app') AS n_tareas,
+            (SELECT spt.token FROM schedule_portal_tokens spt WHERE spt.proyecto_id = p.id AND spt.activo = true ORDER BY spt.created_at DESC LIMIT 1) AS portal_token
        FROM proyectos p
        LEFT JOIN schedule_planes sp ON sp.proyecto_id = p.id AND sp.scope = 'proyecto'
       WHERE p.estado = 'prospecto' AND p.deal_estado IN ('plan_propuesto','esperando_cliente','aprobado')

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Loader2, Send, Check, Rocket, CalendarRange, UserCheck, Eye } from 'lucide-react'
+import { Loader2, Send, Check, Rocket, CalendarRange, UserCheck, Eye, Link2, Copy, ExternalLink } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { ingenieriaService, type IngDealEnCurso } from '@/services/ingenieria'
 
@@ -60,6 +60,7 @@ export default function DealsEnCurso({ mode, emptyHint }: { mode: 'estimados' | 
         {visibles.map((d) => {
           const chip = CHIP[d.deal_estado]
           const isBusy = busy === d.proyecto_id
+          const portalLink = d.portal_token ? `${window.location.origin}/portal/${d.portal_token}` : null
           return (
             <div key={d.proyecto_id} className="p-4">
               <div className="flex items-center gap-2 mb-1 flex-wrap">
@@ -102,6 +103,23 @@ export default function DealsEnCurso({ mode, emptyHint }: { mode: 'estimados' | 
                   {d.deal_estado === 'aprobado' && (esPM ? 'El cliente ya aprobó. Activá para poner el plan en marcha.' : 'Esperando que el PM active el proyecto.')}
                 </span>
               </div>
+              {/* Link del portal del cliente: se puede copiar y abrir directo. */}
+              {portalLink && (
+                <div className="mt-2 flex items-center gap-2 flex-wrap rounded-lg border border-stone-200 bg-stone-50 px-3 py-2">
+                  <Link2 size={13} className="text-forest-600 shrink-0" />
+                  <span className="text-[10px] font-bold uppercase tracking-wide text-stone-500 shrink-0">Portal del cliente</span>
+                  <input readOnly value={portalLink} onFocus={(e) => e.currentTarget.select()}
+                    className="flex-1 min-w-[160px] text-[11px] text-stone-600 bg-white border border-stone-200 rounded px-2 py-1" />
+                  <button onClick={() => { navigator.clipboard?.writeText(portalLink); toast.success('Link copiado') }}
+                    className="inline-flex items-center gap-1 text-xs font-semibold text-stone-600 hover:text-stone-900 border border-stone-300 rounded-lg px-2.5 py-1.5">
+                    <Copy size={13} /> Copiar
+                  </button>
+                  <a href={portalLink} target="_blank" rel="noreferrer"
+                    className="inline-flex items-center gap-1 text-xs font-semibold text-forest-700 hover:text-forest-900 border border-forest-300 rounded-lg px-2.5 py-1.5">
+                    <ExternalLink size={13} /> Abrir portal
+                  </a>
+                </div>
+              )}
             </div>
           )
         })}

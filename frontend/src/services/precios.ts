@@ -81,6 +81,41 @@ export interface EvolucionPrecioResponse {
   total: number
 }
 
+export type OrdenRanking = 'veces' | 'gasto' | 'precio_prom'
+
+export interface RankingMaterial {
+  descripcion: string
+  veces_comprado: number
+  total_gastado: number
+  precio_promedio: number
+  precio_min: number
+  precio_max: number
+  primera_compra: string | null
+  ultima_compra: string | null
+  cantidad_total: number
+  unidad: string | null
+  categoria: string | null
+  material_codigo: string | null
+  vendors_count: number
+  vendors: string[]
+}
+
+export interface RankingsParams {
+  orden?: OrdenRanking
+  limit?: number
+  categoria?: string
+  vendor?: string
+  fecha_desde?: string
+  fecha_hasta?: string
+}
+
+export interface RankingsResponse {
+  rankings: RankingMaterial[]
+  total: number
+  orden: OrdenRanking
+  limit: number
+}
+
 export const preciosService = {
   async getFiltros(): Promise<FiltrosPreciosResponse> {
     const { data } = await api.get<FiltrosPreciosResponse>('/precios/filtros')
@@ -100,6 +135,15 @@ export const preciosService = {
     const params: Record<string, string> = { descripcion }
     if (vendor) params.vendor = vendor
     const { data } = await api.get<EvolucionPrecioResponse>('/precios/evolucion', { params })
+    return data
+  },
+
+  async getRankings(params: RankingsParams): Promise<RankingsResponse> {
+    const clean: Record<string, string | number> = {}
+    Object.entries(params).forEach(([k, v]) => {
+      if (v !== undefined && v !== '' && v !== null) clean[k] = v as string | number
+    })
+    const { data } = await api.get<RankingsResponse>('/precios/rankings', { params: clean })
     return data
   },
 }

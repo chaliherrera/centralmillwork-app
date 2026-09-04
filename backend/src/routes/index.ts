@@ -10,7 +10,7 @@ import {
 } from '../controllers/dashboardController'
 import { mobileSearch, mobileProyectos, mobileProyectoVendors } from '../controllers/mobileController'
 import { getMtosActivos } from '../controllers/mtosController'
-import { getFiltrosPrecios, buscarPrecios, getEvolucionPrecio } from '../controllers/preciosController'
+import { getFiltrosPrecios, buscarPrecios, getEvolucionPrecio, getRankingsMateriales } from '../controllers/preciosController'
 import { getPlanosItem, uploadPlanoItem, uploadPlano } from '../controllers/planosController'
 import {
   getProyectos, getProyecto, createProyecto, updateProyecto, deleteProyecto,
@@ -113,6 +113,7 @@ router.get('/mtos/activos',                  getMtosActivos)
 router.get('/precios/filtros',               getFiltrosPrecios)
 router.get('/precios/buscar',                buscarPrecios)
 router.get('/precios/evolucion',             getEvolucionPrecio)
+router.get('/precios/rankings',              getRankingsMateriales)
 
 // ─── Proyectos ────────────────────────────────────────────────────────────────
 router.get('/proyectos',                      getProyectos)
