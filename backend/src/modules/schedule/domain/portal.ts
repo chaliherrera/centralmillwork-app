@@ -27,7 +27,7 @@ export const APROBABLES: Record<string, string> = {
 // tipo 'accion'  → el cliente aprueba desde el portal (botón).
 // tipo 'estado'  → lo registra su dueño (DocuSign/Contabilidad); el cliente solo lo ve.
 export const CLIENT_MOMENTS: Array<{ codigo: string; label: string; tipo: 'accion' | 'estado' }> = [
-  { codigo: 'PLAN', label: 'Aprobación del plan', tipo: 'estado' }, // deal: el cliente aprobó el schedule
+  { codigo: 'PLAN', label: 'Aprobación del plan', tipo: 'accion' }, // el cliente lo aprueba desde el portal (mueve el deal)
   { codigo: 'C-03', label: 'Firma de contrato', tipo: 'estado' },
   { codigo: 'C-04', label: 'Down Payment',       tipo: 'estado' },
   { codigo: 'E-05', label: 'Muestras',           tipo: 'accion' },
@@ -139,11 +139,16 @@ export async function getVistaPublica(runner: QueryRunner, token: string): Promi
   const pendientes = await Promise.all(pendientesBase.map(async (p) =>
     p.codigo === 'E-07' ? { ...p, documento_url: await latestSubmittalUrl(runner, info.proyectoId) } : p))
 
+  // 'Aprobación del plan': acción del cliente mientras el deal espera su OK. Va primero.
+  const planPendiente = pr[0].deal_estado === 'esperando_cliente'
+    ? [{ codigo: 'PLAN', titulo: 'Aprobación del plan de trabajo', fecha_planeada: null as string | null }]
+    : []
+
   return {
     proyecto: { nombre: pr[0].nombre, cliente: pr[0].cliente, fecha_objetivo: pr[0].fo, semaforo: pr[0].semaforo },
     contacto: info.contactoNombre,
     momentos,
-    pendientes,
+    pendientes: [...planPendiente, ...pendientes],
   }
 }
 
@@ -161,6 +166,28 @@ export async function aplicarAprobacion(
 ): Promise<{ ok: boolean; error?: string }> {
   const info = await resolverToken(runner, token)
   if (!info) return { ok: false, error: 'token inválido' }
+
+  // 'PLAN' no es un hito del schedule: es la aprobación del plan por el cliente, que
+  // mueve el deal a 'aprobado'. Se resuelve acá y no sigue por la lógica de hitos.
+  if (codigo === 'PLAN') {
+    if (decision === 'aprobado' || decision === 'aprobado_con_comentarios') {
+      const { registrarAprobacionCliente } = await import('../../ingenieria/domain/plan_inicial')
+      const r = await registrarAprobacionCliente(runner, info.proyectoId)
+      if (!r.ok) return { ok: false, error: r.error }
+    }
+    // Traza de la decisión (best-effort): no debe frenar la aprobación.
+    try {
+      const { rows: plan } = await runner.query<{ id: number }>(
+        `SELECT id FROM schedule_planes WHERE proyecto_id = $1 AND scope = 'proyecto'`, [info.proyectoId])
+      if (plan[0]) await runner.query(
+        `INSERT INTO schedule_eventos (plan_id, hito_codigo, tipo, descripcion, disparado_por, payload)
+           VALUES ($1,'PLAN','fecha_real',$2,'portal',$3::jsonb)`,
+        [plan[0].id, `Cliente${info.contactoNombre ? ` (${info.contactoNombre})` : ''}: ${decision.replace(/_/g, ' ')} — Aprobación del plan`,
+         JSON.stringify({ source: 'portal', contacto: info.contactoNombre, decision, comentario: comentario || undefined })])
+    } catch { /* traza best-effort */ }
+    return { ok: true }
+  }
+
   if (!APROBABLES[codigo]) return { ok: false, error: 'ese hito no es aprobable por el cliente' }
 
   const { rows: sh } = await runner.query<{ id: number; fecha_real: string | null }>(

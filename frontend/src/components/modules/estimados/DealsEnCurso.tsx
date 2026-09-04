@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Loader2, Send, Check, Rocket, CalendarRange, UserCheck, Eye, Link2, Copy, ExternalLink } from 'lucide-react'
+import { Loader2, Send, Check, Rocket, CalendarRange, UserCheck, Eye, Link2, Copy } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { ingenieriaService, type IngDealEnCurso } from '@/services/ingenieria'
 
@@ -114,10 +114,6 @@ export default function DealsEnCurso({ mode, emptyHint }: { mode: 'estimados' | 
                     className="inline-flex items-center gap-1 text-xs font-semibold text-stone-600 hover:text-stone-900 border border-stone-300 rounded-lg px-2.5 py-1.5">
                     <Copy size={13} /> Copiar
                   </button>
-                  <a href={portalLink} target="_blank" rel="noreferrer"
-                    className="inline-flex items-center gap-1 text-xs font-semibold text-forest-700 hover:text-forest-900 border border-forest-300 rounded-lg px-2.5 py-1.5">
-                    <ExternalLink size={13} /> Abrir portal
-                  </a>
                 </div>
               )}
             </div>
