@@ -27,6 +27,7 @@ export const APROBABLES: Record<string, string> = {
 // tipo 'accion'  → el cliente aprueba desde el portal (botón).
 // tipo 'estado'  → lo registra su dueño (DocuSign/Contabilidad); el cliente solo lo ve.
 export const CLIENT_MOMENTS: Array<{ codigo: string; label: string; tipo: 'accion' | 'estado' }> = [
+  { codigo: 'PLAN', label: 'Aprobación del plan', tipo: 'estado' }, // deal: el cliente aprobó el schedule
   { codigo: 'C-03', label: 'Firma de contrato', tipo: 'estado' },
   { codigo: 'C-04', label: 'Down Payment',       tipo: 'estado' },
   { codigo: 'E-05', label: 'Muestras',           tipo: 'accion' },
@@ -94,13 +95,15 @@ export async function getVistaPublica(runner: QueryRunner, token: string): Promi
   const info = await resolverToken(runner, token)
   if (!info) return null
 
-  const { rows: pr } = await runner.query<{ nombre: string; cliente: string; fo: string | null; semaforo: string }>(
-    `SELECT p.nombre, p.cliente,
+  const { rows: pr } = await runner.query<{ nombre: string; cliente: string; fo: string | null; semaforo: string; deal_estado: string }>(
+    `SELECT p.nombre, p.cliente, p.deal_estado,
             to_char(sp.fecha_objetivo,'YYYY-MM-DD') AS fo, sp.semaforo
        FROM proyectos p
        JOIN schedule_planes sp ON sp.proyecto_id = p.id AND sp.scope = 'proyecto'
       WHERE p.id = $1 LIMIT 1`, [info.proyectoId])
   if (!pr[0]) return null
+  // El cliente ya aprobó el plan cuando el deal llegó a 'aprobado' (o más allá).
+  const planAprobado = pr[0].deal_estado === 'aprobado'
 
   // Estado de los hitos que son "momentos del cliente"
   const codigos = CLIENT_MOMENTS.map((m) => m.codigo)
@@ -116,9 +119,10 @@ export async function getVistaPublica(runner: QueryRunner, token: string): Promi
   // Recorrido: el primer momento no cumplido es "now"; los siguientes "future".
   let yaHuboNow = false
   const momentos = CLIENT_MOMENTS.map((m) => {
-    const h = st.get(m.codigo)
     let estado: 'done' | 'now' | 'future'
-    if (h?.tiene_real) estado = 'done'
+    // 'PLAN' no es un hito del schedule: su estado sale del deal (aprobación del cliente).
+    const cumplido = m.codigo === 'PLAN' ? planAprobado : (st.get(m.codigo)?.tiene_real ?? false)
+    if (cumplido) estado = 'done'
     else if (!yaHuboNow) { estado = 'now'; yaHuboNow = true }
     else estado = 'future'
     return { codigo: m.codigo, label: m.label, tipo: m.tipo, estado }

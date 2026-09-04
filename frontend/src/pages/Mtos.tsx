@@ -9,13 +9,14 @@
 import { useQuery } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
 import { useMemo, useState } from 'react'
-import { ExternalLink, CheckCircle2, Clock, DollarSign, ShoppingCart, Warehouse, Search, X, LayoutList, LineChart as LineChartIcon } from 'lucide-react'
+import { ExternalLink, CheckCircle2, Clock, DollarSign, ShoppingCart, Warehouse, Search, X, LayoutList, LineChart as LineChartIcon, Trophy } from 'lucide-react'
 import clsx from 'clsx'
 import { mtosService, type MtoActivo, type EstadoCotizMto } from '@/services/mtos'
 import PreciosBuscador from '@/components/modules/precios/PreciosBuscador'
+import TopMateriales from '@/components/modules/precios/TopMateriales'
 import Escritorio from '@/components/escritorio/Escritorio'
 
-type TabKey = 'activos' | 'precios'
+type TabKey = 'activos' | 'precios' | 'top'
 
 // Categoría operativa de un MTO — usada para chips de filtro y alertas.
 // - sin_cotizar: 100% en PENDIENTE (aún no se ha cotizado nada)
@@ -85,10 +86,13 @@ export default function Mtos() {
         <div className="flex items-center gap-1 mt-3 border-b border-gray-200">
           <TabButton active={tab === 'activos'} onClick={() => setTab('activos')} icon={LayoutList} label="Activos" />
           <TabButton active={tab === 'precios'} onClick={() => setTab('precios')} icon={LineChartIcon} label="Precios" />
+          <TabButton active={tab === 'top'} onClick={() => setTab('top')} icon={Trophy} label="Top Materiales" />
         </div>
       </div>
 
-      {tab === 'activos' ? <MtosActivos /> : <PreciosBuscador />}
+      {tab === 'activos' && <MtosActivos />}
+      {tab === 'precios' && <PreciosBuscador />}
+      {tab === 'top' && <TopMateriales />}
     </div>
   )
 }
