@@ -270,6 +270,16 @@ export const ingenieriaService = {
   // Edición atómica de dependencias (para deshacer / EditModal).
   bulkDeps: (ext: string, remove: CambioDep[], add: CambioDep[], dry_run = false) =>
     api.put<ApiResponse<MoverResult>>(`/ingenieria/proyecto/${ext}/deps`, { remove, add, dry_run }).then((r) => r.data),
+  // Cambiar el ingeniero propuesto (reasigna todas las tareas de ingeniería + re-ancla).
+  reasignarIngeniero: (ext: string, ingeniero: string, dry_run = false) =>
+    api.post<ApiResponse<ReasignarPreview>>(`/ingenieria/proyecto/${ext}/reasignar-ingeniero`, { ingeniero, dry_run }).then((r) => r.data),
+}
+
+export interface ReasignarPreview {
+  ok: boolean; error?: string
+  ingeniero_actual: string | null; ingeniero_nuevo: string; disponible_desde: string
+  fin_actual: string | null; fin_nuevo: string; entrega: string
+  holgura_dias: number; entra: boolean; n_tareas: number
 }
 
 export interface CambioDep { tarea_id: number; depende_de_id: number; tipo?: string; lag_dias?: number }

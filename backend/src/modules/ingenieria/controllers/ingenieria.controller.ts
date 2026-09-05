@@ -11,7 +11,7 @@ import {
   crearTarea, actualizarTarea, reportarAvance, getPlanProyecto,
   borrarTareaConReconexion, agregarDep, borrarDep, listReprogramaciones, recomputarYGuardar,
   reabrirShopDrawingsPorRechazo, cerrarGatePorAprobacion, cerrarReleasePorSdUpdate,
-  aplicarCambiosDeps, moverTarea,
+  aplicarCambiosDeps, moverTarea, reasignarIngeniero,
 } from '../domain/tareas'
 import { listReservasPendientes, liberarReserva } from '../domain/reservas'
 import { listIngenieros, actualizarIngeniero } from '../domain/ingenieros'
@@ -357,6 +357,22 @@ export async function moverTareaHandler(req: Request, res: Response, next: NextF
     const r = await moverTarea(client, id, Number.isNaN(after as number) ? null : after, Number.isNaN(before as number) ? null : before, dryRun)
     await client.query('COMMIT')
     if (!r.ok) return next(createError(r.error ?? 'no se pudo mover', 400))
+    res.json({ data: r })
+  } catch (e) { await client.query('ROLLBACK').catch(() => {}); next(e) } finally { client.release() }
+}
+
+// POST /api/ingenieria/proyecto/:ext/reasignar-ingeniero  { ingeniero, dry_run? }
+export async function reasignarIngenieroHandler(req: Request, res: Response, next: NextFunction) {
+  const ext = String(req.params.ext)
+  const ingeniero = typeof req.body?.ingeniero === 'string' ? req.body.ingeniero.trim() : ''
+  if (!ingeniero) return next(createError('falta el ingeniero', 400))
+  const dryRun = req.body?.dry_run === true
+  const client = await pool.connect()
+  try {
+    await client.query('BEGIN')
+    const r = await reasignarIngeniero(client, ext, ingeniero, dryRun)
+    await client.query('COMMIT')
+    if (!r.ok) return next(createError(r.error ?? 'no se pudo reasignar', 400))
     res.json({ data: r })
   } catch (e) { await client.query('ROLLBACK').catch(() => {}); next(e) } finally { client.release() }
 }

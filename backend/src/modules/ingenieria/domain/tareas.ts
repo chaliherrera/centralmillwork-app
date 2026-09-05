@@ -9,7 +9,8 @@
 
 import type { PoolClient } from 'pg'
 import pool from '../../../db/pool'
-import { loadFeriados, type ISODate } from '../../schedule/domain/calendario'
+import { loadFeriados, addBusinessDays, businessDaysBetween, type ISODate } from '../../schedule/domain/calendario'
+import { cargarColaIngenieros, ROLES_INGENIERO } from './planificador'
 import { capturarFechasReales } from '../../schedule/domain/captura'
 import { proyectarHitos, esInferida, type HitoPlantilla, type PasoFechas } from '../../schedule/domain/proyeccion'
 import { calcularHolgura, type TareaCPM, type AristaCPM, type HolguraTarea, type HolguraProyecto } from './holgura'
@@ -810,6 +811,81 @@ export async function agregarDep(runner: QueryRunner, tareaId: number, dependeDe
 export async function borrarDep(runner: QueryRunner, tareaId: number, dependeDeId: number): Promise<boolean> {
   const { rowCount } = await runner.query(`DELETE FROM ing_tarea_deps WHERE tarea_id = $1 AND depende_de_id = $2`, [tareaId, dependeDeId])
   return (rowCount ?? 0) > 0
+}
+
+export interface ReasignarPreview {
+  ok: boolean; error?: string
+  ingeniero_actual: string | null; ingeniero_nuevo: string; disponible_desde: string
+  fin_actual: string | null; fin_nuevo: string; entrega: string
+  holgura_dias: number; entra: boolean; n_tareas: number
+}
+
+/** Cambia el ingeniero PROPUESTO del proyecto: reasigna TODAS las tareas de rol
+ *  ingeniería/field al nuevo y re-ancla su piso `no_antes_de` = cuándo se libera el nuevo
+ *  (cola serial, excluyendo este proyecto). El CPM recalcula respetando la entrega fija.
+ *  Con dry_run devuelve el preview (fin antes/después, holgura, cuántas tareas) sin escribir. */
+export async function reasignarIngeniero(
+  runner: QueryRunner, proyectoExt: string, nuevoIng: string, dryRun = false,
+): Promise<ReasignarPreview> {
+  const base: ReasignarPreview = { ok: false, ingeniero_actual: null, ingeniero_nuevo: nuevoIng, disponible_desde: '', fin_actual: null, fin_nuevo: '', entrega: '', holgura_dias: 0, entra: false, n_tareas: 0 }
+  const { rows: hdr } = await runner.query<{ ini: string | null; entrega: string | null }>(
+    `SELECT to_char(fecha_inicio,'YYYY-MM-DD') AS ini, to_char(fecha_entrega,'YYYY-MM-DD') AS entrega
+       FROM ing_proyectos WHERE proyecto_ext = $1`, [proyectoExt])
+  const h = hdr[0]
+  if (!h?.ini || !h?.entrega) return { ...base, error: 'el proyecto no tiene plan' }
+
+  const feriados = await loadFeriados(runner)
+  const colas = await cargarColaIngenieros(runner, { excluirProyectoExt: proyectoExt })
+  const cola = colas.find((c) => c.nombre === nuevoIng)
+  if (!cola) return { ...base, error: 'ingeniero no encontrado o inactivo' }
+  const hoy = hoyISOd()
+  // Cuándo se libera el nuevo: fin de su última tarea + 1 hábil (nunca antes de hoy).
+  const disponible = cola.fin_ultima && cola.fin_ultima >= hoy ? addBusinessDays(cola.fin_ultima, 1, feriados) : hoy
+
+  const rolesIng = [...ROLES_INGENIERO]
+  const { rows: ingRows } = await runner.query<{ id: number; asignado_nombre: string | null }>(
+    `SELECT t.id, t.asignado_nombre FROM ing_tareas t JOIN ing_tarea_tipos tt ON tt.id = t.tipo_id
+      WHERE t.proyecto_ext = $1 AND tt.rol = ANY($2)`, [proyectoExt, rolesIng])
+  const ingIds = new Set(ingRows.map((r) => r.id))
+  if (!ingIds.size) return { ...base, error: 'el proyecto no tiene tareas de ingeniería' }
+  const freq = new Map<string, number>()
+  for (const r of ingRows) if (r.asignado_nombre) freq.set(r.asignado_nombre, (freq.get(r.asignado_nombre) ?? 0) + 1)
+  const ingeniero_actual = [...freq.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? null
+
+  // Preview: corre el CPM con el piso actual (antes) y con el piso del nuevo ingeniero (después).
+  const tareas = await listTareas(runner, proyectoExt)
+  const ids = tareas.map((t) => t.id)
+  const { rows: deps } = await runner.query<{ tarea_id: number; depende_de_id: number; tipo: string; lag_dias: number }>(
+    `SELECT tarea_id, depende_de_id, tipo, lag_dias FROM ing_tarea_deps WHERE tarea_id = ANY($1) AND depende_de_id = ANY($1)`, [ids])
+  const deposito = await estadoDeposito(runner, proyectoExt)
+  const compras = await estadoCompras(runner, proyectoExt)
+  const clave = new Map(tareas.map((t) => [t.id, t.tipo_clave]))
+  const aristas: AristaCPM[] = deps.map((d) => ({ tareaId: d.tarea_id, dependeDeId: d.depende_de_id, lag: d.lag_dias, tipo: d.tipo === 'SS' ? 'SS' : 'FS' }))
+  const correr = (pisoNuevo: boolean): string => {
+    const cpmTareas: TareaCPM[] = tareas.map((t) => ({
+      id: t.id, dur: t.dur_dias,
+      noAntesDe: pisoTarea(clave.get(t.id) ?? null, deposito, compras, pisoNuevo && ingIds.has(t.id) ? disponible : t.no_antes_de),
+    }))
+    return calcularHolgura(cpmTareas, aristas, h.ini!, h.entrega!, feriados).finProyectado ?? h.entrega!
+  }
+  let fin_actual: string, fin_nuevo: string
+  try { fin_actual = correr(false); fin_nuevo = correr(true) }
+  catch { return { ...base, error: 'no se pudo calcular (ciclo en dependencias)' } }
+
+  const preview: ReasignarPreview = {
+    ok: true, ingeniero_actual, ingeniero_nuevo: nuevoIng, disponible_desde: disponible,
+    fin_actual, fin_nuevo, entrega: h.entrega, holgura_dias: businessDaysBetween(fin_nuevo, h.entrega, feriados),
+    entra: fin_nuevo <= h.entrega, n_tareas: ingIds.size,
+  }
+  if (dryRun) return preview
+
+  await runner.query(
+    `UPDATE ing_tareas t SET asignado_nombre = $2, no_antes_de = $3::date, updated_at = NOW()
+       FROM ing_tarea_tipos tt
+      WHERE t.tipo_id = tt.id AND t.proyecto_ext = $1 AND tt.rol = ANY($4)`,
+    [proyectoExt, nuevoIng, disponible, rolesIng])
+  await recomputarYGuardar(runner, proyectoExt)
+  return preview
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

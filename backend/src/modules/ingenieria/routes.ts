@@ -4,7 +4,7 @@ import {
   resumenHandler, tareasHandler, cargaHandler, cargaDetalleHandler,
   cargaEtapasHandler, etapaDetalleHandler, planHandler,
   crearTareaHandler, actualizarTareaHandler, avanceTareaHandler, borrarTareaHandler,
-  agregarDepHandler, borrarDepHandler, bulkDepsHandler, moverTareaHandler,
+  agregarDepHandler, borrarDepHandler, bulkDepsHandler, moverTareaHandler, reasignarIngenieroHandler,
   reservarHandler, reservasPendientesHandler, confirmarReservaHandler, liberarReservaHandler,
   dealsEnCursoHandler, enviarClienteHandler, clienteAproboHandler, activarProyectoHandler,
   overrideDepositoHandler, reprogramacionesHandler, depositosBloqueandoHandler, muestrasEstadoHandler,
@@ -48,6 +48,7 @@ router.post('/tareas/:id/dep', PM, agregarDepHandler)
 router.delete('/tareas/:id/dep/:depId', PM, borrarDepHandler)
 router.put('/proyecto/:ext/deps', PM, bulkDepsHandler)          // edición atómica de deps (drag&drop / EditModal)
 router.post('/tareas/:id/mover', PM, moverTareaHandler)          // reordenar tarea (drag&drop)
+router.post('/proyecto/:ext/reasignar-ingeniero', PM, reasignarIngenieroHandler)  // cambiar ingeniero propuesto (bulk + re-ancla)
 // Ejecución = reportar avance de la tarea (Ingeniería) — solo estado/comentario
 router.patch('/tareas/:id/avance', EXEC, avanceTareaHandler)
 
