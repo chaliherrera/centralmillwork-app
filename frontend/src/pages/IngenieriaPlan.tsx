@@ -910,15 +910,25 @@ function EditModal({ tarea, proyecto, engineers, planTareas, aristas, onClose, o
   const [decComent, setDecComent] = useState(tarea?.decision_comentarios ?? '')
   const set = (k: keyof TareaInput, v: any) => setF((p) => ({ ...p, [k]: v }))
 
-  // Predecesores (solo en la vista por proyecto, donde tenemos el plan)
+  // Predecesores (solo en la vista por proyecto, donde tenemos el plan): esta tarea
+  // espera a estas. La arista es (ESTA depende de PRED) → a.tarea_id === tarea.id.
   const origPreds = useMemo(() => (tarea && aristas ? aristas.filter((a) => a.tarea_id === tarea.id) : []), [tarea, aristas])
   const [preds, setPreds] = useState<{ id: number; lag: number }[]>(origPreds.map((a) => ({ id: a.depende_de_id, lag: a.lag_dias })))
+  // Sucesores: estas tareas esperan a ESTA. La arista es la inversa (SUCESOR depende de
+  // ESTA) → a.depende_de_id === tarea.id. Deja insertar una tarea "en el medio" de un tiro.
+  const origSuccs = useMemo(() => (tarea && aristas ? aristas.filter((a) => a.depende_de_id === tarea.id) : []), [tarea, aristas])
+  const [succs, setSuccs] = useState<{ id: number; lag: number }[]>(origSuccs.map((a) => ({ id: a.tarea_id, lag: a.lag_dias })))
   const nameOf = (id: number) => planTareas?.find((t) => t.id === id)?.nombre ?? `#${id}`
-  const opciones = useMemo(() => (planTareas ?? []).filter((t) => t.id !== tarea?.id && !preds.some((p) => p.id === t.id)), [planTareas, tarea, preds])
+  // Opciones (para ambos desplegables): tareas que no son esta ni ya están como pred/suc
+  // (una tarea no puede ser pred y suc a la vez — sería un ciclo, que el backend rechaza).
+  const opciones = useMemo(() => (planTareas ?? []).filter((t) => t.id !== tarea?.id && !preds.some((p) => p.id === t.id) && !succs.some((s) => s.id === t.id)), [planTareas, tarea, preds, succs])
 
   const syncDeps = async (id: number) => {
     for (const p of preds) await ingenieriaService.agregarDep(id, p.id, p.lag)         // upsert (agrega o cambia lag)
     for (const o of origPreds) if (!preds.some((p) => p.id === o.depende_de_id)) await ingenieriaService.borrarDep(id, o.depende_de_id)
+    // Sucesores: la arista es (SUCESOR depende de ESTA) → agregarDep(succId, id).
+    for (const s of succs) await ingenieriaService.agregarDep(s.id, id, s.lag)
+    for (const o of origSuccs) if (!succs.some((s) => s.id === o.tarea_id)) await ingenieriaService.borrarDep(o.tarea_id, id)
   }
   const save = async () => {
     if (!f.nombre.trim()) { setErr('Poné un nombre'); return }
@@ -1047,6 +1057,34 @@ function EditModal({ tarea, proyecto, engineers, planTareas, aristas, onClose, o
                   <select value="" onChange={(e) => { const id = Number(e.target.value); if (id) setPreds((xs) => [...xs, { id, lag: 0 }]) }}
                     className="inp text-[13px]">
                     <option value="">+ agregar predecesor…</option>
+                    {opciones.map((t) => <option key={t.id} value={t.id}>{t.nombre}</option>)}
+                  </select>
+                )}
+              </div>
+            </L>
+          )}
+
+          {/* Sucesores — estas tareas empiezan después de esta (recalcula holgura al guardar).
+              Con esto una tarea nueva se inserta "en el medio" de un tiro: predecesor = la de
+              antes, sucesor = la de después; la cadena pasa por ella y el schedule se recalcula. */}
+          {planTareas && (
+            <L t="Sucesores · empiezan después de esta">
+              <div className="space-y-1.5">
+                {succs.length === 0 && <div className="text-[12px] text-stone-400 italic">Sin sucesores (nada la espera todavía).</div>}
+                {succs.map((s) => (
+                  <div key={s.id} className="flex items-center gap-2 bg-stone-50 rounded-lg px-2 py-1.5">
+                    <span className="flex-1 text-[13px] text-stone-700 truncate">{nameOf(s.id)}</span>
+                    <span className="text-[11px] text-stone-400">lag</span>
+                    <input type="number" step="1" value={s.lag} onChange={(e) => setSuccs((xs) => xs.map((x) => x.id === s.id ? { ...x, lag: Math.trunc(Number(e.target.value) || 0) } : x))}
+                      className="w-14 rounded-md border border-stone-300 px-1.5 py-1 text-[12px] text-stone-800" />
+                    <span className="text-[11px] text-stone-400">d</span>
+                    <button onClick={() => setSuccs((xs) => xs.filter((x) => x.id !== s.id))} className="text-stone-400 hover:text-rose-600"><X size={14} /></button>
+                  </div>
+                ))}
+                {opciones.length > 0 && (
+                  <select value="" onChange={(e) => { const id = Number(e.target.value); if (id) setSuccs((xs) => [...xs, { id, lag: 0 }]) }}
+                    className="inp text-[13px]">
+                    <option value="">+ agregar sucesor…</option>
                     {opciones.map((t) => <option key={t.id} value={t.id}>{t.nombre}</option>)}
                   </select>
                 )}
