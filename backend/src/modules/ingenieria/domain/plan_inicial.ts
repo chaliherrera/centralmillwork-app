@@ -106,6 +106,13 @@ export async function aceptarPlanPM(runner: QueryRunner, proyectoId: number): Pr
        FROM schedule_hitos sh JOIN schedule_planes sp ON sp.id = sh.plan_id
       WHERE sp.proyecto_id = $1 AND sp.scope = 'proyecto' AND sh.codigo = 'C-03' AND sh.fecha_real IS NOT NULL`, [proyectoId])
   if (c03[0]?.firma) { try { await reanclarPlanAFirma(runner, proyectoId, c03[0].firma) } catch { /* best-effort */ } }
+  else {
+    // Sin firma aún: igual proyectamos el journey desde el plan recién endurecido, para que
+    // los hitos de schedule_hitos queden con su estado real (no_aplica los que aún no aplican)
+    // ANTES de que el cliente vea el portal. Si no, quedan en 'pendiente' (default) y el portal
+    // los muestra como aprobables. reanclarPlanAFirma ya recomputa en la otra rama.
+    try { await recomputarYGuardar(runner, ext) } catch { /* best-effort */ }
+  }
   return { aceptadas: r.rowCount ?? 0 }
 }
 
