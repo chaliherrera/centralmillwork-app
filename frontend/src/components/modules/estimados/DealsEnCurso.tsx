@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Loader2, Send, Check, Rocket, CalendarRange, UserCheck, Eye, Link2, Copy } from 'lucide-react'
+import { Loader2, Send, Check, Rocket, CalendarRange, UserCheck, Eye, Link2, Copy, CalendarClock, X } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { ingenieriaService, type IngDealEnCurso } from '@/services/ingenieria'
+import type { PortalGanttTarea } from '@/services/portal'
+import CronogramaCliente, { ganttDesdePlan } from '@/components/schedule/CronogramaCliente'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Handoff Estimados → Cliente → PM. Un mismo tracker, dos vistas:
@@ -26,6 +28,17 @@ export default function DealsEnCurso({ mode, emptyHint }: { mode: 'estimados' | 
   const [deals, setDeals] = useState<IngDealEnCurso[]>([])
   const [busy, setBusy] = useState<number | null>(null)
   const [loading, setLoading] = useState(true)
+  const [cronoBusy, setCronoBusy] = useState<number | null>(null)
+  const [crono, setCrono] = useState<{ nombre: string; fecha: string | null; gantt: PortalGanttTarea[] } | null>(null)
+
+  async function abrirCrono(d: IngDealEnCurso) {
+    setCronoBusy(d.proyecto_id)
+    try {
+      const plan = (await ingenieriaService.getPlan(d.codigo)).data
+      setCrono({ nombre: d.nombre || d.codigo, fecha: plan?.fecha_entrega ?? d.fecha_objetivo, gantt: ganttDesdePlan(plan?.tareas ?? []) })
+    } catch (e: any) { toast.error(e?.response?.data?.message || 'No se pudo cargar el cronograma') }
+    finally { setCronoBusy(null) }
+  }
 
   const cargar = () => ingenieriaService.dealsEnCurso()
     .then((r) => setDeals(r.data ?? []))
@@ -50,6 +63,7 @@ export default function DealsEnCurso({ mode, emptyHint }: { mode: 'estimados' | 
 
   const esPM = mode === 'pm'
   return (
+    <>
     <div className={`rounded-2xl border ${esPM ? 'border-blue-200' : 'border-forest-200'} bg-white overflow-hidden`}>
       <div className={`flex items-center gap-2 px-4 py-3 border-b border-stone-100 ${esPM ? 'bg-blue-50/40' : 'bg-forest-50/40'}`}>
         {esPM ? <Rocket size={16} className="text-blue-600" /> : <UserCheck size={16} className="text-forest-600" />}
@@ -79,6 +93,10 @@ export default function DealsEnCurso({ mode, emptyHint }: { mode: 'estimados' | 
                   className="inline-flex items-center gap-1.5 rounded-lg border border-stone-300 hover:bg-stone-50 text-stone-700 text-sm font-semibold px-3 py-2">
                   <Eye size={15} /> Ver el plan
                 </Link>
+                <button onClick={() => abrirCrono(d)} disabled={cronoBusy === d.proyecto_id}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-stone-300 hover:bg-stone-50 text-stone-700 text-sm font-semibold px-3 py-2">
+                  {cronoBusy === d.proyecto_id ? <Loader2 className="animate-spin" size={15} /> : <CalendarClock size={15} />} Cronograma
+                </button>
                 {mode === 'estimados' && d.deal_estado === 'plan_propuesto' && (
                   <button onClick={() => accion(d, () => ingenieriaService.enviarCliente(d.proyecto_id), 'Schedule enviado al cliente')} disabled={isBusy}
                     className="inline-flex items-center gap-1.5 rounded-lg bg-forest-600 hover:bg-forest-700 disabled:opacity-50 text-white text-sm font-semibold px-3.5 py-2">
@@ -121,5 +139,21 @@ export default function DealsEnCurso({ mode, emptyHint }: { mode: 'estimados' | 
         })}
       </div>
     </div>
+
+    {/* Cronograma del cliente (la propuesta): descargable para adjuntar a un email. */}
+    {crono && (
+      <div className="fixed inset-0 bg-black/30 flex items-center justify-center p-4 z-50" onClick={() => setCrono(null)}>
+        <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl max-h-[88vh] overflow-y-auto p-5" onClick={(e) => e.stopPropagation()}>
+          <div className="flex items-center gap-2 mb-3">
+            <CalendarClock size={18} className="text-forest-600" />
+            <h3 className="font-bold text-stone-800 text-sm truncate">Cronograma del cliente · {crono.nombre}</h3>
+            <button onClick={() => setCrono(null)} className="ml-auto text-stone-400 hover:text-stone-700"><X size={18} /></button>
+          </div>
+          <p className="text-[11px] text-stone-400 mb-3">Es lo que ve el cliente en el portal. Descargalo para adjuntarlo a un email.</p>
+          <CronogramaCliente nombre={crono.nombre} fechaObjetivo={crono.fecha} gantt={crono.gantt} />
+        </div>
+      </div>
+    )}
+    </>
   )
 }

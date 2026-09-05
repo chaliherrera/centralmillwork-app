@@ -3,6 +3,7 @@ import { Users, Layers, ClipboardList, Plus, X, Loader2, Trash2, Gauge, Check, F
 import toast from 'react-hot-toast'
 import { ingenieriaService, type IngProyecto, type IngTarea, type TareaInput, type IngPlan, type IngTareaPlan, type IngArista, type IngCarga, type IngTareaCelda, type InstalacionDetalle, type MoverResult } from '@/services/ingenieria'
 import MapaEtapas from '@/components/modules/ingenieria/MapaEtapas'
+import CronogramaCliente, { ganttDesdePlan } from '@/components/schedule/CronogramaCliente'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Plan de Ingeniería — réplica de la estructura del Master.Sched (Smartsheet):
@@ -291,6 +292,7 @@ function VistaProyecto({ proyectos, all, plan, planLoading, sel, setSel, onEdit,
   const [dropIdx, setDropIdx] = useState<number | null>(null)   // índice de inserción en taskOrder (0..N)
   const [dndBusy, setDndBusy] = useState(false)
   const [preview, setPreview] = useState<{ res: MoverResult; tareaId: number; afterId: number | null; beforeId: number | null; nombre: string } | null>(null)
+  const [cronoOpen, setCronoOpen] = useState(false)
 
   async function soltarEn(idx: number) {
     const X = dragId; setDragId(null); setDropIdx(null)
@@ -392,7 +394,8 @@ function VistaProyecto({ proyectos, all, plan, planLoading, sel, setSel, onEdit,
           {proyectos.map((pr) => <option key={pr.proyecto_ext} value={pr.proyecto_ext}>{pr.proyecto_ext} · {pr.n_tareas} tareas</option>)}
         </select>
         <span className="text-xs text-stone-400 inline-flex items-center gap-1"><Users size={13} /> {ingenieros.length ? ingenieros.join(', ') : 'sin responsables'}</span>
-        <button onClick={() => onEdit('new')} className="ml-auto inline-flex items-center gap-1.5 rounded-lg bg-forest-600 hover:bg-forest-700 text-white text-sm font-semibold px-3 py-1.5"><Plus size={15} /> Nueva tarea</button>
+        <button onClick={() => setCronoOpen(true)} className="ml-auto inline-flex items-center gap-1.5 rounded-lg border border-forest-200 text-forest-700 hover:bg-forest-50 text-sm font-semibold px-3 py-1.5"><CalendarClock size={15} /> Cronograma cliente</button>
+        <button onClick={() => onEdit('new')} className="inline-flex items-center gap-1.5 rounded-lg bg-forest-600 hover:bg-forest-700 text-white text-sm font-semibold px-3 py-1.5"><Plus size={15} /> Nueva tarea</button>
       </div>
 
       {/* tarjeta de estado: entrega fija + holgura/riesgo */}
@@ -678,6 +681,21 @@ function VistaProyecto({ proyectos, all, plan, planLoading, sel, setSel, onEdit,
               <button onClick={() => setPreview(null)} disabled={dndBusy} className="px-3 py-2 rounded-lg border border-stone-300 text-sm font-semibold text-stone-600 hover:bg-stone-50">Cancelar</button>
               <button onClick={confirmarMov} disabled={dndBusy} className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-forest-600 hover:bg-forest-700 disabled:opacity-50 text-white text-sm font-semibold">{dndBusy ? <Loader2 className="animate-spin" size={15} /> : <Check size={15} />} Confirmar</button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Cronograma del cliente (la propuesta): mismo Gantt que ve el cliente, descargable. */}
+      {cronoOpen && (
+        <div className="fixed inset-0 bg-black/30 flex items-center justify-center p-4 z-50" onClick={() => setCronoOpen(false)}>
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl max-h-[88vh] overflow-y-auto p-5" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center gap-2 mb-3">
+              <CalendarClock size={18} className="text-forest-600" />
+              <h3 className="font-bold text-stone-800 text-sm">Cronograma del cliente · {shortProj(sel)}</h3>
+              <button onClick={() => setCronoOpen(false)} className="ml-auto text-stone-400 hover:text-stone-700"><X size={18} /></button>
+            </div>
+            <p className="text-[11px] text-stone-400 mb-3">Es lo que ve el cliente en el portal. Descargalo para adjuntarlo a un email.</p>
+            <CronogramaCliente nombre={shortProj(sel)} fechaObjetivo={plan?.fecha_entrega ?? null} gantt={ganttDesdePlan(plan?.tareas ?? [])} />
           </div>
         </div>
       )}
