@@ -25,8 +25,10 @@ export interface MovResult {
   explicacion?: { quita: string[]; agrega: string[] }
 }
 
+type ParArista = { tarea_id: number; depende_de_id: number }
+
 /** Adyacencia en el sentido del tiempo: depende_de_id → tarea_id (el predecesor apunta al sucesor). */
-function adyacencia(aristas: AristaRe[]): Map<number, number[]> {
+function adyacencia(aristas: ParArista[]): Map<number, number[]> {
   const adj = new Map<number, number[]>()
   for (const a of aristas) {
     if (!adj.has(a.depende_de_id)) adj.set(a.depende_de_id, [])
@@ -50,7 +52,7 @@ function alcanza(from: number, to: number, adj: Map<number, number[]>): boolean 
 }
 
 /** ¿El grafo tiene un ciclo? (Kahn: si no se pueden ordenar todos los nodos.) */
-function tieneCiclo(aristas: AristaRe[] | CambioArista[], nodos: number[]): boolean {
+function tieneCiclo(aristas: ParArista[], nodos: number[]): boolean {
   const indeg = new Map<number, number>(nodos.map((id) => [id, 0]))
   const adj = new Map<number, number[]>(nodos.map((id) => [id, []]))
   for (const a of aristas) {
