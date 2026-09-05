@@ -36,6 +36,10 @@ export const CLIENT_MOMENTS: Array<{ codigo: string; label: string; tipo: 'accio
   { codigo: 'X-03', label: 'Pago final',         tipo: 'estado' },
 ]
 
+// Tareas del Gantt en las que participa el cliente (se resaltan en el portal):
+// firma de contrato, depósito, aprobación de muestras, revisión y aprobación de planos.
+export const CLIENT_TASK_CLAVES = new Set<string>(['po_execution', 'material_deposit', 'samples', 'client_review', 'approval'])
+
 export type Decision = 'aprobado' | 'aprobado_con_comentarios' | 'rechazado'
 
 export interface TokenInfo {
@@ -84,6 +88,8 @@ export interface VistaPublica {
   momentos: Array<{ codigo: string; label: string; tipo: 'accion' | 'estado'; estado: 'done' | 'now' | 'future' }>
   // Solo las aprobaciones que YA corresponden (predecesores cumplidos, sin resolver).
   pendientes: Array<{ codigo: string; titulo: string; fecha_planeada: string | null; documento_url?: string | null }>
+  // El Gantt completo del proyecto (la propuesta): tareas con fechas; las del cliente marcadas.
+  gantt: Array<{ nombre: string; inicio: string | null; fin: string | null; estado: string; es_cliente: boolean }>
 }
 
 /**
@@ -144,11 +150,23 @@ export async function getVistaPublica(runner: QueryRunner, token: string): Promi
     ? [{ codigo: 'PLAN', titulo: 'Aprobación del plan de trabajo', fecha_planeada: null as string | null }]
     : []
 
+  // El Gantt completo (la propuesta): todas las tareas con fecha; se marcan las del cliente.
+  // Sin costos ni responsables — el schedule no los tiene y esta capa es pública.
+  const { rows: gr } = await runner.query<{ nombre: string; inicio: string | null; fin: string | null; estado: string; clave: string | null }>(
+    `SELECT t.nombre, to_char(t.fecha_inicio,'YYYY-MM-DD') AS inicio, to_char(t.fecha_fin,'YYYY-MM-DD') AS fin,
+            t.estado, tt.clave
+       FROM ing_tareas t
+       LEFT JOIN ing_tarea_tipos tt ON tt.id = t.tipo_id
+      WHERE t.proyecto_id = $1 AND t.fecha_inicio IS NOT NULL AND t.fecha_fin IS NOT NULL AND t.estado <> 'na'
+      ORDER BY t.fecha_inicio, t.id`, [info.proyectoId])
+  const gantt = gr.map((g) => ({ nombre: g.nombre, inicio: g.inicio, fin: g.fin, estado: g.estado, es_cliente: !!g.clave && CLIENT_TASK_CLAVES.has(g.clave) }))
+
   return {
     proyecto: { nombre: pr[0].nombre, cliente: pr[0].cliente, fecha_objetivo: pr[0].fo, semaforo: pr[0].semaforo },
     contacto: info.contactoNombre,
     momentos,
     pendientes: [...planPendiente, ...pendientes],
+    gantt,
   }
 }
 

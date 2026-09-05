@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import toast from 'react-hot-toast'
 import clsx from 'clsx'
-import { CalendarClock, Check, Clock, ThumbsUp, MessageSquare, X, ShieldCheck, Lock, FileText } from 'lucide-react'
+import { toPng } from 'html-to-image'
+import { CalendarClock, Check, Clock, ThumbsUp, MessageSquare, X, ShieldCheck, Lock, FileText, Download, Loader2 } from 'lucide-react'
 import { portalService, type PortalVista, type Decision } from '@/services/portal'
 
 function fmt(d: string | null): string {
@@ -24,6 +25,19 @@ export default function ClientPortal() {
   const [action, setAction] = useState<{ codigo: string; titulo: string; decision: Decision } | null>(null)
   const [comentario, setComentario] = useState('')
   const [busy, setBusy] = useState(false)
+  const ganttRef = useRef<HTMLDivElement>(null)
+  const [descargando, setDescargando] = useState(false)
+
+  async function descargarGantt() {
+    if (!ganttRef.current) return
+    setDescargando(true)
+    try {
+      const png = await toPng(ganttRef.current, { pixelRatio: 2, backgroundColor: '#ffffff', cacheBust: true })
+      const a = document.createElement('a')
+      a.href = png; a.download = `cronograma-${(data?.proyecto.nombre ?? 'proyecto').replace(/[^\w-]+/g, '_')}.png`
+      a.click()
+    } catch { toast.error('No se pudo generar la imagen') } finally { setDescargando(false) }
+  }
 
   // silent=true refresca los datos SIN blanquear la pantalla con el spinner de carga
   // (tras aprobar). El full-screen loading solo va en la carga inicial.
@@ -62,6 +76,25 @@ export default function ClientPortal() {
   const N = data.momentos.length
   const idxNow = data.momentos.findIndex((m) => m.estado === 'now')
   const idxSolido = idxNow >= 0 ? idxNow : N - 1
+
+  // Geometría del Gantt (la propuesta completa) sobre el eje de tiempo.
+  const gantt = data.gantt
+  const day = (d: string) => Math.floor(new Date(d + 'T00:00:00').getTime() / 86400000)
+  const fechasG = gantt.flatMap((t) => [t.inicio, t.fin]).filter(Boolean) as string[]
+  if (data.proyecto.fecha_objetivo) fechasG.push(data.proyecto.fecha_objetivo)
+  const dMin = fechasG.length ? Math.min(...fechasG.map(day)) : 0
+  const spanG = Math.max(1, (fechasG.length ? Math.max(...fechasG.map(day)) : 1) - dMin)
+  const pctG = (d: string | null) => (d ? ((day(d) - dMin) / spanG) * 100 : 0)
+  const MESG = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic']
+  const mesesG: { label: string; left: number }[] = []
+  if (gantt.length) {
+    for (let dd = dMin; dd <= dMin + spanG; dd++) {
+      const date = new Date(dd * 86400000); if (date.getUTCDate() > 3) continue
+      const label = `${MESG[date.getUTCMonth()]} ${String(date.getUTCFullYear()).slice(2)}`
+      const left = ((dd - dMin) / spanG) * 100
+      if (!mesesG.some((m) => m.label === label)) mesesG.push({ label, left })
+    }
+  }
 
   return (
     <div className="min-h-screen bg-[#F6F4EE] text-stone-800">
@@ -122,6 +155,47 @@ export default function ClientPortal() {
             </div>
           </div>
         </div>
+
+        {/* Cronograma del proyecto (Gantt completo) — la propuesta */}
+        {gantt.length > 0 && (
+          <div>
+            <div className="flex items-center gap-2 mb-2">
+              <span className="text-xs font-semibold text-stone-500 uppercase tracking-wide">Cronograma del proyecto</span>
+              <button onClick={descargarGantt} disabled={descargando}
+                className="ml-auto inline-flex items-center gap-1.5 text-[12px] font-semibold text-forest-700 hover:text-forest-900 border border-forest-200 rounded-lg px-2.5 py-1">
+                {descargando ? <Loader2 size={13} className="animate-spin" /> : <Download size={13} />} Descargar
+              </button>
+            </div>
+            <div ref={ganttRef} className="rounded-2xl border border-card-border bg-white p-4" style={{ boxShadow: '0 1px 4px rgba(0,0,0,0.04)' }}>
+              <div className="text-[13px] font-bold text-stone-800 mb-3">{data.proyecto.nombre} · cronograma</div>
+              <div className="overflow-x-auto"><div className="min-w-[560px]">
+                <div className="flex items-stretch border-b border-stone-100 pb-1 mb-1">
+                  <div className="shrink-0" style={{ width: 150 }} />
+                  <div className="relative flex-1 h-4">
+                    {mesesG.map((m, i) => <div key={i} className="absolute top-0 text-[9px] font-semibold text-stone-400" style={{ left: `${m.left}%` }}>{m.label}</div>)}
+                  </div>
+                </div>
+                {gantt.map((t, i) => (
+                  <div key={i} className="flex items-center gap-2 py-0.5">
+                    <div className={clsx('shrink-0 text-[11px] truncate flex items-center gap-1', t.es_cliente ? 'font-bold text-rose-700' : 'text-stone-600')} style={{ width: 150 }}>
+                      {t.es_cliente && <span className="w-1.5 h-1.5 rounded-full bg-rose-500 shrink-0" />}
+                      {t.nombre}
+                    </div>
+                    <div className="relative flex-1 h-4">
+                      <div className={clsx('absolute top-0.5 h-3 rounded', t.es_cliente ? 'bg-rose-500' : t.estado === 'hecha' ? 'bg-emerald-400' : 'bg-forest-400')}
+                        style={{ left: `${pctG(t.inicio)}%`, width: `${Math.max(1.2, pctG(t.fin) - pctG(t.inicio))}%` }} />
+                    </div>
+                  </div>
+                ))}
+                <div className="flex items-center gap-3 mt-3 pt-2 border-t border-stone-100 text-[10px] text-stone-500">
+                  <span className="inline-flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm bg-rose-500 inline-block" /> tus pasos</span>
+                  <span className="inline-flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm bg-forest-400 inline-block" /> producción</span>
+                  {data.proyecto.fecha_objetivo && <span className="ml-auto">Entrega: <b className="text-stone-700">{fmt(data.proyecto.fecha_objetivo)}</b></span>}
+                </div>
+              </div></div>
+            </div>
+          </div>
+        )}
 
         {/* acciones que le tocan ahora */}
         {data.pendientes.length > 0 ? (

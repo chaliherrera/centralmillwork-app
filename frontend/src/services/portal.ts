@@ -6,11 +6,15 @@ export type Decision = 'aprobado' | 'aprobado_con_comentarios' | 'rechazado'
 export interface PortalMomento {
   codigo: string; label: string; tipo: 'accion' | 'estado'; estado: 'done' | 'now' | 'future'
 }
+export interface PortalGanttTarea {
+  nombre: string; inicio: string | null; fin: string | null; estado: string; es_cliente: boolean
+}
 export interface PortalVista {
   proyecto: { nombre: string; cliente: string; fecha_objetivo: string | null; semaforo: string }
   contacto: string | null
   momentos: PortalMomento[]
   pendientes: Array<{ codigo: string; titulo: string; fecha_planeada: string | null; documento_url?: string | null }>
+  gantt: PortalGanttTarea[]
 }
 
 export const portalService = {
