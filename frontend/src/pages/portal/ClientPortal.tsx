@@ -32,7 +32,9 @@ export default function ClientPortal() {
     if (!ganttRef.current) return
     setDescargando(true)
     try {
-      const png = await toPng(ganttRef.current, { pixelRatio: 2, backgroundColor: '#ffffff', cacheBust: true })
+      // skipFonts evita el error CORS al intentar inlinear el CSS de Google Fonts
+      // (el PNG usa la fuente ya renderizada del DOM igual).
+      const png = await toPng(ganttRef.current, { pixelRatio: 2, backgroundColor: '#ffffff', cacheBust: true, skipFonts: true })
       const a = document.createElement('a')
       a.href = png; a.download = `cronograma-${(data?.proyecto.nombre ?? 'proyecto').replace(/[^\w-]+/g, '_')}.png`
       a.click()
