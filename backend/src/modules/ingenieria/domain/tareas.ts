@@ -9,8 +9,10 @@
 
 import type { PoolClient } from 'pg'
 import pool from '../../../db/pool'
-import { loadFeriados } from '../../schedule/domain/calendario'
-import { calcularHolgura, type TareaCPM, type AristaCPM } from './holgura'
+import { loadFeriados, type ISODate } from '../../schedule/domain/calendario'
+import { capturarFechasReales } from '../../schedule/domain/captura'
+import { proyectarHitos, esInferida, type HitoPlantilla, type PasoFechas } from '../../schedule/domain/proyeccion'
+import { calcularHolgura, type TareaCPM, type AristaCPM, type HolguraTarea } from './holgura'
 import { estadoDeposito, type EstadoDeposito } from './deposito'
 import { estadoMuestras, type EstadoMuestras } from './muestras'
 import { estadoCompras, type EstadoCompras } from './compras'
@@ -448,37 +450,108 @@ export async function recomputarYGuardar(runner: QueryRunner, proyectoExt: strin
       const c = r.tareas.get(t.id)
       if (c) await runner.query(`UPDATE ing_tareas SET fecha_inicio = $2, fecha_fin = $3 WHERE id = $1`, [t.id, c.earlyStart, c.earlyFinish])
     }
-    // Proyección al journey map (opción A de Chali): el journey es un REFLEJO del Gantt.
-    // Escribimos las fechas de los hitos mapeados + la salud del proyecto en schedule_hitos/
-    // schedule_planes, para que TODOS los consumidores del journey (lista, detalle, portal)
-    // sean coherentes con el Gantt. Es un cache derivado, refrescado en cada recompute —
-    // nunca se edita solo, así que sigue habiendo una sola fuente de verdad (el Gantt).
-    await sincronizarJourney(runner, proyectoExt, r.holguraProyecto)
+    // Proyección al journey (fuente única = el Gantt): cada hito toma su fecha del PASO
+    // del Gantt al que mapea (schedule_plantilla_hitos.gantt_clave/gantt_ancla). Reemplaza
+    // al motor teórico del Life of a Deal. Es un cache derivado, refrescado en cada
+    // recompute — nunca se edita solo.
+    await proyectarJourney(runner, proyectoExt, tareas, r, h.entrega, feriados)
   } catch { /* ciclo improbable: se deja como está */ }
 }
 
-/** Refresca el journey map de un proyecto con las fechas y la salud del Gantt (opción A).
- *  Solo toca los hitos que MAPEAN a un paso (ing_tarea_tipos.hito_codigo); los demás
- *  (señales de módulos, manuales) quedan como están. No-op si el proyecto no tiene journey. */
-async function sincronizarJourney(runner: QueryRunner, proyectoExt: string, holguraProyecto: number): Promise<void> {
+// Variantes de piedra que comparten milestone con su paso base (para plegar sus fechas).
+const BASE_CLAVE: Record<string, string> = {
+  stone_measure: 'field_measurements', stone_fab: 'fabrication', stone_install: 'installation',
+}
+function hoyISOd(): ISODate {
+  const t = new Date(); const p = (n: number) => String(n).padStart(2, '0')
+  return `${t.getFullYear()}-${p(t.getMonth() + 1)}-${p(t.getDate())}`
+}
+
+/** Proyecta el journey del proyecto DESDE el Gantt (fuente única). Captura los hechos
+ *  reales de los módulos, corre la proyección pura (proyeccion.ts) y persiste hitos +
+ *  salud del plan. No-op si el proyecto no tiene journey (schedule_plan). */
+async function proyectarJourney(
+  runner: QueryRunner, proyectoExt: string,
+  tareas: Array<{ id: number; tipo_clave: string | null }>,
+  cpm: ReturnType<typeof calcularHolgura>, fechaEntrega: string, feriados: Set<ISODate>,
+): Promise<void> {
   const { rows: pr } = await runner.query<{ proyecto_id: number | null }>(
     `SELECT proyecto_id FROM ing_proyectos WHERE proyecto_ext = $1`, [proyectoExt])
   const pid = pr[0]?.proyecto_id
   if (!pid) return
-  // Fechas: cada hito mapeado toma la fecha_fin de su tarea del Gantt.
+  const { rows: pl } = await runner.query<{ id: number; plantilla_id: number }>(
+    `SELECT id, plantilla_id FROM schedule_planes WHERE proyecto_id = $1 AND scope = 'proyecto' LIMIT 1`, [pid])
+  if (!pl[0]) return
+  const planId = pl[0].id, plantillaId = pl[0].plantilla_id
+
+  // Plantilla de hitos + dependencias del journey.
+  const { rows: hitos } = await runner.query<HitoPlantilla>(
+    `SELECT codigo, tipo, gantt_clave, gantt_ancla, gantt_lag_dias, rol_responsable, fuente_dato, es_ancla
+       FROM schedule_plantilla_hitos WHERE plantilla_id = $1`, [plantillaId])
+  const { rows: hdeps } = await runner.query<{ hito: string; dependeDe: string }>(
+    `SELECT hito_codigo AS hito, depende_de_codigo AS "dependeDe"
+       FROM schedule_plantilla_dependencias WHERE plantilla_id = $1`, [plantillaId])
+
+  // Fechas de cada paso del Gantt (plegando variantes de piedra al paso base).
+  const pasos = new Map<string, PasoFechas>()
+  for (const t of tareas) {
+    const c = cpm.tareas.get(t.id); if (!c) continue
+    const clave = BASE_CLAVE[t.tipo_clave ?? ''] ?? t.tipo_clave
+    if (!clave) continue
+    const cur = pasos.get(clave)
+    if (!cur) pasos.set(clave, { es: c.earlyStart, ef: c.earlyFinish, ls: c.lateStart, lf: c.lateFinish })
+    else pasos.set(clave, {
+      es: c.earlyStart < cur.es ? c.earlyStart : cur.es,
+      ef: c.earlyFinish > cur.ef ? c.earlyFinish : cur.ef,
+      ls: c.lateStart < cur.ls ? c.lateStart : cur.ls,
+      lf: c.lateFinish > cur.lf ? c.lateFinish : cur.lf,
+    })
+  }
+
+  // Fechas reales: captura de módulos + preservar las manuales/portal ya guardadas.
+  const capt = await capturarFechasReales(runner, pid)
+  const { rows: ex } = await runner.query<{ codigo: string; fecha_real: string | null; evidencia_ref: unknown }>(
+    `SELECT codigo, to_char(fecha_real,'YYYY-MM-DD') AS fecha_real, evidencia_ref FROM schedule_hitos WHERE plan_id = $1`, [planId])
+  const exMap = new Map(ex.map((e) => [e.codigo, e]))
+  const reales = new Map<string, { fecha_real: ISODate | null; evidencia: unknown }>()
+  for (const h of hitos) {
+    let fr = capt.get(h.codigo)?.fecha_real ?? null
+    let evi: unknown = capt.get(h.codigo)?.evidencia ?? null
+    if (fr === null && h.fuente_dato === 'manual_futuro') {
+      const e = exMap.get(h.codigo)
+      if (e?.fecha_real && !esInferida(e.evidencia_ref)) { fr = e.fecha_real; evi = e.evidencia_ref ?? null }
+    }
+    reales.set(h.codigo, { fecha_real: fr, evidencia: evi })
+  }
+
+  const res = proyectarHitos({
+    hitos, deps: hdeps, pasos, reales, hoy: hoyISOd(), feriados,
+    fechaEntrega, finProyectado: cpm.finProyectado, holguraProyecto: cpm.holguraProyecto,
+  })
+
+  for (const ph of res.hitos) {
+    await runner.query(
+      `INSERT INTO schedule_hitos
+         (plan_id, codigo, fecha_planeada, fecha_baseline, fecha_real, fecha_proyectada,
+          estado, semaforo, holgura_dias, atribucion_atraso, evidencia_ref, updated_at)
+       VALUES ($1,$2,$3,$3,$4,$5,$6,$7,$8,$9,$10,NOW())
+       ON CONFLICT (plan_id, codigo) DO UPDATE SET
+         fecha_planeada    = EXCLUDED.fecha_planeada,
+         fecha_baseline    = COALESCE(schedule_hitos.fecha_baseline, EXCLUDED.fecha_planeada),
+         fecha_real        = EXCLUDED.fecha_real,
+         fecha_proyectada  = EXCLUDED.fecha_proyectada,
+         estado            = EXCLUDED.estado,
+         semaforo          = EXCLUDED.semaforo,
+         holgura_dias      = EXCLUDED.holgura_dias,
+         atribucion_atraso = EXCLUDED.atribucion_atraso,
+         evidencia_ref     = EXCLUDED.evidencia_ref,
+         updated_at        = NOW()`,
+      [planId, ph.codigo, ph.fecha_planeada, ph.fecha_real ? `${ph.fecha_real} 12:00:00` : null, ph.fecha_proyectada,
+       ph.estado, ph.semaforo, ph.holgura_dias, ph.atribucion_atraso, ph.evidencia_ref ? JSON.stringify(ph.evidencia_ref) : null])
+  }
   await runner.query(
-    `UPDATE schedule_hitos sh
-        SET fecha_planeada = t.fecha_fin, fecha_proyectada = t.fecha_fin
-       FROM ing_tareas t
-       JOIN ing_tarea_tipos tt ON tt.id = t.tipo_id
-       JOIN schedule_planes sp ON sp.proyecto_id = t.proyecto_id AND sp.scope = 'proyecto'
-      WHERE t.proyecto_id = $1 AND tt.hito_codigo IS NOT NULL AND t.fecha_fin IS NOT NULL
-        AND sh.plan_id = sp.id AND sh.codigo = tt.hito_codigo`, [pid])
-  // Salud del plan: holgura + semáforo del Gantt (binario, igual que el Gantt: <0 rojo, si no verde).
-  const semaforo = holguraProyecto < 0 ? 'rojo' : 'verde'
-  await runner.query(
-    `UPDATE schedule_planes SET holgura_dias = $2, semaforo = $3, updated_at = NOW()
-      WHERE proyecto_id = $1 AND scope = 'proyecto'`, [pid, Math.round(holguraProyecto), semaforo])
+    `UPDATE schedule_planes SET semaforo = $2, holgura_dias = $3, updated_at = NOW() WHERE id = $1`,
+    [planId, res.semaforoPlan, res.holguraPlan])
 }
 
 // ── Edición (MVP: que el creador la pruebe y la corrijamos) ──
