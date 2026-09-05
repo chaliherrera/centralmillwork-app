@@ -12,7 +12,8 @@ import pool from '../../../db/pool'
 import { loadFeriados, type ISODate } from '../../schedule/domain/calendario'
 import { capturarFechasReales } from '../../schedule/domain/captura'
 import { proyectarHitos, esInferida, type HitoPlantilla, type PasoFechas } from '../../schedule/domain/proyeccion'
-import { calcularHolgura, type TareaCPM, type AristaCPM, type HolguraTarea } from './holgura'
+import { calcularHolgura, type TareaCPM, type AristaCPM, type HolguraTarea, type HolguraProyecto } from './holgura'
+import { tieneCiclo, planificarMovimiento, type CambioArista, type AristaRe, type TareaRe } from './reordenar'
 import { estadoDeposito, type EstadoDeposito } from './deposito'
 import { estadoMuestras, type EstadoMuestras } from './muestras'
 import { estadoCompras, type EstadoCompras } from './compras'
@@ -809,4 +810,96 @@ export async function agregarDep(runner: QueryRunner, tareaId: number, dependeDe
 export async function borrarDep(runner: QueryRunner, tareaId: number, dependeDeId: number): Promise<boolean> {
   const { rowCount } = await runner.query(`DELETE FROM ing_tarea_deps WHERE tarea_id = $1 AND depende_de_id = $2`, [tareaId, dependeDeId])
   return (rowCount ?? 0) > 0
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Drag & drop: aplicar cambios de dependencias en bloque (atómico) + mover tarea
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** CPM del proyecto con un conjunto DADO de aristas (para preview/dry-run del reorder). */
+async function cpmConAristas(runner: QueryRunner, ext: string, aristas: Array<{ tarea_id: number; depende_de_id: number; tipo: string; lag_dias: number }>): Promise<HolguraProyecto | null> {
+  const { rows: hdr } = await runner.query<{ ini: string | null; entrega: string | null }>(
+    `SELECT to_char(fecha_inicio,'YYYY-MM-DD') AS ini, to_char(fecha_entrega,'YYYY-MM-DD') AS entrega FROM ing_proyectos WHERE proyecto_ext = $1`, [ext])
+  const h = hdr[0]; if (!h?.ini || !h?.entrega) return null
+  const tareas = await listTareas(runner, ext); if (!tareas.length) return null
+  const deposito = await estadoDeposito(runner, ext)
+  const compras = await estadoCompras(runner, ext)
+  const clave = new Map(tareas.map((t) => [t.id, t.tipo_clave]))
+  const feriados = await loadFeriados(runner)
+  const cpmTareas: TareaCPM[] = tareas.map((t) => ({ id: t.id, dur: t.dur_dias, noAntesDe: pisoTarea(clave.get(t.id) ?? null, deposito, compras, t.no_antes_de) }))
+  const cpmAristas: AristaCPM[] = aristas.map((a) => ({ tareaId: a.tarea_id, dependeDeId: a.depende_de_id, lag: a.lag_dias, tipo: a.tipo === 'SS' ? 'SS' : 'FS' }))
+  try { return calcularHolgura(cpmTareas, cpmAristas, h.ini, h.entrega, feriados) } catch { return null }
+}
+
+export interface CambioDepsResult {
+  ok: boolean; error?: string; dryRun: boolean; noop?: boolean
+  diffs: Array<{ id: number; nombre: string; ef_antes: string | null; ef_despues: string | null }>
+  fin_antes: string | null; fin_despues: string | null; holgura: number; en_riesgo: boolean
+  inverso: { remove: CambioArista[]; add: CambioArista[] }
+  explicacion?: { quita: string[]; agrega: string[] }
+}
+
+function errDeps(dryRun: boolean, error: string): CambioDepsResult {
+  return { ok: false, error, dryRun, diffs: [], fin_antes: null, fin_despues: null, holgura: 0, en_riesgo: false, inverso: { remove: [], add: [] } }
+}
+
+/** Aplica un conjunto de cambios de dependencias de forma ATÓMICA: valida ciclo,
+ *  corre el CPM antes/después (preview) y, si no es dry-run, escribe + recalcula. */
+export async function aplicarCambiosDeps(
+  runner: QueryRunner, ext: string, remove: CambioArista[], add: CambioArista[], dryRun: boolean,
+  explicacion?: { quita: string[]; agrega: string[] },
+): Promise<CambioDepsResult> {
+  const tareas = await listTareas(runner, ext)
+  const idset = new Set(tareas.map((t) => t.id))
+  for (const c of [...remove, ...add]) if (!idset.has(c.tarea_id) || !idset.has(c.depende_de_id)) return errDeps(dryRun, 'una dependencia queda fuera del proyecto')
+  const ids = [...idset]
+  const { rows: cur } = await runner.query<{ tarea_id: number; depende_de_id: number; tipo: string; lag_dias: number }>(
+    `SELECT tarea_id, depende_de_id, tipo, lag_dias FROM ing_tarea_deps WHERE tarea_id = ANY($1) AND depende_de_id = ANY($1)`, [ids])
+  const rmSet = new Set(remove.map((r) => `${r.tarea_id}<${r.depende_de_id}`))
+  const nueva = [...cur.filter((a) => !rmSet.has(`${a.tarea_id}<${a.depende_de_id}`)),
+    ...add.map((a) => ({ tarea_id: a.tarea_id, depende_de_id: a.depende_de_id, tipo: a.tipo ?? 'FS', lag_dias: a.lag_dias ?? 0 }))]
+  if (tieneCiclo(nueva, ids)) return errDeps(dryRun, 'ese cambio crearía un ciclo de dependencias')
+
+  const antes = await cpmConAristas(runner, ext, cur)
+  const despues = await cpmConAristas(runner, ext, nueva)
+  const diffs = tareas.map((t) => {
+    const a = antes?.tareas.get(t.id), d = despues?.tareas.get(t.id)
+    return { id: t.id, nombre: t.nombre, ef_antes: a?.earlyFinish ?? null, ef_despues: d?.earlyFinish ?? null }
+  }).filter((x) => x.ef_antes !== x.ef_despues)
+
+  const curMap = new Map(cur.map((a) => [`${a.tarea_id}<${a.depende_de_id}`, a]))
+  const inverso = {
+    remove: add.map((a) => ({ tarea_id: a.tarea_id, depende_de_id: a.depende_de_id })),
+    add: remove.map((r) => { const o = curMap.get(`${r.tarea_id}<${r.depende_de_id}`); return { tarea_id: r.tarea_id, depende_de_id: r.depende_de_id, tipo: o?.tipo ?? 'FS', lag_dias: o?.lag_dias ?? 0 } }),
+  }
+
+  if (!dryRun) {
+    for (const r of remove) await borrarDep(runner, r.tarea_id, r.depende_de_id)
+    for (const a of add) await agregarDep(runner, a.tarea_id, a.depende_de_id, a.lag_dias ?? 0, a.tipo ?? 'FS')
+    await recomputarYGuardar(runner, ext)
+  }
+  return { ok: true, dryRun, diffs, fin_antes: antes?.finProyectado ?? null, fin_despues: despues?.finProyectado ?? null,
+    holgura: despues?.holguraProyecto ?? 0, en_riesgo: despues?.enRiesgo ?? false, inverso, explicacion }
+}
+
+/** Mueve una tarea al slot (afterId = fila de arriba, beforeId = fila de abajo),
+ *  recableando dependencias con planificarMovimiento (puro) y aplicando el resultado. */
+export async function moverTarea(
+  runner: QueryRunner, tareaId: number, afterId: number | null, beforeId: number | null, dryRun: boolean,
+): Promise<CambioDepsResult> {
+  const { rows: pe } = await runner.query<{ ext: string | null }>(`SELECT proyecto_ext AS ext FROM ing_tareas WHERE id = $1`, [tareaId])
+  const ext = pe[0]?.ext
+  if (!ext) return errDeps(dryRun, 'tarea no encontrada')
+  const plan = await getPlanProyecto(runner, ext)
+  // orden_visual = orden topológico aproximado (por early_start; desempate por id).
+  const ordenadas = [...plan.tareas].sort((a, b) => {
+    const ka = a.early_start ?? a.fecha_inicio ?? '9999-12-31', kb = b.early_start ?? b.fecha_inicio ?? '9999-12-31'
+    return ka < kb ? -1 : ka > kb ? 1 : a.id - b.id
+  })
+  const T: TareaRe[] = ordenadas.map((t, i) => ({ id: t.id, nombre: t.nombre, estado: t.estado, orden_visual: i + 1 }))
+  const AR: AristaRe[] = plan.aristas.map((a) => ({ tarea_id: a.tarea_id, depende_de_id: a.depende_de_id, tipo: a.tipo, lag_dias: a.lag_dias, ignorada_at: a.ignorada_at }))
+  const mov = planificarMovimiento(T, AR, tareaId, afterId, beforeId)
+  if (!mov.ok) return errDeps(dryRun, mov.error ?? 'no se pudo mover')
+  if (mov.noop) return { ok: true, dryRun, noop: true, diffs: [], fin_antes: null, fin_despues: null, holgura: 0, en_riesgo: false, inverso: { remove: [], add: [] }, explicacion: { quita: [], agrega: [] } }
+  return aplicarCambiosDeps(runner, ext, mov.remove, mov.add, dryRun, mov.explicacion)
 }

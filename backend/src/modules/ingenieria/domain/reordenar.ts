@@ -52,7 +52,7 @@ function alcanza(from: number, to: number, adj: Map<number, number[]>): boolean 
 }
 
 /** ¿El grafo tiene un ciclo? (Kahn: si no se pueden ordenar todos los nodos.) */
-function tieneCiclo(aristas: ParArista[], nodos: number[]): boolean {
+export function tieneCiclo(aristas: ParArista[], nodos: number[]): boolean {
   const indeg = new Map<number, number>(nodos.map((id) => [id, 0]))
   const adj = new Map<number, number[]>(nodos.map((id) => [id, []]))
   for (const a of aristas) {

@@ -11,6 +11,7 @@ import {
   crearTarea, actualizarTarea, reportarAvance, getPlanProyecto,
   borrarTareaConReconexion, agregarDep, borrarDep, listReprogramaciones, recomputarYGuardar,
   reabrirShopDrawingsPorRechazo, cerrarGatePorAprobacion, cerrarReleasePorSdUpdate,
+  aplicarCambiosDeps, moverTarea,
 } from '../domain/tareas'
 import { listReservasPendientes, liberarReserva } from '../domain/reservas'
 import { listIngenieros, actualizarIngeniero } from '../domain/ingenieros'
@@ -320,6 +321,44 @@ export async function borrarDepHandler(req: Request, res: Response, next: NextFu
     if (rows[0]?.ext) await recomputarYGuardar(pool, rows[0].ext)
     res.json({ data: { ok: true } })
   } catch (e) { next(e) }
+}
+
+// ── Drag & drop / edición en bloque de dependencias ──
+const arr = (v: unknown) => (Array.isArray(v) ? v : [])
+const cambios = (v: unknown) => arr(v)
+  .map((c: any) => ({ tarea_id: parseInt(String(c?.tarea_id), 10), depende_de_id: parseInt(String(c?.depende_de_id), 10),
+    tipo: typeof c?.tipo === 'string' ? c.tipo : undefined, lag_dias: Number.isFinite(+c?.lag_dias) ? Math.trunc(+c.lag_dias) : undefined }))
+  .filter((c) => !Number.isNaN(c.tarea_id) && !Number.isNaN(c.depende_de_id))
+
+// PUT /api/ingenieria/proyecto/:ext/deps  { remove:[], add:[], dry_run? } — atómico
+export async function bulkDepsHandler(req: Request, res: Response, next: NextFunction) {
+  const ext = String(req.params.ext)
+  const dryRun = req.body?.dry_run === true
+  const client = await pool.connect()
+  try {
+    await client.query('BEGIN')
+    const r = await aplicarCambiosDeps(client, ext, cambios(req.body?.remove), cambios(req.body?.add), dryRun)
+    await client.query('COMMIT')
+    if (!r.ok) return next(createError(r.error ?? 'no se pudo aplicar', 400))
+    res.json({ data: r })
+  } catch (e) { await client.query('ROLLBACK').catch(() => {}); next(e) } finally { client.release() }
+}
+
+// POST /api/ingenieria/tareas/:id/mover  { after_id, before_id, dry_run? }
+export async function moverTareaHandler(req: Request, res: Response, next: NextFunction) {
+  const id = parseInt(String(req.params.id), 10)
+  if (Number.isNaN(id)) return next(createError('id inválido', 400))
+  const after = req.body?.after_id == null ? null : parseInt(String(req.body.after_id), 10)
+  const before = req.body?.before_id == null ? null : parseInt(String(req.body.before_id), 10)
+  const dryRun = req.body?.dry_run === true
+  const client = await pool.connect()
+  try {
+    await client.query('BEGIN')
+    const r = await moverTarea(client, id, Number.isNaN(after as number) ? null : after, Number.isNaN(before as number) ? null : before, dryRun)
+    await client.query('COMMIT')
+    if (!r.ok) return next(createError(r.error ?? 'no se pudo mover', 400))
+    res.json({ data: r })
+  } catch (e) { await client.query('ROLLBACK').catch(() => {}); next(e) } finally { client.release() }
 }
 
 // ── Pedidos de reprogramación (bandeja del PM) ──
