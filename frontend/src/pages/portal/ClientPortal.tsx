@@ -194,6 +194,9 @@ export default function ClientPortal() {
                   <span className="inline-flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm bg-forest-400 inline-block" /> producción</span>
                   {data.proyecto.fecha_objetivo && <span className="ml-auto">Entrega: <b className="text-stone-700">{fmt(data.proyecto.fecha_objetivo)}</b></span>}
                 </div>
+                <div className="mt-2.5 text-[10.5px] text-rose-800 bg-rose-50 border border-rose-100 rounded-lg px-2.5 py-2 leading-snug">
+                  Las tareas marcadas en <b>rojo</b> dependen de vos. El retraso en su cumplimiento pone en riesgo el cumplimiento de la fecha de entrega propuesta para el proyecto.
+                </div>
               </div></div>
             </div>
           </div>
