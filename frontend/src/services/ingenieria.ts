@@ -264,4 +264,19 @@ export const ingenieriaService = {
     api.post<ApiResponse<{ ok: boolean }>>(`/ingenieria/tareas/${tareaId}/dep`, { depende_de_id, lag_dias }).then((r) => r.data),
   borrarDep: (tareaId: number, dependeDeId: number) =>
     api.delete<ApiResponse<{ ok: boolean }>>(`/ingenieria/tareas/${tareaId}/dep/${dependeDeId}`).then((r) => r.data),
+  // Drag & drop: mover una tarea (recablea dependencias). dry_run = preview sin escribir.
+  moverTarea: (id: number, after_id: number | null, before_id: number | null, dry_run = false) =>
+    api.post<ApiResponse<MoverResult>>(`/ingenieria/tareas/${id}/mover`, { after_id, before_id, dry_run }).then((r) => r.data),
+  // Edición atómica de dependencias (para deshacer / EditModal).
+  bulkDeps: (ext: string, remove: CambioDep[], add: CambioDep[], dry_run = false) =>
+    api.put<ApiResponse<MoverResult>>(`/ingenieria/proyecto/${ext}/deps`, { remove, add, dry_run }).then((r) => r.data),
+}
+
+export interface CambioDep { tarea_id: number; depende_de_id: number; tipo?: string; lag_dias?: number }
+export interface MoverResult {
+  ok: boolean; error?: string; dryRun: boolean; noop?: boolean
+  diffs: Array<{ id: number; nombre: string; ef_antes: string | null; ef_despues: string | null }>
+  fin_antes: string | null; fin_despues: string | null; holgura: number; en_riesgo: boolean
+  inverso: { remove: CambioDep[]; add: CambioDep[] }
+  explicacion?: { quita: string[]; agrega: string[] }
 }

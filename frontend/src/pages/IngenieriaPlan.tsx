@@ -1,6 +1,7 @@
 import { Fragment, useEffect, useMemo, useState } from 'react'
-import { Users, Layers, ClipboardList, Plus, X, Loader2, Trash2, Gauge, Check, FolderKanban, Activity, AlertTriangle, Wallet, Lock, LockOpen, FlaskConical, Package, Wrench, CalendarClock, ChevronUp, ChevronDown } from 'lucide-react'
-import { ingenieriaService, type IngProyecto, type IngTarea, type TareaInput, type IngPlan, type IngTareaPlan, type IngArista, type IngCarga, type IngTareaCelda, type InstalacionDetalle } from '@/services/ingenieria'
+import { Users, Layers, ClipboardList, Plus, X, Loader2, Trash2, Gauge, Check, FolderKanban, Activity, AlertTriangle, Wallet, Lock, LockOpen, FlaskConical, Package, Wrench, CalendarClock, ChevronUp, ChevronDown, GripVertical, ArrowRight, Undo2 } from 'lucide-react'
+import toast from 'react-hot-toast'
+import { ingenieriaService, type IngProyecto, type IngTarea, type TareaInput, type IngPlan, type IngTareaPlan, type IngArista, type IngCarga, type IngTareaCelda, type InstalacionDetalle, type MoverResult } from '@/services/ingenieria'
 import MapaEtapas from '@/components/modules/ingenieria/MapaEtapas'
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -280,6 +281,53 @@ function VistaProyecto({ proyectos, all, plan, planLoading, sel, setSel, onEdit,
   const engColor = useMemo(() => { const m = new Map<string, string>(); [...new Set(all.map((t) => t.asignado_nombre).filter(Boolean))].forEach((e, i) => m.set(e as string, PAL[i % PAL.length])); return m }, [all])
   const tareas = plan?.tareas ?? []
   const ingenieros = useMemo(() => [...new Set(tareas.map((t) => t.asignado_nombre).filter(Boolean))], [tareas])
+
+  // ── Drag & drop: reordenar tareas (recablea dependencias vía el CPM) ──
+  const taskOrder = useMemo(() => [...tareas].sort((a, b) => {
+    const ka = a.early_start ?? a.fecha_inicio ?? '9999-12-31', kb = b.early_start ?? b.fecha_inicio ?? '9999-12-31'
+    return ka < kb ? -1 : ka > kb ? 1 : a.id - b.id
+  }), [tareas])
+  const [dragId, setDragId] = useState<number | null>(null)
+  const [dropIdx, setDropIdx] = useState<number | null>(null)   // índice de inserción en taskOrder (0..N)
+  const [dndBusy, setDndBusy] = useState(false)
+  const [preview, setPreview] = useState<{ res: MoverResult; tareaId: number; afterId: number | null; beforeId: number | null; nombre: string } | null>(null)
+
+  async function soltarEn(idx: number) {
+    const X = dragId; setDragId(null); setDropIdx(null)
+    if (X == null || dndBusy) return
+    let after: IngTareaPlan | null = null, before: IngTareaPlan | null = null
+    for (let i = idx - 1; i >= 0; i--) if (taskOrder[i].id !== X) { after = taskOrder[i]; break }
+    for (let i = idx; i < taskOrder.length; i++) if (taskOrder[i].id !== X) { before = taskOrder[i]; break }
+    const xt = taskOrder.find((t) => t.id === X)
+    setDndBusy(true)
+    try {
+      const r = (await ingenieriaService.moverTarea(X, after?.id ?? null, before?.id ?? null, true)).data
+      if (r.noop) { toast('La tarea ya está en ese lugar'); return }
+      setPreview({ res: r, tareaId: X, afterId: after?.id ?? null, beforeId: before?.id ?? null, nombre: xt?.nombre ?? '' })
+    } catch (e: any) { toast.error(e?.response?.data?.message || 'No se puede mover ahí') }
+    finally { setDndBusy(false) }
+  }
+
+  async function confirmarMov() {
+    if (!preview) return
+    setDndBusy(true)
+    try {
+      const r = (await ingenieriaService.moverTarea(preview.tareaId, preview.afterId, preview.beforeId, false)).data
+      const inverso = r.inverso; const nombre = preview.nombre
+      setPreview(null)
+      await onRefresh()
+      toast((tt) => (
+        <span className="flex items-center gap-2 text-[13px]">
+          <span>Plan reordenado</span>
+          <button onClick={async () => { toast.dismiss(tt.id); try { await ingenieriaService.bulkDeps(sel, inverso.remove, inverso.add, false); await onRefresh(); toast.success('Deshecho') } catch { toast.error('No se pudo deshacer') } }}
+            className="inline-flex items-center gap-1 font-semibold text-forest-700 hover:text-forest-900">
+            <Undo2 size={13} /> Deshacer {nombre ? '' : ''}
+          </button>
+        </span>
+      ), { duration: 8000 })
+    } catch (e: any) { toast.error(e?.response?.data?.message || 'No se pudo aplicar') }
+    finally { setDndBusy(false) }
+  }
   // Validación vs Excel: la app calcula la fecha (early_finish); el Excel la trae (fecha_fin).
   // Si difieren, suele faltar una dependencia (o el experto la puso a mano) — a revisar.
   const difExcel = (t: IngTareaPlan) => !!(t.early_finish && t.fecha_fin && t.early_finish !== t.fecha_fin)
@@ -490,9 +538,19 @@ function VistaProyecto({ proyectos, all, plan, planLoading, sel, setSel, onEdit,
               {g.rows.map((r: any, i: number) => r.type === 'phase'
                 ? <div key={i} className="bg-forest-50/40 px-4 text-[11px] font-bold text-forest-700 uppercase tracking-wide flex items-center" style={{ height: PH_H }}>{r.label} <span className="text-forest-400 font-normal normal-case ml-1">· {r.count}</span></div>
                 : (() => { const t = r.tarea as IngTareaPlan; const holg = t.holgura_dias
+                    const vi = taskOrder.findIndex((x) => x.id === t.id); const arrastrable = t.estado !== 'hecha' && t.estado !== 'na'
                     return (
-                      <div key={i} onClick={() => onEdit(t)} className="px-4 border-b border-stone-50 border-r border-stone-100 hover:bg-forest-50/30 cursor-pointer flex flex-col justify-center" style={{ height: ROW_H }}>
+                      <div key={i}
+                        draggable={arrastrable}
+                        onDragStart={() => setDragId(t.id)}
+                        onDragEnd={() => { setDragId(null); setDropIdx(null) }}
+                        onDragOver={(e) => { if (dragId == null || dragId === t.id) return; e.preventDefault(); const rc = e.currentTarget.getBoundingClientRect(); setDropIdx(e.clientY > rc.top + rc.height / 2 ? vi + 1 : vi) }}
+                        onDrop={(e) => { e.preventDefault(); if (dropIdx != null) soltarEn(dropIdx) }}
+                        onClick={() => onEdit(t)}
+                        className={`group px-4 border-b border-stone-50 border-r border-stone-100 hover:bg-forest-50/30 cursor-pointer flex flex-col justify-center ${dragId === t.id ? 'opacity-40' : ''} ${dropIdx === vi ? 'shadow-[inset_0_2px_0_0_#16a34a]' : ''} ${dropIdx === vi + 1 ? 'shadow-[inset_0_-2px_0_0_#16a34a]' : ''}`}
+                        style={{ height: ROW_H }}>
                         <div className="flex items-center gap-1.5">
+                          {arrastrable && <span title="Arrastrá para reordenar" className="shrink-0 -ml-2 cursor-grab"><GripVertical size={12} className="text-stone-300 group-hover:text-stone-500" /></span>}
                           {difExcel(t) && <span className="shrink-0 flex" title={`No coincide con el Excel\nExcel: ${fmtD(t.fecha_fin)} · app: ${fmtD(t.early_finish)}\n(revisá dependencias)`}><AlertTriangle size={12} className="text-amber-500" /></span>}
                           {t.reprogramacion_pedida && <span className="shrink-0 flex" title="El ingeniero dejó un aviso"><CalendarClock size={12} className="text-amber-600" /></span>}
                           <div className="text-[12.5px] text-stone-800 truncate flex-1">{t.nombre}</div>
@@ -590,6 +648,39 @@ function VistaProyecto({ proyectos, all, plan, planLoading, sel, setSel, onEdit,
       </div>
 
       {instOpen && <InstalacionPanel det={instDet} busy={instBusy} proyecto={sel} onClose={() => setInstOpen(false)} />}
+
+      {/* Preview del reordenamiento (drag & drop): qué se recablea + impacto en la entrega */}
+      {preview && (
+        <div className="fixed inset-0 bg-black/30 flex items-center justify-center p-4 z-50" onClick={() => !dndBusy && setPreview(null)}>
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-5" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center gap-2 mb-3">
+              <GripVertical size={18} className="text-forest-600" />
+              <h3 className="font-bold text-stone-800 text-sm truncate">Reordenar “{preview.nombre}”</h3>
+              <button onClick={() => setPreview(null)} className="ml-auto text-stone-400 hover:text-stone-700"><X size={18} /></button>
+            </div>
+            <div className="space-y-3 text-[13px]">
+              <div className={`rounded-xl border px-3 py-2.5 ${preview.res.holgura < 0 ? 'border-rose-200 bg-rose-50' : 'border-emerald-200 bg-emerald-50'}`}>
+                <div className="flex items-center gap-1.5 font-semibold flex-wrap">
+                  <CalendarClock size={15} className={preview.res.holgura < 0 ? 'text-rose-600' : 'text-emerald-600'} />
+                  <span className="text-stone-700">Entrega:</span>
+                  <span>{fmtD(preview.res.fin_antes)}</span> <ArrowRight size={12} className="text-stone-400" /> <span className="font-bold">{fmtD(preview.res.fin_despues)}</span>
+                </div>
+                <div className="text-[11px] mt-1 text-stone-500">Holgura del proyecto: <b className={preview.res.holgura < 0 ? 'text-rose-600' : ''}>{preview.res.holgura}d</b>{preview.res.en_riesgo ? ' · en riesgo' : ''} · {preview.res.diffs.length} tarea{preview.res.diffs.length === 1 ? '' : 's'} se mueve{preview.res.diffs.length === 1 ? '' : 'n'}</div>
+              </div>
+              {preview.res.explicacion && (preview.res.explicacion.quita.length > 0 || preview.res.explicacion.agrega.length > 0) && (
+                <div className="rounded-xl border border-stone-200 divide-y divide-stone-100 text-[12px] max-h-40 overflow-y-auto">
+                  {preview.res.explicacion.quita.map((s, i) => <div key={'q' + i} className="px-3 py-1.5 text-stone-500"><span className="text-rose-500 font-semibold mr-1">quita</span>{s}</div>)}
+                  {preview.res.explicacion.agrega.map((s, i) => <div key={'a' + i} className="px-3 py-1.5 text-stone-600"><span className="text-forest-600 font-semibold mr-1">agrega</span>{s}</div>)}
+                </div>
+              )}
+            </div>
+            <div className="flex justify-end gap-2 mt-4">
+              <button onClick={() => setPreview(null)} disabled={dndBusy} className="px-3 py-2 rounded-lg border border-stone-300 text-sm font-semibold text-stone-600 hover:bg-stone-50">Cancelar</button>
+              <button onClick={confirmarMov} disabled={dndBusy} className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-forest-600 hover:bg-forest-700 disabled:opacity-50 text-white text-sm font-semibold">{dndBusy ? <Loader2 className="animate-spin" size={15} /> : <Check size={15} />} Confirmar</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
