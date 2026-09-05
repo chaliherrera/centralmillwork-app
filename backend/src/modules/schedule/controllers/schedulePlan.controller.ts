@@ -14,7 +14,6 @@ import { crearToken, revocarToken } from '../domain/portal'
 import { registrarHito } from '../domain/registro'
 import { getTrabajoPorArea } from '../domain/trabajo'
 import { chequearFactibilidad } from '../domain/factibilidad'
-import { recomputarYGuardar } from '../../ingenieria/domain/tareas'
 
 // POST /api/schedule/factibilidad  { fecha_pedida, proyecto_id? | items_qty? }  (read-only, dry-run)
 // Los ítems escalan las duraciones (mismo criterio que el generador). Si viene
@@ -119,22 +118,8 @@ export async function getPlan(req: Request, res: Response, next: NextFunction) {
         WHERE sp.proyecto_id = $1 AND sp.scope = 'proyecto'
         ORDER BY ph.orden`, [proyectoId])
 
-    // El Gantt (ruta de ingeniería) es la ÚNICA fuente de fecha de los hitos que mapean a
-    // un paso: leemos la ruta por proyecto_id (enganche robusto ing_tareas.proyecto_id, no
-    // por string) y la fecha del Gantt (fecha_fin de la tarea) pisa la planeada/proyectada
-    // del hito. Un dato con dueño se LEE, no se copia.
-    const { rows: gantt } = await pool.query<{ codigo: string; fin: string | null }>(
-      `SELECT tt.hito_codigo AS codigo, to_char(t.fecha_fin,'YYYY-MM-DD') AS fin
-         FROM ing_tareas t JOIN ing_tarea_tipos tt ON tt.id = t.tipo_id
-        WHERE t.proyecto_id = $1 AND tt.hito_codigo IS NOT NULL AND t.fecha_fin IS NOT NULL`, [proyectoId])
-    if (gantt.length) {
-      const ganttFecha = new Map(gantt.map((g) => [g.codigo, g.fin]))
-      for (const h of hitos) {
-        const gf = ganttFecha.get(h.codigo)
-        if (gf) { h.fecha_planeada = gf; h.fecha_proyectada = gf; (h as any).desde_gantt = true }
-      }
-    }
-
+    // Las fechas de los hitos ya salen del Gantt (el pipeline las escribió en
+    // schedule_hitos, con su ancla inicio/fin correcta). Se leen tal cual — sin overlay.
     res.json({ data: { plan: planRows[0], hitos } })
   } catch (err) { next(err) }
 }
@@ -260,12 +245,9 @@ export async function registrarHitoHandler(req: Request, res: Response, next: Ne
     const usuarioNombre = (req as any).user?.email ?? null
     await client.query('BEGIN')
     const r = await registrarHito(client, proyectoId, codigo, fecha, nota ?? null, usuarioNombre, importe ?? null)
-    // El depósito (C-04) es piso "no antes de" de material_deposit: al confirmarlo,
-    // recalcular el plan de ingeniería para que las fechas guardadas reflejen la fecha real.
-    if (r.ok && codigo === 'C-04') {
-      const { rows } = await client.query<{ codigo: string }>(`SELECT codigo FROM proyectos WHERE id = $1`, [proyectoId])
-      if (rows[0]) await recomputarYGuardar(client, rows[0].codigo)
-    }
+    // Registrar un hecho (incl. el depósito C-04, piso de material_deposit) recalcula el
+    // pipeline: refresca las fechas del Gantt y la proyección del journey en un solo lugar.
+    if (r.ok) await recomputeScheduleForProyecto(client, proyectoId, 'manual')
     await client.query('COMMIT')
     if (!r.ok) return next(createError(r.error ?? 'no se pudo registrar', 400))
     res.json({ data: { ok: true } })

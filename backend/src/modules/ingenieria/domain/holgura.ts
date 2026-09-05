@@ -16,8 +16,8 @@
 //   3. Holgura(t) = LF(t) − EF(t). Camino crítico = holgura 0. Riesgo = holgura < 0.
 //
 // Función PURA: no toca DB ni Express (calendario.ts es puro). Testeable aislada.
-// NO reusa motor.ts (ese es para la plantilla de 54 hitos del schedule maestro y
-// no maneja lags ni pares Start/Finish — acá necesitamos ambos).
+// Es el ÚNICO motor de fechas del sistema: el Gantt de ingeniería. El journey/schedule
+// proyecta sus hitos desde estas fechas (schedule/domain/proyeccion.ts).
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { ISODate, subBusinessDays, addBusinessDays, businessDaysBetween } from '../../schedule/domain/calendario'

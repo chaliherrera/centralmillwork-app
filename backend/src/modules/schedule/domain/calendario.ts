@@ -5,8 +5,8 @@
 // schedule_feriados (decisión 2026-08-10: lun-vie).
 //
 // Todo se maneja como strings 'YYYY-MM-DD' y aritmética en UTC para evitar
-// corrimientos por zona horaria / horario de verano. El motor de schedule
-// (motor.ts) usa estos helpers para restar/sumar duraciones.
+// corrimientos por zona horaria / horario de verano. El CPM (holgura.ts) y la
+// proyección del journey (proyeccion.ts) usan estos helpers.
 // ─────────────────────────────────────────────────────────────────────────────
 
 import type { PoolClient } from 'pg'

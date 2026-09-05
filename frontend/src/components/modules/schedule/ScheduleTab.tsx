@@ -262,8 +262,8 @@ export default function ScheduleTab({ proyectoId }: { proyectoId: number }) {
         </div>
         <h3 className="mt-4 text-lg font-semibold text-stone-800">Este proyecto todavía no tiene schedule</h3>
         <p className="mt-1.5 text-sm text-stone-500 leading-relaxed">
-          Elegí la fecha de entrega comprometida con el cliente. El sistema calcula hacia atrás
-          la fecha límite de cada hito y lo mantiene vivo con lo que pasa en la operación.
+          Elegí la fecha de entrega comprometida con el cliente. Las fechas de cada hito salen
+          del plan de ingeniería (el Gantt) y se mantienen vivas con lo que pasa en la operación.
         </p>
         <div className="mt-6 flex items-center justify-center gap-2">
           <input type="date" value={fechaObjetivo} onChange={(e) => setFechaObjetivo(e.target.value)} className="input w-44" />
@@ -429,11 +429,9 @@ export default function ScheduleTab({ proyectoId }: { proyectoId: number }) {
           <div className="grid bg-[#faf8f2] rounded-t-2xl" style={gridCols}>
             <div className="p-3 text-[10px] uppercase tracking-wider text-stone-400 font-bold flex flex-col items-start justify-end gap-1">
               <span>Recorrido →</span>
-              {(data?.hitos ?? []).some((h) => h.desde_gantt) && (
-                <span className="inline-flex items-center gap-1 normal-case tracking-normal font-medium text-[10px] text-forest-700 bg-forest-50 rounded-full px-1.5 py-0.5" title="Las fechas de los hitos de la ruta las calcula el Gantt de ingeniería (fuente única).">
-                  <RefreshCw size={9} /> Fechas del Gantt
-                </span>
-              )}
+              <span className="inline-flex items-center gap-1 normal-case tracking-normal font-medium text-[10px] text-forest-700 bg-forest-50 rounded-full px-1.5 py-0.5" title="Las fechas de los hitos salen del plan de ingeniería (el Gantt), fuente única.">
+                <RefreshCw size={9} /> Fechas del Gantt
+              </span>
             </div>
             {fases.map((f) => {
               const meta = FASES.find((x) => x.key === f.key)!; const c = ST_COLOR[f.estado]

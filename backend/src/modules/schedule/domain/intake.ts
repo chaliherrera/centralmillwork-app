@@ -80,14 +80,15 @@ export async function intakeProyecto(
       [proyectoId, evidencia, fechaFirma])
   }
 
-  await recomputeScheduleForProyecto(runner, proyectoId, 'manual')
-
   // Re-anclar el día cero del plan de ingeniería a la firma (si el plan lo generó el
-  // PM en la app). La holgura se achica por lo que tardó el cliente en firmar; el
-  // inicio original queda guardado para documentar la demora.
+  // PM en la app) ANTES de recalcular, para que el journey refleje el Gantt re-anclado.
+  // La holgura se achica por lo que tardó el cliente en firmar; el inicio original queda
+  // guardado para documentar la demora.
   if (firma?.fechaFirma) {
     try { await reanclarPlanAFirma(runner, proyectoId, firma.fechaFirma) } catch { /* best-effort */ }
   }
+
+  await recomputeScheduleForProyecto(runner, proyectoId, 'manual')
 
   return { ok: true, planNuevo }
 }
