@@ -8,6 +8,7 @@ import DepositosBloqueando from '@/components/modules/ingenieria/DepositosBloque
 import GestionIngenieros from '@/components/modules/ingenieria/GestionIngenieros'
 import { ingenieriaService, type IngCarga, type ReasignarPreview } from '@/services/ingenieria'
 import IngenieriaPlan, { VistaDisponibilidad } from './IngenieriaPlan'
+import Escritorio from '@/components/escritorio/Escritorio'
 
 // Escritorio del PM. El PM es el dueño del recurso Ingeniería: acá tiene su bandeja
 // (planes sugeridos a aceptar + lo que le toca) y el Plan de Ingeniería (capacidad,
@@ -47,6 +48,10 @@ export default function ProjectMgmt() {
           <ReprogramacionesPendientes onRevisar={onRevisar} />
           <ReservasPendientes onRevisar={onRevisar} />
           <DealsEnCurso mode="pm" />
+          {/* Fabricación de piedra (paso 17): el PM confirma cuando el proveedor entregó.
+              Solo aparece si hay algo (hideWhenEmpty). */}
+          <Escritorio rol="externo" hideWhenEmpty titulo="Fabricación de piedra"
+            subtitulo="Confirmá cuando el proveedor entregó la piedra fabricada." />
         </div>
       )}
       {tab === 'plan' && (

@@ -14,12 +14,16 @@ const CUMPLIDA_LABEL: Record<string, string> = {
   field_measurements: 'Medida',
   sd_update: 'Set final listo',
   shipment: 'Enviado',
+  stone_measure: 'Medición hecha',
+  stone_fab: 'Fabricación lista',
+  stone_install: 'Instalación hecha',
 }
-// Pasos que el propio rol COMPLETA a mano (trabajo interno + shipment). Los "de señal"
-// (compras, producción, instalación) se cierran solos por el módulo → link, sin botón.
+// Pasos que el propio rol COMPLETA a mano (trabajo interno + shipment + piedra). Los "de
+// señal" (compras, producción, instalación) se cierran solos por el módulo → link, sin botón.
 const COMPLETABLE = new Set([
   'meeting_designer', 'shop_drawings', 'samples', 'client_review',
   'field_measurements', 'sd_update', 'release', 'cnc', 'shipment',
+  'stone_measure', 'stone_fab', 'stone_install',
 ])
 // Deep-links a los módulos para los pasos de señal.
 const LINK_MODULO: Record<string, { to: string; label: string }> = {
@@ -49,8 +53,9 @@ const fmtD = (iso: string | null) => {
   return `${+d} ${M[+m - 1]}`
 }
 
-export default function Escritorio({ rol, asignado, titulo, subtitulo }: {
+export default function Escritorio({ rol, asignado, titulo, subtitulo, hideWhenEmpty }: {
   rol?: string; asignado?: string; titulo?: string; subtitulo?: string
+  hideWhenEmpty?: boolean   // no renderiza nada si no hay tareas ni bloqueadas (ej. piedra en el PM)
 }) {
   const qc = useQueryClient()
   const [verEspera, setVerEspera] = useState(false)
@@ -118,6 +123,10 @@ export default function Escritorio({ rol, asignado, titulo, subtitulo }: {
     for (const t of tareas) { const k = t.proyecto_ext ?? '—'; if (!m.has(k)) m.set(k, []); m.get(k)!.push(t) }
     return [...m.entries()]
   }, [tareas])
+
+  // Modo "solo si hay algo" (para escritorios secundarios como la piedra en el PM):
+  // no ocupa lugar mientras carga ni cuando no hay nada.
+  if (hideWhenEmpty && (isLoading || (tareas.length === 0 && bloqueadas.length === 0))) return null
 
   return (
     <div className="rounded-2xl border border-stone-200 bg-white overflow-hidden">
