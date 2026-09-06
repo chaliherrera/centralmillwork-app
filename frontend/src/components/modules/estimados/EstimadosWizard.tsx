@@ -118,7 +118,7 @@ export default function EstimadosWizard() {
       <div className="rounded-2xl border border-emerald-200 bg-emerald-50/60 p-8 text-center">
         <CheckCircle2 size={44} className="text-emerald-600 mx-auto" />
         <h2 className="mt-3 text-xl font-bold text-stone-900">Contrato firmado y schedule en marcha</h2>
-        <p className="mt-1 text-stone-600">{sel.codigo} · {sel.nombre} — comprometido para el <b>{fmt(fechaComprometida)}</b>.</p>
+        <p className="mt-1 text-stone-600">{sel.codigo} · {sel.nombre} — propuesto para el <b>{fmt(fechaComprometida)}</b>.</p>
         <p className="mt-1 text-sm text-forest-700">Día cero = firma del cliente {fechaFirma ? <b>{fmt(fechaFirma)}</b> : '(hoy)'}.</p>
         {reservadas > 0 && <p className="mt-1 text-sm text-forest-700">🔒 {reservadas} espacio{reservadas > 1 ? 's' : ''} de Ingeniería reservado{reservadas > 1 ? 's' : ''} — el PM confirma y asigna el ingeniero.</p>}
         <div className="mt-5 flex items-center justify-center gap-3">
@@ -203,9 +203,9 @@ export default function EstimadosWizard() {
             }} />
             {factRes && (
               <div className="rounded-xl border border-forest-200 bg-forest-50/40 p-4">
-                <div className="text-[11px] uppercase tracking-wide text-forest-600 font-semibold">Fecha a comprometer con el cliente</div>
+                <div className="text-[11px] uppercase tracking-wide text-forest-600 font-semibold">Fecha propuesta al cliente</div>
                 <p className="text-xs text-stone-500 mt-0.5">
-                  {factRes.factible ? 'La fecha pedida entra. Podés comprometerla.' : 'La pedida no entra. Comprometé la fecha real, o negociá otra con el cliente.'}
+                  {factRes.factible ? 'La fecha pedida entra. Podés proponerla.' : 'La pedida no entra. Proponé la fecha real, o negociá otra con el cliente.'}
                 </p>
                 <input type="date" value={fechaComprometida} onChange={(e) => setFechaComprometida(e.target.value)}
                   className="mt-2 rounded-lg border border-stone-300 px-3 py-2 text-sm text-stone-800 focus:outline-none focus:ring-2 focus:ring-forest-300" />
@@ -220,12 +220,12 @@ export default function EstimadosWizard() {
           <div className="space-y-4">
             <div>
               <h3 className="font-bold text-stone-800">Aceptación del PM</h3>
-              <p className="text-sm text-stone-500">Se genera el schedule (hacia atrás desde la fecha comprometida) y se propone la reserva de Ingeniería. El <b>PM la acepta y confirma en su bandeja</b> — no hace falta esperarlo acá.</p>
+              <p className="text-sm text-stone-500">Se genera el schedule (hacia atrás desde la fecha propuesta) y se propone la reserva de Ingeniería. El <b>PM la acepta y confirma en su bandeja</b> — no hace falta esperarlo acá.</p>
             </div>
             <div className="rounded-xl border border-stone-100 bg-stone-50/60 divide-y divide-stone-100">
               <Row k="Proyecto" v={`${sel.codigo} · ${sel.nombre}`} />
               <Row k="Fecha pedida por el cliente" v={fechaSolicitada ? fmt(fechaSolicitada) : '—'} />
-              <Row k="Fecha comprometida (objetivo)" v={<b className="text-forest-700">{fmt(fechaComprometida)}</b>} />
+              <Row k="Fecha propuesta (objetivo)" v={<b className="text-forest-700">{fmt(fechaComprometida)}</b>} />
               {factRes && !factRes.factible && <Row k="Aviso" v={<span className="text-amber-700">La pedida no era factible — se comprometió una fecha real.</span>} />}
             </div>
             {!enviadoPM ? (
