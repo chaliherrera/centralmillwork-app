@@ -274,6 +274,13 @@ export async function avanceTareaHandler(req: Request, res: Response, next: Next
     let hitoMarcado = false
     if (parsed.data.estado === 'hecha')
       hitoMarcado = await sincronizarHitoDeTarea(id)
+    // Refrescar el journey SIEMPRE tras un cambio de estado/decisión/fecha (aunque el paso no
+    // mapee a un hito manual — ej. samples es aprobable por portal): así el recorrido queda al
+    // día. NO mueve fechas (Q5: el CPM usa duración+deps, no la fecha real; el PM replanifica).
+    if (parsed.data.estado || parsed.data.decision || parsed.data.fecha_fin_real) {
+      const { rows: er } = await pool.query<{ ext: string | null }>(`SELECT proyecto_ext AS ext FROM ing_tareas WHERE id = $1`, [id])
+      if (er[0]?.ext) await recomputarYGuardar(pool, er[0].ext)
+    }
     res.json({ data: { ok: true, shop_drawings_reabierto: reabierto, gate_cerrado: gateCerrado, release_cerrado: releaseCerrado, hito_journey_marcado: hitoMarcado } })
   } catch (e) { next(e) }
 }

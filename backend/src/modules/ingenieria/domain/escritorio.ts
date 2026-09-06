@@ -65,10 +65,15 @@ export async function getEscritorio(
   if (opts.asignado) { params.push(opts.asignado); asigCond = `AND t.asignado_nombre = $${params.length}` }
 
   // Base: tareas pendientes/en_curso de la ruta REAL (no sugerencias), del rol pedido.
+  // Solo proyectos ACTIVOS: un plan 'app' entra a los escritorios recién cuando el PM
+  // activa el proyecto (el cliente ya aceptó) — no mientras es prospecto/reserva. Los
+  // importados del Excel (import_excel) son proyectos reales en curso: se muestran siempre.
   const base = `FROM ing_tareas t JOIN ing_tarea_tipos tt ON tt.id = t.tipo_id
     LEFT JOIN ing_proyectos ip ON ip.proyecto_ext = t.proyecto_ext
+    LEFT JOIN proyectos p ON p.id = t.proyecto_id
     WHERE t.estado NOT IN ('hecha','na')
       AND t.origen IN ('app','import_excel')
+      AND (t.origen = 'import_excel' OR p.estado = 'activo')
       AND tt.rol = ANY($1) ${asigCond}`
 
   const { rows } = await runner.query<EscritorioTarea>(
@@ -83,21 +88,23 @@ export async function getEscritorio(
   // Las bloqueadas, con el predecesor que las traba (el más tardío = el que manda).
   const { rows: bloq } = await runner.query<EnEspera>(
     `SELECT DISTINCT ON (t.id) t.id, t.proyecto_ext, t.nombre,
-            p.nombre AS espera_nombre, pt.rol AS espera_rol
+            pr.nombre AS espera_nombre, ptt.rol AS espera_rol
        FROM ing_tareas t
        JOIN ing_tarea_tipos tt ON tt.id = t.tipo_id
+       LEFT JOIN proyectos pj ON pj.id = t.proyecto_id
        JOIN ing_tarea_deps d ON d.tarea_id = t.id AND d.ignorada_at IS NULL
-       JOIN ing_tareas p ON p.id = d.depende_de_id
-       JOIN ing_tarea_tipos pt ON pt.id = p.tipo_id
+       JOIN ing_tareas pr ON pr.id = d.depende_de_id
+       JOIN ing_tarea_tipos ptt ON ptt.id = pr.tipo_id
       WHERE t.estado NOT IN ('hecha','na')
         AND t.origen IN ('app','import_excel')
+        AND (t.origen = 'import_excel' OR pj.estado = 'activo')
         AND tt.rol = ANY($1) ${asigCond}
-        AND ( (d.tipo = 'FS' AND p.estado NOT IN ('hecha','na'))
-           OR (d.tipo = 'SS' AND p.estado = 'pendiente'
+        AND ( (d.tipo = 'FS' AND pr.estado NOT IN ('hecha','na'))
+           OR (d.tipo = 'SS' AND pr.estado = 'pendiente'
                AND EXISTS (SELECT 1 FROM ing_tarea_deps d2 JOIN ing_tareas p2 ON p2.id = d2.depende_de_id
-                            WHERE d2.tarea_id = p.id AND d2.ignorada_at IS NULL
+                            WHERE d2.tarea_id = pr.id AND d2.ignorada_at IS NULL
                               AND d2.tipo = 'FS' AND p2.estado NOT IN ('hecha','na'))) )
-      ORDER BY t.id, p.fecha_fin DESC NULLS LAST`, params)
+      ORDER BY t.id, pr.fecha_fin DESC NULLS LAST`, params)
 
   return { tareas: rows, bloqueadas: bloq }
 }
