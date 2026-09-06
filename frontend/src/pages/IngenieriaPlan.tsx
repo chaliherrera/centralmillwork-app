@@ -1,7 +1,7 @@
 import { Fragment, useEffect, useMemo, useState } from 'react'
-import { Users, Layers, ClipboardList, Plus, X, Loader2, Trash2, Gauge, Check, FolderKanban, Activity, AlertTriangle, Wallet, Lock, LockOpen, FlaskConical, Package, Wrench, CalendarClock, ChevronUp, ChevronDown, GripVertical, ArrowRight, Undo2 } from 'lucide-react'
+import { Users, Layers, ClipboardList, Plus, X, Loader2, Trash2, Gauge, Check, FolderKanban, Activity, AlertTriangle, Wallet, Lock, LockOpen, FlaskConical, Package, Wrench, CalendarClock, ChevronUp, ChevronDown, GripVertical, Split } from 'lucide-react'
 import toast from 'react-hot-toast'
-import { ingenieriaService, type IngProyecto, type IngTarea, type TareaInput, type IngPlan, type IngTareaPlan, type IngArista, type IngCarga, type IngTareaCelda, type InstalacionDetalle, type MoverResult } from '@/services/ingenieria'
+import { ingenieriaService, type IngProyecto, type IngTarea, type TareaInput, type IngPlan, type IngTareaPlan, type IngArista, type IngCarga, type IngTareaCelda, type InstalacionDetalle } from '@/services/ingenieria'
 import MapaEtapas from '@/components/modules/ingenieria/MapaEtapas'
 import CronogramaCliente, { ganttDesdePlan } from '@/components/schedule/CronogramaCliente'
 
@@ -18,6 +18,17 @@ const mondayOf = (dt: Date) => { const x = new Date(dt); const wd = (x.getDay() 
 const fmtD = (iso: string | null) => iso ? `${d(iso).getDate()} ${MES[d(iso).getMonth()]}` : '—'
 const shortProj = (p: string | null) => (p || '—').replace(/^\s*(\d{2}-\d{3})\s*/, '$1 · ')
 const PAL = ['#2563eb', '#0d9488', '#ea580c', '#7c3aed', '#059669', '#db2777', '#ca8a04', '#4f46e5', '#0891b2', '#dc2626', '#65a30d', '#9333ea']
+// Orden de la FILA en la lista/Gantt: manda orden_visual (persistido por el drag
+// visual); si falta, se cae a la fecha temprana + id. Las FECHAS de las barras no
+// dependen de esto (las decide el CPM) — esto solo ordena las filas.
+const cmpOrden = (a: IngTareaPlan, b: IngTareaPlan) => {
+  const oa = a.orden_visual, ob = b.orden_visual
+  if (oa != null && ob != null && oa !== ob) return oa - ob
+  if (oa != null && ob == null) return -1
+  if (oa == null && ob != null) return 1
+  const ka = a.early_start || a.fecha_inicio || '9999-12-31', kb = b.early_start || b.fecha_inicio || '9999-12-31'
+  return ka < kb ? -1 : ka > kb ? 1 : a.id - b.id
+}
 
 export default function IngenieriaPlan({ embedded, initialProyecto, initialMode }: { embedded?: boolean; initialProyecto?: string; initialMode?: 'disponibilidad' | 'proyecto' | 'carga' | 'etapas' }) {
   const [resumen, setResumen] = useState<{ tareas: number; proyectos: number; ingenieros: number } | null>(null)
@@ -283,53 +294,36 @@ function VistaProyecto({ proyectos, all, plan, planLoading, sel, setSel, onEdit,
   const tareas = plan?.tareas ?? []
   const ingenieros = useMemo(() => [...new Set(tareas.map((t) => t.asignado_nombre).filter(Boolean))], [tareas])
 
-  // ── Drag & drop: reordenar tareas (recablea dependencias vía el CPM) ──
-  const taskOrder = useMemo(() => [...tareas].sort((a, b) => {
-    const ka = a.early_start ?? a.fecha_inicio ?? '9999-12-31', kb = b.early_start ?? b.fecha_inicio ?? '9999-12-31'
-    return ka < kb ? -1 : ka > kb ? 1 : a.id - b.id
-  }), [tareas])
+  // ── Drag & drop VISUAL: reordena la FILA sin tocar fechas. El orden lo manda
+  //    orden_visual (persistido); si falta, se cae a la fecha temprana + id. ──
+  const taskOrder = useMemo(() => [...tareas].sort(cmpOrden), [tareas])
   const [dragId, setDragId] = useState<number | null>(null)
   const [dropIdx, setDropIdx] = useState<number | null>(null)   // índice de inserción en taskOrder (0..N)
   const [dndBusy, setDndBusy] = useState(false)
-  const [preview, setPreview] = useState<{ res: MoverResult; tareaId: number; afterId: number | null; beforeId: number | null; nombre: string } | null>(null)
   const [cronoOpen, setCronoOpen] = useState(false)
 
+  // Soltar = reordenar la FILA (visual), SIN tocar fechas ni dependencias. Después
+  // se abre el modal de la tarea para que, si se quiere, se la secuencie de verdad
+  // (predecesores / sucesores / paralela a).
   async function soltarEn(idx: number) {
     const X = dragId; setDragId(null); setDropIdx(null)
     if (X == null || dndBusy) return
-    let after: IngTareaPlan | null = null, before: IngTareaPlan | null = null
-    for (let i = idx - 1; i >= 0; i--) if (taskOrder[i].id !== X) { after = taskOrder[i]; break }
-    for (let i = idx; i < taskOrder.length; i++) if (taskOrder[i].id !== X) { before = taskOrder[i]; break }
-    const xt = taskOrder.find((t) => t.id === X)
+    const cur = taskOrder.findIndex((t) => t.id === X)
+    if (cur === -1) return
+    const sinX = taskOrder.filter((t) => t.id !== X)
+    const insertAt = idx > cur ? idx - 1 : idx
+    const nuevo = [...sinX.slice(0, insertAt), taskOrder[cur], ...sinX.slice(insertAt)]
+    if (nuevo.every((t, i) => t.id === taskOrder[i].id)) return   // no cambió de lugar
+    const xt = taskOrder[cur]
     setDndBusy(true)
     try {
-      const r = (await ingenieriaService.moverTarea(X, after?.id ?? null, before?.id ?? null, true)).data
-      if (r.noop) { toast('La tarea ya está en ese lugar'); return }
-      setPreview({ res: r, tareaId: X, afterId: after?.id ?? null, beforeId: before?.id ?? null, nombre: xt?.nombre ?? '' })
-    } catch (e: any) { toast.error(e?.response?.data?.message || 'No se puede mover ahí') }
+      await ingenieriaService.reordenarVisual(sel, nuevo.map((t) => t.id))
+      await onRefresh()
+      onEdit(xt)   // abre el modal (Predecesores / Sucesores / Paralela a)
+    } catch (e: any) { toast.error(e?.response?.data?.message || 'No se pudo reordenar') }
     finally { setDndBusy(false) }
   }
 
-  async function confirmarMov() {
-    if (!preview) return
-    setDndBusy(true)
-    try {
-      const r = (await ingenieriaService.moverTarea(preview.tareaId, preview.afterId, preview.beforeId, false)).data
-      const inverso = r.inverso; const nombre = preview.nombre
-      setPreview(null)
-      await onRefresh()
-      toast((tt) => (
-        <span className="flex items-center gap-2 text-[13px]">
-          <span>Plan reordenado</span>
-          <button onClick={async () => { toast.dismiss(tt.id); try { await ingenieriaService.bulkDeps(sel, inverso.remove, inverso.add, false); await onRefresh(); toast.success('Deshecho') } catch { toast.error('No se pudo deshacer') } }}
-            className="inline-flex items-center gap-1 font-semibold text-forest-700 hover:text-forest-900">
-            <Undo2 size={13} /> Deshacer {nombre ? '' : ''}
-          </button>
-        </span>
-      ), { duration: 8000 })
-    } catch (e: any) { toast.error(e?.response?.data?.message || 'No se pudo aplicar') }
-    finally { setDndBusy(false) }
-  }
   // Validación vs Excel: la app calcula la fecha (early_finish); el Excel la trae (fecha_fin).
   // Si difieren, suele faltar una dependencia (o el experto la puso a mano) — a revisar.
   const difExcel = (t: IngTareaPlan) => !!(t.early_finish && t.fecha_fin && t.early_finish !== t.fecha_fin)
@@ -341,7 +335,7 @@ function VistaProyecto({ proyectos, all, plan, planLoading, sel, setSel, onEdit,
     // fases en orden, tareas por fecha temprana
     const fasesMap = new Map<string, typeof tareas>()
     for (const t of tareas) { const k = t.fase || '— Sin fase —'; if (!fasesMap.has(k)) fasesMap.set(k, []); fasesMap.get(k)!.push(t) }
-    for (const arr of fasesMap.values()) arr.sort((a, b) => (a.early_start || a.fecha_inicio || '~').localeCompare(b.early_start || b.fecha_inicio || '~'))
+    for (const arr of fasesMap.values()) arr.sort(cmpOrden)
     const fases = [...fasesMap.entries()]
 
     // layout vertical: y de cada tarea (para alinear barras y conectores)
@@ -654,39 +648,6 @@ function VistaProyecto({ proyectos, all, plan, planLoading, sel, setSel, onEdit,
 
       {instOpen && <InstalacionPanel det={instDet} busy={instBusy} proyecto={sel} onClose={() => setInstOpen(false)} />}
 
-      {/* Preview del reordenamiento (drag & drop): qué se recablea + impacto en la entrega */}
-      {preview && (
-        <div className="fixed inset-0 bg-black/30 flex items-center justify-center p-4 z-50" onClick={() => !dndBusy && setPreview(null)}>
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-5" onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-center gap-2 mb-3">
-              <GripVertical size={18} className="text-forest-600" />
-              <h3 className="font-bold text-stone-800 text-sm truncate">Reordenar “{preview.nombre}”</h3>
-              <button onClick={() => setPreview(null)} className="ml-auto text-stone-400 hover:text-stone-700"><X size={18} /></button>
-            </div>
-            <div className="space-y-3 text-[13px]">
-              <div className={`rounded-xl border px-3 py-2.5 ${preview.res.holgura < 0 ? 'border-rose-200 bg-rose-50' : 'border-emerald-200 bg-emerald-50'}`}>
-                <div className="flex items-center gap-1.5 font-semibold flex-wrap">
-                  <CalendarClock size={15} className={preview.res.holgura < 0 ? 'text-rose-600' : 'text-emerald-600'} />
-                  <span className="text-stone-700">Entrega:</span>
-                  <span>{fmtD(preview.res.fin_antes)}</span> <ArrowRight size={12} className="text-stone-400" /> <span className="font-bold">{fmtD(preview.res.fin_despues)}</span>
-                </div>
-                <div className="text-[11px] mt-1 text-stone-500">Holgura del proyecto: <b className={preview.res.holgura < 0 ? 'text-rose-600' : ''}>{preview.res.holgura}d</b>{preview.res.en_riesgo ? ' · en riesgo' : ''} · {preview.res.diffs.length} tarea{preview.res.diffs.length === 1 ? '' : 's'} se mueve{preview.res.diffs.length === 1 ? '' : 'n'}</div>
-              </div>
-              {preview.res.explicacion && (preview.res.explicacion.quita.length > 0 || preview.res.explicacion.agrega.length > 0) && (
-                <div className="rounded-xl border border-stone-200 divide-y divide-stone-100 text-[12px] max-h-40 overflow-y-auto">
-                  {preview.res.explicacion.quita.map((s, i) => <div key={'q' + i} className="px-3 py-1.5 text-stone-500"><span className="text-rose-500 font-semibold mr-1">quita</span>{s}</div>)}
-                  {preview.res.explicacion.agrega.map((s, i) => <div key={'a' + i} className="px-3 py-1.5 text-stone-600"><span className="text-forest-600 font-semibold mr-1">agrega</span>{s}</div>)}
-                </div>
-              )}
-            </div>
-            <div className="flex justify-end gap-2 mt-4">
-              <button onClick={() => setPreview(null)} disabled={dndBusy} className="px-3 py-2 rounded-lg border border-stone-300 text-sm font-semibold text-stone-600 hover:bg-stone-50">Cancelar</button>
-              <button onClick={confirmarMov} disabled={dndBusy} className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-forest-600 hover:bg-forest-700 disabled:opacity-50 text-white text-sm font-semibold">{dndBusy ? <Loader2 className="animate-spin" size={15} /> : <Check size={15} />} Confirmar</button>
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* Cronograma del cliente (la propuesta): mismo Gantt que ve el cliente, descargable. */}
       {cronoOpen && (
         <div className="fixed inset-0 bg-black/30 flex items-center justify-center p-4 z-50" onClick={() => setCronoOpen(false)}>
@@ -912,18 +873,25 @@ function EditModal({ tarea, proyecto, engineers, planTareas, aristas, onClose, o
   const [decComent, setDecComent] = useState(tarea?.decision_comentarios ?? '')
   const set = (k: keyof TareaInput, v: any) => setF((p) => ({ ...p, [k]: v }))
 
-  // Predecesores (solo en la vista por proyecto, donde tenemos el plan): esta tarea
-  // espera a estas. La arista es (ESTA depende de PRED) → a.tarea_id === tarea.id.
-  const origPreds = useMemo(() => (tarea && aristas ? aristas.filter((a) => a.tarea_id === tarea.id) : []), [tarea, aristas])
+  // Relaciones (solo en la vista por proyecto, donde tenemos el plan). Tres tipos:
+  //  · Predecesores (FS): ESTA empieza después de… → arista (ESTA ← PRED), tipo FS.
+  //  · Sucesores (FS): esas empiezan después de ESTA → arista (SUC ← ESTA), tipo FS.
+  //  · Paralela a (SS): ESTA arranca junto con… → arista (ESTA ← PAR), tipo SS.
+  // Las FS y las SS se separan por a.tipo (una SS no es un predecesor, arrancan juntas).
+  const origPreds = useMemo(() => (tarea && aristas ? aristas.filter((a) => a.tarea_id === tarea.id && a.tipo !== 'SS') : []), [tarea, aristas])
   const [preds, setPreds] = useState<{ id: number; lag: number }[]>(origPreds.map((a) => ({ id: a.depende_de_id, lag: a.lag_dias })))
-  // Sucesores: estas tareas esperan a ESTA. La arista es la inversa (SUCESOR depende de
-  // ESTA) → a.depende_de_id === tarea.id. Deja insertar una tarea "en el medio" de un tiro.
-  const origSuccs = useMemo(() => (tarea && aristas ? aristas.filter((a) => a.depende_de_id === tarea.id) : []), [tarea, aristas])
+  const origSuccs = useMemo(() => (tarea && aristas ? aristas.filter((a) => a.depende_de_id === tarea.id && a.tipo !== 'SS') : []), [tarea, aristas])
   const [succs, setSuccs] = useState<{ id: number; lag: number }[]>(origSuccs.map((a) => ({ id: a.tarea_id, lag: a.lag_dias })))
+  // Paralelas (SS): la relación es simétrica ("arrancan juntas"). Se muestran las de
+  // cualquier dirección; el compañero es el "otro" id de la arista SS.
+  const origPars = useMemo(() => (tarea && aristas
+    ? aristas.filter((a) => a.tipo === 'SS' && (a.tarea_id === tarea.id || a.depende_de_id === tarea.id))
+        .map((a) => ({ id: a.tarea_id === tarea.id ? a.depende_de_id : a.tarea_id, outbound: a.tarea_id === tarea.id }))
+    : []), [tarea, aristas])
+  const [pars, setPars] = useState<number[]>(origPars.map((p) => p.id))
   const nameOf = (id: number) => planTareas?.find((t) => t.id === id)?.nombre ?? `#${id}`
-  // Opciones (para ambos desplegables): tareas que no son esta ni ya están como pred/suc
-  // (una tarea no puede ser pred y suc a la vez — sería un ciclo, que el backend rechaza).
-  const opciones = useMemo(() => (planTareas ?? []).filter((t) => t.id !== tarea?.id && !preds.some((p) => p.id === t.id) && !succs.some((s) => s.id === t.id)), [planTareas, tarea, preds, succs])
+  // Opciones: tareas que no son esta ni ya están como pred/suc/paralela (evita ciclos).
+  const opciones = useMemo(() => (planTareas ?? []).filter((t) => t.id !== tarea?.id && !preds.some((p) => p.id === t.id) && !succs.some((s) => s.id === t.id) && !pars.some((p) => p === t.id)), [planTareas, tarea, preds, succs, pars])
 
   const syncDeps = async (id: number) => {
     for (const p of preds) await ingenieriaService.agregarDep(id, p.id, p.lag)         // upsert (agrega o cambia lag)
@@ -931,6 +899,12 @@ function EditModal({ tarea, proyecto, engineers, planTareas, aristas, onClose, o
     // Sucesores: la arista es (SUCESOR depende de ESTA) → agregarDep(succId, id).
     for (const s of succs) await ingenieriaService.agregarDep(s.id, id, s.lag)
     for (const o of origSuccs) if (!succs.some((s) => s.id === o.tarea_id)) await ingenieriaService.borrarDep(o.tarea_id, id)
+    // Paralela a (SS): las nuevas se guardan como (ESTA ← compañero) tipo SS.
+    for (const p of pars) if (!origPars.some((o) => o.id === p)) await ingenieriaService.agregarDep(id, p, 0, 'SS')
+    // Quitadas: borro la arista en la dirección en que estaba guardada.
+    for (const o of origPars) if (!pars.some((p) => p === o.id)) {
+      if (o.outbound) await ingenieriaService.borrarDep(id, o.id); else await ingenieriaService.borrarDep(o.id, id)
+    }
   }
   const save = async () => {
     if (!f.nombre.trim()) { setErr('Poné un nombre'); return }
@@ -1087,6 +1061,31 @@ function EditModal({ tarea, proyecto, engineers, planTareas, aristas, onClose, o
                   <select value="" onChange={(e) => { const id = Number(e.target.value); if (id) setSuccs((xs) => [...xs, { id, lag: 0 }]) }}
                     className="inp text-[13px]">
                     <option value="">+ agregar sucesor…</option>
+                    {opciones.map((t) => <option key={t.id} value={t.id}>{t.nombre}</option>)}
+                  </select>
+                )}
+              </div>
+            </L>
+          )}
+
+          {/* Paralela a — arranca junto con otra tarea (dependencia SS "start-to-start").
+              Es lo natural para trabajo que corre en paralelo (ej. Long Lead ∥ Shop Drawings):
+              no espera a la otra, arrancan al mismo tiempo. */}
+          {planTareas && (
+            <L t="Paralela a · arranca junto con">
+              <div className="space-y-1.5">
+                {pars.length === 0 && <div className="text-[12px] text-stone-400 italic">Sin paralelas (arranca según sus predecesores).</div>}
+                {pars.map((pid) => (
+                  <div key={pid} className="flex items-center gap-2 bg-forest-50 rounded-lg px-2 py-1.5">
+                    <Split size={13} className="text-forest-600 shrink-0" />
+                    <span className="flex-1 text-[13px] text-stone-700 truncate">{nameOf(pid)}</span>
+                    <button onClick={() => setPars((xs) => xs.filter((x) => x !== pid))} className="text-stone-400 hover:text-rose-600"><X size={14} /></button>
+                  </div>
+                ))}
+                {opciones.length > 0 && (
+                  <select value="" onChange={(e) => { const id = Number(e.target.value); if (id) setPars((xs) => [...xs, id]) }}
+                    className="inp text-[13px]">
+                    <option value="">+ marcar paralela a…</option>
                     {opciones.map((t) => <option key={t.id} value={t.id}>{t.nombre}</option>)}
                   </select>
                 )}

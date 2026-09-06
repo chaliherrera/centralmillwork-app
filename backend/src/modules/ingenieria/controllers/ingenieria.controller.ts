@@ -11,7 +11,7 @@ import {
   crearTarea, actualizarTarea, reportarAvance, getPlanProyecto,
   borrarTareaConReconexion, agregarDep, borrarDep, listReprogramaciones, recomputarYGuardar,
   reabrirShopDrawingsPorRechazo, cerrarGatePorAprobacion, cerrarReleasePorSdUpdate,
-  aplicarCambiosDeps, moverTarea, reasignarIngeniero,
+  aplicarCambiosDeps, moverTarea, reasignarIngeniero, reordenarVisual,
 } from '../domain/tareas'
 import { listReservasPendientes, liberarReserva } from '../domain/reservas'
 import { listIngenieros, actualizarIngeniero } from '../domain/ingenieros'
@@ -366,6 +366,19 @@ export async function moverTareaHandler(req: Request, res: Response, next: NextF
     if (!r.ok) return next(createError(r.error ?? 'no se pudo mover', 400))
     res.json({ data: r })
   } catch (e) { await client.query('ROLLBACK').catch(() => {}); next(e) } finally { client.release() }
+}
+
+// POST /api/ingenieria/proyecto/:ext/orden-visual  { orden: number[] }
+// Reordena la FILA de la lista (drag visual). NO toca dependencias ni fechas.
+export async function reordenarVisualHandler(req: Request, res: Response, next: NextFunction) {
+  const ext = String(req.params.ext)
+  const orden = (Array.isArray(req.body?.orden) ? req.body.orden : [])
+    .map((x: unknown) => parseInt(String(x), 10)).filter((n: number) => !Number.isNaN(n))
+  if (!orden.length) return next(createError('falta el orden', 400))
+  try {
+    const r = await reordenarVisual(pool, ext, orden)
+    res.json({ data: r })
+  } catch (e) { next(e) }
 }
 
 // POST /api/ingenieria/proyecto/:ext/reasignar-ingeniero  { ingeniero, dry_run? }

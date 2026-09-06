@@ -32,6 +32,7 @@ export interface Tarea {
   asignado_nombre: string | null
   allocation_pct: number
   dur_dias: number
+  orden_visual: number | null       // orden de la FILA en la lista (drag visual, no toca fechas)
   fecha_inicio: string | null
   fecha_fin: string | null
   fecha_compromiso: string | null   // patrón "comprometida + cumplida": cuándo se hará
@@ -86,7 +87,7 @@ export async function listProyectos(runner: QueryRunner): Promise<ProyectoResume
 export async function listTareas(runner: QueryRunner, proyectoExt?: string): Promise<Tarea[]> {
   const { rows } = await runner.query<Tarea & { allocation_pct: string; dur_dias: string }>(
     `SELECT t.id, t.proyecto_ext, t.fase, tt.clave AS tipo_clave, tt.hito_codigo,
-            t.nombre, t.asignado_nombre, t.allocation_pct, t.dur_dias,
+            t.nombre, t.asignado_nombre, t.allocation_pct, t.dur_dias, t.orden_visual,
             to_char(t.fecha_inicio,'YYYY-MM-DD') AS fecha_inicio,
             to_char(t.fecha_fin,'YYYY-MM-DD') AS fecha_fin,
             to_char(t.fecha_compromiso,'YYYY-MM-DD') AS fecha_compromiso,
@@ -97,7 +98,7 @@ export async function listTareas(runner: QueryRunner, proyectoExt?: string): Pro
        FROM ing_tareas t
        LEFT JOIN ing_tarea_tipos tt ON tt.id = t.tipo_id
       WHERE ($1::text IS NULL OR t.proyecto_ext = $1)
-      ORDER BY t.proyecto_ext, t.fecha_inicio NULLS LAST, t.id`,
+      ORDER BY t.proyecto_ext, t.orden_visual NULLS LAST, t.fecha_inicio NULLS LAST, t.id`,
     [proyectoExt ?? null])
   return rows.map((r) => ({ ...r, allocation_pct: +r.allocation_pct, dur_dias: +r.dur_dias }))
 }
@@ -816,6 +817,24 @@ export async function agregarDep(runner: QueryRunner, tareaId: number, dependeDe
 export async function borrarDep(runner: QueryRunner, tareaId: number, dependeDeId: number): Promise<boolean> {
   const { rowCount } = await runner.query(`DELETE FROM ing_tarea_deps WHERE tarea_id = $1 AND depende_de_id = $2`, [tareaId, dependeDeId])
   return (rowCount ?? 0) > 0
+}
+
+/** Reordena la FILA de la lista del Gantt (orden visual), sin tocar dependencias ni
+ *  fechas. `ordenIds` es la lista completa de tareas del proyecto en el nuevo orden.
+ *  Solo escribe orden_visual = posición (1..N) para las tareas que pertenecen al
+ *  proyecto (ignora ids ajenos por seguridad). No dispara recompute: las fechas no
+ *  cambian. Devuelve cuántas filas se actualizaron. */
+export async function reordenarVisual(runner: QueryRunner, proyectoExt: string, ordenIds: number[]): Promise<{ ok: boolean; actualizadas: number }> {
+  const { rows } = await runner.query<{ id: number }>(`SELECT id FROM ing_tareas WHERE proyecto_ext = $1`, [proyectoExt])
+  const propias = new Set(rows.map((r) => r.id))
+  let n = 0, pos = 0
+  for (const id of ordenIds) {
+    if (!propias.has(id)) continue
+    pos++
+    const { rowCount } = await runner.query(`UPDATE ing_tareas SET orden_visual = $2 WHERE id = $1`, [id, pos])
+    n += rowCount ?? 0
+  }
+  return { ok: true, actualizadas: n }
 }
 
 export interface ReasignarPreview {

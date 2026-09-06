@@ -18,6 +18,7 @@ export interface IngTarea {
   asignado_nombre: string | null
   allocation_pct: number
   dur_dias: number
+  orden_visual: number | null       // orden de la FILA en la lista (drag visual, no toca fechas)
   fecha_inicio: string | null
   fecha_fin: string | null
   fecha_compromiso: string | null   // "comprometida + cumplida": cuándo se hará
@@ -274,14 +275,17 @@ export const ingenieriaService = {
   borrarTarea: (id: number) =>
     api.delete<ApiResponse<{ ok: boolean; reconectadas: number }>>(`/ingenieria/tareas/${id}`).then((r) => r.data),
 
-  // Dependencias (predecesores)
-  agregarDep: (tareaId: number, depende_de_id: number, lag_dias = 0) =>
-    api.post<ApiResponse<{ ok: boolean }>>(`/ingenieria/tareas/${tareaId}/dep`, { depende_de_id, lag_dias }).then((r) => r.data),
+  // Dependencias. tipo: 'FS' (por defecto, "después de") o 'SS' ("arranca junto con" = paralela).
+  agregarDep: (tareaId: number, depende_de_id: number, lag_dias = 0, tipo: 'FS' | 'SS' = 'FS') =>
+    api.post<ApiResponse<{ ok: boolean }>>(`/ingenieria/tareas/${tareaId}/dep`, { depende_de_id, lag_dias, tipo }).then((r) => r.data),
   borrarDep: (tareaId: number, dependeDeId: number) =>
     api.delete<ApiResponse<{ ok: boolean }>>(`/ingenieria/tareas/${tareaId}/dep/${dependeDeId}`).then((r) => r.data),
   // Drag & drop: mover una tarea (recablea dependencias). dry_run = preview sin escribir.
   moverTarea: (id: number, after_id: number | null, before_id: number | null, dry_run = false) =>
     api.post<ApiResponse<MoverResult>>(`/ingenieria/tareas/${id}/mover`, { after_id, before_id, dry_run }).then((r) => r.data),
+  // Drag VISUAL: reordena la FILA de la lista sin tocar dependencias ni fechas.
+  reordenarVisual: (ext: string, orden: number[]) =>
+    api.post<ApiResponse<{ ok: boolean; actualizadas: number }>>(`/ingenieria/proyecto/${ext}/orden-visual`, { orden }).then((r) => r.data),
   // Edición atómica de dependencias (para deshacer / EditModal).
   bulkDeps: (ext: string, remove: CambioDep[], add: CambioDep[], dry_run = false) =>
     api.put<ApiResponse<MoverResult>>(`/ingenieria/proyecto/${ext}/deps`, { remove, add, dry_run }).then((r) => r.data),
