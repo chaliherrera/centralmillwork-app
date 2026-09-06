@@ -6,10 +6,18 @@ import {
   Route as RouteIcon,
 } from 'lucide-react'
 import { useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import clsx from 'clsx'
 import { useAuth } from '@/context/AuthContext'
 import { useTheme } from '@/context/ThemeContext'
+import { ingenieriaService } from '@/services/ingenieria'
 import type { UserRole } from '@/types'
+
+// Rols de ruta que cuenta el badge "te toca: N" de cada página con escritorio.
+const BADGE_ROLS: Record<string, string[]> = {
+  '/estimados': ['estimacion'], '/ingenieria': ['ingenieria', 'field'], '/field': ['field'],
+  '/mtos': ['compras'], '/produccion': ['produccion', 'instalacion'], '/logistica': ['logistica'], '/pm': ['externo'],
+}
 
 interface NavItem {
   to: string
@@ -47,6 +55,15 @@ export default function Sidebar() {
   const { theme, setTheme } = useTheme()
   const [collapsed, setCollapsed] = useState(false)
   const isGlass = theme === 'glass'
+
+  // Badge "te toca: N" por página con escritorio (refresca cada 60s).
+  const { data: resumen } = useQuery({
+    queryKey: ['escritorio-resumen'],
+    queryFn: () => ingenieriaService.escritorioResumen().then((r) => r.data),
+    refetchInterval: 60_000,
+    refetchOnWindowFocus: true,
+  })
+  const badgeDe = (to: string) => (BADGE_ROLS[to] ?? []).reduce((s, r) => s + (resumen?.[r] ?? 0), 0)
 
   const visibleItems = NAV_ITEMS.filter(
     (item) => !user || item.roles.includes(user.rol)
@@ -102,7 +119,7 @@ export default function Sidebar() {
             title={collapsed ? label : undefined}
             className={({ isActive }) =>
               clsx(
-                'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors duration-100',
+                'relative flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors duration-100',
                 isActive
                   ? (isGlass
                       ? 'text-white'
@@ -124,6 +141,11 @@ export default function Sidebar() {
           >
             <Icon size={18} className="shrink-0" />
             {!collapsed && <span className="truncate">{label}</span>}
+            {badgeDe(to) > 0 && (collapsed
+              ? <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-gold-500" />
+              : <span className="ml-auto shrink-0 text-[10px] font-bold rounded-full bg-gold-500 text-white px-1.5 min-w-[18px] text-center leading-[17px]"
+                  title="Te toca ahora">{badgeDe(to) > 99 ? '99+' : badgeDe(to)}</span>
+            )}
           </NavLink>
         ))}
       </nav>

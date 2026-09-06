@@ -120,6 +120,33 @@ export async function getEscritorio(
   return { tareas: rows, bloqueadas: bloq }
 }
 
+/** Conteo liviano de tareas ACCIONABLES (desbloqueadas) por rol de escritorio, para el
+ *  badge "te toca: N" del menú. Respeta el mismo filtro que el escritorio (proyecto activo,
+ *  handoff de material_proc, asignado). Devuelve { <rol>: N } — la piedra/MTO ya ruteados. */
+export async function getEscritorioResumen(
+  runner: QueryRunner, opts: { roles: string[]; asignado?: string | null }
+): Promise<Record<string, number>> {
+  const params: unknown[] = [opts.roles]
+  let asigCond = ''
+  if (opts.asignado) { params.push(opts.asignado); asigCond = `AND t.asignado_nombre = $${params.length}` }
+  const verCompras = opts.roles.includes('compras')
+  const rolCond = `( (tt.rol = ANY($1) AND NOT (tt.clave = 'material_proc' AND t.estado = 'en_curso'))${
+    verCompras ? " OR (tt.clave = 'material_proc' AND t.estado = 'en_curso')" : ''} )`
+  const { rows } = await runner.query<{ erol: string; n: number }>(
+    `SELECT (CASE WHEN tt.clave = 'material_proc' AND t.estado = 'en_curso' THEN 'compras' ELSE tt.rol END) AS erol,
+            COUNT(*)::int AS n
+       FROM ing_tareas t JOIN ing_tarea_tipos tt ON tt.id = t.tipo_id
+       LEFT JOIN proyectos p ON p.id = t.proyecto_id
+      WHERE t.estado NOT IN ('hecha','na') AND t.origen IN ('app','import_excel')
+        AND (t.origen = 'import_excel' OR p.estado = 'activo')
+        AND ${rolCond} ${asigCond}
+        AND NOT ${BLOQUEADA}
+      GROUP BY erol`, params)
+  const m: Record<string, number> = {}
+  for (const r of rows) if (r.erol) m[r.erol] = r.n
+  return m
+}
+
 // Mapa rol-de-app → roles-de-ruta que ve su escritorio. ADMIN/PM ven todo (con selector).
 export const ROLES_RUTA_POR_APP: Record<string, string[]> = {
   ENGINEERING: ['ingenieria', 'field'],

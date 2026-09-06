@@ -8,7 +8,7 @@ import {
   reservarHandler, reservasPendientesHandler, confirmarReservaHandler, liberarReservaHandler,
   dealsEnCursoHandler, enviarClienteHandler, clienteAproboHandler, activarProyectoHandler,
   overrideDepositoHandler, reprogramacionesHandler, depositosBloqueandoHandler, muestrasEstadoHandler,
-  comprasEstadoHandler, instalacionDetalleHandler, escritorioHandler,
+  comprasEstadoHandler, instalacionDetalleHandler, escritorioHandler, escritorioResumenHandler,
   ingenierosHandler, actualizarIngenieroHandler,
 } from './controllers/ingenieria.controller'
 
@@ -35,6 +35,7 @@ router.get('/muestras-estado', READ, muestrasEstadoHandler)  // estado de muestr
 router.get('/compras-estado', READ, comprasEstadoHandler)  // estado de compras por proyecto → escritorio ingeniero (#9)
 // Escritorio por rol (todos los roles operativos ven el suyo — Compras/Producción incluidos).
 const ESCRITORIO = requireRole('ADMIN', 'PROJECT_MANAGEMENT', 'ENGINEERING', 'PROCUREMENT', 'PRODUCTION', 'SHOP_MANAGER', 'LOGISTICA', 'CONTABILIDAD', 'FIELD')
+router.get('/escritorio/resumen', ESCRITORIO, escritorioResumenHandler)  // badge "te toca: N" del menú
 router.get('/escritorio', ESCRITORIO, escritorioHandler)
 router.get('/proyecto/:ext/instalacion-detalle', READ, instalacionDetalleHandler)  // ítem×ítem + punch → panel del PM (#15)
 // Gestión de ingenieros (fuente de verdad de quién está activo). Ver = READ; administrar = PM.

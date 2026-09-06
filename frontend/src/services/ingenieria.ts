@@ -254,6 +254,9 @@ export const ingenieriaService = {
     api.get<ApiResponse<InstalacionDetalle>>(`/ingenieria/proyecto/${encodeURIComponent(proyectoExt)}/instalacion-detalle`).then((r) => r.data),
   escritorio: (params?: { rol?: string; asignado?: string }) =>
     api.get<ApiResponse<EscritorioResp>>('/ingenieria/escritorio', { params }).then((r) => r.data),
+  // Resumen liviano para el badge "te toca: N" del menú: { <rol>: cantidad }.
+  escritorioResumen: () =>
+    api.get<ApiResponse<Record<string, number>>>('/ingenieria/escritorio/resumen').then((r) => r.data),
   // Gestión de ingenieros (el PM administra el recurso: activo / hace_cnc).
   getIngenieros: () =>
     api.get<ApiResponse<Ingeniero[]>>('/ingenieria/ingenieros').then((r) => r.data),

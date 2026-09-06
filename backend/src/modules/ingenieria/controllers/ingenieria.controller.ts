@@ -23,7 +23,7 @@ import { estadoDeposito, overrideGate, listDepositosBloqueando } from '../domain
 import { listMuestrasPorProyecto } from '../domain/muestras'
 import { listComprasPorProyecto } from '../domain/compras'
 import { detalleInstalacion } from '../domain/instalacion'
-import { getEscritorio, ROLES_RUTA_POR_APP } from '../domain/escritorio'
+import { getEscritorio, getEscritorioResumen, ROLES_RUTA_POR_APP } from '../domain/escritorio'
 
 function pid(req: Request): number {
   const id = parseInt(String(req.params.id ?? req.params.proyectoId), 10)
@@ -433,6 +433,24 @@ export async function escritorioHandler(req: Request, res: Response, next: NextF
       asignado = rows[0]?.nombre ?? (user.nombre ?? null)
     }
     res.json({ data: await getEscritorio(pool, { roles, asignado }) })
+  } catch (e) { next(e) }
+}
+
+// ── Resumen del escritorio: conteo por rol para el badge "te toca: N" del menú ──
+// GET /api/ingenieria/escritorio/resumen  → { <rol>: N } (misma identidad que el escritorio)
+export async function escritorioResumenHandler(req: Request, res: Response, next: NextFunction) {
+  try {
+    const user = (req as any).user
+    const rolApp = user?.rol ?? ''
+    const roles = ROLES_RUTA_POR_APP[rolApp] ?? []
+    if (!roles.length) return res.json({ data: {} })
+    let asignado: string | null = null
+    if ((rolApp === 'ENGINEERING' || rolApp === 'FIELD') && user?.id) {
+      const { rows } = await pool.query<{ nombre: string }>(
+        `SELECT nombre FROM ing_ingenieros WHERE usuario_id = $1 AND activo LIMIT 1`, [user.id])
+      asignado = rows[0]?.nombre ?? (user.nombre ?? null)
+    }
+    res.json({ data: await getEscritorioResumen(pool, { roles, asignado }) })
   } catch (e) { next(e) }
 }
 
