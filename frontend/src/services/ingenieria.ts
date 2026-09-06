@@ -161,7 +161,8 @@ export interface EscritorioTarea {
   fecha_fin: string | null; fecha_entrega: string | null; dur_dias: number; estado: string
   reprogramacion_pedida: boolean; reprogramacion_motivo: string | null
 }
-export interface EscritorioResp { tareas: EscritorioTarea[]; bloqueadas: number }
+export interface EnEspera { id: number; proyecto_ext: string | null; nombre: string; espera_nombre: string; espera_rol: string | null }
+export interface EscritorioResp { tareas: EscritorioTarea[]; bloqueadas: EnEspera[] }
 export interface Ingeniero { nombre: string; activo: boolean; hace_cnc: boolean; usuario_id: string | null; tareas_activas: number }
 export interface IngPlan {
   proyecto_ext: string

@@ -413,7 +413,7 @@ export async function escritorioHandler(req: Request, res: Response, next: NextF
     const rolApp = user?.rol ?? ''
     const rolQuery = typeof req.query.rol === 'string' && req.query.rol ? req.query.rol : ''
     const roles = rolQuery ? rolQuery.split(',').map((s) => s.trim()).filter(Boolean) : (ROLES_RUTA_POR_APP[rolApp] ?? [])
-    if (!roles.length) return res.json({ data: { tareas: [], bloqueadas: 0 } })
+    if (!roles.length) return res.json({ data: { tareas: [], bloqueadas: [] } })
 
     // Identidad (pieza 7): cada persona ve SOLO lo suyo. Para ENGINEERING/FIELD el asignado se
     // deriva del usuario logueado (ing_ingenieros linkeado por usuario_id → nombre del ingeniero;

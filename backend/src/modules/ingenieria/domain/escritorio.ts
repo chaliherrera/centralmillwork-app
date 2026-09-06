@@ -46,10 +46,20 @@ const BLOQUEADA = `EXISTS (
                          WHERE d2.tarea_id = p.id AND d2.ignorada_at IS NULL
                            AND d2.tipo = 'FS' AND p2.estado NOT IN ('hecha','na'))) ))`
 
+// Una tarea "en espera": bloqueada, con QUÉ predecesor la traba y de qué rol es
+// (para que cada persona entienda por qué no ve nada, sin notificar a nadie).
+export interface EnEspera {
+  id: number
+  proyecto_ext: string | null
+  nombre: string
+  espera_nombre: string   // la tarea predecesora que falta
+  espera_rol: string | null   // rol de esa predecesora (→ de quién depende)
+}
+
 export async function getEscritorio(
   runner: QueryRunner,
   opts: { roles: string[]; asignado?: string | null }
-): Promise<{ tareas: EscritorioTarea[]; bloqueadas: number }> {
+): Promise<{ tareas: EscritorioTarea[]; bloqueadas: EnEspera[] }> {
   const params: unknown[] = [opts.roles]
   let asigCond = ''
   if (opts.asignado) { params.push(opts.asignado); asigCond = `AND t.asignado_nombre = $${params.length}` }
@@ -70,10 +80,26 @@ export async function getEscritorio(
        ${base} AND NOT ${BLOQUEADA}
       ORDER BY t.fecha_inicio NULLS LAST, t.proyecto_ext, tt.orden`, params)
 
-  const { rows: bc } = await runner.query<{ n: number }>(
-    `SELECT COUNT(*)::int AS n ${base} AND ${BLOQUEADA}`, params)
+  // Las bloqueadas, con el predecesor que las traba (el más tardío = el que manda).
+  const { rows: bloq } = await runner.query<EnEspera>(
+    `SELECT DISTINCT ON (t.id) t.id, t.proyecto_ext, t.nombre,
+            p.nombre AS espera_nombre, pt.rol AS espera_rol
+       FROM ing_tareas t
+       JOIN ing_tarea_tipos tt ON tt.id = t.tipo_id
+       JOIN ing_tarea_deps d ON d.tarea_id = t.id AND d.ignorada_at IS NULL
+       JOIN ing_tareas p ON p.id = d.depende_de_id
+       JOIN ing_tarea_tipos pt ON pt.id = p.tipo_id
+      WHERE t.estado NOT IN ('hecha','na')
+        AND t.origen IN ('app','import_excel')
+        AND tt.rol = ANY($1) ${asigCond}
+        AND ( (d.tipo = 'FS' AND p.estado NOT IN ('hecha','na'))
+           OR (d.tipo = 'SS' AND p.estado = 'pendiente'
+               AND EXISTS (SELECT 1 FROM ing_tarea_deps d2 JOIN ing_tareas p2 ON p2.id = d2.depende_de_id
+                            WHERE d2.tarea_id = p.id AND d2.ignorada_at IS NULL
+                              AND d2.tipo = 'FS' AND p2.estado NOT IN ('hecha','na'))) )
+      ORDER BY t.id, p.fecha_fin DESC NULLS LAST`, params)
 
-  return { tareas: rows, bloqueadas: bc[0]?.n ?? 0 }
+  return { tareas: rows, bloqueadas: bloq }
 }
 
 // Mapa rol-de-app → roles-de-ruta que ve su escritorio. ADMIN/PM ven todo (con selector).

@@ -35,6 +35,12 @@ const ARTIFACT: Record<string, { kind: 'submittal' | 'archivo'; codigo?: string;
   sd_update:     { kind: 'submittal', label: 'Adjuntar set final (PDF)', accept: 'application/pdf' },
   cnc:           { kind: 'archivo', codigo: 'E-11', label: 'Adjuntar archivos CNC' },
 }
+// Rol de la ruta → de quién depende (para "en espera: … · <área>").
+const ROL_AREA: Record<string, string> = {
+  estimacion: 'Estimados', ingenieria: 'Ingeniería', field: 'Field', compras: 'Compras',
+  produccion: 'Producción', instalacion: 'Instalación', logistica: 'Logística',
+  admin: 'Finanzas', cliente: 'Cliente', externo: 'Externo',
+}
 const shortProj = (p: string | null) => (p || '—').replace(/^\s*(\d{2}-\d{3})\s*/, '$1 · ')
 const hoy = () => new Date().toISOString().slice(0, 10)
 const fmtD = (iso: string | null) => {
@@ -106,7 +112,7 @@ export default function Escritorio({ rol, asignado, titulo, subtitulo }: {
   })
 
   const tareas = data?.data.tareas ?? []
-  const bloqueadas = data?.data.bloqueadas ?? 0
+  const bloqueadas = data?.data.bloqueadas ?? []
   const porProyecto = useMemo(() => {
     const m = new Map<string, EscritorioTarea[]>()
     for (const t of tareas) { const k = t.proyecto_ext ?? '—'; if (!m.has(k)) m.set(k, []); m.get(k)!.push(t) }
@@ -247,12 +253,27 @@ export default function Escritorio({ rol, asignado, titulo, subtitulo }: {
         </div>
       )}
 
-      {bloqueadas > 0 && (
-        <button onClick={() => setVerEspera((v) => !v)}
-          className="w-full px-4 py-2.5 border-t border-stone-100 text-left text-xs font-medium text-stone-500 hover:bg-stone-50 flex items-center gap-1.5">
-          {verEspera ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-          <b className="text-stone-700">{bloqueadas}</b> en espera (todavía no se cumplió su predecesor)
-        </button>
+      {bloqueadas.length > 0 && (
+        <div className="border-t border-stone-100">
+          <button onClick={() => setVerEspera((v) => !v)}
+            className="w-full px-4 py-2.5 text-left text-xs font-medium text-stone-500 hover:bg-stone-50 flex items-center gap-1.5">
+            {verEspera ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+            <b className="text-stone-700">{bloqueadas.length}</b> en espera — mirá qué falta y de quién depende
+          </button>
+          {verEspera && (
+            <div className="px-4 pb-3 space-y-1.5 max-h-72 overflow-y-auto">
+              {bloqueadas.map((b) => (
+                <div key={b.id} className="text-[12px] rounded-lg bg-stone-50 border border-stone-100 px-2.5 py-1.5">
+                  <div className="text-stone-700 truncate">{b.nombre}<span className="text-stone-400"> · {shortProj(b.proyecto_ext)}</span></div>
+                  <div className="text-stone-500">
+                    espera <span className="font-medium text-stone-600">{b.espera_nombre}</span>
+                    {b.espera_rol && <span className="font-semibold text-forest-700"> · {ROL_AREA[b.espera_rol] ?? b.espera_rol}</span>}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
       )}
     </div>
   )
