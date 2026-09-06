@@ -7,7 +7,7 @@ import {
   agregarDepHandler, borrarDepHandler, bulkDepsHandler, moverTareaHandler, reasignarIngenieroHandler,
   reservarHandler, reservasPendientesHandler, confirmarReservaHandler, liberarReservaHandler,
   dealsEnCursoHandler, enviarClienteHandler, clienteAproboHandler, activarProyectoHandler,
-  overrideDepositoHandler, reprogramacionesHandler, depositosBloqueandoHandler, muestrasEstadoHandler,
+  overrideDepositoHandler, reprogramacionesHandler, depositosBloqueandoHandler, pagosPorCobrarHandler, muestrasEstadoHandler,
   comprasEstadoHandler, instalacionDetalleHandler, escritorioHandler, escritorioResumenHandler,
   ingenierosHandler, actualizarIngenieroHandler,
 } from './controllers/ingenieria.controller'
@@ -31,6 +31,7 @@ router.get('/carga-etapas/detalle', READ, etapaDetalleHandler)
 router.get('/plan', READ, planHandler)
 router.get('/reprogramaciones', READ, reprogramacionesHandler)  // pedidos del ingeniero → bandeja del PM
 router.get('/depositos-bloqueando', READ, depositosBloqueandoHandler)  // depósito impago con compras listas → bandeja del PM
+router.get('/pagos-por-cobrar', READ, pagosPorCobrarHandler)  // depósito + pago final por registrar → bandeja del PM
 router.get('/muestras-estado', READ, muestrasEstadoHandler)  // estado de muestras por proyecto → escritorio ingeniero (#6)
 router.get('/compras-estado', READ, comprasEstadoHandler)  // estado de compras por proyecto → escritorio ingeniero (#9)
 // Escritorio por rol (todos los roles operativos ven el suyo — Compras/Producción incluidos).

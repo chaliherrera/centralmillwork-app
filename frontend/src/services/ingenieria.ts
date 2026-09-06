@@ -40,6 +40,13 @@ export interface Reprogramacion {
   motivo: string | null
   fecha_inicio: string | null
 }
+export interface PagoPorCobrar {
+  proyecto_id: number
+  proyecto_codigo: string
+  nombre: string | null
+  hito: string
+  dias_pendiente: number | null
+}
 export interface DepositoBloqueando {
   proyecto_ext: string
   nombre: string | null
@@ -246,6 +253,8 @@ export const ingenieriaService = {
     api.get<ApiResponse<Reprogramacion[]>>('/ingenieria/reprogramaciones').then((r) => r.data),
   depositosBloqueando: () =>
     api.get<ApiResponse<DepositoBloqueando[]>>('/ingenieria/depositos-bloqueando').then((r) => r.data),
+  pagosPorCobrar: () =>
+    api.get<ApiResponse<PagoPorCobrar[]>>('/ingenieria/pagos-por-cobrar').then((r) => r.data),
   muestrasEstado: () =>
     api.get<ApiResponse<MuestrasProyecto[]>>('/ingenieria/muestras-estado').then((r) => r.data),
   comprasEstado: () =>

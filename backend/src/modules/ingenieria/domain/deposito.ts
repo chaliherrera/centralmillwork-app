@@ -124,3 +124,27 @@ export async function overrideGate(
     [proyectoExt, tipoClave, abrir, usuarioId])
   return { ok: true, afectadas: rowCount ?? 0 }
 }
+
+export interface PagoPorCobrar {
+  proyecto_id: number
+  proyecto_codigo: string
+  nombre: string | null
+  hito: string                    // 'C-04' (depósito) | 'X-03' (pago final)
+  dias_pendiente: number | null   // días desde el día cero
+}
+
+/** Pagos del cliente pendientes de registrar, en proyectos ACTIVOS: el depósito (C-04) y el
+ *  pago final (X-03), cuando ya son relevantes (estado ≠ no_aplica) y sin fecha_real. Es la
+ *  lista "por cobrar" del PM — Finanzas avisa que el dinero entró y el PM lo registra (con monto). */
+export async function listPagosPorCobrar(runner: QueryRunner): Promise<PagoPorCobrar[]> {
+  const { rows } = await runner.query<PagoPorCobrar>(
+    `SELECT p.id AS proyecto_id, p.codigo AS proyecto_codigo, p.nombre, h.codigo AS hito,
+            GREATEST(0, (CURRENT_DATE - ip.fecha_inicio))::int AS dias_pendiente
+       FROM proyectos p
+       JOIN ing_proyectos ip ON ip.proyecto_id = p.id
+       JOIN schedule_planes sp ON sp.proyecto_id = p.id AND sp.scope = 'proyecto'
+       JOIN schedule_hitos h ON h.plan_id = sp.id AND h.codigo IN ('C-04','X-03')
+      WHERE p.estado = 'activo' AND h.fecha_real IS NULL AND h.estado <> 'no_aplica'
+      ORDER BY h.codigo, dias_pendiente DESC, p.codigo`)
+  return rows
+}

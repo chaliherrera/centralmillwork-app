@@ -19,7 +19,7 @@ import {
   generarPlanIngenieria, aceptarPlanPM,
   enviarAClienteDeal, registrarAprobacionCliente, activarProyecto, listDealsEnCurso,
 } from '../domain/plan_inicial'
-import { estadoDeposito, overrideGate, listDepositosBloqueando } from '../domain/deposito'
+import { estadoDeposito, overrideGate, listDepositosBloqueando, listPagosPorCobrar } from '../domain/deposito'
 import { listMuestrasPorProyecto } from '../domain/muestras'
 import { listComprasPorProyecto } from '../domain/compras'
 import { detalleInstalacion } from '../domain/instalacion'
@@ -468,6 +468,15 @@ export async function instalacionDetalleHandler(req: Request, res: Response, nex
 export async function depositosBloqueandoHandler(_req: Request, res: Response, next: NextFunction) {
   try {
     const data = await listDepositosBloqueando(pool)
+    res.json({ data })
+  } catch (e) { next(e) }
+}
+
+// ── Pagos por cobrar (depósito + pago final) para registrar — bandeja del PM ──
+// GET /api/ingenieria/pagos-por-cobrar
+export async function pagosPorCobrarHandler(_req: Request, res: Response, next: NextFunction) {
+  try {
+    const data = await listPagosPorCobrar(pool)
     res.json({ data })
   } catch (e) { next(e) }
 }
