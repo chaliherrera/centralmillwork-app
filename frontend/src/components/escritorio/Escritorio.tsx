@@ -162,8 +162,18 @@ export default function Escritorio({ rol, asignado, titulo, subtitulo, hideWhenE
                     <div key={t.id} className="rounded-lg border border-stone-200 px-3 py-2.5">
                       <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
                         <div className="min-w-0 flex-1">
-                          <div className="text-sm font-semibold text-stone-800">{t.nombre}</div>
-                          <div className="text-[11px] text-stone-400">plan {fmtD(t.fecha_inicio)} → {fmtD(t.fecha_fin)} · {t.dur_dias}d{t.estado === 'en_curso' ? ' · en curso' : ''}</div>
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="text-sm font-semibold text-stone-800">{t.nombre}</span>
+                            {t.es_critico ? (
+                              <span className="text-[9px] font-bold uppercase tracking-wide rounded px-1.5 py-0.5 bg-rose-100 text-rose-700">crítico</span>
+                            ) : t.holgura_dias != null && (
+                              <span className={`text-[9px] font-bold rounded px-1.5 py-0.5 ${t.holgura_dias < 0 ? 'bg-rose-100 text-rose-700' : t.holgura_dias <= 2 ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'}`}
+                                title="Holgura: días que puede atrasarse sin mover la entrega">
+                                {t.holgura_dias < 0 ? '' : '+'}{t.holgura_dias}d
+                              </span>
+                            )}
+                          </div>
+                          <div className="text-[11px] text-stone-400">plan {fmtD(t.fecha_inicio)} → {fmtD(t.fecha_fin)} · {t.dur_dias}d{t.fecha_entrega ? ` · entrega ${fmtD(t.fecha_entrega)}` : ''}{t.estado === 'en_curso' ? ' · en curso' : ''}</div>
                         </div>
                         {esFirma ? (
                           <button onClick={() => { if (firmaOpen === t.id) cerrarFirma(); else { setFirmaFirma(''); setFirmaEnvio(''); setFirmaPdf(null); setFirmaOpen(t.id) } }}

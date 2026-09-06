@@ -453,7 +453,9 @@ export async function recomputarYGuardar(runner: QueryRunner, proyectoExt: strin
     const r = calcularHolgura(cpmTareas, aristas, h.ini, h.entrega, feriados)
     for (const t of tareas) {
       const c = r.tareas.get(t.id)
-      if (c) await runner.query(`UPDATE ing_tareas SET fecha_inicio = $2, fecha_fin = $3 WHERE id = $1`, [t.id, c.earlyStart, c.earlyFinish])
+      if (c) await runner.query(
+        `UPDATE ing_tareas SET fecha_inicio = $2, fecha_fin = $3, es_critico = $4, holgura_dias = $5 WHERE id = $1`,
+        [t.id, c.earlyStart, c.earlyFinish, c.critico, c.holguraDias])
     }
     // Proyección al journey (fuente única = el Gantt): cada hito toma su fecha del PASO
     // del Gantt al que mapea (schedule_plantilla_hitos.gantt_clave/gantt_ancla). Reemplaza

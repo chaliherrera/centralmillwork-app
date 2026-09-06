@@ -158,7 +158,8 @@ export interface InstalacionDetalle { items: InstalacionItem[]; punch: Instalaci
 export interface EscritorioTarea {
   id: number; proyecto_ext: string | null; proyecto_id: number | null; nombre: string; tipo_clave: string | null
   rol: string | null; asignado_nombre: string | null; fecha_inicio: string | null
-  fecha_fin: string | null; fecha_entrega: string | null; dur_dias: number; estado: string
+  fecha_fin: string | null; fecha_entrega: string | null; es_critico: boolean | null; holgura_dias: number | null
+  dur_dias: number; estado: string
   reprogramacion_pedida: boolean; reprogramacion_motivo: string | null
 }
 export interface EnEspera { id: number; proyecto_ext: string | null; nombre: string; espera_nombre: string; espera_rol: string | null }

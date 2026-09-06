@@ -25,7 +25,9 @@ export interface EscritorioTarea {
   asignado_nombre: string | null
   fecha_inicio: string | null
   fecha_fin: string | null
-  fecha_entrega: string | null    // entrega comprometida del proyecto (para el intake de la firma)
+  fecha_entrega: string | null    // entrega comprometida del proyecto (para el intake + contexto)
+  es_critico: boolean | null      // ¿está en el camino crítico? (prioridad)
+  holgura_dias: number | null     // días de holgura del CPM (< 0 = en riesgo)
   dur_dias: number
   estado: string
   reprogramacion_pedida: boolean
@@ -89,6 +91,7 @@ export async function getEscritorio(
             to_char(t.fecha_inicio,'YYYY-MM-DD') AS fecha_inicio,
             to_char(t.fecha_fin,'YYYY-MM-DD')    AS fecha_fin,
             to_char(ip.fecha_entrega,'YYYY-MM-DD') AS fecha_entrega,
+            t.es_critico, t.holgura_dias,
             t.dur_dias, t.estado, t.reprogramacion_pedida, t.reprogramacion_motivo
        ${base} AND NOT ${BLOQUEADA}
       ORDER BY t.fecha_inicio NULLS LAST, t.proyecto_ext, tt.orden`, params)
