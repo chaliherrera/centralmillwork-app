@@ -1,5 +1,4 @@
 import { Truck } from 'lucide-react'
-import MiTrabajo from '@/components/modules/schedule/MiTrabajo'
 import Escritorio from '@/components/escritorio/Escritorio'
 
 // Escritorio de Logística — despacho de todos los proyectos (BOL, precinto, envío).
@@ -17,7 +16,6 @@ export default function Logistica() {
       </div>
       <Escritorio rol="logistica" titulo="Despacho — te toca ahora"
         subtitulo="Los envíos listos para cargar y despachar, de todos los proyectos. Marcá cuando el producto salió." />
-      <MiTrabajo area="logistics" emptyMsg="Logística no tiene nada pendiente ahora mismo. 🎉" />
     </div>
   )
 }

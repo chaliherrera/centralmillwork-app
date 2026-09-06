@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react'
 import { ClipboardList, Inbox, Gauge, Users, Loader2, UserCog, ArrowRight, Check, X } from 'lucide-react'
 import toast from 'react-hot-toast'
-import MiTrabajo from '@/components/modules/schedule/MiTrabajo'
 import ReservasPendientes from '@/components/modules/estimados/ReservasPendientes'
 import DealsEnCurso from '@/components/modules/estimados/DealsEnCurso'
 import ReprogramacionesPendientes from '@/components/modules/ingenieria/ReprogramacionesPendientes'
@@ -48,7 +47,6 @@ export default function ProjectMgmt() {
           <ReprogramacionesPendientes onRevisar={onRevisar} />
           <ReservasPendientes onRevisar={onRevisar} />
           <DealsEnCurso mode="pm" />
-          <MiTrabajo area="pm" emptyMsg="El PM no tiene nada pendiente ahora mismo. 🎉" />
         </div>
       )}
       {tab === 'plan' && (
