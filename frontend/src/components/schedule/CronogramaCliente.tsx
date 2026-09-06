@@ -49,8 +49,11 @@ export default function CronogramaCliente({ nombre, fechaObjetivo, gantt }: { no
     } catch { toast.error('No se pudo generar la imagen') } finally { setDescargando(false) }
   }
 
+  const LABEL_W = 220   // ancho de la columna de nombres (se comparte con el encabezado)
   const day = (d: string) => Math.floor(new Date(d + 'T00:00:00').getTime() / 86400000)
   const fechas = gantt.flatMap((t) => [t.inicio, t.fin]).filter(Boolean) as string[]
+  // Fecha de inicio del proyecto = arranque de la primera tarea (para el pie del cronograma).
+  const inicioProy = gantt.map((t) => t.inicio).filter(Boolean).sort()[0] ?? null
   if (fechaObjetivo) fechas.push(fechaObjetivo)
   const dMin = fechas.length ? Math.min(...fechas.map(day)) : 0
   const span = Math.max(1, (fechas.length ? Math.max(...fechas.map(day)) : 1) - dMin)
@@ -77,19 +80,19 @@ export default function CronogramaCliente({ nombre, fechaObjetivo, gantt }: { no
       </div>
       <div ref={ref} className="rounded-2xl border border-card-border bg-white p-4" style={{ boxShadow: '0 1px 4px rgba(0,0,0,0.04)' }}>
         <div className="text-[13px] font-bold text-stone-800 mb-3">{nombre} · cronograma</div>
-        <div className="overflow-x-auto"><div className="min-w-[560px]">
+        <div className="overflow-x-auto"><div className="min-w-[620px]">
           <div className="flex items-stretch border-b border-stone-100 pb-1 mb-1">
-            <div className="shrink-0" style={{ width: 184 }} />
+            <div className="shrink-0" style={{ width: LABEL_W }} />
             <div className="relative flex-1 h-4">
               {meses.map((m, i) => <div key={i} className="absolute top-0 text-[9px] font-semibold text-stone-400" style={{ left: `${m.left}%` }}>{m.label}</div>)}
             </div>
           </div>
           {gantt.map((t, i) => (
             <div key={i} className="flex items-center gap-2 py-[3px]">
-              <div className="shrink-0 min-w-0" style={{ width: 184 }}>
-                <div className={clsx('text-[11px] truncate flex items-center gap-1 leading-tight', t.es_cliente ? 'font-bold text-rose-700' : 'text-stone-600')}>
-                  {t.es_cliente && <span className="w-1.5 h-1.5 rounded-full bg-rose-500 shrink-0" />}
-                  {t.nombre}
+              <div className="shrink-0" style={{ width: LABEL_W }}>
+                <div className={clsx('text-[11px] flex items-start gap-1 leading-tight break-words', t.es_cliente ? 'font-bold text-rose-700' : 'text-stone-600')}>
+                  {t.es_cliente && <span className="w-1.5 h-1.5 rounded-full bg-rose-500 shrink-0 mt-[3px]" />}
+                  <span className="min-w-0">{t.nombre}</span>
                 </div>
                 <div className="text-[9.5px] text-stone-400 tabular-nums leading-tight mt-0.5">{fmtc(t.inicio)} → {fmtc(t.fin)}</div>
               </div>
@@ -102,7 +105,10 @@ export default function CronogramaCliente({ nombre, fechaObjetivo, gantt }: { no
           <div className="flex items-center gap-3 mt-3 pt-2 border-t border-stone-100 text-[10px] text-stone-500">
             <span className="inline-flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm bg-rose-500 inline-block" /> tus pasos</span>
             <span className="inline-flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm bg-forest-400 inline-block" /> producción</span>
-            {fechaObjetivo && <span className="ml-auto">Entrega: <b className="text-stone-700">{fmt(fechaObjetivo)}</b></span>}
+            <span className="ml-auto flex items-center gap-3">
+              {inicioProy && <span>Inicio: <b className="text-stone-700">{fmt(inicioProy)}</b></span>}
+              {fechaObjetivo && <span>Entrega: <b className="text-stone-700">{fmt(fechaObjetivo)}</b></span>}
+            </span>
           </div>
           <div className="mt-2.5 text-[10.5px] text-rose-800 bg-rose-50 border border-rose-100 rounded-lg px-2.5 py-2 leading-snug">
             Las tareas marcadas en <b>rojo</b> dependen de vos. El retraso en su cumplimiento pone en riesgo el cumplimiento de la fecha de entrega propuesta para el proyecto.

@@ -651,7 +651,7 @@ function VistaProyecto({ proyectos, all, plan, planLoading, sel, setSel, onEdit,
       {/* Cronograma del cliente (la propuesta): mismo Gantt que ve el cliente, descargable. */}
       {cronoOpen && (
         <div className="fixed inset-0 bg-black/30 flex items-center justify-center p-4 z-50" onClick={() => setCronoOpen(false)}>
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl max-h-[88vh] overflow-y-auto p-5" onClick={(e) => e.stopPropagation()}>
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-3xl max-h-[88vh] overflow-y-auto p-5" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center gap-2 mb-3">
               <CalendarClock size={18} className="text-forest-600" />
               <h3 className="font-bold text-stone-800 text-sm">Cronograma del cliente · {shortProj(sel)}</h3>
