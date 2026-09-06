@@ -84,6 +84,7 @@ export async function getEscritorio(
     WHERE t.estado NOT IN ('hecha','na')
       AND t.origen IN ('app','import_excel')
       AND (t.origen = 'import_excel' OR p.estado = 'activo')
+      AND NOT (tt.clave = 'po_execution' AND t.origen <> 'app')
       AND ${rolCond} ${asigCond}`
 
   const { rows } = await runner.query<EscritorioTarea>(
@@ -139,6 +140,7 @@ export async function getEscritorioResumen(
        LEFT JOIN proyectos p ON p.id = t.proyecto_id
       WHERE t.estado NOT IN ('hecha','na') AND t.origen IN ('app','import_excel')
         AND (t.origen = 'import_excel' OR p.estado = 'activo')
+        AND NOT (tt.clave = 'po_execution' AND t.origen <> 'app')
         AND ${rolCond} ${asigCond}
         AND NOT ${BLOQUEADA}
       GROUP BY erol`, params)
