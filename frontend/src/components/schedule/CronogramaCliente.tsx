@@ -25,6 +25,8 @@ export function ganttDesdePlan(tareas: IngTareaPlan[]): PortalGanttTarea[] {
 
 const MESG = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic']
 const fmt = (d: string | null) => { if (!d) return ''; const [y, m, day] = d.split('-'); return `${day}/${m}/${y.slice(2)}` }
+// Formato compacto para el rango de cada tarea (día/mes, sin ceros a la izquierda).
+const fmtc = (d: string | null) => { if (!d) return ''; const p = d.split('-'); return `${+p[2]}/${+p[1]}` }
 
 /**
  * El "cronograma del proyecto" (Gantt completo = la propuesta) que ve el cliente:
@@ -77,19 +79,22 @@ export default function CronogramaCliente({ nombre, fechaObjetivo, gantt }: { no
         <div className="text-[13px] font-bold text-stone-800 mb-3">{nombre} · cronograma</div>
         <div className="overflow-x-auto"><div className="min-w-[560px]">
           <div className="flex items-stretch border-b border-stone-100 pb-1 mb-1">
-            <div className="shrink-0" style={{ width: 150 }} />
+            <div className="shrink-0" style={{ width: 184 }} />
             <div className="relative flex-1 h-4">
               {meses.map((m, i) => <div key={i} className="absolute top-0 text-[9px] font-semibold text-stone-400" style={{ left: `${m.left}%` }}>{m.label}</div>)}
             </div>
           </div>
           {gantt.map((t, i) => (
-            <div key={i} className="flex items-center gap-2 py-0.5">
-              <div className={clsx('shrink-0 text-[11px] truncate flex items-center gap-1', t.es_cliente ? 'font-bold text-rose-700' : 'text-stone-600')} style={{ width: 150 }}>
-                {t.es_cliente && <span className="w-1.5 h-1.5 rounded-full bg-rose-500 shrink-0" />}
-                {t.nombre}
+            <div key={i} className="flex items-center gap-2 py-[3px]">
+              <div className="shrink-0 min-w-0" style={{ width: 184 }}>
+                <div className={clsx('text-[11px] truncate flex items-center gap-1 leading-tight', t.es_cliente ? 'font-bold text-rose-700' : 'text-stone-600')}>
+                  {t.es_cliente && <span className="w-1.5 h-1.5 rounded-full bg-rose-500 shrink-0" />}
+                  {t.nombre}
+                </div>
+                <div className="text-[9.5px] text-stone-400 tabular-nums leading-tight mt-0.5">{fmtc(t.inicio)} → {fmtc(t.fin)}</div>
               </div>
-              <div className="relative flex-1 h-4">
-                <div className={clsx('absolute top-0.5 h-3 rounded', t.es_cliente ? 'bg-rose-500' : t.estado === 'hecha' ? 'bg-emerald-400' : 'bg-forest-400')}
+              <div className="relative flex-1 h-6">
+                <div className={clsx('absolute top-1/2 -translate-y-1/2 h-3 rounded', t.es_cliente ? 'bg-rose-500' : t.estado === 'hecha' ? 'bg-emerald-400' : 'bg-forest-400')}
                   style={{ left: `${pct(t.inicio)}%`, width: `${Math.max(1.2, pct(t.fin) - pct(t.inicio))}%` }} />
               </div>
             </div>
