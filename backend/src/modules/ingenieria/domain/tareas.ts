@@ -410,7 +410,7 @@ export async function cerrarTareasAutomaticas(runner: QueryRunner, proyectoExt: 
     po_execution:     { done: hito.has('C-03'), fecha: hito.get('C-03') ?? null },
     material_deposit: { done: !!deposito.fecha_resolucion, fecha: deposito.fecha_resolucion },
     long_leads:       { done: !!compras.fecha_primera_oc, fecha: compras.fecha_primera_oc },
-    material_proc:    { done: comprasCompleto, fecha: compras.fecha_ultima_recepcion },
+    material_proc:    { done: comprasCompleto, enCurso: compras.n_materiales > 0, fecha: compras.fecha_ultima_recepcion },
     approval:         { done: hito.has('E-07') || reviewOk, fecha: hito.get('E-07') ?? null },
     fabrication:      { done: hito.has('P-06'), enCurso: hito.has('P-05'), fecha: hito.get('P-06') ?? hito.get('P-05') ?? null },
     installation:     { done: instalacion.completa || hito.has('I-07'), fecha: instalacion.fecha_ultima ?? hito.get('I-07') ?? null },

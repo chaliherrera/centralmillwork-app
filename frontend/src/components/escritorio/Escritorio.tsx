@@ -153,6 +153,9 @@ export default function Escritorio({ rol, asignado, titulo, subtitulo, hideWhenE
                   const esFirma = clave === 'po_execution' && t.proyecto_id != null
                   const esCompletable = COMPLETABLE.has(clave)
                   const link = LINK_MODULO[clave]
+                  // material_proc pendiente = el ingeniero produce/importa el MTO ("Importar MTO");
+                  // en_curso = Compras cotiza/compra ("Ir a Control MTOs"). Mismo destino (/mtos).
+                  const linkLabel = clave === 'material_proc' && t.estado !== 'en_curso' ? 'Importar MTO' : link?.label
                   const art = ARTIFACT[clave]
                   const fecha = fechas[t.id] ?? hoy()
                   return (
@@ -186,7 +189,7 @@ export default function Escritorio({ rol, asignado, titulo, subtitulo, hideWhenE
                           </div>
                         ) : link ? (
                           <Link to={link.to} className="inline-flex items-center gap-1 rounded-lg border border-stone-300 hover:bg-stone-50 text-stone-700 text-xs font-semibold px-2.5 py-1.5 shrink-0">
-                            <ExternalLink size={13} /> {link.label}
+                            <ExternalLink size={13} /> {linkLabel}
                           </Link>
                         ) : (
                           <span className="text-[11px] text-stone-400 italic shrink-0">se cierra sola con el módulo</span>

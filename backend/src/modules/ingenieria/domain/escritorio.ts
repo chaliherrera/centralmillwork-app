@@ -64,6 +64,14 @@ export async function getEscritorio(
   let asigCond = ''
   if (opts.asignado) { params.push(opts.asignado); asigCond = `AND t.asignado_nombre = $${params.length}` }
 
+  // Handoff del paso 9 (Material Procurement, Q4): el MTO nace en Ingeniería (pendiente = el
+  // ingeniero lo produce/importa) y APENAS se importa (n_materiales>0 → en_curso, vía el
+  // reconciliador) pasa a COMPRAS (cotizar/comprar). Aunque su rol de catálogo es 'ingenieria',
+  // en_curso lo ve Compras; pendiente lo ve Ingeniería. El resto de los pasos van por su rol.
+  const verCompras = opts.roles.includes('compras')
+  const rolCond = `( (tt.rol = ANY($1) AND NOT (tt.clave = 'material_proc' AND t.estado = 'en_curso'))${
+    verCompras ? " OR (tt.clave = 'material_proc' AND t.estado = 'en_curso')" : ''} )`
+
   // Base: tareas pendientes/en_curso de la ruta REAL (no sugerencias), del rol pedido.
   // Solo proyectos ACTIVOS: un plan 'app' entra a los escritorios recién cuando el PM
   // activa el proyecto (el cliente ya aceptó) — no mientras es prospecto/reserva. Los
@@ -74,7 +82,7 @@ export async function getEscritorio(
     WHERE t.estado NOT IN ('hecha','na')
       AND t.origen IN ('app','import_excel')
       AND (t.origen = 'import_excel' OR p.estado = 'activo')
-      AND tt.rol = ANY($1) ${asigCond}`
+      AND ${rolCond} ${asigCond}`
 
   const { rows } = await runner.query<EscritorioTarea>(
     `SELECT t.id, t.proyecto_ext, t.proyecto_id, t.nombre, tt.clave AS tipo_clave, tt.rol, t.asignado_nombre,
