@@ -28,6 +28,13 @@ const LINK_MODULO: Record<string, { to: string; label: string }> = {
   fabrication: { to: '/produccion/ordenes', label: 'Ir a Producción' },
   installation: { to: '/produccion', label: 'Ir a Instalación' },
 }
+// Pasos que producen un ARCHIVO al completarse (submittal de planos o archivos CNC). El
+// archivo se adjunta acá mismo, al completar el paso — reemplaza al viejo "Mi trabajo".
+const ARTIFACT: Record<string, { kind: 'submittal' | 'archivo'; codigo?: string; label: string; accept?: string }> = {
+  shop_drawings: { kind: 'submittal', label: 'Adjuntar planos (PDF)', accept: 'application/pdf' },
+  sd_update:     { kind: 'submittal', label: 'Adjuntar set final (PDF)', accept: 'application/pdf' },
+  cnc:           { kind: 'archivo', codigo: 'E-11', label: 'Adjuntar archivos CNC' },
+}
 const shortProj = (p: string | null) => (p || '—').replace(/^\s*(\d{2}-\d{3})\s*/, '$1 · ')
 const hoy = () => new Date().toISOString().slice(0, 10)
 const fmtD = (iso: string | null) => {
@@ -42,6 +49,7 @@ export default function Escritorio({ rol, asignado, titulo, subtitulo }: {
   const qc = useQueryClient()
   const [verEspera, setVerEspera] = useState(false)
   const [fechas, setFechas] = useState<Record<number, string>>({})
+  const [archivos, setArchivos] = useState<Record<number, File | null>>({})   // adjuntos por tarea (planos/CNC)
   const [avisoOpen, setAvisoOpen] = useState<number | null>(null)
   const [avisoVal, setAvisoVal] = useState('')
   // Firma del contrato (paso 1, PO Execution — día cero). Reusa el intake de Estimados.
@@ -57,10 +65,19 @@ export default function Escritorio({ rol, asignado, titulo, subtitulo }: {
     refetchOnWindowFocus: true,
   })
 
+  // Completar el paso. Si el paso produce un archivo (planos/CNC) y se adjuntó uno, se sube
+  // ANTES de cerrar la tarea — así el escritorio es el único lugar (sin "Mi trabajo" aparte).
   const completar = useMutation({
-    mutationFn: ({ id, fecha }: { id: number; fecha: string }) =>
-      ingenieriaService.avanceTarea(id, { estado: 'hecha', fecha_fin_real: fecha }),
-    onSuccess: () => { toast.success('Tarea completada'); qc.invalidateQueries({ queryKey: ['escritorio'] }) },
+    mutationFn: async ({ t, fecha }: { t: EscritorioTarea; fecha: string }) => {
+      const art = ARTIFACT[t.tipo_clave ?? '']
+      const file = archivos[t.id] ?? null
+      if (art && file && t.proyecto_id != null) {
+        if (art.kind === 'submittal') await scheduleService.uploadSubmittal(t.proyecto_id, file)
+        else await scheduleService.uploadArchivoHito(t.proyecto_id, art.codigo!, file)
+      }
+      return ingenieriaService.avanceTarea(t.id, { estado: 'hecha', fecha_fin_real: fecha })
+    },
+    onSuccess: () => { toast.success('Tarea completada'); setArchivos({}); qc.invalidateQueries({ queryKey: ['escritorio'] }) },
     onError: (e: any) => toast.error(e?.response?.data?.message ?? 'No se pudo completar'),
   })
 
@@ -121,6 +138,7 @@ export default function Escritorio({ rol, asignado, titulo, subtitulo }: {
                   const esFirma = clave === 'po_execution' && t.proyecto_id != null
                   const esCompletable = COMPLETABLE.has(clave)
                   const link = LINK_MODULO[clave]
+                  const art = ARTIFACT[clave]
                   const fecha = fechas[t.id] ?? hoy()
                   return (
                     <div key={t.id} className="rounded-lg border border-stone-200 px-3 py-2.5">
@@ -135,12 +153,20 @@ export default function Escritorio({ rol, asignado, titulo, subtitulo }: {
                             <FileSignature size={13} /> Registrar firma
                           </button>
                         ) : esCompletable ? (
-                          <div className="flex items-center gap-1.5 shrink-0">
+                          <div className="flex items-center gap-1.5 shrink-0 flex-wrap justify-end">
+                            {art && (
+                              <label className="inline-flex items-center gap-1 rounded-lg border border-stone-300 hover:bg-stone-50 text-stone-600 text-xs font-medium px-2.5 py-1.5 cursor-pointer max-w-[190px]">
+                                <FileUp size={13} className="shrink-0" />
+                                <span className="truncate">{archivos[t.id]?.name ?? art.label}</span>
+                                <input type="file" accept={art.accept} className="hidden"
+                                  onChange={(e) => setArchivos((a) => ({ ...a, [t.id]: e.target.files?.[0] ?? null }))} />
+                              </label>
+                            )}
                             <input type="date" value={fecha} onChange={(e) => setFechas((f) => ({ ...f, [t.id]: e.target.value }))}
                               className="text-xs border border-stone-300 rounded-lg px-2 py-1.5" title={CUMPLIDA_LABEL[clave] ?? 'Fecha de cumplimiento'} />
-                            <button onClick={() => completar.mutate({ id: t.id, fecha })} disabled={completar.isPending}
+                            <button onClick={() => completar.mutate({ t, fecha })} disabled={completar.isPending}
                               className="inline-flex items-center gap-1 rounded-lg bg-forest-600 hover:bg-forest-700 disabled:opacity-50 text-white text-xs font-semibold px-2.5 py-1.5">
-                              <CheckCircle2 size={13} /> {CUMPLIDA_LABEL[clave] ?? 'Completar'}
+                              {completar.isPending ? <Loader2 className="animate-spin" size={13} /> : <CheckCircle2 size={13} />} {CUMPLIDA_LABEL[clave] ?? 'Completar'}
                             </button>
                           </div>
                         ) : link ? (
