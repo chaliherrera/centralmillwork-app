@@ -1,9 +1,10 @@
 import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Loader2, CheckCircle2, ClipboardList, ChevronDown, ChevronUp, ExternalLink, MessageSquarePlus } from 'lucide-react'
+import { Loader2, CheckCircle2, ClipboardList, ChevronDown, ChevronUp, ExternalLink, MessageSquarePlus, FileSignature, FileUp } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { ingenieriaService, type EscritorioTarea } from '@/services/ingenieria'
+import { scheduleService } from '@/services/schedule'
 
 // Etiqueta contextual del "completar" según el tipo de paso (mismo criterio que el
 // escritorio del ingeniero): enviar = completar.
@@ -43,6 +44,11 @@ export default function Escritorio({ rol, asignado, titulo, subtitulo }: {
   const [fechas, setFechas] = useState<Record<number, string>>({})
   const [avisoOpen, setAvisoOpen] = useState<number | null>(null)
   const [avisoVal, setAvisoVal] = useState('')
+  // Firma del contrato (paso 1, PO Execution — día cero). Reusa el intake de Estimados.
+  const [firmaOpen, setFirmaOpen] = useState<number | null>(null)
+  const [firmaFirma, setFirmaFirma] = useState('')
+  const [firmaEnvio, setFirmaEnvio] = useState('')
+  const [firmaPdf, setFirmaPdf] = useState<File | null>(null)
 
   const { data, isLoading } = useQuery({
     queryKey: ['escritorio', rol ?? '', asignado ?? ''],
@@ -70,6 +76,16 @@ export default function Escritorio({ rol, asignado, titulo, subtitulo }: {
   const quitarAviso = useMutation({
     mutationFn: (id: number) => ingenieriaService.avanceTarea(id, { reprogramacion_pedida: false, reprogramacion_motivo: null }),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['escritorio'] }) },
+  })
+  const cerrarFirma = () => { setFirmaOpen(null); setFirmaFirma(''); setFirmaEnvio(''); setFirmaPdf(null) }
+  // Registrar la firma del contrato = día cero. Reusa el intake (graba C-03, re-ancla, y el
+  // reconciliador cierra PO Execution). No exige regenerar el plan (ya existe si está activo).
+  const registrarFirma = useMutation({
+    mutationFn: (t: EscritorioTarea) => scheduleService.intake(
+      t.proyecto_id!, t.fecha_entrega ?? hoy(), firmaPdf,
+      { fecha_firma: firmaFirma || undefined, fecha_envio: firmaEnvio || undefined }),
+    onSuccess: () => { toast.success('Firma registrada — día cero cerrado'); cerrarFirma(); qc.invalidateQueries({ queryKey: ['escritorio'] }) },
+    onError: (e: any) => toast.error(e?.response?.data?.message ?? 'No se pudo registrar la firma'),
   })
 
   const tareas = data?.data.tareas ?? []
@@ -102,6 +118,7 @@ export default function Escritorio({ rol, asignado, titulo, subtitulo }: {
               <div className="space-y-2">
                 {ts.map((t) => {
                   const clave = t.tipo_clave ?? ''
+                  const esFirma = clave === 'po_execution' && t.proyecto_id != null
                   const esCompletable = COMPLETABLE.has(clave)
                   const link = LINK_MODULO[clave]
                   const fecha = fechas[t.id] ?? hoy()
@@ -112,7 +129,12 @@ export default function Escritorio({ rol, asignado, titulo, subtitulo }: {
                           <div className="text-sm font-semibold text-stone-800">{t.nombre}</div>
                           <div className="text-[11px] text-stone-400">plan {fmtD(t.fecha_inicio)} → {fmtD(t.fecha_fin)} · {t.dur_dias}d{t.estado === 'en_curso' ? ' · en curso' : ''}</div>
                         </div>
-                        {esCompletable ? (
+                        {esFirma ? (
+                          <button onClick={() => { if (firmaOpen === t.id) cerrarFirma(); else { setFirmaFirma(''); setFirmaEnvio(''); setFirmaPdf(null); setFirmaOpen(t.id) } }}
+                            className="inline-flex items-center gap-1 rounded-lg bg-forest-600 hover:bg-forest-700 text-white text-xs font-semibold px-2.5 py-1.5 shrink-0">
+                            <FileSignature size={13} /> Registrar firma
+                          </button>
+                        ) : esCompletable ? (
                           <div className="flex items-center gap-1.5 shrink-0">
                             <input type="date" value={fecha} onChange={(e) => setFechas((f) => ({ ...f, [t.id]: e.target.value }))}
                               className="text-xs border border-stone-300 rounded-lg px-2 py-1.5" title={CUMPLIDA_LABEL[clave] ?? 'Fecha de cumplimiento'} />
@@ -135,6 +157,38 @@ export default function Escritorio({ rol, asignado, titulo, subtitulo }: {
                           <MessageSquarePlus size={15} />
                         </button>
                       </div>
+
+                      {/* Registrar firma del contrato (día cero) — reusa el intake de Estimados */}
+                      {esFirma && firmaOpen === t.id && (
+                        <div className="mt-2.5 rounded-lg border border-forest-200 bg-forest-50/50 px-3 py-2.5 space-y-2">
+                          <div className="grid grid-cols-2 gap-2">
+                            <label className="block">
+                              <span className="text-[10px] uppercase tracking-wide text-forest-700 font-semibold">Firmado por el cliente · día cero</span>
+                              <input type="date" value={firmaFirma} onChange={(e) => setFirmaFirma(e.target.value)}
+                                className="mt-0.5 w-full text-xs border border-stone-300 rounded-lg px-2 py-1.5" />
+                            </label>
+                            <label className="block">
+                              <span className="text-[10px] uppercase tracking-wide text-stone-400 font-semibold">Enviado al cliente (opcional)</span>
+                              <input type="date" value={firmaEnvio} onChange={(e) => setFirmaEnvio(e.target.value)}
+                                className="mt-0.5 w-full text-xs border border-stone-300 rounded-lg px-2 py-1.5" />
+                            </label>
+                          </div>
+                          <label className="flex items-center gap-2 rounded-lg border border-stone-300 bg-white px-2.5 py-1.5 cursor-pointer text-xs">
+                            <FileUp size={14} className="text-stone-500 shrink-0" />
+                            <span className="text-stone-600 truncate flex-1">{firmaPdf ? firmaPdf.name : 'PDF del contrato firmado · obligatorio'}</span>
+                            <input type="file" accept="application/pdf" className="hidden" onChange={(e) => setFirmaPdf(e.target.files?.[0] ?? null)} />
+                          </label>
+                          {firmaEnvio && firmaFirma && firmaFirma < firmaEnvio && <p className="text-[11px] text-rose-600">La firma no puede ser anterior al envío.</p>}
+                          <div className="flex items-center justify-end gap-2">
+                            <button onClick={cerrarFirma} className="text-xs text-stone-500 hover:text-stone-800 px-2 py-1">Cancelar</button>
+                            <button onClick={() => registrarFirma.mutate(t)}
+                              disabled={registrarFirma.isPending || !firmaFirma || !firmaPdf || (!!firmaEnvio && firmaFirma < firmaEnvio)}
+                              className="inline-flex items-center gap-1.5 rounded-lg bg-forest-600 hover:bg-forest-700 disabled:opacity-50 text-white text-xs font-semibold px-3 py-1.5">
+                              {registrarFirma.isPending ? <Loader2 className="animate-spin" size={13} /> : <FileSignature size={13} />} Registrar firma
+                            </button>
+                          </div>
+                        </div>
+                      )}
 
                       {/* Aviso ya enviado (colapsado) */}
                       {t.reprogramacion_pedida && avisoOpen !== t.id && (

@@ -156,9 +156,9 @@ export interface InstalacionPunch {
 export interface InstalacionDetalle { items: InstalacionItem[]; punch: InstalacionPunch[] }
 // Escritorio por rol: tu próxima tarea desbloqueada, cross-project.
 export interface EscritorioTarea {
-  id: number; proyecto_ext: string | null; nombre: string; tipo_clave: string | null
+  id: number; proyecto_ext: string | null; proyecto_id: number | null; nombre: string; tipo_clave: string | null
   rol: string | null; asignado_nombre: string | null; fecha_inicio: string | null
-  fecha_fin: string | null; dur_dias: number; estado: string
+  fecha_fin: string | null; fecha_entrega: string | null; dur_dias: number; estado: string
   reprogramacion_pedida: boolean; reprogramacion_motivo: string | null
 }
 export interface EscritorioResp { tareas: EscritorioTarea[]; bloqueadas: number }

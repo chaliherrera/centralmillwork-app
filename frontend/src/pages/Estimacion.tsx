@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { FileSignature, Inbox, Plus } from 'lucide-react'
 import EstimadosWizard from '@/components/modules/estimados/EstimadosWizard'
 import DealsEnCurso from '@/components/modules/estimados/DealsEnCurso'
+import Escritorio from '@/components/escritorio/Escritorio'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Escritorio de Estimación — dos pestañas, como el del PM:
@@ -33,7 +34,13 @@ export default function Estimacion() {
       </div>
 
       {tab === 'bandeja' ? (
-        <DealsEnCurso mode="estimados" emptyHint="Cuando el PM acepte un plan, el deal aparece acá para que le mandes el schedule al cliente." />
+        <div className="space-y-5">
+          {/* Escritorio de Estimados: lo que le toca (hoy, PO Execution → registrar la firma
+              del contrato = día cero, que destraba toda la cadena aguas abajo). */}
+          <Escritorio rol="estimacion" titulo="Te toca a vos ahora"
+            subtitulo="Tu próxima tarea de cada proyecto — completala y aparece la siguiente." />
+          <DealsEnCurso mode="estimados" emptyHint="Cuando el PM acepte un plan, el deal aparece acá para que le mandes el schedule al cliente." />
+        </div>
       ) : (
         <EstimadosWizard />
       )}

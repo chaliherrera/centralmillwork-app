@@ -18,12 +18,14 @@ type QueryRunner = PoolClient | typeof pool
 export interface EscritorioTarea {
   id: number
   proyecto_ext: string | null
+  proyecto_id: number | null      // para acciones que operan sobre el proyecto (ej. registrar firma)
   nombre: string
   tipo_clave: string | null
   rol: string | null
   asignado_nombre: string | null
   fecha_inicio: string | null
   fecha_fin: string | null
+  fecha_entrega: string | null    // entrega comprometida del proyecto (para el intake de la firma)
   dur_dias: number
   estado: string
   reprogramacion_pedida: boolean
@@ -54,14 +56,16 @@ export async function getEscritorio(
 
   // Base: tareas pendientes/en_curso de la ruta REAL (no sugerencias), del rol pedido.
   const base = `FROM ing_tareas t JOIN ing_tarea_tipos tt ON tt.id = t.tipo_id
+    LEFT JOIN ing_proyectos ip ON ip.proyecto_ext = t.proyecto_ext
     WHERE t.estado NOT IN ('hecha','na')
       AND t.origen IN ('app','import_excel')
       AND tt.rol = ANY($1) ${asigCond}`
 
   const { rows } = await runner.query<EscritorioTarea>(
-    `SELECT t.id, t.proyecto_ext, t.nombre, tt.clave AS tipo_clave, tt.rol, t.asignado_nombre,
+    `SELECT t.id, t.proyecto_ext, t.proyecto_id, t.nombre, tt.clave AS tipo_clave, tt.rol, t.asignado_nombre,
             to_char(t.fecha_inicio,'YYYY-MM-DD') AS fecha_inicio,
             to_char(t.fecha_fin,'YYYY-MM-DD')    AS fecha_fin,
+            to_char(ip.fecha_entrega,'YYYY-MM-DD') AS fecha_entrega,
             t.dur_dias, t.estado, t.reprogramacion_pedida, t.reprogramacion_motivo
        ${base} AND NOT ${BLOQUEADA}
       ORDER BY t.fecha_inicio NULLS LAST, t.proyecto_ext, tt.orden`, params)
