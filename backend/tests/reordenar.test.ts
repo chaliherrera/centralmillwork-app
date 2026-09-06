@@ -32,20 +32,21 @@ describe('reordenar — recableado de dependencias', () => {
     expect(idx(o, 2)).toBeLessThan(idx(o, 4))   // 2 antes de 4
   })
 
-  it('material_proc entre 6 y 7: conserva depósito, corta approval, no crea ciclo', () => {
+  it('material_proc entre 6 y 7: reparenta a field, NO serializa sd_update, conserva depósito', () => {
     // 1 po, 2 deposit(candado sobre 9), 5 approval, 6 field, 7 sd_update, 9 material_proc, 10 fabrication
     const T = tareas([1, 'po'], [2, 'deposit'], [5, 'approval'], [6, 'field'], [7, 'sd_update'], [9, 'material_proc'], [10, 'fabrication'])
     const A = [
       dep(5, 1), dep(6, 5), dep(7, 6),
-      dep(9, 5), dep(9, 2, 'FS', 0, true),   // material_proc ← approval (se corta) y ← deposit (CANDADO, se conserva)
+      dep(9, 5), dep(9, 2, 'FS', 0, true),   // material_proc ← approval y ← deposit (CANDADO, se conserva)
       dep(10, 9),                             // fabrication ← material_proc (se conserva)
     ]
     const r = planificarMovimiento(T, A, 9, 6, 7)   // mover material_proc entre field(6) y sd_update(7)
     expect(r.ok).toBe(true)
+    // NO obliga a sd_update a esperar a material_proc (no serializa)
+    expect(r.add.some((a) => a.tarea_id === 7 && a.depende_de_id === 9)).toBe(false)
     const o = ordenFinal(A, r, [1, 2, 5, 6, 7, 9, 10])!
     expect(o).not.toBeNull()
-    expect(idx(o, 6)).toBeLessThan(idx(o, 9))    // 9 después de field
-    expect(idx(o, 9)).toBeLessThan(idx(o, 7))    // 9 antes de sd_update
+    expect(idx(o, 6)).toBeLessThan(idx(o, 9))    // 9 arranca después de field (reparentado)
     expect(idx(o, 2)).toBeLessThan(idx(o, 9))    // el depósito (candado) sigue antes de 9
     expect(idx(o, 9)).toBeLessThan(idx(o, 10))   // fabricación sigue después de 9
   })
@@ -123,15 +124,31 @@ describe('reordenar — recableado de dependencias', () => {
     expect(idx(o, 6)).toBeLessThan(idx(o, 10))   // y ahora también después de X
   })
 
-  it('ramas paralelas: no se pueden reordenar entre sí (no serializa)', () => {
+  it('ramas paralelas: reordenar NUNCA serializa (no agrega B←X)', () => {
     // long_leads(2) y shop_drawings(3) dependen AMBAS de meeting(1) → corren en paralelo.
-    // Arrastrar long_leads entre meeting y shop_drawings debe RECHAZARSE, no crear
-    // shop_drawings ← long_leads (que sumaría los 20 días de long lead al camino).
+    // Arrastrar long_leads entre meeting y shop_drawings NO debe crear shop_drawings ← long_leads
+    // (que sumaría los 20 días de long lead al camino de shop drawings).
     const T = tareas([1, 'meeting'], [3, 'shop_drawings'], [2, 'long_leads'])
     const A = [dep(2, 1), dep(3, 1)]                    // ambas ← meeting
     const r = planificarMovimiento(T, A, 2, 1, 3)       // mover long_leads entre meeting y shop_drawings
-    expect(r.ok).toBe(false)
-    expect(r.error).toMatch(/paralelo/)
-    expect(r.add.length).toBe(0)                        // no crea ninguna arista serializante
+    expect(r.ok).toBe(true)
+    expect(r.add.some((a) => a.tarea_id === 3 && a.depende_de_id === 2)).toBe(false)  // NUNCA shop←long
+  })
+
+  it('reparenta cortando el predecesor tardío, sin serializar el paralelo (caso del bug real)', () => {
+    // meeting(1) → shop_drawings(3) → samples(4, SS). long_leads(2) quedó ← samples (arista
+    // aberrante que lo atrasa a la posición 6). Arrastrarlo arriba debe: cortar 2←samples,
+    // reparentarlo a meeting, y NO hacer que shop ni samples esperen a long_leads.
+    const T = tareas([1, 'meeting'], [3, 'shop_drawings'], [4, 'samples'], [2, 'long_leads'])
+    const A = [dep(3, 1), dep(4, 3, 'SS'), dep(2, 4)]   // long_leads ← samples (tardía/aberrante)
+    const r = planificarMovimiento(T, A, 2, 1, 3)       // mover long_leads entre meeting y shop_drawings
+    expect(r.ok).toBe(true)
+    expect(r.remove.some((x) => x.tarea_id === 2 && x.depende_de_id === 4)).toBe(true)   // corta la tardía
+    expect(r.add.some((a) => a.tarea_id === 2 && a.depende_de_id === 1)).toBe(true)      // reparenta a meeting
+    expect(r.add.some((a) => a.tarea_id === 3 && a.depende_de_id === 2)).toBe(false)     // NO shop←long
+    expect(r.add.some((a) => a.tarea_id === 4 && a.depende_de_id === 2)).toBe(false)     // NO samples←long
+    const o = ordenFinal(A, r, [1, 2, 3, 4])!
+    expect(o).not.toBeNull()
+    expect(idx(o, 1)).toBeLessThan(idx(o, 2))    // long_leads después de meeting
   })
 })

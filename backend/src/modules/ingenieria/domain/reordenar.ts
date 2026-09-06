@@ -7,7 +7,10 @@
 // quede en ese lugar SIN perder coherencia:
 //   1. Corta las aristas FS que contradicen el nuevo lugar.
 //   2. Reconecta el hueco que deja X (como borrarTareaConReconexion).
-//   3. Inserta X en el slot (X←A, B←X), sacando la arista directa B←A si existía.
+//   3. Reparenta X: SOLO cambia de quién depende X (X ← A). NUNCA hace que otra
+//      tarea espere a X (no agrega B ← X). Forzar B ← X serializaría trabajo que
+//      puede correr en paralelo (ej. long leads ∥ shop drawings) → atrasos
+//      silenciosos. Para que B espere a X, se declara explícito en Sucesores.
 //   4. Nunca crea SS ni toca SS existentes (los pares SS se mueven como bloque).
 //   5. Rechaza candados (depósito), tareas hechas y ciclos.
 // Es PURA: recibe el grafo en memoria y devuelve {remove, add}. No toca DB.
@@ -96,18 +99,6 @@ export function planificarMovimiento(
   const ultHecha = Math.max(-Infinity, ...tareas.filter((t) => t.estado === 'hecha' || t.estado === 'na').map((t) => t.orden_visual))
   if (posA < ultHecha) return { ok: false, error: 'no se puede mover una tarea antes de las ya realizadas', remove: [], add: [] }
 
-  // RAMAS PARALELAS: si X y B dependen ambas del MISMO predecesor A (son hermanas
-  // paralelas — ej. long_leads y shop_drawings, ambas ← meeting), reordenarlas entre sí
-  // NO es un cambio de dependencias: insertar B←X las SERIALIZARÍA (sumaría la duración de
-  // X al camino de B). Se rechaza con un mensaje claro — su orden lo define la fecha.
-  if (A !== null && B !== null) {
-    const dep = (t: number, d: number) => aristas.some((a) => a.tarea_id === t && a.depende_de_id === d && a.tipo !== 'SS')
-    if (dep(X, A) && dep(B, A)) {
-      const nom = (id: number) => byId.get(id)?.nombre ?? `#${id}`
-      return { ok: false, error: `${nom(X)} y ${nom(B)} corren en paralelo (ambas dependen de ${nom(A)}) — no se pueden reordenar entre sí; su posición la define la fecha de inicio.`, remove: [], add: [] }
-    }
-  }
-
   const remove: CambioArista[] = []
   const add: CambioArista[] = []
   const cutPreds = new Set<number>()
@@ -153,14 +144,11 @@ export function planificarMovimiento(
     }
   }
 
-  // ── 3) Insertar X en el slot ─────────────────────────────────────────────────
+  // ── 3) Reparentar X: solo cambia de QUIÉN depende X (X ← A) ───────────────────
+  // NUNCA agrega B ← X ni saca B ← A: el drag reposiciona X sin obligar a ninguna
+  // otra tarea a esperarlo. Así es imposible serializar por error tareas paralelas.
+  // (Para que B espere a X, se declara explícito con el campo Sucesores.)
   if (A !== null && !existe(X, A) && !alcanza(A, X, adyacencia([...working, ...add]))) add.push({ tarea_id: X, depende_de_id: A, tipo: 'FS', lag_dias: 0 })
-  if (B !== null && !existe(B, X) && !alcanza(X, B, adyacencia([...working, ...add]))) add.push({ tarea_id: B, depende_de_id: X, tipo: 'FS', lag_dias: 0 })
-  // Sacar la arista directa B←A (FS, lag 0) si existía: ahora X va en el medio.
-  if (A !== null && B !== null) {
-    const ba = working.find((a) => a.tarea_id === B && a.depende_de_id === A && a.tipo !== 'SS' && (a.lag_dias || 0) === 0)
-    if (ba) remove.push({ tarea_id: B, depende_de_id: A })
-  }
 
   if (remove.length === 0 && add.length === 0) return { ok: true, noop: true, remove: [], add: [] }
 
