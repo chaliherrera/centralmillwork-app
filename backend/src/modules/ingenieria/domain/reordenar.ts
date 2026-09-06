@@ -96,6 +96,18 @@ export function planificarMovimiento(
   const ultHecha = Math.max(-Infinity, ...tareas.filter((t) => t.estado === 'hecha' || t.estado === 'na').map((t) => t.orden_visual))
   if (posA < ultHecha) return { ok: false, error: 'no se puede mover una tarea antes de las ya realizadas', remove: [], add: [] }
 
+  // RAMAS PARALELAS: si X y B dependen ambas del MISMO predecesor A (son hermanas
+  // paralelas — ej. long_leads y shop_drawings, ambas ← meeting), reordenarlas entre sí
+  // NO es un cambio de dependencias: insertar B←X las SERIALIZARÍA (sumaría la duración de
+  // X al camino de B). Se rechaza con un mensaje claro — su orden lo define la fecha.
+  if (A !== null && B !== null) {
+    const dep = (t: number, d: number) => aristas.some((a) => a.tarea_id === t && a.depende_de_id === d && a.tipo !== 'SS')
+    if (dep(X, A) && dep(B, A)) {
+      const nom = (id: number) => byId.get(id)?.nombre ?? `#${id}`
+      return { ok: false, error: `${nom(X)} y ${nom(B)} corren en paralelo (ambas dependen de ${nom(A)}) — no se pueden reordenar entre sí; su posición la define la fecha de inicio.`, remove: [], add: [] }
+    }
+  }
+
   const remove: CambioArista[] = []
   const add: CambioArista[] = []
   const cutPreds = new Set<number>()

@@ -122,4 +122,16 @@ describe('reordenar — recableado de dependencias', () => {
     for (const p of [7, 8, 9]) expect(idx(o, p)).toBeLessThan(idx(o, 10))
     expect(idx(o, 6)).toBeLessThan(idx(o, 10))   // y ahora también después de X
   })
+
+  it('ramas paralelas: no se pueden reordenar entre sí (no serializa)', () => {
+    // long_leads(2) y shop_drawings(3) dependen AMBAS de meeting(1) → corren en paralelo.
+    // Arrastrar long_leads entre meeting y shop_drawings debe RECHAZARSE, no crear
+    // shop_drawings ← long_leads (que sumaría los 20 días de long lead al camino).
+    const T = tareas([1, 'meeting'], [3, 'shop_drawings'], [2, 'long_leads'])
+    const A = [dep(2, 1), dep(3, 1)]                    // ambas ← meeting
+    const r = planificarMovimiento(T, A, 2, 1, 3)       // mover long_leads entre meeting y shop_drawings
+    expect(r.ok).toBe(false)
+    expect(r.error).toMatch(/paralelo/)
+    expect(r.add.length).toBe(0)                        // no crea ninguna arista serializante
+  })
 })
