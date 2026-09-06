@@ -168,6 +168,7 @@ export interface IngPlan {
   fecha_inicio: string | null
   fecha_entrega: string | null
   status_ext: string | null
+  proyecto_estado: string | null
   n_items: number | null
   presupuesto: number | null
   fin_proyectado: string | null

@@ -419,8 +419,10 @@ function VistaProyecto({ proyectos, all, plan, planLoading, sel, setSel, onEdit,
         </div>
       )}
 
-      {/* Gate del depósito: la confirmación de Finanzas se LEE; el PM puede abrirlo a mano */}
-      {plan && tareas.some((t) => t.tipo_clave === 'material_deposit') && (() => {
+      {/* Gate del depósito: la confirmación de Finanzas se LEE; el PM puede abrirlo a mano.
+          Solo se muestra cuando el proyecto está ACTIVO — en un prospecto/reserva el gate
+          todavía no aplica (no confunde al PM mientras revisa el plan). */}
+      {plan && plan.proyecto_estado === 'activo' && tareas.some((t) => t.tipo_clave === 'material_deposit') && (() => {
         const dep = plan.deposito
         if (dep.confirmado_finanzas) return (
           <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-2.5 flex items-center gap-2.5 text-sm">

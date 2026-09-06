@@ -276,6 +276,7 @@ export interface PlanProyecto {
   fecha_inicio: string | null   // inicio del proyecto (ancla hacia adelante)
   fecha_entrega: string | null  // entrega FIJA (ancla hacia atrás) — sagrada
   status_ext: string | null
+  proyecto_estado: string | null // estado del proyecto (prospecto|activo…): gates de UI solo cuando activo
   n_items: number | null
   presupuesto: number | null
   fin_proyectado: string | null // cuándo termina la cadena
@@ -291,11 +292,12 @@ export interface PlanProyecto {
 
 /** Devuelve el plan completo de un proyecto con la holgura de cada tarea. */
 export async function getPlanProyecto(runner: QueryRunner, proyectoExt: string): Promise<PlanProyecto> {
-  const { rows: hdr } = await runner.query<{ ini: string | null; entrega: string | null; status: string | null; n_items: number | null; presupuesto: string | null }>(
-    `SELECT to_char(fecha_inicio,'YYYY-MM-DD') AS ini, to_char(fecha_entrega,'YYYY-MM-DD') AS entrega,
-            status_ext AS status, n_items, presupuesto
-       FROM ing_proyectos WHERE proyecto_ext = $1`, [proyectoExt])
-  const h = hdr[0] ?? { ini: null, entrega: null, status: null, n_items: null, presupuesto: null }
+  const { rows: hdr } = await runner.query<{ ini: string | null; entrega: string | null; status: string | null; n_items: number | null; presupuesto: string | null; estado: string | null }>(
+    `SELECT to_char(ip.fecha_inicio,'YYYY-MM-DD') AS ini, to_char(ip.fecha_entrega,'YYYY-MM-DD') AS entrega,
+            ip.status_ext AS status, ip.n_items, ip.presupuesto, p.estado
+       FROM ing_proyectos ip LEFT JOIN proyectos p ON p.id = ip.proyecto_id
+      WHERE ip.proyecto_ext = $1`, [proyectoExt])
+  const h = hdr[0] ?? { ini: null, entrega: null, status: null, n_items: null, presupuesto: null, estado: null }
 
   const tareas = await listTareas(runner, proyectoExt)
   const ids = tareas.map((t) => t.id)
@@ -339,6 +341,7 @@ export async function getPlanProyecto(runner: QueryRunner, proyectoExt: string):
 
   return {
     proyecto_ext: proyectoExt, fecha_inicio: h.ini, fecha_entrega: h.entrega, status_ext: h.status,
+    proyecto_estado: h.estado,
     n_items: h.n_items, presupuesto: h.presupuesto != null ? +h.presupuesto : null,
     fin_proyectado: finProyectado, holgura_proyecto: holguraProyecto, en_riesgo: enRiesgo,
     deposito, muestras, compras, instalacion, tareas: holgura, aristas: deps,
