@@ -53,10 +53,10 @@ export default function ProjectMgmt() {
           <ReprogramacionesPendientes onRevisar={onRevisar} />
           <ReservasPendientes onRevisar={onRevisar} />
           <DealsEnCurso mode="pm" />
-          {/* Fabricación de piedra (paso 17): el PM confirma cuando el proveedor entregó.
-              Solo aparece si hay algo (hideWhenEmpty). */}
-          <Escritorio rol="externo" hideWhenEmpty titulo="Fabricación de piedra"
-            subtitulo="Confirmá cuando el proveedor entregó la piedra fabricada." />
+          {/* Piedra (countertops): proveedor externo, 100% del PM. Los 3 pasos (medición →
+              fabricación → instalación) aparecen acá encadenados. Solo si hay algo (hideWhenEmpty). */}
+          <Escritorio rol="externo" hideWhenEmpty titulo="Piedra · countertops"
+            subtitulo="Proveedor externo — confirmá cada paso: medición, fabricación e instalación." />
         </div>
       )}
       {tab === 'plan' && (
