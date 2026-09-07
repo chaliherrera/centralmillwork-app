@@ -559,7 +559,12 @@ async function proyectarJourney(
     let evi: unknown = capt.get(h.codigo)?.evidencia ?? null
     if (fr === null && h.fuente_dato === 'manual_futuro') {
       const e = exMap.get(h.codigo)
-      if (e?.fecha_real && !esInferida(e.evidencia_ref)) { fr = e.fecha_real; evi = e.evidencia_ref ?? null }
+      // Preservar SOLO hechos reales (registro/portal/pago/submittal). Un valor derivado
+      // del Gantt (source:'gantt') NO se preserva: se RE-DERIVA abajo desde el estado
+      // actual del paso — si el paso reabrió (p.ej. samples tras rechazar una muestra),
+      // el hito debe soltar su fecha vieja y volver a pendiente, no quedar cumplido stale.
+      const evSrc = (e?.evidencia_ref as { source?: string } | null)?.source
+      if (e?.fecha_real && !esInferida(e.evidencia_ref) && evSrc !== 'gantt') { fr = e.fecha_real; evi = e.evidencia_ref ?? null }
       if (fr === null && h.gantt_clave && !h.es_ancla && !DERIVA_NO.has(h.codigo)) {
         const ep = estadoPaso.get(h.gantt_clave)
         const listo = ep && (h.gantt_ancla === 'inicio' ? ep.estado !== 'pendiente' : ep.estado === 'hecha')
