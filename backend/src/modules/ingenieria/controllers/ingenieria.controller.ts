@@ -24,6 +24,7 @@ import { listMuestrasPorProyecto } from '../domain/muestras'
 import { listComprasPorProyecto } from '../domain/compras'
 import { detalleInstalacion } from '../domain/instalacion'
 import { getEscritorio, getEscritorioResumen, ROLES_RUTA_POR_APP } from '../domain/escritorio'
+import { listNovedadesCliente } from '../domain/novedades'
 
 function pid(req: Request): number {
   const id = parseInt(String(req.params.id ?? req.params.proyectoId), 10)
@@ -468,6 +469,25 @@ export async function escritorioResumenHandler(req: Request, res: Response, next
       asignado = rows[0]?.nombre ?? null
     }
     res.json({ data: await getEscritorioResumen(pool, { roles, asignado }) })
+  } catch (e) { next(e) }
+}
+
+// ── Novedades del cliente (Fase 4): lo que el cliente decidió en el PORTAL ──
+// GET /api/ingenieria/escritorio/novedades-cliente → decisiones recientes del portal.
+// Para ENGINEERING/FIELD se acota a sus proyectos (misma identidad que el escritorio);
+// ADMIN/PM las ven todas. Informativo — el ingeniero coteja y gana la última decisión.
+export async function novedadesClienteHandler(req: Request, res: Response, next: NextFunction) {
+  try {
+    const user = (req as any).user
+    const rolApp = user?.rol ?? ''
+    let asignado: string | null = typeof req.query.asignado === 'string' && req.query.asignado ? req.query.asignado : null
+    if (!asignado && (rolApp === 'ENGINEERING' || rolApp === 'FIELD') && user?.id) {
+      const { rows } = await pool.query<{ nombre: string }>(
+        `SELECT nombre FROM ing_ingenieros WHERE (usuario_id = $1 OR lower(email) = lower($2)) AND activo LIMIT 1`,
+        [user.id, user.email])
+      asignado = rows[0]?.nombre ?? null
+    }
+    res.json({ data: await listNovedadesCliente(pool, { asignado }) })
   } catch (e) { next(e) }
 }
 

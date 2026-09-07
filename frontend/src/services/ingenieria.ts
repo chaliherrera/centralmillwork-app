@@ -173,6 +173,11 @@ export interface EscritorioTarea {
 }
 export interface EnEspera { id: number; proyecto_ext: string | null; nombre: string; espera_nombre: string; espera_rol: string | null }
 export interface EscritorioResp { tareas: EscritorioTarea[]; bloqueadas: EnEspera[] }
+// Novedades del cliente (portal): decisiones que el ingeniero debe cotejar (#8).
+export interface NovedadCliente {
+  id: number; proyecto_ext: string | null; proyecto_nombre: string | null; hito_codigo: string | null
+  decision: string | null; comentario: string | null; contacto: string | null; descripcion: string | null; created_at: string
+}
 export interface Ingeniero { nombre: string; activo: boolean; hace_cnc: boolean; usuario_id: string | null; tareas_activas: number }
 export interface IngPlan {
   proyecto_ext: string
@@ -268,6 +273,9 @@ export const ingenieriaService = {
   // Resumen liviano para el badge "te toca: N" del menú: { <rol>: cantidad }.
   escritorioResumen: () =>
     api.get<ApiResponse<Record<string, number>>>('/ingenieria/escritorio/resumen').then((r) => r.data),
+
+  novedadesCliente: () =>
+    api.get<ApiResponse<NovedadCliente[]>>('/ingenieria/escritorio/novedades-cliente').then((r) => r.data),
   // Gestión de ingenieros (el PM administra el recurso: activo / hace_cnc).
   getIngenieros: () =>
     api.get<ApiResponse<Ingeniero[]>>('/ingenieria/ingenieros').then((r) => r.data),
