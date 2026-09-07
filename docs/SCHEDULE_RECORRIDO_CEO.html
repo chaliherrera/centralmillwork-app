@@ -98,36 +98,30 @@ const FASES = [
   {k:'CIERRE',     lbl:'Cierre'},
 ];
 const ACT = {
-  estimacion:{n:'Estimación', c:'#57534e'}, pm:{n:'PM', c:'#9B7200'},
-  ingenieria:{n:'Ingeniería', c:'#4338ca'}, cliente:{n:'Cliente', c:'#1d4ed8'}, campo:{n:'Campo', c:'#a21caf'},
-  compras:{n:'Compras', c:'#b45309'}, recepcion:{n:'Recepción', c:'#b45309'}, logistica:{n:'Logística', c:'#0891b2'},
+  estimacion:{n:'Estimación', c:'#57534e'}, contabilidad:{n:'Contabilidad', c:'#9B7200'},
+  ingenieria:{n:'Ingeniería', c:'#4338ca'}, cliente:{n:'Cliente', c:'#1d4ed8'},
+  compras:{n:'Compras', c:'#b45309'}, recepcion:{n:'Recepción', c:'#b45309'},
   taller:{n:'Taller', c:'#059669'}, qc:{n:'Control de calidad', c:'#0d9488'}, sistema:{n:'El sistema', c:'#3b4233'},
 };
 // ── El guion. TODO el texto vive acá (traducir = duplicar este array). ──
 const STEPS = [
   {intro:true, done:[], active:null, actor:null,
-   ttl:'Un proyecto entra al sistema', det:'El sistema evalúa la factibilidad: propone la fecha real de entrega y el ingeniero con cupo. Después calcula hacia atrás cada hito y sigue el recorrido en vivo.'},
+   ttl:'Un proyecto entra al sistema', det:'Entrega comprometida: 15 de diciembre. El sistema calcula hacia atrás la fecha límite de cada hito, y sigue el recorrido en vivo.'},
 
   {done:[], active:'CONTRATO', actor:'estimacion', hito:'C-03 · Contrato firmado',
-   ttl:'Se firma el contrato', det:'Estimación registra la firma y sube el PDF desde su escritorio. Es el día cero: a partir de acá, el reloj corre.'},
+   ttl:'Se firma el contrato', det:'Estimación sube el PDF firmado. Es el día cero: a partir de acá, el reloj corre.'},
 
-  {done:[], active:'CONTRATO', actor:'pm', hito:'C-04 · Down Payment',
-   ttl:'El PM registra el anticipo', det:'El pago lo registra el PM desde su bandeja, con importe y autor. Evidencia real, no un tilde.'},
+  {done:[], active:'CONTRATO', actor:'contabilidad', hito:'C-04 · Down Payment',
+   ttl:'Contabilidad registra el anticipo', det:'Se registra el pago recibido (USD 25.000), con importe y autor. Evidencia real, no un tilde.'},
 
   {done:['CONTRATO'], active:'INGENIERIA', actor:'ingenieria', hito:'E-06 · Planos emitidos',
-   ttl:'Ingeniería emite los shop drawings', det:'Desde su escritorio sube los planos (Rev A). El paso se completa solo y el cliente ya puede verlos en su portal.'},
+   ttl:'Ingeniería emite los shop drawings', det:'Sube los planos (Rev A). El hito se completa solo, y el cliente ya puede verlos en su portal.'},
 
   {done:['CONTRATO'], active:'INGENIERIA', actor:'cliente', hito:'E-07 · Planos aprobados',
-   ttl:'El cliente aprueba los planos', det:'Desde su portal, sobre el documento real. La decisión vuelve al ingeniero en "Novedades del cliente".'},
-
-  {done:['CONTRATO'], active:'INGENIERIA', actor:'campo', hito:'E-03 · Field measurements',
-   ttl:'Medidas de campo', det:'El ingeniero manda el plano a Campo; el instalador toma la medida en el móvil. Un paso, dos manos — el trabajo cambia de escritorio solo.'},
-
-  {done:['CONTRATO'], active:'INGENIERIA', actor:'compras', hito:'E-09 · MTO → Compras',
-   ttl:'El ingeniero libera el MTO', det:'Sube la lista de materiales y la tarea pasa directo al escritorio de Compras. Sin reenvíos, sin emails.'},
+   ttl:'El cliente aprueba los planos', det:'Desde su portal, sobre el documento real. Su respuesta queda registrada con fecha y nombre.'},
 
   {done:['CONTRATO'], active:'INGENIERIA', actor:'ingenieria', hito:'E-10 · Release · E-11 · CNC',
-   ttl:'Release y archivos CNC', det:'Ingeniería libera los planos aprobados y entrega los archivos CNC al taller.'},
+   ttl:'Release a producción y archivos CNC', det:'Ingeniería libera los planos aprobados y entrega los archivos CNC al taller.'},
 
   {done:['CONTRATO','INGENIERIA'], active:'MATERIALES', actor:'compras', hito:'M-05 · OCs emitidas',
    ttl:'Compras emite las órdenes de compra', det:'El sistema lo capta solo, de las OCs que Compras ya carga en su día a día. Sin trabajo extra.'},
@@ -136,7 +130,7 @@ const STEPS = [
    ttl:'Llega el material al taller', det:'Se cierra la recepción y el hito se completa solo. El schedule se entera de lo que realmente pasa.'},
 
   {done:['CONTRATO','INGENIERIA','MATERIALES'], active:'PRODUCCION', actor:'sistema', hito:'P-01 · Production Intake', gate:true,
-   ttl:'Producción ARRANCA', det:'Están las condiciones: muestras, planos, release, CNC y material. Recién ahí se abre producción — con el set final de planos a mano del taller.'},
+   ttl:'Producción ARRANCA', det:'Están las 5 condiciones: muestras, planos, release, CNC y material. Recién ahí el sistema deja abrir producción.'},
 
   {done:['CONTRATO','INGENIERIA','MATERIALES'], active:'PRODUCCION', actor:'taller', hito:'P-05 · Fabricación',
    ttl:'El taller fabrica', det:'El kiosko registra el avance por estación, en tiempo real. Cada pieza suma al progreso.'},
@@ -144,17 +138,8 @@ const STEPS = [
   {done:['CONTRATO','INGENIERIA','MATERIALES','PRODUCCION'], active:'QC', actor:'qc', hito:'QC-02 · QC aprobado',
    ttl:'Control de calidad aprueba', det:'Inspección final con fotos de cada ítem. La fabricación queda validada.'},
 
-  {done:['CONTRATO','INGENIERIA','MATERIALES','PRODUCCION','QC'], active:'DESPACHO', actor:'logistica', hito:'S-04 · Despacho',
-   ttl:'Se despacha al sitio', det:'Logística registra el envío. Las fotos del paquete y el camión quedan listas para compartirle al cliente.'},
-
-  {done:['CONTRATO','INGENIERIA','MATERIALES','PRODUCCION','QC','DESPACHO'], active:'INSTALACION', actor:'pm', hito:'I-07 · Sign-off del cliente',
-   ttl:'Instalación — PM y Campo', det:'El PM inicia la instalación; Campo verifica en el móvil (ítems, punch list y firma del cliente); vuelve al PM para cerrarla. La piedra la gestiona el PM de punta a punta.'},
-
-  {done:['CONTRATO','INGENIERIA','MATERIALES','PRODUCCION','QC','DESPACHO','INSTALACION'], active:'CIERRE', actor:'pm', hito:'X-03 · Pago final',
-   ttl:'Entrega y cierre', det:'Firmado, entregado y cobrado: el PM registra el pago final cuando todo está entregado.'},
-
-  {done:['CONTRATO','INGENIERIA','MATERIALES','PRODUCCION','QC','DESPACHO','INSTALACION','CIERRE'], active:null, actor:null, closing:true,
-   ttl:'Todo el recorrido, en vivo', det:'Cada paso vive en el escritorio de su dueño, cada hito con su evidencia real. El journey es de solo lectura: refleja la realidad, no la dicta. Y sin un solo email — todo pasa por los escritorios.'},
+  {done:['CONTRATO','INGENIERIA','MATERIALES','PRODUCCION','QC'], active:null, actor:null, closing:true,
+   ttl:'De Contrato a QC, en vivo', det:'Cada hito, con su dueño y su evidencia. El journey map lo refleja al instante — y el recorrido sigue hasta la entrega.'},
 ];
 
 // salud (0..1) por fase segun estado, para la curva
