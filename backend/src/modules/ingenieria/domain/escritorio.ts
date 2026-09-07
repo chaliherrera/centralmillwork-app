@@ -21,6 +21,8 @@ export interface EscritorioTarea {
   proyecto_id: number | null      // para acciones que operan sobre el proyecto (ej. registrar firma)
   nombre: string
   tipo_clave: string | null
+  entregable: string | null       // catálogo (083): qué captura el escritorio al completar
+  cierre: string | null           // manual | derivado | decision_cliente
   rol: string | null
   asignado_nombre: string | null
   fecha_inicio: string | null
@@ -88,7 +90,7 @@ export async function getEscritorio(
       AND ${rolCond} ${asigCond}`
 
   const { rows } = await runner.query<EscritorioTarea>(
-    `SELECT t.id, t.proyecto_ext, t.proyecto_id, t.nombre, tt.clave AS tipo_clave, tt.rol, t.asignado_nombre,
+    `SELECT t.id, t.proyecto_ext, t.proyecto_id, t.nombre, tt.clave AS tipo_clave, tt.entregable, tt.cierre, tt.rol, t.asignado_nombre,
             to_char(t.fecha_inicio,'YYYY-MM-DD') AS fecha_inicio,
             to_char(t.fecha_fin,'YYYY-MM-DD')    AS fecha_fin,
             to_char(ip.fecha_entrega,'YYYY-MM-DD') AS fecha_entrega,

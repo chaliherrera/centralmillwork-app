@@ -61,6 +61,7 @@ export default function Escritorio({ rol, asignado, titulo, subtitulo, hideWhenE
   const [verEspera, setVerEspera] = useState(false)
   const [fechas, setFechas] = useState<Record<number, string>>({})
   const [archivos, setArchivos] = useState<Record<number, File | null>>({})   // adjuntos por tarea (planos/CNC)
+  const [decComent, setDecComent] = useState<Record<number, string>>({})       // comentario de la decisión del cliente
   const [avisoOpen, setAvisoOpen] = useState<number | null>(null)
   const [avisoVal, setAvisoVal] = useState('')
   // Firma del contrato (paso 1, PO Execution — día cero). Reusa el intake de Estimados.
@@ -109,6 +110,23 @@ export default function Escritorio({ rol, asignado, titulo, subtitulo, hideWhenE
     mutationFn: (id: number) => ingenieriaService.avanceTarea(id, { reprogramacion_pedida: false, reprogramacion_motivo: null }),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['escritorio'] }) },
   })
+  // Decisión del cliente en la revisión (entregable='decision', ej. Architect/Designer Review).
+  // El ingeniero registra la respuesta del cliente (cotejada con portal/mail/teléfono). Aprobado
+  // cierra el gate; rechazado reabre shop drawings (lo hace el backend). Es lo que cierra el paso.
+  const decidir = useMutation({
+    mutationFn: ({ t, decision, fecha }: { t: EscritorioTarea; decision: string; fecha: string }) =>
+      ingenieriaService.avanceTarea(t.id, {
+        decision, decision_comentarios: decComent[t.id]?.trim() || null, fecha_fin_real: fecha,
+        // aprobado/con_comentarios cierran la revisión (→hecha, sale del escritorio + destraba approval);
+        // rechazado NO la cierra: el backend reabre shop drawings para rehacerlos (reject-loop).
+        ...(decision !== 'rechazado' ? { estado: 'hecha' } : {}),
+      }),
+    onSuccess: () => {
+      toast.success('Decisión registrada')
+      setDecComent({}); qc.invalidateQueries({ queryKey: ['escritorio'] }); qc.invalidateQueries({ queryKey: ['escritorio-resumen'] })
+    },
+    onError: (e: any) => toast.error(e?.response?.data?.message ?? 'No se pudo registrar la decisión'),
+  })
   const cerrarFirma = () => { setFirmaOpen(null); setFirmaFirma(''); setFirmaEnvio(''); setFirmaPdf(null) }
   // Registrar la firma del contrato = día cero. Reusa el intake (graba C-03, re-ancla, y el
   // reconciliador cierra PO Execution). No exige regenerar el plan (ya existe si está activo).
@@ -155,7 +173,8 @@ export default function Escritorio({ rol, asignado, titulo, subtitulo, hideWhenE
                 {ts.map((t) => {
                   const clave = t.tipo_clave ?? ''
                   const esFirma = clave === 'po_execution' && t.proyecto_id != null
-                  const esCompletable = COMPLETABLE.has(clave)
+                  const esDecision = t.entregable === 'decision'   // registrar la respuesta del cliente
+                  const esCompletable = COMPLETABLE.has(clave) && !esDecision
                   const link = LINK_MODULO[clave]
                   // material_proc pendiente = el ingeniero produce/importa el MTO ("Importar MTO");
                   // en_curso = Compras cotiza/compra ("Ir a Control MTOs"). Mismo destino (/mtos).
@@ -184,6 +203,23 @@ export default function Escritorio({ rol, asignado, titulo, subtitulo, hideWhenE
                             className="inline-flex items-center gap-1 rounded-lg bg-forest-600 hover:bg-forest-700 text-white text-xs font-semibold px-2.5 py-1.5 shrink-0">
                             <FileSignature size={13} /> Registrar firma
                           </button>
+                        ) : esDecision ? (
+                          <div className="flex items-center gap-1.5 shrink-0 flex-wrap justify-end">
+                            <input type="date" value={fecha} onChange={(e) => setFechas((f) => ({ ...f, [t.id]: e.target.value }))}
+                              className="text-xs border border-stone-300 rounded-lg px-2 py-1.5" title="Fecha de la respuesta del cliente" />
+                            <button onClick={() => decidir.mutate({ t, decision: 'aprobado', fecha })} disabled={decidir.isPending}
+                              className="inline-flex items-center gap-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white text-xs font-semibold px-2.5 py-1.5">
+                              <CheckCircle2 size={13} /> Aprobado
+                            </button>
+                            <button onClick={() => decidir.mutate({ t, decision: 'con_comentarios', fecha })} disabled={decidir.isPending}
+                              className="rounded-lg bg-amber-500 hover:bg-amber-600 disabled:opacity-50 text-white text-xs font-semibold px-2.5 py-1.5">
+                              Con comentarios
+                            </button>
+                            <button onClick={() => decidir.mutate({ t, decision: 'rechazado', fecha })} disabled={decidir.isPending}
+                              className="rounded-lg bg-rose-600 hover:bg-rose-700 disabled:opacity-50 text-white text-xs font-semibold px-2.5 py-1.5">
+                              Rechazado
+                            </button>
+                          </div>
                         ) : esCompletable ? (
                           <div className="flex items-center gap-1.5 shrink-0 flex-wrap justify-end">
                             {art && (
@@ -215,6 +251,13 @@ export default function Escritorio({ rol, asignado, titulo, subtitulo, hideWhenE
                           <MessageSquarePlus size={15} />
                         </button>
                       </div>
+
+                      {/* Comentario de la decisión del cliente (comentarios / motivo del rechazo) */}
+                      {esDecision && (
+                        <input value={decComent[t.id] ?? ''} onChange={(e) => setDecComent((c) => ({ ...c, [t.id]: e.target.value }))}
+                          placeholder="Qué dijo el cliente (comentarios / motivo del rechazo)…"
+                          className="mt-2 w-full text-xs border border-stone-300 rounded-lg px-2.5 py-1.5" />
+                      )}
 
                       {/* Registrar firma del contrato (día cero) — reusa el intake de Estimados */}
                       {esFirma && firmaOpen === t.id && (

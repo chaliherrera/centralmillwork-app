@@ -165,6 +165,7 @@ export interface InstalacionDetalle { items: InstalacionItem[]; punch: Instalaci
 // Escritorio por rol: tu próxima tarea desbloqueada, cross-project.
 export interface EscritorioTarea {
   id: number; proyecto_ext: string | null; proyecto_id: number | null; nombre: string; tipo_clave: string | null
+  entregable: string | null; cierre: string | null
   rol: string | null; asignado_nombre: string | null; fecha_inicio: string | null
   fecha_fin: string | null; fecha_entrega: string | null; es_critico: boolean | null; holgura_dias: number | null
   dur_dias: number; estado: string
