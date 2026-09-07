@@ -1155,8 +1155,15 @@ export async function getMisMuestrasEnProceso(req: Request, res: Response, next:
               m.proyecto_id, p.codigo AS proyecto_codigo, p.nombre AS proyecto_nombre
          FROM muestras m
          LEFT JOIN proyectos p ON p.id = m.proyecto_id
-        WHERE m.owner_id = $1 AND m.estado IN ('EN_FABRICACION','EN_QC','ENVIADA')
-        ORDER BY CASE m.estado WHEN 'ENVIADA' THEN 0 WHEN 'EN_QC' THEN 1 ELSE 2 END, m.fecha_solicitud`,
+        WHERE m.owner_id = $1 AND m.estado IN ('EN_FABRICACION','EN_QC','ENVIADA','APROBADA')
+          -- APROBADA se muestra solo hasta que el paso "samples" del proyecto quede cerrado
+          -- (para que el ingeniero sepa que le toca completar Samples Process en su escritorio).
+          AND (m.estado <> 'APROBADA' OR NOT EXISTS (
+            SELECT 1 FROM ing_tareas t
+              JOIN ing_tarea_tipos tt ON tt.id = t.tipo_id
+              JOIN ing_proyectos ip ON ip.proyecto_id = m.proyecto_id
+            WHERE t.proyecto_ext = ip.proyecto_ext AND tt.clave = 'samples' AND t.estado = 'hecha'))
+        ORDER BY CASE m.estado WHEN 'ENVIADA' THEN 0 WHEN 'APROBADA' THEN 1 WHEN 'EN_QC' THEN 2 ELSE 3 END, m.fecha_solicitud`,
       [userId])
     res.json({ data: rows })
   } catch (err) { next(err) }

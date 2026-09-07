@@ -510,6 +510,7 @@ function DetalleMuestraDrawer({ id, onClose, onChange }: { id: number; onClose: 
       refetchOcsStatus()
       qc.invalidateQueries({ queryKey: ['muestra', id] })
       qc.invalidateQueries({ queryKey: ['tareas'] })  // se cerró tarea procurement + creó shop_manager
+      qc.invalidateQueries({ queryKey: ['muestras-esperando-compras'] })  // ya no espera compras
     },
     onError: (err: any) => toast.error(err?.response?.data?.message ?? 'No se pudo marcar sin compras'),
   })
@@ -519,6 +520,9 @@ function DetalleMuestraDrawer({ id, onClose, onChange }: { id: number; onClose: 
     onSuccess: (res) => {
       toast.success(res.message)
       qc.invalidateQueries({ queryKey: ['muestra', id] })
+      // Refrescar los avisos de escritorio (ingeniero/compras) sin recargar la página.
+      qc.invalidateQueries({ queryKey: ['mis-muestras-en-proceso'] })
+      qc.invalidateQueries({ queryKey: ['muestras-esperando-compras'] })
       onChange()
     },
     onError: (err: any) => toast.error(err?.response?.data?.message ?? 'Error en la transición'),

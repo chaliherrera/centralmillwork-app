@@ -10,6 +10,7 @@ const ESTADO: Record<string, { label: string; cls: string; hint?: string }> = {
   EN_FABRICACION: { label: 'En fabricación',        cls: 'bg-amber-100 text-amber-700' },
   EN_QC:          { label: 'En control de calidad', cls: 'bg-purple-100 text-purple-700' },
   ENVIADA:        { label: 'Enviada al cliente',     cls: 'bg-blue-100 text-blue-700', hint: 'registrá su respuesta' },
+  APROBADA:       { label: 'Aprobada',               cls: 'bg-emerald-100 text-emerald-700', hint: 'completá Samples Process en tu escritorio' },
 }
 
 export default function MisMuestrasEnProceso() {
