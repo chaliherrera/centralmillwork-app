@@ -499,6 +499,24 @@ export async function transicionarMuestra(req: Request, res: Response, next: Nex
       }
     }
 
+    // ── Flow de taller: fabricación / QC / envío / re-fabricar / archivar son
+    // decisión de PRODUCCIÓN (ADMIN o SHOP_MANAGER). ENGINEERING solo aprueba/
+    // rechaza (guarda arriba) o reabre una rechazada (guarda abajo). Como la ruta
+    // ahora deja pasar a ENGINEERING (para que pueda aprobar), acá lo frenamos si
+    // intenta un paso de taller. ──────────────────────────────────────────────
+    {
+      const esAproRech = nuevo_estado === 'APROBADA' || nuevo_estado === 'RECHAZADA'
+      const esReapertura = muestra.estado === 'RECHAZADA' && nuevo_estado === 'SOLICITADA'
+      if (!esAproRech && !esReapertura) {
+        const rol = req.user?.rol
+        if (rol !== 'ADMIN' && rol !== 'SHOP_MANAGER') {
+          await client.query('ROLLBACK')
+          return next(createError(
+            `Esa transición la maneja producción (ADMIN o SHOP_MANAGER). Tu rol es ${rol ?? 'desconocido'}.`, 403))
+        }
+      }
+    }
+
     // ── Constraint especial RECHAZADA → SOLICITADA (Chali 2026-05-31) ──────
     // "Una vez rechazada, es INGENIERIA quien debe llevarla nuevamente a
     // SOLICITADAS, con un nuevo PDF Sample Request".

@@ -220,6 +220,9 @@ router.delete('/cotizaciones/:id',            WRITE, deleteCotizacion)
 const MUESTRAS_READ  = requireRole('ADMIN', 'ENGINEERING', 'SHOP_MANAGER', 'PROCUREMENT', 'VIEWER')
 const MUESTRAS_WRITE = requireRole('ADMIN', 'ENGINEERING', 'SHOP_MANAGER')
 const MUESTRAS_FLOW  = requireRole('ADMIN', 'SHOP_MANAGER')
+// /transicion incluye APROBADA/RECHAZADA (decisión de INGENIERIA) además del flow de
+// taller: se deja pasar a ENGINEERING y el handler enforce qué transición hace cada rol.
+const MUESTRAS_TRANSICION = requireRole('ADMIN', 'SHOP_MANAGER', 'ENGINEERING')
 // F5: logística de envío es responsabilidad de procurement (ya no shop_manager).
 // confirmarRecepcion también pasa porque es seguimiento del envío.
 const MUESTRAS_ENVIO = requireRole('ADMIN', 'PROCUREMENT')
@@ -231,7 +234,7 @@ router.get   ('/muestras/mias-en-proceso',                MUESTRAS_READ,  getMis
 router.get   ('/muestras/:id',                            MUESTRAS_READ,  getMuestra)
 router.post  ('/muestras',                                MUESTRAS_WRITE, validateBody(createMuestraSchema), createMuestra)
 router.patch ('/muestras/:id',                            MUESTRAS_WRITE, validateBody(updateMuestraSchema), updateMuestra)
-router.post  ('/muestras/:id/transicion',                 MUESTRAS_FLOW,  validateBody(transicionEstadoSchema), transicionarMuestra)
+router.post  ('/muestras/:id/transicion',                 MUESTRAS_TRANSICION, validateBody(transicionEstadoSchema), transicionarMuestra)
 router.post  ('/muestras/:id/aprobar-qc',                 MUESTRAS_FLOW,  aprobarQC)
 router.post  ('/muestras/:id/envios',                     MUESTRAS_ENVIO, validateBody(registrarEnvioSchema), registrarEnvio)
 router.post  ('/muestras/:id/envios/:envioId/foto',       MUESTRAS_ENVIO, uploadEnvioFotoMulter.single('foto'), uploadEnvioFoto)
