@@ -15,6 +15,7 @@ import { mtosService, type MtoActivo, type EstadoCotizMto } from '@/services/mto
 import PreciosBuscador from '@/components/modules/precios/PreciosBuscador'
 import TopMateriales from '@/components/modules/precios/TopMateriales'
 import Escritorio from '@/components/escritorio/Escritorio'
+import MuestrasEsperandoCompras from '@/components/modules/muestras/MuestrasEsperandoCompras'
 
 type TabKey = 'activos' | 'precios' | 'top'
 
@@ -80,6 +81,8 @@ export default function Mtos() {
       {/* Escritorio de Compras — qué proyecto necesita que arranques la compra ahora. */}
       <Escritorio rol="compras" titulo="Compras — te toca ahora"
         subtitulo="Proyectos que necesitan que arranques los long leads / el material, de todos los proyectos. Se cierran solos al emitir la OC." />
+      {/* Aviso: muestras que esperan decisión de compras (F2 del módulo de Muestras). */}
+      <MuestrasEsperandoCompras />
       {/* Header con tabs */}
       <div>
         <h1 className="text-2xl font-bold text-forest-900">Control MTO</h1>

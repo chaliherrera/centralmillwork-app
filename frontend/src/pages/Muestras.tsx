@@ -1,4 +1,5 @@
-import { useState, useMemo, useRef } from 'react'
+import { useState, useMemo, useRef, useEffect } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Plus, Beaker, Calendar, User as UserIcon, AlertTriangle, RefreshCw,
@@ -47,6 +48,19 @@ export default function Muestras() {
   const [showCreate, setShowCreate] = useState(false)
   const [selectedId, setSelectedId] = useState<number | null>(null)
   const [showArchivadas, setShowArchivadas] = useState(false)
+
+  // Deep-link ?open=<id> (ej. desde el aviso "muestras esperando compras"): abre el
+  // detalle de esa muestra y limpia el parámetro de la URL.
+  const [searchParams, setSearchParams] = useSearchParams()
+  useEffect(() => {
+    const open = searchParams.get('open')
+    if (open && !Number.isNaN(Number(open))) {
+      setSelectedId(Number(open))
+      searchParams.delete('open')
+      setSearchParams(searchParams, { replace: true })
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   const canCreate = user?.rol === 'ADMIN' || user?.rol === 'ENGINEERING' || user?.rol === 'SHOP_MANAGER'
 

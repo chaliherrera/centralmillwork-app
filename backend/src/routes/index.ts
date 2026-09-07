@@ -52,7 +52,7 @@ import {
 } from '../controllers/tareasController'
 import {
   getMuestras, getMuestra, createMuestra, updateMuestra,
-  transicionarMuestra, registrarEnvio, confirmarRecepcion, getMuestrasKpis,
+  transicionarMuestra, registrarEnvio, confirmarRecepcion, getMuestrasKpis, getMuestrasEsperandoCompras,
   aprobarQC,
   uploadArchivo, getArchivos, deleteArchivo, uploadMuestraArchivo,
   uploadEnvioFoto, uploadEnvioFotoMulter,
@@ -226,6 +226,7 @@ const MUESTRAS_ENVIO = requireRole('ADMIN', 'PROCUREMENT')
 
 router.get   ('/muestras',                                MUESTRAS_READ,  getMuestras)
 router.get   ('/muestras/kpis',                           MUESTRAS_READ,  getMuestrasKpis)
+router.get   ('/muestras/esperando-compras',              MUESTRAS_READ,  getMuestrasEsperandoCompras)  // aviso al escritorio de Compras
 router.get   ('/muestras/:id',                            MUESTRAS_READ,  getMuestra)
 router.post  ('/muestras',                                MUESTRAS_WRITE, validateBody(createMuestraSchema), createMuestra)
 router.patch ('/muestras/:id',                            MUESTRAS_WRITE, validateBody(updateMuestraSchema), updateMuestra)

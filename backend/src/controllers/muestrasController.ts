@@ -1106,6 +1106,25 @@ export async function getMuestrasKpis(_req: Request, res: Response, next: NextFu
   } catch (err) { next(err) }
 }
 
+// Muestras que esperan DECISIÓN DE COMPRAS: en estado SOLICITADA, sin ninguna OC
+// vinculada y sin haber marcado "sin compras". Alimenta el aviso del escritorio de
+// Compras ("hay una muestra en camino") — F2 del módulo de Muestras.
+export async function getMuestrasEsperandoCompras(_req: Request, res: Response, next: NextFunction) {
+  try {
+    const { rows } = await pool.query(
+      `SELECT m.id, m.codigo, m.descripcion, m.tipo::text AS tipo, m.prioridad::text AS prioridad,
+              to_char(m.fecha_solicitud,'YYYY-MM-DD') AS fecha_solicitud,
+              m.proyecto_id, p.codigo AS proyecto_codigo, p.nombre AS proyecto_nombre
+         FROM muestras m
+         LEFT JOIN proyectos p ON p.id = m.proyecto_id
+        WHERE m.estado = 'SOLICITADA'
+          AND NOT EXISTS (SELECT 1 FROM ordenes_compra oc WHERE oc.muestra_id = m.id)
+          AND NOT EXISTS (SELECT 1 FROM muestras_eventos e WHERE e.muestra_id = m.id AND e.tipo = 'sin_compras')
+        ORDER BY CASE m.prioridad WHEN 'ALTA' THEN 0 WHEN 'MEDIA' THEN 1 ELSE 2 END, m.fecha_solicitud`)
+    res.json({ data: rows })
+  } catch (err) { next(err) }
+}
+
 // ─── Upload de archivos a Supabase ──────────────────────────────────────────
 // Multer en memoria — el binario se sube a Supabase, no se persiste a disco.
 // Mismo bucket que oc_imagenes (configurado en env: SUPABASE_BUCKET).

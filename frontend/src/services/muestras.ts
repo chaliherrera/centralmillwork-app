@@ -12,6 +12,12 @@ interface ListFilters {
   incluir_archivadas?: boolean
 }
 
+export interface MuestraEsperandoCompras {
+  id: number; codigo: string; descripcion: string; tipo: string; prioridad: string
+  fecha_solicitud: string | null; proyecto_id: number | null
+  proyecto_codigo: string | null; proyecto_nombre: string | null
+}
+
 export const muestrasService = {
   list: (filters?: ListFilters) =>
     api.get<{ data: MuestrasListResp }>('/muestras', {
@@ -27,6 +33,10 @@ export const muestrasService = {
 
   kpis: () =>
     api.get<{ data: MuestrasKpis }>('/muestras/kpis').then((r) => r.data.data),
+
+  // Muestras SOLICITADAS sin decisión de compras — aviso al escritorio de Compras.
+  esperandoCompras: () =>
+    api.get<{ data: MuestraEsperandoCompras[] }>('/muestras/esperando-compras').then((r) => r.data.data),
 
   get: (id: number) =>
     api.get<{ data: MuestraDetalle }>(`/muestras/${id}`).then((r) => r.data.data),
