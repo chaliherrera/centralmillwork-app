@@ -617,6 +617,19 @@ export async function importarMateriales(req: Request, res: Response, next: Next
         data: { importados, omitidos, fecha_importacion: fechaHoy, import_batch_id: batch_id },
         message: `${importados} materiales importados correctamente`,
       })
+
+      // Integración Gantt·Journey: importar el MTO cambia el agregado de compras (ya hay
+      // materiales) → el paso `material_proc` debe pasar de "pendiente" (Ingeniería lo
+      // produce) a "en_curso" (Compras cotiza/compra) enseguida, sin esperar al cron.
+      // Best-effort, fuera de la transacción del import.
+      pool.query<{ ext: string | null }>(`SELECT proyecto_ext AS ext FROM ing_proyectos WHERE proyecto_id = $1`, [proyId])
+        .then(async ({ rows: [pex] }) => {
+          if (pex?.ext) {
+            const { recomputarYGuardar } = await import('../modules/ingenieria/domain/tareas')
+            await recomputarYGuardar(pool, pex.ext)
+          }
+        })
+        .catch((e) => logger.warn('recompute tras importar MTO fallo', { proyecto_id: proyId, err: String(e) }))
     } catch (err) {
       await client.query('ROLLBACK')
       throw err
