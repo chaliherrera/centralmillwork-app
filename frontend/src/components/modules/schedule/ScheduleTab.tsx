@@ -4,7 +4,7 @@ import clsx from 'clsx'
 import {
   CalendarClock, Lock, RefreshCw, Flag, Check,
   Target, User, Handshake, Activity, ChevronRight, Share2, Copy, X,
-  ClipboardCheck, AlertTriangle, Zap, Upload, FileText, DollarSign,
+  AlertTriangle, Zap, FileText,
 } from 'lucide-react'
 import { scheduleService, type ScheduleData, type ScheduleHito, type Semaforo } from '@/services/schedule'
 
@@ -49,23 +49,10 @@ const ATRIB_LABEL: Record<string, string> = {
   logistics: 'Logística', field: 'Field', finance: 'Finanzas', pm: 'PM', cliente: 'Cliente', gc: 'GC', vendor: 'Vendor',
 }
 const activoEstado = (e: string) => e === 'pendiente' || e === 'en_riesgo' || e === 'vencido'
-const esRegistrable = (h: ScheduleHito) => h.fuente_dato === 'manual_futuro' && !CLIENT_APROBABLES.includes(h.codigo)
+// Journey de SOLO LECTURA: las acciones (subir planos, MTO, registrar pago, release…)
+// viven en los escritorios de cada rol. Acá solo se muestra el estado y las fechas del Gantt.
+const esActivable = (h: ScheduleHito) => h.fuente_dato === 'manual_futuro' && !CLIENT_APROBABLES.includes(h.codigo)
 const esCliente = (h: ScheduleHito) => CLIENT_APROBABLES.includes(h.codigo)
-// Acción específica por hito de Ingeniería. submittal = sube PDF versionado;
-// archivo = sube archivo (CNC); registro = completa con fecha/nota (label propio).
-const ACCION_HITO: Record<string, { label: string; tipo: 'submittal' | 'archivo' | 'pago' }> = {
-  'C-03': { label: 'Subir contrato firmado', tipo: 'archivo' },
-  'C-04': { label: 'Registrar pago', tipo: 'pago' },
-  'E-06': { label: 'Subir planos', tipo: 'submittal' },
-  'E-08': { label: 'Subir planos', tipo: 'submittal' },
-  'E-11': { label: 'Subir archivos CNC', tipo: 'archivo' },
-  'X-03': { label: 'Registrar pago final', tipo: 'pago' },
-}
-const REGISTRO_LABEL: Record<string, string> = {
-  'E-09': 'Liberar MTO', 'E-10': 'Release to Production',
-}
-// Etiqueta del campo de dato opcional en la subida de archivo, por hito.
-const ARCHIVO_NOTA: Record<string, string> = {}
 
 function fmt(d: string | null): string {
   if (!d) return '—'
@@ -98,17 +85,6 @@ export default function ScheduleTab({ proyectoId }: { proyectoId: number }) {
   const [fechaObjetivo, setFechaObjetivo] = useState('')
   const [selected, setSelected] = useState<string | null>(null)
   const [portal, setPortal] = useState<{ open: boolean; nombre: string; link: string | null }>({ open: false, nombre: '', link: null })
-  const [registro, setRegistro] = useState<{ codigo: string; nombre: string } | null>(null)
-  const [regFecha, setRegFecha] = useState('')
-  const [regNota, setRegNota] = useState('')
-  const [submittal, setSubmittal] = useState<{ codigo: string; nombre: string } | null>(null)
-  const [subFile, setSubFile] = useState<File | null>(null)
-  const [archivoHito, setArchivoHito] = useState<{ codigo: string; nombre: string } | null>(null)
-  const [arcFile, setArcFile] = useState<File | null>(null)
-  const [arcNota, setArcNota] = useState('')
-  const [pago, setPago] = useState<{ codigo: string; nombre: string } | null>(null)
-  const [pagoImporte, setPagoImporte] = useState('')
-  const [pagoFecha, setPagoFecha] = useState('')
   const [planosUrl, setPlanosUrl] = useState<string | null>(null)
 
   async function load() {
@@ -143,71 +119,6 @@ export default function ScheduleTab({ proyectoId }: { proyectoId: number }) {
       setPortal((p) => ({ ...p, link: `${window.location.origin}/portal/${r.data.token}` }))
     } catch { /* toast */ } finally { setBusy(false) }
   }
-  function abrirRegistro(h: ScheduleHito) {
-    setRegistro({ codigo: h.codigo, nombre: h.nombre })
-    setRegFecha(new Date().toISOString().slice(0, 10)); setRegNota('')
-  }
-  async function confirmarRegistro() {
-    if (!registro || !regFecha) { toast.error('Elegí la fecha'); return }
-    setBusy(true)
-    try {
-      await scheduleService.registrarHito(proyectoId, registro.codigo, regFecha, regNota || undefined)
-      toast.success('Hito registrado'); setRegistro(null); await load()
-    } catch { /* toast */ } finally { setBusy(false) }
-  }
-  async function confirmarSubmittal() {
-    if (!subFile) { toast.error('Elegí el PDF de los planos'); return }
-    setBusy(true)
-    try {
-      const r = await scheduleService.uploadSubmittal(proyectoId, subFile)
-      toast.success(`Submittal ${r.data.version_label} emitido`); setSubmittal(null); setSubFile(null); await load()
-    } catch { /* toast */ } finally { setBusy(false) }
-  }
-  async function confirmarArchivo() {
-    if (!archivoHito || !arcFile) { toast.error('Elegí un archivo'); return }
-    setBusy(true)
-    try {
-      await scheduleService.uploadArchivoHito(proyectoId, archivoHito.codigo, arcFile, arcNota || undefined)
-      toast.success('Archivo adjuntado'); setArchivoHito(null); setArcFile(null); setArcNota(''); await load()
-    } catch { /* toast */ } finally { setBusy(false) }
-  }
-  async function confirmarPago() {
-    if (!pago || !pagoFecha) { toast.error('Elegí la fecha del pago'); return }
-    const importe = pagoImporte ? Number(pagoImporte) : undefined
-    setBusy(true)
-    try {
-      await scheduleService.registrarHito(proyectoId, pago.codigo, pagoFecha, undefined, importe)
-      toast.success('Pago registrado'); setPago(null); await load()
-    } catch { /* toast */ } finally { setBusy(false) }
-  }
-  const accionHito = (h: ScheduleHito, small = false) => {
-    const cls = clsx('shrink-0 inline-flex items-center gap-1.5 font-medium rounded-lg',
-      small ? 'text-[11px] text-forest-700 hover:text-white hover:bg-forest-600 border border-forest-200 px-2 py-1 transition-colors'
-            : 'text-xs text-white bg-forest-600 hover:bg-forest-700 px-3 py-1.5')
-    const ico = small ? 12 : 14
-    const cfg = ACCION_HITO[h.codigo]
-    if (cfg?.tipo === 'submittal') return (
-      <button onClick={() => { setSubmittal({ codigo: h.codigo, nombre: h.nombre }); setSubFile(null) }} className={cls}>
-        <Upload size={ico} /> {cfg.label}
-      </button>
-    )
-    if (cfg?.tipo === 'archivo') return (
-      <button onClick={() => { setArchivoHito({ codigo: h.codigo, nombre: h.nombre }); setArcFile(null); setArcNota('') }} className={cls}>
-        <Upload size={ico} /> {cfg.label}
-      </button>
-    )
-    if (cfg?.tipo === 'pago') return (
-      <button onClick={() => { setPago({ codigo: h.codigo, nombre: h.nombre }); setPagoImporte(''); setPagoFecha(new Date().toISOString().slice(0, 10)) }} className={cls}>
-        <DollarSign size={ico} /> {cfg.label}
-      </button>
-    )
-    return (
-      <button onClick={() => abrirRegistro(h)} className={cls}>
-        <ClipboardCheck size={ico} /> {REGISTRO_LABEL[h.codigo] ?? 'Registrar'}
-      </button>
-    )
-  }
-
   const { fases, totalHitos, totalCumplidos } = useMemo(() => {
     const rank: Record<Semaforo, number> = { gris: 0, verde: 1, amarillo: 2, rojo: 3 }
     const byC = new Map<string, ScheduleHito>()
@@ -240,7 +151,7 @@ export default function ScheduleTab({ proyectoId }: { proyectoId: number }) {
   const frontier = useMemo(() => {
     const activos = (data?.hitos ?? []).filter((h) => !h.parent_codigo && activoEstado(h.estado))
     return {
-      accionables: activos.filter(esRegistrable).sort((a, b) => a.orden - b.orden),
+      accionables: activos.filter(esActivable).sort((a, b) => a.orden - b.orden),
       cliente: activos.filter(esCliente).sort((a, b) => a.orden - b.orden),
     }
   }, [data])
@@ -401,7 +312,9 @@ export default function ScheduleTab({ proyectoId }: { proyectoId: number }) {
                       {h.holgura_dias < 0 ? '' : '+'}{h.holgura_dias}d
                     </span>
                   )}
-                  {accionHito(h)}
+                  <span className="shrink-0 text-[10px] font-medium text-stone-400 bg-stone-50 rounded-full px-2 py-1">
+                    en su escritorio
+                  </span>
                 </div>
               )
             })}
@@ -567,7 +480,9 @@ export default function ScheduleTab({ proyectoId }: { proyectoId: number }) {
                             {h.holgura_dias < 0 ? '' : '+'}{h.holgura_dias}d
                           </span>
                         )}
-                        {activoEstado(h.estado) && esRegistrable(h) && accionHito(h, true)}
+                        {activoEstado(h.estado) && esActivable(h) && (
+                          <span className="shrink-0 text-[10px] font-medium text-stone-400">en su escritorio</span>
+                        )}
                         {activoEstado(h.estado) && esCliente(h) && (
                           <span className="shrink-0 inline-flex items-center gap-1 text-[10px] font-medium text-blue-700 bg-blue-50 rounded px-1.5 py-0.5"><Handshake size={11} /> portal</span>
                         )}
@@ -578,115 +493,6 @@ export default function ScheduleTab({ proyectoId }: { proyectoId: number }) {
               )
             })}
           </ol>
-        </div>
-      )}
-
-      {/* modal registrar hito */}
-      {registro && (
-        <div className="fixed inset-0 bg-black/30 flex items-center justify-center p-4 z-50" onClick={() => !busy && setRegistro(null)}>
-          <div className="bg-white rounded-2xl max-w-md w-full p-5 shadow-xl" onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-center gap-2">
-              <ClipboardCheck size={18} className="text-forest-600" />
-              <h3 className="font-semibold text-stone-800">Registrar hito</h3>
-              <button onClick={() => setRegistro(null)} className="ml-auto text-stone-400 hover:text-stone-700"><X size={18} /></button>
-            </div>
-            <p className="text-sm text-stone-500 mt-1.5">
-              <b className="text-stone-700">{registro.nombre}</b>. Registrás que ocurrió de verdad — queda con tu nombre y la fecha.
-            </p>
-            <label className="block mt-3 text-xs font-medium text-stone-500">¿Cuándo ocurrió?</label>
-            <input type="date" value={regFecha} onChange={(e) => setRegFecha(e.target.value)} className="input w-full mt-1" />
-            <label className="block mt-3 text-xs font-medium text-stone-500">Nota (opcional)</label>
-            <textarea value={regNota} onChange={(e) => setRegNota(e.target.value)} rows={2}
-                      placeholder="Ej: submittal Rev A enviado, N° de factura…" className="input w-full mt-1 resize-none" />
-            <div className="mt-4 flex justify-end gap-2">
-              <button onClick={() => setRegistro(null)} disabled={busy} className="px-3 py-2 text-sm text-stone-500">Cancelar</button>
-              <button onClick={confirmarRegistro} disabled={busy} className="btn-primary"><ClipboardCheck size={15} /> Registrar</button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* modal subir submittal (planos) */}
-      {submittal && (
-        <div className="fixed inset-0 bg-black/30 flex items-center justify-center p-4 z-50" onClick={() => !busy && setSubmittal(null)}>
-          <div className="bg-white rounded-2xl max-w-md w-full p-5 shadow-xl" onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-center gap-2">
-              <Upload size={18} className="text-forest-600" />
-              <h3 className="font-semibold text-stone-800">Emitir planos al cliente</h3>
-              <button onClick={() => setSubmittal(null)} className="ml-auto text-stone-400 hover:text-stone-700"><X size={18} /></button>
-            </div>
-            <p className="text-sm text-stone-500 mt-1.5">
-              Subí el PDF de los shop drawings. Se registra como una nueva revisión y el cliente lo verá en su portal para aprobar.
-            </p>
-            <label className="mt-4 flex flex-col items-center justify-center gap-2 border-2 border-dashed border-stone-300 rounded-xl py-8 cursor-pointer hover:border-forest-400 transition-colors">
-              <FileText size={26} className="text-stone-300" />
-              <span className="text-sm text-stone-500">{subFile ? subFile.name : 'Elegí un archivo PDF'}</span>
-              <input type="file" accept="application/pdf" className="hidden"
-                     onChange={(e) => setSubFile(e.target.files?.[0] ?? null)} />
-            </label>
-            <div className="mt-4 flex justify-end gap-2">
-              <button onClick={() => setSubmittal(null)} disabled={busy} className="px-3 py-2 text-sm text-stone-500">Cancelar</button>
-              <button onClick={confirmarSubmittal} disabled={busy || !subFile} className="btn-primary">
-                <Upload size={15} /> {busy ? 'Subiendo…' : 'Emitir planos'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* modal subir archivo (CNC / entregable) */}
-      {archivoHito && (
-        <div className="fixed inset-0 bg-black/30 flex items-center justify-center p-4 z-50" onClick={() => !busy && setArchivoHito(null)}>
-          <div className="bg-white rounded-2xl max-w-md w-full p-5 shadow-xl" onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-center gap-2">
-              <Upload size={18} className="text-forest-600" />
-              <h3 className="font-semibold text-stone-800">{archivoHito.nombre}</h3>
-              <button onClick={() => setArchivoHito(null)} className="ml-auto text-stone-400 hover:text-stone-700"><X size={18} /></button>
-            </div>
-            <p className="text-sm text-stone-500 mt-1.5">
-              Subí el archivo. Queda adjunto al hito y lo completa (con tu nombre y la fecha).
-            </p>
-            <label className="mt-4 flex flex-col items-center justify-center gap-2 border-2 border-dashed border-stone-300 rounded-xl py-8 cursor-pointer hover:border-forest-400 transition-colors">
-              <FileText size={26} className="text-stone-300" />
-              <span className="text-sm text-stone-500">{arcFile ? arcFile.name : 'Elegí un archivo'}</span>
-              <input type="file" className="hidden" onChange={(e) => setArcFile(e.target.files?.[0] ?? null)} />
-            </label>
-            {ARCHIVO_NOTA[archivoHito.codigo] && (
-              <>
-                <label className="block mt-3 text-xs font-medium text-stone-500">{ARCHIVO_NOTA[archivoHito.codigo]} (opcional)</label>
-                <input value={arcNota} onChange={(e) => setArcNota(e.target.value)} className="input w-full mt-1" />
-              </>
-            )}
-            <div className="mt-4 flex justify-end gap-2">
-              <button onClick={() => setArchivoHito(null)} disabled={busy} className="px-3 py-2 text-sm text-stone-500">Cancelar</button>
-              <button onClick={confirmarArchivo} disabled={busy || !arcFile} className="btn-primary">
-                <Upload size={15} /> {busy ? 'Subiendo…' : 'Subir archivo'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* modal registrar pago */}
-      {pago && (
-        <div className="fixed inset-0 bg-black/30 flex items-center justify-center p-4 z-50" onClick={() => !busy && setPago(null)}>
-          <div className="bg-white rounded-2xl max-w-md w-full p-5 shadow-xl" onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-center gap-2">
-              <DollarSign size={18} className="text-forest-600" />
-              <h3 className="font-semibold text-stone-800">{pago.nombre}</h3>
-              <button onClick={() => setPago(null)} className="ml-auto text-stone-400 hover:text-stone-700"><X size={18} /></button>
-            </div>
-            <p className="text-sm text-stone-500 mt-1.5">Registrá el pago recibido. Queda con tu nombre y la fecha.</p>
-            <label className="block mt-3 text-xs font-medium text-stone-500">Importe recibido (USD)</label>
-            <input type="number" min="0" step="0.01" value={pagoImporte} onChange={(e) => setPagoImporte(e.target.value)}
-                   placeholder="Ej: 25000" className="input w-full mt-1" />
-            <label className="block mt-3 text-xs font-medium text-stone-500">¿Cuándo se recibió?</label>
-            <input type="date" value={pagoFecha} onChange={(e) => setPagoFecha(e.target.value)} className="input w-full mt-1" />
-            <div className="mt-4 flex justify-end gap-2">
-              <button onClick={() => setPago(null)} disabled={busy} className="px-3 py-2 text-sm text-stone-500">Cancelar</button>
-              <button onClick={confirmarPago} disabled={busy} className="btn-primary"><DollarSign size={15} /> Registrar pago</button>
-            </div>
-          </div>
         </div>
       )}
     </div>
