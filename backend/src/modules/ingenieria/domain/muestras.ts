@@ -21,7 +21,12 @@ export interface EstadoMuestras {
   aprobadas: number
   rechazadas: number
   pendientes: number         // en vuelo (solicitada/fabricación/qc/enviada)
-  todas_aprobadas: boolean   // señal E-05 (informativa, no bloquea el gate)
+  todas_aprobadas: boolean   // TODAS las activas aprobadas (badge informativo del plan)
+  // ¿cierra el paso "Samples" del cronograma? Decisión de Chali (2026-09-07): la APROBADA
+  // lo cierra — basta con que haya ≥1 aprobada y NINGUNA en proceso. Una RECHAZADA que no
+  // se rehace queda como historial y NO bloquea (es una muestra distinta, su estado no
+  // cambia). Si se le hace una versión nueva, vuelve a "en proceso" y reabre Samples.
+  samples_listo: boolean
   fecha_solicitud: string | null   // la más temprana
   fecha_aprobacion: string | null  // la más tardía (aprobación del cliente)
 }
@@ -81,6 +86,7 @@ export async function estadoMuestras(runner: QueryRunner, proyectoExt: string): 
     rechazadas: r ? +r.rechazadas : 0,
     pendientes: r ? +r.pendientes : 0,
     todas_aprobadas: total > 0 && aprobadas === total,
+    samples_listo: aprobadas > 0 && (r ? +r.pendientes : 0) === 0,
     fecha_solicitud: r?.fecha_solicitud ?? null,
     fecha_aprobacion: r?.fecha_aprobacion ?? null,
   }

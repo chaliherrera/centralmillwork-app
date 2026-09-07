@@ -417,14 +417,15 @@ export async function cerrarTareasAutomaticas(runner: QueryRunner, proyectoExt: 
     fabrication:      { done: hito.has('P-06'), enCurso: hito.has('P-05'), fecha: hito.get('P-06') ?? hito.get('P-05') ?? null },
     installation:     { done: instalacion.completa || hito.has('I-07'), fecha: instalacion.fecha_ultima ?? hito.get('I-07') ?? null },
   }
-  // samples (paso #6, señal E-05): DERIVADO del módulo de Muestras (Q1). Cierra sola
-  // cuando TODAS las muestras activas están APROBADA; si una se RECHAZA, el módulo crea
-  // una versión nueva (queda pendiente) → samples vuelve a en_curso y el recompute
-  // reprograma. Solo se deriva si el proyecto tiene muestras cargadas (si no, se respeta
-  // lo que haya: puede que el proyecto no lleve muestras). Corre en paralelo, no bloquea.
+  // samples (paso #6, señal E-05): DERIVADO del módulo de Muestras (Q1). La APROBADA lo
+  // cierra (decisión de Chali 2026-09-07): cierra cuando hay ≥1 muestra APROBADA y NINGUNA
+  // en proceso; una RECHAZADA queda como historial y NO bloquea (su estado no cambia). Si
+  // a una rechazada se le hace una versión nueva, vuelve a "en proceso" → reabre samples
+  // y el recompute reprograma. Solo deriva si el proyecto tiene muestras (si no, se respeta
+  // lo que haya). Corre en paralelo, no bloquea el gate del cliente.
   if (muestras.hay) reglas.samples = {
-    done: muestras.todas_aprobadas, enCurso: !muestras.todas_aprobadas,
-    fecha: muestras.todas_aprobadas ? muestras.fecha_aprobacion : null,
+    done: muestras.samples_listo, enCurso: !muestras.samples_listo,
+    fecha: muestras.samples_listo ? muestras.fecha_aprobacion : null,
   }
 
   for (const [clave, r] of Object.entries(reglas)) {
