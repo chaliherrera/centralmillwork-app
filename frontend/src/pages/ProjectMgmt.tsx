@@ -10,6 +10,7 @@ import { ingenieriaService, type IngCarga } from '@/services/ingenieria'
 import IngenieriaPlan, { VistaDisponibilidad } from './IngenieriaPlan'
 import Escritorio from '@/components/escritorio/Escritorio'
 import PagosPorCobrar from '@/components/modules/ingenieria/PagosPorCobrar'
+import InstalacionesPM from '@/components/modules/ingenieria/InstalacionesPM'
 
 // Escritorio del PM. El PM es el dueño del recurso Ingeniería: acá tiene su bandeja
 // (planes sugeridos a aceptar + lo que le toca) y el Plan de Ingeniería (capacidad,
@@ -46,6 +47,8 @@ export default function ProjectMgmt() {
       {tab === 'bandeja' && (
         <div className="max-w-3xl mx-auto space-y-5 mt-4">
           <PagosPorCobrar />
+          {/* Instalaciones (handoff 3 etapas): el PM inicia y, tras la verificación de Campo, cierra. */}
+          <InstalacionesPM />
           <DepositosBloqueando onRevisar={onRevisar} />
           <ReprogramacionesPendientes onRevisar={onRevisar} />
           <ReservasPendientes onRevisar={onRevisar} />

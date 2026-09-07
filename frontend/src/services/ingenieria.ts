@@ -48,6 +48,19 @@ export interface PagoPorCobrar {
   hito: string
   dias_pendiente: number | null
 }
+// Instalación para la bandeja del PM (handoff 3 etapas: iniciar / completar).
+export interface InstalacionPM {
+  tarea_id: number
+  proyecto_ext: string | null
+  proyecto_nombre: string | null
+  estado: string
+  etapa: 'iniciar' | 'completar'
+  fecha_fin: string | null
+  items_total: number
+  items_instalados: number
+  punch_abiertos: number
+  firmada: boolean
+}
 export interface DepositoBloqueando {
   proyecto_ext: string
   nombre: string | null
@@ -262,6 +275,8 @@ export const ingenieriaService = {
     api.get<ApiResponse<DepositoBloqueando[]>>('/ingenieria/depositos-bloqueando').then((r) => r.data),
   pagosPorCobrar: () =>
     api.get<ApiResponse<PagoPorCobrar[]>>('/ingenieria/pagos-por-cobrar').then((r) => r.data),
+  instalacionesPM: () =>
+    api.get<ApiResponse<InstalacionPM[]>>('/ingenieria/instalaciones-pm').then((r) => r.data),
   muestrasEstado: () =>
     api.get<ApiResponse<MuestrasProyecto[]>>('/ingenieria/muestras-estado').then((r) => r.data),
   comprasEstado: () =>

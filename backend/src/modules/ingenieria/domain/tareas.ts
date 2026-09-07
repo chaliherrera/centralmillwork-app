@@ -386,7 +386,6 @@ export async function cerrarTareasAutomaticas(runner: QueryRunner, proyectoExt: 
   // queries concurrentes sobre el mismo client.
   const deposito = await estadoDeposito(runner, proyectoExt)
   const compras = await estadoCompras(runner, proyectoExt)
-  const instalacion = await estadoInstalacion(runner, proyectoExt)
   const muestras = await estadoMuestras(runner, proyectoExt)
   const produccion = await estadoProduccion(runner, proyectoExt)
 
@@ -420,7 +419,10 @@ export async function cerrarTareasAutomaticas(runner: QueryRunner, proyectoExt: 
     // después → desfase de un recompute). Cierra cuando todas las OPs de producción están
     // Completada; en_curso si alguna arrancó. (Las OPs de MUESTRA no cuentan.)
     fabrication:      { done: produccion.completa, enCurso: produccion.en_curso, fecha: produccion.fecha_completa },
-    installation:     { done: instalacion.completa || hito.has('I-07'), fecha: instalacion.fecha_ultima ?? hito.get('I-07') ?? null },
+    // installation: NO auto-cierra. Handoff de 3 etapas del PM (Chali 2026-09-08): el PM
+    // inicia (pendiente→en_curso) → Campo verifica en el móvil (ítems+punch+firma=I-07) →
+    // el PM completa (en_curso→hecha). El reconciliador no la toca; la mueven las acciones
+    // del PM (avanceTarea) y la verificación. Ver listInstalacionesPM + gate de listInstallQueue.
   }
   // samples (paso #6, señal E-05): DERIVADO del módulo de Muestras (Q1). La APROBADA lo
   // cierra (decisión de Chali 2026-09-07): cierra cuando hay ≥1 muestra APROBADA y NINGUNA

@@ -96,6 +96,7 @@ export async function getEscritorio(
       AND t.origen IN ('app','import_excel')
       AND (t.origen = 'import_excel' OR p.estado = 'activo')
       AND NOT (tt.clave = 'po_execution' AND t.origen <> 'app')
+      AND tt.clave <> 'installation'
       AND ${rolCond} ${asigCond}`
 
   const { rows } = await runner.query<EscritorioTarea>(
@@ -158,6 +159,7 @@ export async function getEscritorioResumen(
       WHERE t.estado NOT IN ('hecha','na') AND t.origen IN ('app','import_excel')
         AND (t.origen = 'import_excel' OR p.estado = 'activo')
         AND NOT (tt.clave = 'po_execution' AND t.origen <> 'app')
+        AND tt.clave <> 'installation'
         AND ${rolCond} ${asigCond}
         AND NOT ${BLOQUEADA}
       GROUP BY erol`, params)

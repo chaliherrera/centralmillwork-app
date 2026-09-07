@@ -73,6 +73,14 @@ export async function listInstallQueue(runner: QueryRunner): Promise<InstallProy
         AND EXISTS (
           SELECT 1 FROM schedule_hitos i7 WHERE i7.plan_id = sp.id
             AND i7.codigo = 'I-07' AND i7.fecha_real IS NULL)
+        -- Gate del handoff (Chali 2026-09-08): Campo verifica en el móvil SOLO después de
+        -- que el PM inició la instalación (tarea 'installation' en_curso). Antes de eso el
+        -- proyecto no aparece en la cola.
+        AND EXISTS (
+          SELECT 1 FROM ing_tareas t
+            JOIN ing_tarea_tipos tt ON tt.id = t.tipo_id
+            JOIN ing_proyectos ip ON ip.proyecto_ext = t.proyecto_ext
+           WHERE ip.proyecto_id = sp.proyecto_id AND tt.clave = 'installation' AND t.estado = 'en_curso')
       ORDER BY sp.fecha_objetivo NULLS LAST, sp.proyecto_id, ph.orden`, [INSTALL_CODES])
 
   const porProyecto = new Map<number, InstallProyecto>()

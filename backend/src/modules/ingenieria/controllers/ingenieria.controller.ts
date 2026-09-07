@@ -22,7 +22,7 @@ import {
 import { estadoDeposito, overrideGate, listDepositosBloqueando, listPagosPorCobrar } from '../domain/deposito'
 import { listMuestrasPorProyecto } from '../domain/muestras'
 import { listComprasPorProyecto } from '../domain/compras'
-import { detalleInstalacion } from '../domain/instalacion'
+import { detalleInstalacion, listInstalacionesPM } from '../domain/instalacion'
 import { getEscritorio, getEscritorioResumen, ROLES_RUTA_POR_APP } from '../domain/escritorio'
 import { listNovedadesCliente } from '../domain/novedades'
 
@@ -514,6 +514,15 @@ export async function depositosBloqueandoHandler(_req: Request, res: Response, n
 export async function pagosPorCobrarHandler(_req: Request, res: Response, next: NextFunction) {
   try {
     const data = await listPagosPorCobrar(pool)
+    res.json({ data })
+  } catch (e) { next(e) }
+}
+
+// ── Instalaciones para el PM (handoff 3 etapas) — bandeja del PM ──
+// GET /api/ingenieria/instalaciones-pm  → las que le tocan al PM (iniciar / completar).
+export async function instalacionesPMHandler(_req: Request, res: Response, next: NextFunction) {
+  try {
+    const data = await listInstalacionesPM(pool)
     res.json({ data })
   } catch (e) { next(e) }
 }
