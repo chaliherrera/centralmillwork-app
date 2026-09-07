@@ -18,6 +18,11 @@ export interface MuestraEsperandoCompras {
   proyecto_codigo: string | null; proyecto_nombre: string | null
 }
 
+export interface MuestraEnProceso {
+  id: number; codigo: string; descripcion: string; estado: string; prioridad: string
+  proyecto_id: number | null; proyecto_codigo: string | null; proyecto_nombre: string | null
+}
+
 export const muestrasService = {
   list: (filters?: ListFilters) =>
     api.get<{ data: MuestrasListResp }>('/muestras', {
@@ -37,6 +42,10 @@ export const muestrasService = {
   // Muestras SOLICITADAS sin decisión de compras — aviso al escritorio de Compras.
   esperandoCompras: () =>
     api.get<{ data: MuestraEsperandoCompras[] }>('/muestras/esperando-compras').then((r) => r.data.data),
+
+  // Muestras del ingeniero logueado que están en proceso — aviso a su escritorio.
+  miasEnProceso: () =>
+    api.get<{ data: MuestraEnProceso[] }>('/muestras/mias-en-proceso').then((r) => r.data.data),
 
   get: (id: number) =>
     api.get<{ data: MuestraDetalle }>(`/muestras/${id}`).then((r) => r.data.data),

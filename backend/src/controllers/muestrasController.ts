@@ -1125,6 +1125,25 @@ export async function getMuestrasEsperandoCompras(_req: Request, res: Response, 
   } catch (err) { next(err) }
 }
 
+// Muestras del ingeniero logueado que están EN PROCESO (fabricación / QC / enviada).
+// Alimenta el aviso de su escritorio: "tus muestras en proceso". El owner de la muestra
+// es el usuario del ingeniero solicitante (identidad, igual que el escritorio).
+export async function getMisMuestrasEnProceso(req: Request, res: Response, next: NextFunction) {
+  try {
+    const userId = (req as any).user?.id
+    if (!userId) return res.json({ data: [] })
+    const { rows } = await pool.query(
+      `SELECT m.id, m.codigo, m.descripcion, m.estado::text AS estado, m.prioridad::text AS prioridad,
+              m.proyecto_id, p.codigo AS proyecto_codigo, p.nombre AS proyecto_nombre
+         FROM muestras m
+         LEFT JOIN proyectos p ON p.id = m.proyecto_id
+        WHERE m.owner_id = $1 AND m.estado IN ('EN_FABRICACION','EN_QC','ENVIADA')
+        ORDER BY CASE m.estado WHEN 'ENVIADA' THEN 0 WHEN 'EN_QC' THEN 1 ELSE 2 END, m.fecha_solicitud`,
+      [userId])
+    res.json({ data: rows })
+  } catch (err) { next(err) }
+}
+
 // ─── Upload de archivos a Supabase ──────────────────────────────────────────
 // Multer en memoria — el binario se sube a Supabase, no se persiste a disco.
 // Mismo bucket que oc_imagenes (configurado en env: SUPABASE_BUCKET).

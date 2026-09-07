@@ -1,5 +1,6 @@
 import { DraftingCompass } from 'lucide-react'
 import Escritorio from '@/components/escritorio/Escritorio'
+import MisMuestrasEnProceso from '@/components/modules/muestras/MisMuestrasEnProceso'
 
 // Escritorio de Ingeniería — "lo que le toca a Ingeniería", en todos los proyectos.
 export default function Ingenieria() {
@@ -15,6 +16,8 @@ export default function Ingenieria() {
         </div>
       </div>
       <Escritorio rol="ingenieria,field" titulo="Escritorio de Ingeniería" subtitulo="Solo lo desbloqueado, de todos los proyectos. Completá (y adjuntá planos/CNC cuando corresponda) y aparece lo siguiente." />
+      {/* Aviso: tus muestras en proceso (fabricación / QC / enviada). */}
+      <MisMuestrasEnProceso />
     </div>
   )
 }
