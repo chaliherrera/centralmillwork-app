@@ -107,11 +107,17 @@ export async function capturarFechasReales(
   }
   if (!hasOP) return out
 
+  // Las OPs de MUESTRAS (tipo='MUESTRA') NO son fabricación del proyecto — no deben
+  // contar para los hitos de producción del millwork (P-01/P-05/P-06/QC). Si no se
+  // excluyen, completar la OP de una muestra marca "fabricación completa" del proyecto
+  // y la inferencia back-rellena los hitos de ingeniería como hechos (bug 2026-09-07).
+  const NO_MUESTRA = `AND tipo IS DISTINCT FROM 'MUESTRA'`
+
   // ── P-01 · Producción iniciada = primera OP creada ─────────────────────────
   const p01 = await scalarDate(runner,
     `SELECT to_char(MIN(created_at),'YYYY-MM-DD') AS d
        FROM ordenes_produccion
-      WHERE proyecto_id = $1 AND status <> 'Cancelada'`, [proyectoId])
+      WHERE proyecto_id = $1 AND status <> 'Cancelada' ${NO_MUESTRA}`, [proyectoId])
   set('P-01', p01, { source: 'op_creada' })
 
   // ── P-05 · Fabricación en curso = primera OP que pasó de Pendiente ─────────
@@ -122,7 +128,7 @@ export async function capturarFechasReales(
   const p05 = await scalarDate(runner,
     `SELECT to_char(MIN(COALESCE(fecha_inicio, updated_at)),'YYYY-MM-DD') AS d
        FROM ordenes_produccion
-      WHERE proyecto_id = $1 AND status IN ('En Proceso', 'Pausada', 'Completada')`, [proyectoId])
+      WHERE proyecto_id = $1 AND status IN ('En Proceso', 'Pausada', 'Completada') ${NO_MUESTRA}`, [proyectoId])
   set('P-05', p05, { source: 'op_estacion' })
 
   // ── P-06 · Fabricación completa = todas las OPs activas completadas ────────
@@ -132,7 +138,7 @@ export async function capturarFechasReales(
          COUNT(*) FILTER (WHERE status <> 'Cancelada')::text AS activas,
          COUNT(*) FILTER (WHERE status NOT IN ('Completada','Cancelada'))::text AS pendientes,
          to_char(MAX(fecha_completada),'YYYY-MM-DD') AS d
-         FROM ordenes_produccion WHERE proyecto_id = $1`, [proyectoId])
+         FROM ordenes_produccion WHERE proyecto_id = $1 ${NO_MUESTRA}`, [proyectoId])
     const activas = Number(rows[0]?.activas ?? 0)
     const pendientes = Number(rows[0]?.pendientes ?? 0)
     set('P-06', activas > 0 && pendientes === 0 ? (rows[0]?.d ?? null) : null,
@@ -144,21 +150,21 @@ export async function capturarFechasReales(
     const qc01 = await scalarDate(runner,
       `SELECT to_char(MIN(q.fecha_inspeccion),'YYYY-MM-DD') AS d
          FROM qc_inspecciones q JOIN ordenes_produccion op ON op.id = q.orden_id
-        WHERE op.proyecto_id = $1`, [proyectoId])
+        WHERE op.proyecto_id = $1 AND op.tipo IS DISTINCT FROM 'MUESTRA'`, [proyectoId])
     set('QC-01', qc01, { source: 'qc' })
 
     // ── QC-02 · QC final aprobado = última inspección con decisión Aprobar ───
     const qc02 = await scalarDate(runner,
       `SELECT to_char(MAX(q.fecha_inspeccion),'YYYY-MM-DD') AS d
          FROM qc_inspecciones q JOIN ordenes_produccion op ON op.id = q.orden_id
-        WHERE op.proyecto_id = $1 AND q.decision = 'Aprobar'`, [proyectoId])
+        WHERE op.proyecto_id = $1 AND q.decision = 'Aprobar' AND op.tipo IS DISTINCT FROM 'MUESTRA'`, [proyectoId])
     set('QC-02', qc02, { source: 'qc', regla: 'última inspección aprobada' })
 
     // ── QC-03 · Reproceso por defecto = existe decisión Reprocesar/Scrap ─────
     const qc03 = await scalarDate(runner,
       `SELECT to_char(MAX(q.fecha_inspeccion),'YYYY-MM-DD') AS d
          FROM qc_inspecciones q JOIN ordenes_produccion op ON op.id = q.orden_id
-        WHERE op.proyecto_id = $1 AND q.decision IN ('Reprocesar','Scrap')`, [proyectoId])
+        WHERE op.proyecto_id = $1 AND q.decision IN ('Reprocesar','Scrap') AND op.tipo IS DISTINCT FROM 'MUESTRA'`, [proyectoId])
     set('QC-03', qc03, { source: 'qc' })
   }
 
