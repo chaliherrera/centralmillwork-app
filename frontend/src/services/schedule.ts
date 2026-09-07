@@ -38,24 +38,6 @@ export interface ScheduleData {
   hitos: ScheduleHito[]
 }
 
-export interface TrabajoHito {
-  codigo: string
-  nombre: string
-  rol_responsable: string | null
-  fecha_planeada: string | null
-  estado: string
-  semaforo: Semaforo
-  holgura_dias: number | null
-  atribucion_atraso: string | null
-}
-export interface TrabajoProyecto {
-  proyecto_id: number
-  proyecto_codigo: string
-  proyecto_nombre: string
-  fecha_objetivo: string | null
-  hitos: TrabajoHito[]
-}
-
 export interface RankingIng { nombre: string; hace_cnc: boolean; disponible_desde: string; n_pendientes: number; fin_proyectado: string; entra: boolean }
 export interface FactibilidadResult {
   fecha_pedida: string
@@ -101,10 +83,6 @@ export const scheduleService = {
   // proyecto_id escala las duraciones por ítem (mismo criterio que el generador).
   getFactibilidad: (fecha_pedida: string, proyecto_id?: number) =>
     api.post<ApiResponse<FactibilidadResult>>(`/schedule/factibilidad`, { fecha_pedida, proyecto_id }).then((r) => r.data),
-
-  // Escritorio por área: la frontera del equipo a través de todos los proyectos.
-  getMiTrabajo: (area: string) =>
-    api.get<ApiResponse<TrabajoProyecto[]>>(`/schedule/mi-trabajo`, { params: { area } }).then((r) => r.data),
 
   generar: (proyectoId: number, fecha_objetivo: string) =>
     api
