@@ -4,6 +4,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Loader2, CheckCircle2, ClipboardList, ChevronDown, ChevronUp, ExternalLink, MessageSquarePlus, FileSignature, FileUp } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { ingenieriaService, type EscritorioTarea } from '@/services/ingenieria'
+import { materialesService } from '@/services/materiales'
 import { scheduleService } from '@/services/schedule'
 
 // Etiqueta contextual del "completar" según el tipo de paso (mismo criterio que el
@@ -35,10 +36,13 @@ const LINK_MODULO: Record<string, { to: string; label: string }> = {
 // Pasos que producen un ARCHIVO al completarse (submittal de planos o archivos CNC). El
 // archivo se adjunta acá mismo, al completar el paso — reemplaza al viejo "Mi trabajo".
 const ARTIFACT: Record<string, { kind: 'submittal' | 'archivo'; codigo?: string; label: string; accept?: string }> = {
-  shop_drawings: { kind: 'submittal', label: 'Adjuntar planos (PDF)', accept: 'application/pdf' },
-  sd_update:     { kind: 'submittal', label: 'Adjuntar set final (PDF)', accept: 'application/pdf' },
-  cnc:           { kind: 'archivo', codigo: 'E-11', label: 'Adjuntar archivos CNC' },
+  shop_drawings:      { kind: 'submittal', label: 'Adjuntar planos (PDF)', accept: 'application/pdf' },
+  sd_update:          { kind: 'submittal', label: 'Adjuntar set final (PDF)', accept: 'application/pdf' },
+  cnc:                { kind: 'archivo', codigo: 'E-11', label: 'Adjuntar archivos CNC' },
+  field_measurements: { kind: 'archivo', codigo: 'E-03', label: 'Adjuntar medición (plano/fotos)', accept: '.pdf,image/*' },
 }
+// Pasos cuyo entregable (archivo/plano/medición) es OBLIGATORIO para poder completar.
+const ENTREGABLE_OBLIGATORIO = new Set(['submittal', 'archivo', 'medicion'])
 // Rol de la ruta → de quién depende (para "en espera: … · <área>").
 const ROL_AREA: Record<string, string> = {
   estimacion: 'Estimados', ingenieria: 'Ingeniería', field: 'Field', compras: 'Compras',
@@ -127,6 +131,21 @@ export default function Escritorio({ rol, asignado, titulo, subtitulo, hideWhenE
     },
     onError: (e: any) => toast.error(e?.response?.data?.message ?? 'No se pudo registrar la decisión'),
   })
+  // Subir el MTO/BOM (entregable='mto', paso material_proc): el ingeniero importa la lista de
+  // materiales que Compras va a comprar. Al importar, el reconciliador pasa el paso a en_curso
+  // (Compras) y aparece en Control MTO. Reusa el importador de Excel del módulo de materiales.
+  const subirMto = useMutation({
+    mutationFn: async ({ t }: { t: EscritorioTarea }) => {
+      const file = archivos[t.id]
+      if (!file || t.proyecto_id == null) throw new Error('Elegí el archivo del MTO (Excel)')
+      return materialesService.importar(t.proyecto_id, 'agregar', file)
+    },
+    onSuccess: (r: any) => {
+      toast.success(`MTO cargado: ${r?.data?.importados ?? 0} materiales → pasa a Compras`)
+      setArchivos({}); qc.invalidateQueries({ queryKey: ['escritorio'] }); qc.invalidateQueries({ queryKey: ['escritorio-resumen'] })
+    },
+    onError: (e: any) => toast.error(e?.response?.data?.message ?? e?.message ?? 'No se pudo cargar el MTO'),
+  })
   const cerrarFirma = () => { setFirmaOpen(null); setFirmaFirma(''); setFirmaEnvio(''); setFirmaPdf(null) }
   // Registrar la firma del contrato = día cero. Reusa el intake (graba C-03, re-ancla, y el
   // reconciliador cierra PO Execution). No exige regenerar el plan (ya existe si está activo).
@@ -174,7 +193,8 @@ export default function Escritorio({ rol, asignado, titulo, subtitulo, hideWhenE
                   const clave = t.tipo_clave ?? ''
                   const esFirma = clave === 'po_execution' && t.proyecto_id != null
                   const esDecision = t.entregable === 'decision'   // registrar la respuesta del cliente
-                  const esCompletable = COMPLETABLE.has(clave) && !esDecision
+                  const esMto = t.entregable === 'mto' && t.estado !== 'en_curso'   // el ingeniero sube el MTO
+                  const esCompletable = COMPLETABLE.has(clave) && !esDecision && !esMto
                   const link = LINK_MODULO[clave]
                   // material_proc pendiente = el ingeniero produce/importa el MTO ("Importar MTO");
                   // en_curso = Compras cotiza/compra ("Ir a Control MTOs"). Mismo destino (/mtos).
@@ -220,6 +240,19 @@ export default function Escritorio({ rol, asignado, titulo, subtitulo, hideWhenE
                               Rechazado
                             </button>
                           </div>
+                        ) : esMto ? (
+                          <div className="flex items-center gap-1.5 shrink-0 flex-wrap justify-end">
+                            <label className="inline-flex items-center gap-1 rounded-lg border border-stone-300 hover:bg-stone-50 text-stone-600 text-xs font-medium px-2.5 py-1.5 cursor-pointer max-w-[190px]">
+                              <FileUp size={13} className="shrink-0" />
+                              <span className="truncate">{archivos[t.id]?.name ?? 'MTO / BOM (Excel)'}</span>
+                              <input type="file" accept=".xlsx,.xls,.csv" className="hidden"
+                                onChange={(e) => setArchivos((a) => ({ ...a, [t.id]: e.target.files?.[0] ?? null }))} />
+                            </label>
+                            <button onClick={() => subirMto.mutate({ t })} disabled={subirMto.isPending || !archivos[t.id]}
+                              className="inline-flex items-center gap-1 rounded-lg bg-forest-600 hover:bg-forest-700 disabled:opacity-50 text-white text-xs font-semibold px-2.5 py-1.5">
+                              {subirMto.isPending ? <Loader2 className="animate-spin" size={13} /> : <FileUp size={13} />} Subir MTO
+                            </button>
+                          </div>
                         ) : esCompletable ? (
                           <div className="flex items-center gap-1.5 shrink-0 flex-wrap justify-end">
                             {art && (
@@ -232,7 +265,9 @@ export default function Escritorio({ rol, asignado, titulo, subtitulo, hideWhenE
                             )}
                             <input type="date" value={fecha} onChange={(e) => setFechas((f) => ({ ...f, [t.id]: e.target.value }))}
                               className="text-xs border border-stone-300 rounded-lg px-2 py-1.5" title={CUMPLIDA_LABEL[clave] ?? 'Fecha de cumplimiento'} />
-                            <button onClick={() => completar.mutate({ t, fecha })} disabled={completar.isPending}
+                            <button onClick={() => completar.mutate({ t, fecha })}
+                              disabled={completar.isPending || (ENTREGABLE_OBLIGATORIO.has(t.entregable ?? '') && !archivos[t.id])}
+                              title={ENTREGABLE_OBLIGATORIO.has(t.entregable ?? '') && !archivos[t.id] ? 'Adjuntá el documento del paso para completar' : undefined}
                               className="inline-flex items-center gap-1 rounded-lg bg-forest-600 hover:bg-forest-700 disabled:opacity-50 text-white text-xs font-semibold px-2.5 py-1.5">
                               {completar.isPending ? <Loader2 className="animate-spin" size={13} /> : <CheckCircle2 size={13} />} {CUMPLIDA_LABEL[clave] ?? 'Completar'}
                             </button>
