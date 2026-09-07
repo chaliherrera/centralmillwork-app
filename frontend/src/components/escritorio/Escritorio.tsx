@@ -39,7 +39,8 @@ const ARTIFACT: Record<string, { kind: 'submittal' | 'archivo'; codigo?: string;
   shop_drawings:      { kind: 'submittal', label: 'Adjuntar planos (PDF)', accept: 'application/pdf' },
   sd_update:          { kind: 'submittal', label: 'Adjuntar set final (PDF)', accept: 'application/pdf' },
   cnc:                { kind: 'archivo', codigo: 'E-11', label: 'Adjuntar archivos CNC' },
-  field_measurements: { kind: 'archivo', codigo: 'E-03', label: 'Adjuntar medición (plano/fotos)', accept: '.pdf,image/*' },
+  // field_measurements NO va acá: es un handoff en 2 etapas (etapa 1 sube el plano vía
+  // subirPlanoCampo → Campo; Campo solo marca "Medida"). Ver esPlanoCampo / verPlano.
 }
 // Pasos cuyo entregable (archivo/plano/medición) es OBLIGATORIO para poder completar.
 const ENTREGABLE_OBLIGATORIO = new Set(['submittal', 'archivo', 'medicion'])
@@ -146,6 +147,29 @@ export default function Escritorio({ rol, asignado, titulo, subtitulo, hideWhenE
     },
     onError: (e: any) => toast.error(e?.response?.data?.message ?? e?.message ?? 'No se pudo cargar el MTO'),
   })
+  // Field Measurements etapa 1: el ingeniero adjunta el plano de campo → handoff a Campo (NO
+  // completa el paso; Campo lo cierra marcando "Medida"). El plano viaja como adjunto de E-03.
+  const subirPlano = useMutation({
+    mutationFn: async ({ t }: { t: EscritorioTarea }) => {
+      const file = archivos[t.id]
+      if (!file) throw new Error('Elegí el plano de campo')
+      return scheduleService.subirPlanoCampo(t.id, file)
+    },
+    onSuccess: () => {
+      toast.success('Plano enviado a Campo')
+      setArchivos({}); qc.invalidateQueries({ queryKey: ['escritorio'] }); qc.invalidateQueries({ queryKey: ['escritorio-resumen'] })
+    },
+    onError: (e: any) => toast.error(e?.response?.data?.message ?? e?.message ?? 'No se pudo enviar el plano'),
+  })
+  // Campo abre el plano de field measurements (adjunto de E-03) para tomar la medida.
+  async function verPlano(t: EscritorioTarea) {
+    if (t.proyecto_id == null) return
+    try {
+      const r = await scheduleService.getArchivosHito(t.proyecto_id, 'E-03')
+      const url = r.data?.find((a) => a.url)?.url
+      if (url) window.open(url, '_blank', 'noopener'); else toast.error('No hay plano adjunto todavía')
+    } catch { toast.error('No se pudo abrir el plano') }
+  }
   const cerrarFirma = () => { setFirmaOpen(null); setFirmaFirma(''); setFirmaEnvio(''); setFirmaPdf(null) }
   // Registrar la firma del contrato = día cero. Reusa el intake (graba C-03, re-ancla, y el
   // reconciliador cierra PO Execution). No exige regenerar el plan (ya existe si está activo).
@@ -194,12 +218,16 @@ export default function Escritorio({ rol, asignado, titulo, subtitulo, hideWhenE
                   const esFirma = clave === 'po_execution' && t.proyecto_id != null
                   const esDecision = t.entregable === 'decision'   // registrar la respuesta del cliente
                   const esMto = t.entregable === 'mto' && t.estado !== 'en_curso'   // el ingeniero sube el MTO
-                  const esCompletable = COMPLETABLE.has(clave) && !esDecision && !esMto
+                  // Field Measurements etapa 1 (pendiente): el ingeniero sube el PLANO de campo → handoff a Campo.
+                  // En_curso lo ve Campo, que solo marca "Medida" (esCompletable, sin adjuntar nada).
+                  const esPlanoCampo = clave === 'field_measurements' && t.estado !== 'en_curso'
+                  const esCompletable = COMPLETABLE.has(clave) && !esDecision && !esMto && !esPlanoCampo
                   const link = LINK_MODULO[clave]
                   // material_proc pendiente = el ingeniero produce/importa el MTO ("Importar MTO");
                   // en_curso = Compras cotiza/compra ("Ir a Control MTOs"). Mismo destino (/mtos).
                   const linkLabel = clave === 'material_proc' && t.estado !== 'en_curso' ? 'Importar MTO' : link?.label
-                  const art = ARTIFACT[clave]
+                  // field_measurements no adjunta en esCompletable (etapa 1 = plano vía esPlanoCampo; Campo solo marca Medida).
+                  const art = clave === 'field_measurements' ? undefined : ARTIFACT[clave]
                   const fecha = fechas[t.id] ?? hoy()
                   return (
                     <div key={t.id} className="rounded-lg border border-stone-200 px-3 py-2.5">
@@ -253,6 +281,20 @@ export default function Escritorio({ rol, asignado, titulo, subtitulo, hideWhenE
                               {subirMto.isPending ? <Loader2 className="animate-spin" size={13} /> : <FileUp size={13} />} Subir MTO
                             </button>
                           </div>
+                        ) : esPlanoCampo ? (
+                          <div className="flex items-center gap-1.5 shrink-0 flex-wrap justify-end">
+                            <label className="inline-flex items-center gap-1 rounded-lg border border-stone-300 hover:bg-stone-50 text-stone-600 text-xs font-medium px-2.5 py-1.5 cursor-pointer max-w-[190px]">
+                              <FileUp size={13} className="shrink-0" />
+                              <span className="truncate">{archivos[t.id]?.name ?? 'Plano de campo'}</span>
+                              <input type="file" accept=".pdf,image/*" className="hidden"
+                                onChange={(e) => setArchivos((a) => ({ ...a, [t.id]: e.target.files?.[0] ?? null }))} />
+                            </label>
+                            <button onClick={() => subirPlano.mutate({ t })} disabled={subirPlano.isPending || !archivos[t.id]}
+                              title="Adjuntá el plano y se envía a Campo para tomar la medida"
+                              className="inline-flex items-center gap-1 rounded-lg bg-forest-600 hover:bg-forest-700 disabled:opacity-50 text-white text-xs font-semibold px-2.5 py-1.5">
+                              {subirPlano.isPending ? <Loader2 className="animate-spin" size={13} /> : <FileUp size={13} />} Enviar a Campo
+                            </button>
+                          </div>
                         ) : esCompletable ? (
                           <div className="flex items-center gap-1.5 shrink-0 flex-wrap justify-end">
                             {art && (
@@ -262,6 +304,12 @@ export default function Escritorio({ rol, asignado, titulo, subtitulo, hideWhenE
                                 <input type="file" accept={art.accept} className="hidden"
                                   onChange={(e) => setArchivos((a) => ({ ...a, [t.id]: e.target.files?.[0] ?? null }))} />
                               </label>
+                            )}
+                            {clave === 'field_measurements' && (
+                              <button type="button" onClick={() => verPlano(t)}
+                                className="inline-flex items-center gap-1 rounded-lg border border-stone-300 hover:bg-stone-50 text-stone-700 text-xs font-medium px-2.5 py-1.5">
+                                <ExternalLink size={13} /> Ver plano
+                              </button>
                             )}
                             <input type="date" value={fecha} onChange={(e) => setFechas((f) => ({ ...f, [t.id]: e.target.value }))}
                               className="text-xs border border-stone-300 rounded-lg px-2 py-1.5" title={CUMPLIDA_LABEL[clave] ?? 'Fecha de cumplimiento'} />

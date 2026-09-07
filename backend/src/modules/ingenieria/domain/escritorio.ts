@@ -73,8 +73,17 @@ export async function getEscritorio(
   // reconciliador) pasa a COMPRAS (cotizar/comprar). Aunque su rol de catálogo es 'ingenieria',
   // en_curso lo ve Compras; pendiente lo ve Ingeniería. El resto de los pasos van por su rol.
   const verCompras = opts.roles.includes('compras')
-  const rolCond = `( (tt.rol = ANY($1) AND NOT (tt.clave = 'material_proc' AND t.estado = 'en_curso'))${
-    verCompras ? " OR (tt.clave = 'material_proc' AND t.estado = 'en_curso')" : ''} )`
+  // Handoff de Field Measurements (Etapa 2, #10): el plano nace en Ingeniería (pendiente = el
+  // ingeniero sube el plano de campo) y al subirlo (→ en_curso) pasa a CAMPO (marca "Medida").
+  // Field Measurements es rol 'ingenieria' (pendiente lo ve Ingeniería); en_curso lo ve el
+  // escritorio de CAMPO PURO (rol 'field' SIN 'ingenieria'). El de Ingeniería incluye 'field'
+  // pero NO re-muestra en_curso → así desaparece de Favio tras el handoff (igual que el MTO).
+  const esCampo = opts.roles.includes('field') && !opts.roles.includes('ingenieria')
+  const rolCond = `( (tt.rol = ANY($1)
+                       AND NOT (tt.clave = 'material_proc' AND t.estado = 'en_curso')
+                       AND NOT (tt.clave = 'field_measurements' AND t.estado = 'en_curso'))${
+    verCompras ? " OR (tt.clave = 'material_proc' AND t.estado = 'en_curso')" : ''}${
+    esCampo ? " OR (tt.clave = 'field_measurements' AND t.estado = 'en_curso')" : ''} )`
 
   // Base: tareas pendientes/en_curso de la ruta REAL (no sugerencias), del rol pedido.
   // Solo proyectos ACTIVOS: un plan 'app' entra a los escritorios recién cuando el PM
@@ -133,10 +142,16 @@ export async function getEscritorioResumen(
   let asigCond = ''
   if (opts.asignado) { params.push(opts.asignado); asigCond = `AND t.asignado_nombre = $${params.length}` }
   const verCompras = opts.roles.includes('compras')
-  const rolCond = `( (tt.rol = ANY($1) AND NOT (tt.clave = 'material_proc' AND t.estado = 'en_curso'))${
-    verCompras ? " OR (tt.clave = 'material_proc' AND t.estado = 'en_curso')" : ''} )`
+  const esCampo = opts.roles.includes('field') && !opts.roles.includes('ingenieria')
+  const rolCond = `( (tt.rol = ANY($1)
+                       AND NOT (tt.clave = 'material_proc' AND t.estado = 'en_curso')
+                       AND NOT (tt.clave = 'field_measurements' AND t.estado = 'en_curso'))${
+    verCompras ? " OR (tt.clave = 'material_proc' AND t.estado = 'en_curso')" : ''}${
+    esCampo ? " OR (tt.clave = 'field_measurements' AND t.estado = 'en_curso')" : ''} )`
   const { rows } = await runner.query<{ erol: string; n: number }>(
-    `SELECT (CASE WHEN tt.clave = 'material_proc' AND t.estado = 'en_curso' THEN 'compras' ELSE tt.rol END) AS erol,
+    `SELECT (CASE WHEN tt.clave = 'material_proc' AND t.estado = 'en_curso' THEN 'compras'
+                  WHEN tt.clave = 'field_measurements' AND t.estado = 'en_curso' THEN 'field'
+                  ELSE tt.rol END) AS erol,
             COUNT(*)::int AS n
        FROM ing_tareas t JOIN ing_tarea_tipos tt ON tt.id = t.tipo_id
        LEFT JOIN proyectos p ON p.id = t.proyecto_id

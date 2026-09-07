@@ -1,7 +1,7 @@
 import { Router } from 'express'
 import { requireRole } from '../../middleware/auth'
 import { getPlan, generarPlanHandler, recalcularHandler, crearPortalTokenHandler, listPortalTokensHandler, revocarPortalTokenHandler, registrarHitoHandler, cambiarFechaObjetivoHandler, factibilidadHandler, proyectosOverviewHandler } from './controllers/schedulePlan.controller'
-import { uploadSubmittal, uploadSubmittalHandler, listSubmittalsHandler, uploadArchivo, uploadArchivoHitoHandler, listArchivosHitoHandler } from './controllers/submittals.controller'
+import { uploadSubmittal, uploadSubmittalHandler, listSubmittalsHandler, uploadArchivo, uploadArchivoHitoHandler, listArchivosHitoHandler, uploadPlanoCampoHandler } from './controllers/submittals.controller'
 import { uploadFoto, installQueueHandler, listItemsHandler, marcarItemHandler, desmarcarItemHandler, listPunchHandler, crearPunchHandler, resolverPunchHandler, signoffHandler } from './controllers/field.controller'
 import { uploadContrato, intakeHandler } from './controllers/intake.controller'
 
@@ -40,6 +40,8 @@ router.get ('/proyecto/:id/submittals', SCHEDULE_READ, listSubmittalsHandler)
 router.post('/proyecto/:id/submittals', SCHEDULE_ENGINEERING, uploadSubmittal.single('planos'), uploadSubmittalHandler)
 router.get ('/proyecto/:id/hito/:codigo/archivos', SCHEDULE_READ, listArchivosHitoHandler)
 router.post('/proyecto/:id/hito/:codigo/archivo', SCHEDULE_REGISTRAR, uploadArchivo.single('archivo'), uploadArchivoHitoHandler)
+// Handoff Field Measurements (etapa 1): el ingeniero sube el plano de campo → en_curso (Campo).
+router.post('/tarea/:tareaId/plano-campo', SCHEDULE_ENGINEERING, uploadArchivo.single('plano'), uploadPlanoCampoHandler)
 
 // Field / Install — punch list + sign-off en obra (desde el móvil).
 // El check-in (I-04) y el avance (I-05) reusan el endpoint de archivo de arriba.

@@ -154,4 +154,22 @@ export const scheduleService = {
       })
       .then((r) => r.data)
   },
+
+  // Field Measurements etapa 1: subir el plano de campo → handoff a Campo (NO cierra E-03).
+  subirPlanoCampo: (tareaId: number, file: File) => {
+    const fd = new FormData()
+    fd.append('plano', file)
+    return api
+      .post<ApiResponse<{ id: number }>>(`/schedule/tarea/${tareaId}/plano-campo`, fd, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      })
+      .then((r) => r.data)
+  },
+
+  // Archivos de un hito (para que Campo abra el plano de field measurements: codigo 'E-03').
+  getArchivosHito: (proyectoId: number, codigo: string) =>
+    api
+      .get<ApiResponse<{ id: number; original_name: string | null; url: string | null; created_at: string }[]>>(
+        `/schedule/proyecto/${proyectoId}/hito/${codigo}/archivos`)
+      .then((r) => r.data),
 }
