@@ -4,6 +4,7 @@ import toast from 'react-hot-toast'
 import { ingenieriaService, type IngProyecto, type IngTarea, type TareaInput, type IngPlan, type IngTareaPlan, type IngArista, type IngCarga, type IngTareaCelda, type InstalacionDetalle } from '@/services/ingenieria'
 import MapaEtapas from '@/components/modules/ingenieria/MapaEtapas'
 import CronogramaCliente, { ganttDesdePlan } from '@/components/schedule/CronogramaCliente'
+import CambiarIngeniero from '@/components/modules/ingenieria/CambiarIngeniero'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Plan de Ingeniería — réplica de la estructura del Master.Sched (Smartsheet):
@@ -293,6 +294,12 @@ function VistaProyecto({ proyectos, all, plan, planLoading, sel, setSel, onEdit,
   const engColor = useMemo(() => { const m = new Map<string, string>(); [...new Set(all.map((t) => t.asignado_nombre).filter(Boolean))].forEach((e, i) => m.set(e as string, PAL[i % PAL.length])); return m }, [all])
   const tareas = plan?.tareas ?? []
   const ingenieros = useMemo(() => [...new Set(tareas.map((t) => t.asignado_nombre).filter(Boolean))], [tareas])
+  // El ingeniero propuesto = el más asignado en el plan (para "Cambiar ingeniero").
+  const propuesto = useMemo(() => {
+    const freq = new Map<string, number>()
+    for (const t of tareas) if (t.asignado_nombre) freq.set(t.asignado_nombre, (freq.get(t.asignado_nombre) ?? 0) + 1)
+    return [...freq.entries()].sort((a, b) => b[1] - a[1])[0]?.[0]
+  }, [tareas])
 
   // ── Drag & drop VISUAL: reordena la FILA sin tocar fechas. El orden lo manda
   //    orden_visual (persistido); si falta, se cae a la fecha temprana + id. ──
@@ -388,6 +395,8 @@ function VistaProyecto({ proyectos, all, plan, planLoading, sel, setSel, onEdit,
           {proyectos.map((pr) => <option key={pr.proyecto_ext} value={pr.proyecto_ext}>{pr.proyecto_ext} · {pr.n_tareas} tareas</option>)}
         </select>
         <span className="text-xs text-stone-400 inline-flex items-center gap-1"><Users size={13} /> {ingenieros.length ? ingenieros.join(', ') : 'sin responsables'}</span>
+        {/* Cambiar ingeniero en cualquier etapa (reasigna todo + recalcula vs la entrega fija). */}
+        <CambiarIngeniero proyectoExt={sel} propuesto={propuesto} onDone={onRefresh} label="Cambiar ingeniero" />
         <button onClick={() => setCronoOpen(true)} className="ml-auto inline-flex items-center gap-1.5 rounded-lg border border-forest-200 text-forest-700 hover:bg-forest-50 text-sm font-semibold px-3 py-1.5"><CalendarClock size={15} /> Cronograma cliente</button>
         <button onClick={() => onEdit('new')} className="inline-flex items-center gap-1.5 rounded-lg bg-forest-600 hover:bg-forest-700 text-white text-sm font-semibold px-3 py-1.5"><Plus size={15} /> Nueva tarea</button>
       </div>
