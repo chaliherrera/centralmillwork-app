@@ -60,6 +60,10 @@ export default function CronogramaCliente({ nombre, fechaObjetivo, gantt }: { no
   const pct = (d: string | null) => (d ? ((day(d) - dMin) / span) * 100 : 0)
   const meses: { label: string; left: number }[] = []
   if (gantt.length) {
+    // Etiqueta del mes de ARRANQUE al borde izquierdo (aunque el proyecto empiece a
+    // mitad de mes: si no, ese primer mes —ej. septiembre— quedaba sin nombre).
+    const d0 = new Date(dMin * 86400000)
+    meses.push({ label: `${MESG[d0.getUTCMonth()]} ${String(d0.getUTCFullYear()).slice(2)}`, left: 0 })
     for (let dd = dMin; dd <= dMin + span; dd++) {
       const date = new Date(dd * 86400000); if (date.getUTCDate() > 3) continue
       const label = `${MESG[date.getUTCMonth()]} ${String(date.getUTCFullYear()).slice(2)}`
@@ -103,8 +107,8 @@ export default function CronogramaCliente({ nombre, fechaObjetivo, gantt }: { no
             </div>
           ))}
           <div className="flex items-center gap-3 mt-3 pt-2 border-t border-stone-100 text-[10px] text-stone-500">
-            <span className="inline-flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm bg-rose-500 inline-block" /> tus pasos</span>
-            <span className="inline-flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm bg-forest-400 inline-block" /> producción</span>
+            <span className="inline-flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm bg-rose-500 inline-block" /> Cliente</span>
+            <span className="inline-flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm bg-forest-400 inline-block" /> Central Millwork LLC</span>
             <span className="ml-auto flex items-center gap-3">
               {inicioProy && <span>Inicio: <b className="text-stone-700">{fmt(inicioProy)}</b></span>}
               {fechaObjetivo && <span>Entrega: <b className="text-stone-700">{fmt(fechaObjetivo)}</b></span>}
