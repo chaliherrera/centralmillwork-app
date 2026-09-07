@@ -144,7 +144,7 @@ export async function enviarAClienteDeal(runner: QueryRunner, proyectoId: number
 /** Estimados registra que el cliente aprobó el schedule. */
 export async function registrarAprobacionCliente(runner: QueryRunner, proyectoId: number): Promise<{ ok: boolean; error?: string }> {
   const { rowCount } = await runner.query(
-    `UPDATE proyectos SET deal_estado = 'aprobado' WHERE id = $1 AND deal_estado = 'esperando_cliente'`, [proyectoId])
+    `UPDATE proyectos SET deal_estado = 'aprobado', deal_aprobado_at = NOW() WHERE id = $1 AND deal_estado = 'esperando_cliente'`, [proyectoId])
   return rowCount ? { ok: true } : { ok: false, error: 'el schedule tiene que estar enviado al cliente primero' }
 }
 
@@ -159,6 +159,7 @@ export interface DealEnCurso {
   proyecto_id: number; codigo: string; nombre: string; cliente: string | null
   estado: string; deal_estado: string; fecha_objetivo: string | null; n_tareas: number
   portal_token: string | null
+  deal_aprobado_at: string | null   // cuándo aprobó el cliente (ISO), para la confirmación en Estimados
 }
 
 /** Deals post-aceptación del PM que siguen en curso (prospecto): esperando el handoff
@@ -167,6 +168,7 @@ export async function listDealsEnCurso(runner: QueryRunner): Promise<DealEnCurso
   const { rows } = await runner.query<DealEnCurso>(
     `SELECT p.id AS proyecto_id, p.codigo, p.nombre, p.cliente, p.estado, p.deal_estado,
             to_char(sp.fecha_objetivo,'YYYY-MM-DD') AS fecha_objetivo,
+            to_char(p.deal_aprobado_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS deal_aprobado_at,
             (SELECT count(*)::int FROM ing_tareas t WHERE t.proyecto_id = p.id AND t.origen = 'app') AS n_tareas,
             (SELECT spt.token FROM schedule_portal_tokens spt WHERE spt.proyecto_id = p.id AND spt.activo = true ORDER BY spt.created_at DESC LIMIT 1) AS portal_token
        FROM proyectos p

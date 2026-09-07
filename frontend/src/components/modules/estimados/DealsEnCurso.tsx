@@ -17,6 +17,14 @@ import CronogramaCliente, { ganttDesdePlan } from '@/components/schedule/Cronogr
 
 const MES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic']
 const fmt = (iso: string | null) => { if (!iso) return '—'; const d = new Date(iso + 'T00:00:00'); return `${d.getDate()} ${MES[d.getMonth()]}` }
+// Fecha + hora de la aprobación (instante UTC del backend → hora local del que mira).
+const fmtDateTime = (iso: string | null) => {
+  if (!iso) return null
+  const d = new Date(iso)
+  if (isNaN(d.getTime())) return null
+  const hh = String(d.getHours()).padStart(2, '0'), mm = String(d.getMinutes()).padStart(2, '0')
+  return `${d.getDate()} ${MES[d.getMonth()]} ${d.getFullYear()}, ${hh}:${mm}`
+}
 
 const CHIP: Record<string, { label: string; cls: string }> = {
   plan_propuesto:    { label: 'PM aceptó el plan',  cls: 'text-forest-700 bg-forest-100' },
@@ -45,8 +53,10 @@ export default function DealsEnCurso({ mode, emptyHint }: { mode: 'estimados' | 
     .catch(() => {}).finally(() => setLoading(false))
   useEffect(() => { cargar() }, [])
 
+  // Estimados también ve el deal 'aprobado' (como confirmación con fecha/hora) hasta que
+  // el PM activa; antes desaparecía apenas el cliente aprobaba y Estimados quedaba sin cierre.
   const visibles = deals.filter((d) =>
-    mode === 'estimados' ? (d.deal_estado === 'plan_propuesto' || d.deal_estado === 'esperando_cliente')
+    mode === 'estimados' ? (d.deal_estado === 'plan_propuesto' || d.deal_estado === 'esperando_cliente' || d.deal_estado === 'aprobado')
                          : d.deal_estado === 'aprobado')
 
   const accion = async (d: IngDealEnCurso, fn: () => Promise<unknown>, ok: string) => {
@@ -118,9 +128,20 @@ export default function DealsEnCurso({ mode, emptyHint }: { mode: 'estimados' | 
                 <span className="text-[11px] text-stone-400">
                   {d.deal_estado === 'plan_propuesto' && 'El PM aceptó — mandale el schedule al cliente para su OK.'}
                   {d.deal_estado === 'esperando_cliente' && 'Esperando el OK del cliente. Registralo cuando responda.'}
-                  {d.deal_estado === 'aprobado' && (esPM ? 'El cliente ya aprobó. Activá para poner el plan en marcha.' : 'Esperando que el PM active el proyecto.')}
+                  {d.deal_estado === 'aprobado' && esPM && 'El cliente ya aprobó. Activá para poner el plan en marcha.'}
                 </span>
               </div>
+              {/* Estimados: confirmación de que el cliente aprobó (con fecha y hora). Queda
+                  visible hasta que el PM activa, así Estimados tiene el cierre del handoff. */}
+              {mode === 'estimados' && d.deal_estado === 'aprobado' && (
+                <div className="mt-2 flex items-start gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-[12.5px] text-emerald-800">
+                  <UserCheck size={15} className="text-emerald-600 shrink-0 mt-0.5" />
+                  <span>
+                    <b>El cliente aprobó el schedule</b>{fmtDateTime(d.deal_aprobado_at) && <> el <b>{fmtDateTime(d.deal_aprobado_at)}</b></>}.
+                    <span className="text-emerald-700"> Esperando que el PM active el proyecto.</span>
+                  </span>
+                </div>
+              )}
               {/* Link del portal del cliente: se puede copiar y abrir directo. */}
               {portalLink && (
                 <div className="mt-2 flex items-center gap-2 flex-wrap rounded-lg border border-stone-200 bg-stone-50 px-3 py-2">
