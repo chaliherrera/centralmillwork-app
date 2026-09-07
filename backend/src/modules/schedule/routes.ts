@@ -1,6 +1,6 @@
 import { Router } from 'express'
 import { requireRole } from '../../middleware/auth'
-import { getPlan, generarPlanHandler, recalcularHandler, crearPortalTokenHandler, listPortalTokensHandler, revocarPortalTokenHandler, registrarHitoHandler, trabajoPorAreaHandler, cambiarFechaObjetivoHandler, factibilidadHandler, proyectosOverviewHandler } from './controllers/schedulePlan.controller'
+import { getPlan, generarPlanHandler, recalcularHandler, crearPortalTokenHandler, listPortalTokensHandler, revocarPortalTokenHandler, registrarHitoHandler, cambiarFechaObjetivoHandler, factibilidadHandler, proyectosOverviewHandler } from './controllers/schedulePlan.controller'
 import { uploadSubmittal, uploadSubmittalHandler, listSubmittalsHandler, uploadArchivo, uploadArchivoHitoHandler, listArchivosHitoHandler } from './controllers/submittals.controller'
 import { uploadFoto, installQueueHandler, listItemsHandler, marcarItemHandler, desmarcarItemHandler, listPunchHandler, crearPunchHandler, resolverPunchHandler, signoffHandler } from './controllers/field.controller'
 import { uploadContrato, intakeHandler } from './controllers/intake.controller'
@@ -18,7 +18,6 @@ const SCHEDULE_REGISTRAR = requireRole(
   'ADMIN', 'PROJECT_MANAGEMENT', 'ENGINEERING', 'PROCUREMENT', 'PRODUCTION', 'SHOP_MANAGER', 'CONTABILIDAD', 'LOGISTICA'
 )
 
-router.get ('/mi-trabajo',              SCHEDULE_READ,  trabajoPorAreaHandler)
 // Índice de la cartera: todos los proyectos con schedule y su estado (nav "Schedule").
 router.get ('/proyectos',               SCHEDULE_READ,  proyectosOverviewHandler)
 // Chequeo de factibilidad (read-only, dry-run): ¿se puede entregar para tal fecha?
