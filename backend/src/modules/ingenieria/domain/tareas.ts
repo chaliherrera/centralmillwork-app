@@ -480,7 +480,7 @@ function hoyISOd(): ISODate {
  *  salud del plan. No-op si el proyecto no tiene journey (schedule_plan). */
 async function proyectarJourney(
   runner: QueryRunner, proyectoExt: string,
-  tareas: Array<{ id: number; tipo_clave: string | null }>,
+  tareas: Array<{ id: number; tipo_clave: string | null; estado: string; fecha_fin_real: string | null }>,
   cpm: ReturnType<typeof calcularHolgura>, fechaEntrega: string, feriados: Set<ISODate>,
 ): Promise<void> {
   const { rows: pr } = await runner.query<{ proyecto_id: number | null }>(
@@ -516,11 +516,33 @@ async function proyectarJourney(
     })
   }
 
-  // Fechas reales: captura de módulos + preservar las manuales/portal ya guardadas.
+  // Estado REAL de cada paso del Gantt (Fase 1: el journey deriva el "cumplido" de acá,
+  // no de la inferencia). Se pliegan las variantes de piedra: el paso está 'hecha' solo
+  // si TODAS sus tareas están hechas; 'en_curso' si alguna arrancó.
+  const acc = new Map<string, { total: number; hechas: number; iniciadas: number; finReal: string | null }>()
+  for (const t of tareas) {
+    const clave = BASE_CLAVE[t.tipo_clave ?? ''] ?? t.tipo_clave
+    if (!clave) continue
+    const a = acc.get(clave) ?? { total: 0, hechas: 0, iniciadas: 0, finReal: null }
+    a.total++
+    if (t.estado === 'hecha') { a.hechas++; if (t.fecha_fin_real && (!a.finReal || t.fecha_fin_real > a.finReal)) a.finReal = t.fecha_fin_real }
+    if (t.estado === 'hecha' || t.estado === 'en_curso') a.iniciadas++
+    acc.set(clave, a)
+  }
+  const estadoPaso = new Map<string, { estado: 'hecha' | 'en_curso' | 'pendiente'; finReal: string | null }>()
+  for (const [clave, a] of acc) estadoPaso.set(clave, {
+    estado: a.hechas === a.total ? 'hecha' : a.iniciadas > 0 ? 'en_curso' : 'pendiente', finReal: a.finReal,
+  })
+
+  // Fechas reales, por precedencia: (1) hecho de módulo (compras/producción/QC);
+  // (2) registro manual/portal/pago/submittal ya guardado (no inferido); (3) FALLBACK:
+  // estado de la tarea del Gantt (para los pasos manual_futuro que se cierran en el
+  // escritorio/portal sin escribir el hito). C-04/X-03/I-07 no derivan (son de Finanzas/entrega).
   const capt = await capturarFechasReales(runner, pid)
   const { rows: ex } = await runner.query<{ codigo: string; fecha_real: string | null; evidencia_ref: unknown }>(
     `SELECT codigo, to_char(fecha_real,'YYYY-MM-DD') AS fecha_real, evidencia_ref FROM schedule_hitos WHERE plan_id = $1`, [planId])
   const exMap = new Map(ex.map((e) => [e.codigo, e]))
+  const DERIVA_NO = new Set(['C-04', 'X-03'])
   const reales = new Map<string, { fecha_real: ISODate | null; evidencia: unknown }>()
   for (const h of hitos) {
     let fr = capt.get(h.codigo)?.fecha_real ?? null
@@ -528,6 +550,14 @@ async function proyectarJourney(
     if (fr === null && h.fuente_dato === 'manual_futuro') {
       const e = exMap.get(h.codigo)
       if (e?.fecha_real && !esInferida(e.evidencia_ref)) { fr = e.fecha_real; evi = e.evidencia_ref ?? null }
+      if (fr === null && h.gantt_clave && !h.es_ancla && !DERIVA_NO.has(h.codigo)) {
+        const ep = estadoPaso.get(h.gantt_clave)
+        const listo = ep && (h.gantt_ancla === 'inicio' ? ep.estado !== 'pendiente' : ep.estado === 'hecha')
+        if (ep && listo) {
+          fr = ep.finReal ?? pasos.get(h.gantt_clave)?.es ?? null
+          evi = { source: 'gantt', nota: `paso del Gantt ${h.gantt_clave} = ${ep.estado}` }
+        }
+      }
     }
     reales.set(h.codigo, { fecha_real: fr, evidencia: evi })
   }

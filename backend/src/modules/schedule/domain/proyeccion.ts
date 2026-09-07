@@ -13,11 +13,10 @@ import { businessDaysBetween, addBusinessDays, type ISODate } from './calendario
 
 const HOLGURA_VERDE = 3 // días hábiles
 
-// No se infieren por "cierre hacia atrás": aprobaciones del cliente y pagos exigen
-// prueba propia (mismo criterio que recompute.ts). C-04 down payment, X-03 pago.
-const NO_INFERIR = new Set<string>(['E-05', 'E-07', 'I-07', 'C-04', 'X-03'])
-
-/** La inferencia es un cálculo, no un hecho: no se toma como base al releer. */
+/** La inferencia hacia atrás YA NO EXISTE (Fase 1, 2026-09-07): un hito está cumplido
+ *  solo si tiene un HECHO real (estado de la tarea del Gantt, hecho de módulo, o registro
+ *  manual/portal/pago). Se conserva este helper para limpiar de la base las viejas marcas
+ *  'inferido' al releer (nunca se toman como base). */
 export function esInferida(evidencia: unknown): boolean {
   return !!evidencia && typeof evidencia === 'object' && (evidencia as { source?: string }).source === 'inferido'
 }
@@ -111,7 +110,6 @@ export function proyectarHitos(inp: ProyeccionInput): ProyeccionResult {
   const { hitos, deps, pasos, reales, hoy, feriados, fechaEntrega, finProyectado, holguraProyecto } = inp
 
   const tipoPorCodigo = new Map(hitos.map((h) => [h.codigo, h.tipo]))
-  const fuentePorCodigo = new Map(hitos.map((h) => [h.codigo, h.fuente_dato]))
   const rolPorCodigo = new Map(hitos.map((h) => [h.codigo, h.rol_responsable]))
 
   // pred map + quién tiene dependientes (para "revisión suelta")
@@ -122,29 +120,13 @@ export function proyectarHitos(inp: ProyeccionInput): ProyeccionResult {
   const esRevisionSuelta = (codigo: string) =>
     tipoPorCodigo.get(codigo) === 'cont' && !tieneDependientes.has(codigo)
 
-  // Cumplidos = con fecha real (capturada o preservada no-inferida).
+  // Cumplidos = con fecha real (hecho de la tarea del Gantt, hecho de módulo, o registro).
+  // SIN inferencia hacia atrás: un paso posterior cumplido NO rellena los anteriores.
   const cumplidos = new Set<string>()
   for (const h of hitos) {
     const fr = reales.get(h.codigo)?.fecha_real ?? null
     if (fr) cumplidos.add(h.codigo)
   }
-
-  // Cierre hacia atrás: desde cada cumplido, sus predecesores 'manual_futuro' (menos
-  // NO_INFERIR) se dan por cumplidos por inferencia (rellena huecos administrativos).
-  const inferidos = new Set<string>()
-  {
-    const stack = [...cumplidos]
-    const visto = new Set<string>(cumplidos)
-    while (stack.length) {
-      const codigo = stack.pop()!
-      for (const p of pred.get(codigo) ?? []) {
-        if (visto.has(p)) continue
-        visto.add(p); stack.push(p)
-        if (!cumplidos.has(p) && !NO_INFERIR.has(p) && fuentePorCodigo.get(p) === 'manual_futuro') inferidos.add(p)
-      }
-    }
-  }
-  for (const c of inferidos) cumplidos.add(c)
 
   const rank: Record<string, number> = { gris: 0, verde: 1, amarillo: 2, rojo: 3 }
   let peor = 'gris'
@@ -152,14 +134,8 @@ export function proyectarHitos(inp: ProyeccionInput): ProyeccionResult {
 
   for (const h of hitos) {
     const { planeada, limite, sinPaso } = fechasDeHito(h, pasos, feriados, fechaEntrega)
-    let fechaReal = reales.get(h.codigo)?.fecha_real ?? null
-    let evidencia: unknown = reales.get(h.codigo)?.evidencia ?? null
-
-    // Inferido (sin hecho real pero un paso posterior ya está cumplido).
-    if (fechaReal === null && inferidos.has(h.codigo)) {
-      fechaReal = planeada ?? hoy
-      evidencia = { source: 'inferido', nota: 'implícito: un paso posterior ya está cumplido' }
-    }
+    const fechaReal = reales.get(h.codigo)?.fecha_real ?? null
+    const evidencia: unknown = reales.get(h.codigo)?.evidencia ?? null
 
     let estado: string, semaforo: string
     let holgura: number | null = null

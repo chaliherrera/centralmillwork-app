@@ -136,6 +136,23 @@ describe('proyeccion — journey desde el Gantt', () => {
     expect(by(r, 'M-07').estado).toBe('cumplido')
   })
 
+  it('SIN inferencia hacia atrás: un paso posterior cumplido NO rellena los anteriores', () => {
+    const r = run({
+      hitos: [
+        hito('A', { gantt_clave: 'pa', gantt_ancla: 'fin' }),   // anterior, sin cumplir
+        hito('B', { gantt_clave: 'pb', gantt_ancla: 'fin' }),   // posterior, cumplido
+      ],
+      deps: [{ hito: 'B', dependeDe: 'A' }],                    // B espera a A
+      pasos: new Map([
+        ['pa', paso('2026-09-10', '2026-09-20', '2026-09-21', '2026-09-30')],
+        ['pb', paso('2026-10-01', '2026-10-10', '2026-10-11', '2026-10-20')],
+      ]),
+      reales: new Map([['B', { fecha_real: '2026-10-08', evidencia: { source: 'gantt' } }]]),
+    })
+    expect(by(r, 'B').estado).toBe('cumplido')
+    expect(by(r, 'A').estado).not.toBe('cumplido')   // antes la inferencia lo marcaba; ahora no
+  })
+
   it('PUNTO FIJO: proyectar dos veces con la misma entrada da el mismo resultado', () => {
     const input: Partial<ProyeccionInput> = {
       hitos: [
