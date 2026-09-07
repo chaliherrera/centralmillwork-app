@@ -441,9 +441,12 @@ export async function escritorioHandler(req: Request, res: Response, next: NextF
     // (el selector del PM/admin para mirar el escritorio de un ingeniero puntual).
     let asignado: string | null = typeof req.query.asignado === 'string' && req.query.asignado ? req.query.asignado : null
     if (!asignado && (rolApp === 'ENGINEERING' || rolApp === 'FIELD') && user?.id) {
+      // Vínculo por usuario_id O por email (= login del ingeniero). El email es la llave
+      // natural: al crear la cuenta con favio@… y ponerlo en la ficha, el círculo se cierra.
       const { rows } = await pool.query<{ nombre: string }>(
-        `SELECT nombre FROM ing_ingenieros WHERE usuario_id = $1 AND activo LIMIT 1`, [user.id])
-      asignado = rows[0]?.nombre ?? (user.nombre ?? null)
+        `SELECT nombre FROM ing_ingenieros WHERE (usuario_id = $1 OR lower(email) = lower($2)) AND activo LIMIT 1`,
+        [user.id, user.email])
+      asignado = rows[0]?.nombre ?? null
     }
     res.json({ data: await getEscritorio(pool, { roles, asignado }) })
   } catch (e) { next(e) }
@@ -460,8 +463,9 @@ export async function escritorioResumenHandler(req: Request, res: Response, next
     let asignado: string | null = null
     if ((rolApp === 'ENGINEERING' || rolApp === 'FIELD') && user?.id) {
       const { rows } = await pool.query<{ nombre: string }>(
-        `SELECT nombre FROM ing_ingenieros WHERE usuario_id = $1 AND activo LIMIT 1`, [user.id])
-      asignado = rows[0]?.nombre ?? (user.nombre ?? null)
+        `SELECT nombre FROM ing_ingenieros WHERE (usuario_id = $1 OR lower(email) = lower($2)) AND activo LIMIT 1`,
+        [user.id, user.email])
+      asignado = rows[0]?.nombre ?? null
     }
     res.json({ data: await getEscritorioResumen(pool, { roles, asignado }) })
   } catch (e) { next(e) }
