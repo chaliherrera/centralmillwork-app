@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Loader2, CheckCircle2, ClipboardList, ChevronDown, ChevronUp, ExternalLink, MessageSquarePlus, FileSignature, FileUp } from 'lucide-react'
+import { Loader2, CheckCircle2, ClipboardList, ChevronDown, ChevronUp, ExternalLink, MessageSquarePlus, FileSignature, FileUp, FileText } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { ingenieriaService, type EscritorioTarea } from '@/services/ingenieria'
 import { materialesService } from '@/services/materiales'
@@ -170,6 +170,17 @@ export default function Escritorio({ rol, asignado, titulo, subtitulo, hideWhenE
       if (url) window.open(url, '_blank', 'noopener'); else toast.error('No hay plano adjunto todavía')
     } catch { toast.error('No se pudo abrir el plano') }
   }
+  // Producción abre el SET FINAL de producción (último submittal) para estudiar la ruta de
+  // cada ítem al crear la OP. Solo el set final (no los shop drawings). Adjuntarlo a la OP
+  // para el kiosko queda como mejora futura (hoy el shop manager lo distribuye a mano).
+  async function verPlanos(t: EscritorioTarea) {
+    if (t.proyecto_id == null) return
+    try {
+      const r = await scheduleService.getSubmittals(t.proyecto_id)
+      const url = r.data?.[0]?.url   // ordenado version DESC → [0] = set final
+      if (url) window.open(url, '_blank', 'noopener'); else toast.error('No hay planos cargados todavía')
+    } catch { toast.error('No se pudieron abrir los planos') }
+  }
   const cerrarFirma = () => { setFirmaOpen(null); setFirmaFirma(''); setFirmaEnvio(''); setFirmaPdf(null) }
   // Registrar la firma del contrato = día cero. Reusa el intake (graba C-03, re-ancla, y el
   // reconciliador cierra PO Execution). No exige regenerar el plan (ya existe si está activo).
@@ -321,9 +332,18 @@ export default function Escritorio({ rol, asignado, titulo, subtitulo, hideWhenE
                             </button>
                           </div>
                         ) : link ? (
-                          <Link to={link.to} className="inline-flex items-center gap-1 rounded-lg border border-stone-300 hover:bg-stone-50 text-stone-700 text-xs font-semibold px-2.5 py-1.5 shrink-0">
-                            <ExternalLink size={13} /> {linkLabel}
-                          </Link>
+                          <div className="flex items-center gap-1.5 shrink-0 flex-wrap justify-end">
+                            {clave === 'fabrication' && (
+                              <button type="button" onClick={() => verPlanos(t)}
+                                title="Abrir el set final de producción para estudiar la ruta de cada ítem"
+                                className="inline-flex items-center gap-1 rounded-lg border border-forest-200 hover:bg-forest-50 text-forest-700 text-xs font-semibold px-2.5 py-1.5">
+                                <FileText size={13} /> Ver planos
+                              </button>
+                            )}
+                            <Link to={link.to} className="inline-flex items-center gap-1 rounded-lg border border-stone-300 hover:bg-stone-50 text-stone-700 text-xs font-semibold px-2.5 py-1.5">
+                              <ExternalLink size={13} /> {linkLabel}
+                            </Link>
+                          </div>
                         ) : (
                           <span className="text-[11px] text-stone-400 italic shrink-0">se cierra sola con el módulo</span>
                         )}
