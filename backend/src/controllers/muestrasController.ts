@@ -591,6 +591,30 @@ export async function transicionarMuestra(req: Request, res: Response, next: Nex
       }
     }
 
+    // ── Gating por OP DURO (Q5, 2026-09-07): no se pasa a QC hasta que el
+    // operario COMPLETE la OP de la muestra en el kiosko. Antes el taller
+    // saltaba a QC a mano; ahora el estado real de la OP manda. Si la muestra
+    // (caso viejo/edge) no tiene OP, no se traba — no se puede gatear sobre nada.
+    if (nuevo_estado === 'EN_QC') {
+      const { rows: [ver] } = await client.query<{ op_id: number | null }>(
+        `SELECT op_id FROM muestras_versiones WHERE muestra_id = $1 AND version_numero = $2`,
+        [id, muestra.version_actual]
+      )
+      if (ver?.op_id != null) {
+        const { rows: [op] } = await client.query<{ status: string; numero_orden: string }>(
+          `SELECT status, numero_orden FROM ordenes_produccion WHERE id = $1`, [ver.op_id]
+        )
+        if (op && op.status !== 'Completada') {
+          await client.query('ROLLBACK')
+          return next(createError(
+            `La OP ${op.numero_orden} de esta muestra todavía no está completada en el taller (está "${op.status}"). ` +
+            `QC arranca cuando el operario termina la OP en el kiosko.`,
+            400
+          ))
+        }
+      }
+    }
+
     // ── Caso especial: RECHAZADA crea V+1 con la razón del cliente ─────────
     // Y genera una tarea nueva para PROCUREMENT (puede que la V2 necesite
     // materiales adicionales o diferentes).
@@ -805,6 +829,24 @@ export async function transicionarMuestra(req: Request, res: Response, next: Nex
       de: muestra.estado, a: nuevo_estado, version: nuevaVersion,
       opCreada: opCreada?.numero_orden ?? null,
     })
+
+    // Integración Gantt·Journey (Fase 3): el paso `samples` se DERIVA del módulo de
+    // Muestras. Toda transición que cambie el agregado (aprobar/rechazar/reabrir/etc.)
+    // debe reprogramar el proyecto: el reconciliador re-deriva samples (hecha cuando
+    // todas aprobadas; en_curso si una se rechaza → reprograma). Best-effort, fuera de
+    // la transacción de la muestra (no debe tumbar la respuesta si el proyecto no tiene plan).
+    if (updated.proyecto_id != null) {
+      try {
+        const { rows: [pex] } = await pool.query<{ ext: string | null }>(
+          `SELECT proyecto_ext AS ext FROM ing_proyectos WHERE proyecto_id = $1`, [updated.proyecto_id])
+        if (pex?.ext) {
+          const { recomputarYGuardar } = await import('../modules/ingenieria/domain/tareas')
+          await recomputarYGuardar(pool, pex.ext)
+        }
+      } catch (e) {
+        logger.warn('recompute tras transicion de muestra fallo', { muestraId: id, err: String(e) })
+      }
+    }
 
     // F6 (2026-06-17): notificaciones de cierre de ciclo.
     // PROCUREMENT + SHOP_MANAGER se enteran del veredicto del cliente.

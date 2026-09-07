@@ -16,9 +16,22 @@
 import type { PoolClient } from 'pg'
 import pool from '../db/pool'
 import { logger } from './logger'
-import { sendEmail, muestraEnQCEmail, muestraEnviadaEmail, muestraQCAprobadoEmail, muestraAprobadaEmail, muestraRechazadaEmail } from './mailer'
+import { sendEmail as sendEmailRaw, muestraEnQCEmail, muestraEnviadaEmail, muestraQCAprobadoEmail, muestraAprobadaEmail, muestraRechazadaEmail, type SendEmailParams, type SendEmailResult } from './mailer'
 
 type QueryRunner = PoolClient | typeof pool
+
+// Q10 (2026-09-07): los avisos de Muestras viven en los ESCRITORIOS por rol (widgets del
+// escritorio). El email queda APAGADO hasta reactivar Resend/Cloudflare; cuando vuelva será
+// un REFUERZO, no el canal principal. Prendé con MUESTRAS_EMAILS='on'. Un solo choke point:
+// las 5 funciones de aviso pasan por este wrapper, así que apagar acá las apaga a todas.
+const MUESTRAS_EMAILS_ON = process.env.MUESTRAS_EMAILS === 'on'
+async function sendEmail(params: SendEmailParams): Promise<SendEmailResult> {
+  if (!MUESTRAS_EMAILS_ON) {
+    logger.info('notifyMuestra: email apagado por flag (el aviso vive en el escritorio)', { subject: params.subject })
+    return { ok: true, passthrough: true }
+  }
+  return sendEmailRaw(params)
+}
 
 interface DestinatarioRow { email: string; nombre: string }
 

@@ -386,6 +386,7 @@ export async function cerrarTareasAutomaticas(runner: QueryRunner, proyectoExt: 
   const deposito = await estadoDeposito(runner, proyectoExt)
   const compras = await estadoCompras(runner, proyectoExt)
   const instalacion = await estadoInstalacion(runner, proyectoExt)
+  const muestras = await estadoMuestras(runner, proyectoExt)
 
   // Hechos del journey (schedule_hitos): C-03 contrato, E-07 planos aprobados (portal),
   // P-05/P-06 fabricación, I-07 sign-off. Solo si el proyecto tiene journey.
@@ -415,6 +416,15 @@ export async function cerrarTareasAutomaticas(runner: QueryRunner, proyectoExt: 
     approval:         { done: hito.has('E-07') || reviewOk, fecha: hito.get('E-07') ?? null },
     fabrication:      { done: hito.has('P-06'), enCurso: hito.has('P-05'), fecha: hito.get('P-06') ?? hito.get('P-05') ?? null },
     installation:     { done: instalacion.completa || hito.has('I-07'), fecha: instalacion.fecha_ultima ?? hito.get('I-07') ?? null },
+  }
+  // samples (paso #6, señal E-05): DERIVADO del módulo de Muestras (Q1). Cierra sola
+  // cuando TODAS las muestras activas están APROBADA; si una se RECHAZA, el módulo crea
+  // una versión nueva (queda pendiente) → samples vuelve a en_curso y el recompute
+  // reprograma. Solo se deriva si el proyecto tiene muestras cargadas (si no, se respeta
+  // lo que haya: puede que el proyecto no lleve muestras). Corre en paralelo, no bloquea.
+  if (muestras.hay) reglas.samples = {
+    done: muestras.todas_aprobadas, enCurso: !muestras.todas_aprobadas,
+    fecha: muestras.todas_aprobadas ? muestras.fecha_aprobacion : null,
   }
 
   for (const [clave, r] of Object.entries(reglas)) {
