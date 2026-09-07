@@ -145,7 +145,10 @@ router.get('/materiales/freight',            getPreciosFreight)
 router.get('/materiales/:id/oc-info',        getMaterialOcInfo)
 router.get('/materiales/:id',                getMaterial)
 router.post('/materiales',                   WRITE, createMaterial)
-router.post('/materiales/importar',          WRITE, uploadExcel.single('archivo'), importarMateriales)
+// El MTO/BOM lo sube el INGENIERO desde su escritorio (paso material_proc, entregable='mto'):
+// el ingeniero produce la lista y al importarla pasa a Compras. Por eso ENGINEERING puede
+// importar (además de ADMIN/PROCUREMENT). El resto de escrituras de materiales sigue en WRITE.
+router.post('/materiales/importar',          requireRole('ADMIN', 'PROCUREMENT', 'ENGINEERING'), uploadExcel.single('archivo'), importarMateriales)
 router.patch('/materiales/precios-lote',     WRITE, updatePreciosLote)
 router.put('/materiales/:id',                WRITE, updateMaterial)
 router.delete('/materiales/:id',             WRITE, deleteMaterial)
