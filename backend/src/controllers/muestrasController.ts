@@ -406,6 +406,21 @@ export async function createMuestra(req: Request, res: Response, next: NextFunct
       requestId: req.id, muestraId: muestra.id, codigo: muestra.codigo,
       usuario: req.user?.email,
     })
+
+    // Integración Gantt·Journey (Fase 3): crear una muestra ligada a un proyecto ya
+    // cambia el agregado (hay muestra sin aprobar) → el paso `samples` debe reflejar
+    // en_curso enseguida, sin esperar la primera transición. Best-effort, fuera de la
+    // transacción de la muestra.
+    if (muestra.proyecto_id != null) {
+      pool.query<{ ext: string | null }>(`SELECT proyecto_ext AS ext FROM ing_proyectos WHERE proyecto_id = $1`, [muestra.proyecto_id])
+        .then(async ({ rows: [pex] }) => {
+          if (pex?.ext) {
+            const { recomputarYGuardar } = await import('../modules/ingenieria/domain/tareas')
+            await recomputarYGuardar(pool, pex.ext)
+          }
+        })
+        .catch((e) => logger.warn('recompute tras crear muestra fallo', { muestraId: muestra.id, err: String(e) }))
+    }
     res.status(201).json({ data: muestra, message: 'Muestra creada' })
   } catch (err) {
     await client.query('ROLLBACK')
