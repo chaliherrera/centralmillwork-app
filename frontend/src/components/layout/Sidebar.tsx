@@ -60,8 +60,10 @@ export default function Sidebar() {
   const { data: resumen } = useQuery({
     queryKey: ['escritorio-resumen'],
     queryFn: () => ingenieriaService.escritorioResumen().then((r) => r.data),
-    refetchInterval: 60_000,
+    refetchInterval: 20_000,          // alineado con la lista del escritorio (antes 60s → desfasado)
     refetchOnWindowFocus: true,
+    refetchOnMount: 'always',
+    staleTime: 0,
   })
   const badgeDe = (to: string) => (BADGE_ROLS[to] ?? []).reduce((s, r) => s + (resumen?.[r] ?? 0), 0)
 

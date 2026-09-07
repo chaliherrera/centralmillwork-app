@@ -74,6 +74,10 @@ export default function Escritorio({ rol, asignado, titulo, subtitulo, hideWhenE
     queryFn: () => ingenieriaService.escritorio({ rol, asignado }),
     refetchInterval: 20_000,
     refetchOnWindowFocus: true,
+    // Refrescar SIEMPRE al montar (navegar y volver): sin esto, el staleTime global de
+    // 5 min mostraba el caché viejo hasta el próximo tick → la lista no coincidía con el badge.
+    refetchOnMount: 'always',
+    staleTime: 0,
   })
 
   // Completar el paso. Si el paso produce un archivo (planos/CNC) y se adjuntó uno, se sube

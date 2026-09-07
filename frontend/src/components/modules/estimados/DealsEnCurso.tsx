@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
 import { Loader2, Send, Check, Rocket, CalendarRange, UserCheck, Eye, Link2, Copy, CalendarClock, X } from 'lucide-react'
 import toast from 'react-hot-toast'
@@ -59,9 +60,15 @@ export default function DealsEnCurso({ mode, emptyHint }: { mode: 'estimados' | 
     mode === 'estimados' ? (d.deal_estado === 'plan_propuesto' || d.deal_estado === 'esperando_cliente' || d.deal_estado === 'aprobado')
                          : d.deal_estado === 'aprobado')
 
+  const qc = useQueryClient()
   const accion = async (d: IngDealEnCurso, fn: () => Promise<unknown>, ok: string) => {
     setBusy(d.proyecto_id)
-    try { await fn(); toast.success(ok); await cargar() }
+    try {
+      await fn(); toast.success(ok); await cargar()
+      // Aprobar/activar cambia lo que "te toca": refrescá el escritorio y su badge ya.
+      qc.invalidateQueries({ queryKey: ['escritorio'] })
+      qc.invalidateQueries({ queryKey: ['escritorio-resumen'] })
+    }
     catch (e: any) { toast.error(e?.response?.data?.message || 'No se pudo completar') }
     finally { setBusy(null) }
   }
