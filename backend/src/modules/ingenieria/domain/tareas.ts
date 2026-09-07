@@ -19,6 +19,7 @@ import { estadoDeposito, type EstadoDeposito } from './deposito'
 import { estadoMuestras, type EstadoMuestras } from './muestras'
 import { estadoCompras, type EstadoCompras } from './compras'
 import { estadoInstalacion, type EstadoInstalacion } from './instalacion'
+import { estadoProduccion } from './produccion'
 
 type QueryRunner = PoolClient | typeof pool
 
@@ -387,6 +388,7 @@ export async function cerrarTareasAutomaticas(runner: QueryRunner, proyectoExt: 
   const compras = await estadoCompras(runner, proyectoExt)
   const instalacion = await estadoInstalacion(runner, proyectoExt)
   const muestras = await estadoMuestras(runner, proyectoExt)
+  const produccion = await estadoProduccion(runner, proyectoExt)
 
   // Hechos del journey (schedule_hitos): C-03 contrato, E-07 planos aprobados (portal),
   // P-05/P-06 fabricación, I-07 sign-off. Solo si el proyecto tiene journey.
@@ -414,7 +416,10 @@ export async function cerrarTareasAutomaticas(runner: QueryRunner, proyectoExt: 
     long_leads:       { done: !!compras.fecha_primera_oc, fecha: compras.fecha_primera_oc },
     material_proc:    { done: comprasCompleto, enCurso: compras.n_materiales > 0, fecha: compras.fecha_ultima_recepcion },
     approval:         { done: hito.has('E-07') || reviewOk, fecha: hito.get('E-07') ?? null },
-    fabrication:      { done: hito.has('P-06'), enCurso: hito.has('P-05'), fecha: hito.get('P-06') ?? hito.get('P-05') ?? null },
+    // Fabricación: lee producción DIRECTO (no el hito P-06 del journey, que se actualiza
+    // después → desfase de un recompute). Cierra cuando todas las OPs de producción están
+    // Completada; en_curso si alguna arrancó. (Las OPs de MUESTRA no cuentan.)
+    fabrication:      { done: produccion.completa, enCurso: produccion.en_curso, fecha: produccion.fecha_completa },
     installation:     { done: instalacion.completa || hito.has('I-07'), fecha: instalacion.fecha_ultima ?? hito.get('I-07') ?? null },
   }
   // samples (paso #6, señal E-05): DERIVADO del módulo de Muestras (Q1). La APROBADA lo
