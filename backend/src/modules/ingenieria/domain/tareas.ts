@@ -377,15 +377,20 @@ function pisoTarea(tipoClave: string | null, deposito: EstadoDeposito, compras: 
  * una marca a mano se autocorrige. Reversible (si el hecho desaparece, la tarea vuelve a
  * pendiente). Preserva 'na'. Sin esto, filtrar el escritorio por predecesores trabaría todo.
  */
-export async function cerrarTareasAutomaticas(runner: QueryRunner, proyectoExt: string): Promise<void> {
+export async function cerrarTareasAutomaticas(
+  runner: QueryRunner, proyectoExt: string,
+  pre?: { deposito: Awaited<ReturnType<typeof estadoDeposito>>; compras: Awaited<ReturnType<typeof estadoCompras>> }
+): Promise<void> {
   const { rows: pr } = await runner.query<{ pid: number | null }>(
     `SELECT proyecto_id AS pid FROM ing_proyectos WHERE proyecto_ext = $1`, [proyectoExt])
   const pid = pr[0]?.pid ?? null
 
   // Secuencial (no Promise.all): con un client en transacción no se pueden correr
-  // queries concurrentes sobre el mismo client.
-  const deposito = await estadoDeposito(runner, proyectoExt)
-  const compras = await estadoCompras(runner, proyectoExt)
+  // queries concurrentes sobre el mismo client. deposito/compras se pueden pasar ya
+  // calculados (recomputarYGuardar los reusa para el CPM) para no computarlos dos veces
+  // por pasada; cerrarTareasAutomaticas no modifica esas tablas, así que da lo mismo.
+  const deposito = pre?.deposito ?? await estadoDeposito(runner, proyectoExt)
+  const compras = pre?.compras ?? await estadoCompras(runner, proyectoExt)
   const muestras = await estadoMuestras(runner, proyectoExt)
   const produccion = await estadoProduccion(runner, proyectoExt)
 
@@ -449,9 +454,14 @@ export async function cerrarTareasAutomaticas(runner: QueryRunner, proyectoExt: 
 }
 
 export async function recomputarYGuardar(runner: QueryRunner, proyectoExt: string): Promise<void> {
+  // deposito/compras se calculan UNA vez por pasada y se reusan: el reconciliador los
+  // necesita y el CPM (pisoTarea) también. Se leen antes del reconciliador (no dependen
+  // de sus escrituras) para no duplicar la lectura.
+  const deposito = await estadoDeposito(runner, proyectoExt)
+  const compras = await estadoCompras(runner, proyectoExt)
   // Primero reconciliar las tareas auto desde los hechos de módulos (el módulo gana),
   // así el estado de la ruta refleja la realidad antes de recalcular/leer.
-  await cerrarTareasAutomaticas(runner, proyectoExt)
+  await cerrarTareasAutomaticas(runner, proyectoExt, { deposito, compras })
   const { rows: hdr } = await runner.query<{ ini: string | null; entrega: string | null }>(
     `SELECT to_char(fecha_inicio,'YYYY-MM-DD') AS ini, to_char(fecha_entrega,'YYYY-MM-DD') AS entrega
        FROM ing_proyectos WHERE proyecto_ext = $1`, [proyectoExt])
@@ -463,8 +473,7 @@ export async function recomputarYGuardar(runner: QueryRunner, proyectoExt: strin
   const { rows: deps } = await runner.query<{ tarea_id: number; depende_de_id: number; tipo: string; lag_dias: number }>(
     `SELECT tarea_id, depende_de_id, tipo, lag_dias FROM ing_tarea_deps
       WHERE tarea_id = ANY($1) AND depende_de_id = ANY($1)`, [ids])
-  const deposito = await estadoDeposito(runner, proyectoExt)
-  const compras = await estadoCompras(runner, proyectoExt)
+  // deposito/compras ya calculados arriba (reusados por el CPM).
   const clave = new Map(tareas.map((t) => [t.id, t.tipo_clave]))
   const feriados = await loadFeriados(runner)
   const cpmTareas: TareaCPM[] = tareas.map((t) => ({ id: t.id, dur: t.dur_dias, noAntesDe: pisoTarea(clave.get(t.id) ?? null, deposito, compras, t.no_antes_de) }))
