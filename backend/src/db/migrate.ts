@@ -78,6 +78,13 @@ async function ensureMigrationsTable(): Promise<void> {
  * "ya aplicadas" sin ejecutarlas. Esto cubre el caso de prod existente
  * donde las migraciones ya se aplicaron con el runner viejo (sin tracking).
  *
+ * GUARDA (Fase 0, 2026-09-10): blanquear TODAS las migraciones solo es seguro
+ * si el schema ya está al día. Si prod quedó atrás en la frontera del refactor
+ * (o usa el tracker viejo public.migrations), marcar todo esconde migraciones
+ * SIN aplicar y el backend nuevo consulta tablas del refactor inexistentes y cae.
+ * Por eso, antes de blanquear, exigimos prueba de que el schema del refactor
+ * está presente; si no, ABORTAMOS con instrucciones en vez de romper en silencio.
+ *
  * Después del bootstrap, los siguientes runs trabajan normal: solo aplican
  * migraciones nuevas, skip las ya registradas.
  */
@@ -95,7 +102,34 @@ async function maybeBootstrap(migrations: MigrationFile[]): Promise<boolean> {
   )
   if (parseInt(count) > 0) return false
 
-  console.log('🔧 Bootstrap: schema ya existe pero schema_migrations vacía.')
+  // Centinela: ¿el schema contiene el refactor? schedule_planes (migr. 046) +
+  // la columna ing_tarea_tipos.cierre (migr. 083, el último cambio de estructura).
+  // Si faltan, el schema NO está al día → blanquear sería catastrófico.
+  // NOTA: al agregar futuras migraciones de ESTRUCTURA, actualizar este centinela.
+  const { rows: [sent] } = await pool.query<{ tip: boolean; legacy: boolean }>(`
+    SELECT
+      (EXISTS (SELECT 1 FROM information_schema.tables
+                WHERE table_schema='public' AND table_name='schedule_planes')
+       AND EXISTS (SELECT 1 FROM information_schema.columns
+                WHERE table_schema='public' AND table_name='ing_tarea_tipos'
+                  AND column_name='cierre')) AS tip,
+      EXISTS (SELECT 1 FROM information_schema.tables
+              WHERE table_schema='public' AND table_name='migrations') AS legacy
+  `)
+  if (!sent.tip) {
+    throw new Error(
+      '❌ Bootstrap ABORTADO: hay schema (proyectos existe) pero FALTAN objetos del ' +
+      'refactor (schedule_planes / ing_tarea_tipos.cierre) y schema_migrations está vacía.\n' +
+      '   Blanquear marcaría migraciones SIN aplicar → el backend caería consultando tablas inexistentes.\n' +
+      (sent.legacy
+        ? '   Detecté el tracker viejo public.migrations: sembrá schema_migrations con las filas YA aplicadas\n' +
+          '   (según public.migrations) ANTES de correr el runner, para que aplique 046-085 de verdad.\n'
+        : '   Sembrá schema_migrations con la frontera real ANTES de correr el runner.\n') +
+      '   Ver el checklist de merge de la auditoría de integridad (Fase 1).'
+    )
+  }
+
+  console.log('🔧 Bootstrap: schema al día pero schema_migrations vacía.')
   console.log(`   Registrando ${migrations.length} migraciones como aplicadas sin ejecutarlas...`)
 
   for (const m of migrations) {
