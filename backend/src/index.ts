@@ -134,20 +134,13 @@ app.use(errorHandler)
   app.listen(PORT, () => {
     logger.info('server listening', { port: PORT, url: `http://localhost:${PORT}` })
 
-    // ── FASE A del refactor Tareas (2026-07-12) ────────────────────────────
-    // Auto-sync DESACTIVADO. Ver decisión en project_tareas_fase_a_kill.md.
-    //
-    // El endpoint POST /api/tareas/sync-system sigue existiendo — el usuario
-    // puede correr el sync manualmente vía UI si lo necesita. Pero el cron
-    // que lo disparaba dos veces al día está apagado hasta decidir qué
-    // reemplaza al módulo Tareas.
-    //
-    // Cuando decidamos Fase B (Panel del día en Dashboard vs digest matutino
-    // vs otra opción), este cron probablemente NO vuelva — el panel viviria
-    // consultando las reglas en tiempo real desde el frontend.
-    logger.info('system tareas sync DISABLED (Fase A del refactor)')
+    // ── Módulo Tareas — sync por reglas DESACTIVADO (2026-07-12) ───────────
+    // El cron y el job jobs/tareasFromSystem.ts (que generaba tareas por reglas)
+    // se retiraron por sobreingeniería. NO existe endpoint de sync-system. Si se
+    // decide una Fase B (Panel del día vs digest), lo más probable es que el panel
+    // consulte las reglas en tiempo real, sin cron. Ver project_tareas_fase_a_kill.md.
 
-    // Reloj del schedule (Life of a Deal): envejece el semáforo de los planes
+    // Reloj del schedule: envejece el semáforo de los planes
     // activos aunque no haya actividad. Lock entre réplicas adentro.
     startScheduleCron(6)
   })

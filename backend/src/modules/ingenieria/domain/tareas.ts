@@ -389,8 +389,9 @@ export async function cerrarTareasAutomaticas(runner: QueryRunner, proyectoExt: 
   const muestras = await estadoMuestras(runner, proyectoExt)
   const produccion = await estadoProduccion(runner, proyectoExt)
 
-  // Hechos del journey (schedule_hitos): C-03 contrato, E-07 planos aprobados (portal),
-  // P-05/P-06 fabricación, I-07 sign-off. Solo si el proyecto tiene journey.
+  // Hechos del journey (schedule_hitos) que USA el reconciliador: C-03 (contrato) y
+  // E-07 (planos aprobados por el portal). Fabricación (P-05/P-06) e instalación (I-07)
+  // se leen de sus módulos directo, no de acá. Solo si el proyecto tiene journey.
   const hito = new Map<string, string | null>()
   if (pid) {
     const { rows } = await runner.query<{ codigo: string; f: string | null }>(
@@ -398,7 +399,7 @@ export async function cerrarTareasAutomaticas(runner: QueryRunner, proyectoExt: 
          FROM schedule_hitos sh JOIN schedule_planes sp ON sp.id = sh.plan_id
         WHERE sp.proyecto_id = $1 AND sp.scope = 'proyecto'
           AND sh.codigo = ANY($2) AND sh.fecha_real IS NOT NULL`,
-      [pid, ['C-03', 'E-07', 'P-05', 'P-06', 'I-07']])
+      [pid, ['C-03', 'E-07']])
     for (const r of rows) hito.set(r.codigo, r.f)
   }
   // approval también cierra por la vía manual (el ingeniero registró la decisión del cliente).

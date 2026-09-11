@@ -17,21 +17,6 @@ import { logger } from '../../../utils/logger'
 type QueryRunner = PoolClient | typeof pool
 type Disparador = 'recepcion' | 'op' | 'oc' | 'manual' | 'cron'
 
-/** Mapea el rol responsable del hito al área para atribución de atrasos.
- *  (La proyección real vive en proyeccion.ts; esto se conserva para "Mi trabajo".) */
-export function areaFromRol(rol: string | null): string {
-  const r = (rol ?? '').toLowerCase()
-  if (r.includes('estimat')) return 'estimating'
-  if (r.includes('engineer')) return 'engineering'
-  if (r.includes('procurement')) return 'procurement'
-  if (r.includes('production') || r.includes('shop')) return 'production'
-  if (r.includes('logistics')) return 'logistics'
-  if (r.includes('field')) return 'field'
-  if (r.includes('cfo') || r.includes('financial') || r.includes('office')) return 'finance'
-  if (r.includes('pm')) return 'pm'
-  return r || 'sin_asignar'
-}
-
 /**
  * Crea el plan de schedule de un proyecto a partir de una plantilla.
  * @returns el id del plan creado.

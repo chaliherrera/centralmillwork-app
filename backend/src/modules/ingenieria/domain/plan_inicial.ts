@@ -6,8 +6,8 @@
 // con sus dependencias (plantilla `ing_tipo_deps`) y duraciones pre-llenadas del
 // intake (items × día donde aplique; catálogo si no). El PM poda las que no aplican
 // y asigna. Día cero provisional = hoy; se re-ancla a la firma del contrato.
-// Idempotente: borra el plan 'app'/'reserva' previo (absorbe la reserva tentativa).
-// NO toca proyectos importados del Excel (esos ya traen su plan).
+// Idempotente: borra el plan BLANDO previo ('sugerencia') y lo regenera.
+// NO toca proyectos importados del Excel ni el plan ya aceptado ('app').
 // ─────────────────────────────────────────────────────────────────────────────
 
 import type { PoolClient } from 'pg'
@@ -45,8 +45,8 @@ export async function generarPlanIngenieria(
     `SELECT count(*)::int AS n FROM ing_tareas WHERE proyecto_ext = $1 AND origen IN ('import_excel','app')`, [proyectoExt])
   if ((ex[0]?.n ?? 0) > 0) return { creadas: 0, error: 'el proyecto ya tiene un plan (del Excel o aceptado por el PM)' }
 
-  // Idempotente: borra el plan BLANDO previo (sugerencia/reserva); nunca toca 'app'/'import_excel'
-  await runner.query(`DELETE FROM ing_tareas WHERE proyecto_ext = $1 AND origen IN ('sugerencia','reserva')`, [proyectoExt])
+  // Idempotente: borra el plan BLANDO previo (sugerencia); nunca toca 'app'/'import_excel'
+  await runner.query(`DELETE FROM ing_tareas WHERE proyecto_ext = $1 AND origen = 'sugerencia'`, [proyectoExt])
 
   // ── FUENTE ÚNICA: el planificador decide ingeniero + fechas (misma lógica que la
   //    factibilidad). El plan de ingeniería arranca cuando el ingeniero se LIBERA (cola

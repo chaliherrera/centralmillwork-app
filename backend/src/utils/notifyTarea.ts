@@ -1,7 +1,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // notifyTarea — Helper para mandar email de notificación de tarea pendiente
 // ─────────────────────────────────────────────────────────────────────────────
-// Llamado desde: jobs/tareasFromSystem (cron), muestrasController.createMuestra,
+// Llamado desde: muestrasController.createMuestra,
 // modules/muestras/domain/ocsStatus (cerrarProcurementYCrearShopManager).
 //
 // Idempotencia: si la tarea ya tiene email_sent_at IS NOT NULL, NO se manda

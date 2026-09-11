@@ -13,7 +13,7 @@
 // Etapa 1 — hitos instrumentados:
 //   M-03 long-lead ordenados · M-04 MTO cotizado · M-05 OCs emitidas
 //   M-07 material 100% · P-05 fabricación en curso · P-06 fabricación completa
-//   QC-01 controles · QC-02 QC final · QC-03 reproceso
+//   QC-02 QC final  (QC-01/QC-03 podados de la plantilla en la migr. 074)
 // ─────────────────────────────────────────────────────────────────────────────
 
 import type { PoolClient } from 'pg'
@@ -146,26 +146,13 @@ export async function capturarFechasReales(
   }
 
   if (hasQC) {
-    // ── QC-01 · Controles por etapa = primera inspección registrada ──────────
-    const qc01 = await scalarDate(runner,
-      `SELECT to_char(MIN(q.fecha_inspeccion),'YYYY-MM-DD') AS d
-         FROM qc_inspecciones q JOIN ordenes_produccion op ON op.id = q.orden_id
-        WHERE op.proyecto_id = $1 AND op.tipo IS DISTINCT FROM 'MUESTRA'`, [proyectoId])
-    set('QC-01', qc01, { source: 'qc' })
-
     // ── QC-02 · QC final aprobado = última inspección con decisión Aprobar ───
+    // (QC-01 y QC-03 se podaron de la plantilla en la migr. 074; no se capturan.)
     const qc02 = await scalarDate(runner,
       `SELECT to_char(MAX(q.fecha_inspeccion),'YYYY-MM-DD') AS d
          FROM qc_inspecciones q JOIN ordenes_produccion op ON op.id = q.orden_id
         WHERE op.proyecto_id = $1 AND q.decision = 'Aprobar' AND op.tipo IS DISTINCT FROM 'MUESTRA'`, [proyectoId])
     set('QC-02', qc02, { source: 'qc', regla: 'última inspección aprobada' })
-
-    // ── QC-03 · Reproceso por defecto = existe decisión Reprocesar/Scrap ─────
-    const qc03 = await scalarDate(runner,
-      `SELECT to_char(MAX(q.fecha_inspeccion),'YYYY-MM-DD') AS d
-         FROM qc_inspecciones q JOIN ordenes_produccion op ON op.id = q.orden_id
-        WHERE op.proyecto_id = $1 AND q.decision IN ('Reprocesar','Scrap') AND op.tipo IS DISTINCT FROM 'MUESTRA'`, [proyectoId])
-    set('QC-03', qc03, { source: 'qc' })
   }
 
   return out
