@@ -37,7 +37,8 @@ export async function estadoInstalacion(runner: QueryRunner, proyectoExt: string
             COUNT(ii.id)::int AS instalados,
             to_char(max(ii.instalado_at),'YYYY-MM-DD') AS ultima
        FROM ing_proyectos ip
-       JOIN ordenes_produccion op ON op.proyecto_id = ip.proyecto_id AND op.status <> 'Cancelada'
+       JOIN ordenes_produccion op ON op.proyecto_id = ip.proyecto_id
+            AND op.status <> 'Cancelada' AND op.tipo IS DISTINCT FROM 'MUESTRA'
        LEFT JOIN schedule_install_items ii ON ii.op_id = op.id AND ii.proyecto_id = op.proyecto_id
       WHERE ip.proyecto_ext = $1`, [proyectoExt])
 
