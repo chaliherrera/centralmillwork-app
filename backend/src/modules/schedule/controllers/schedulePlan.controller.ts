@@ -231,10 +231,9 @@ export async function registrarHitoHandler(req: Request, res: Response, next: Ne
     const { fecha, nota, importe } = registrarSchema.parse(req.body ?? {})
     const usuarioNombre = (req as any).user?.email ?? null
     await client.query('BEGIN')
+    // registrarHito ya recalcula el pipeline internamente (refresca fechas del Gantt +
+    // proyección del journey) en la misma transacción — no hace falta recomputar de nuevo acá.
     const r = await registrarHito(client, proyectoId, codigo, fecha, nota ?? null, usuarioNombre, importe ?? null)
-    // Registrar un hecho (incl. el depósito C-04, piso de material_deposit) recalcula el
-    // pipeline: refresca las fechas del Gantt y la proyección del journey en un solo lugar.
-    if (r.ok) await recomputeScheduleForProyecto(client, proyectoId, 'manual')
     await client.query('COMMIT')
     if (!r.ok) return next(createError(r.error ?? 'no se pudo registrar', 400))
     res.json({ data: { ok: true } })

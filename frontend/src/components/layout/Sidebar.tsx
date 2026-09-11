@@ -60,7 +60,7 @@ export default function Sidebar() {
   const { data: resumen } = useQuery({
     queryKey: ['escritorio-resumen'],
     queryFn: () => ingenieriaService.escritorioResumen().then((r) => r.data),
-    refetchInterval: 20_000,          // alineado con la lista del escritorio (antes 60s → desfasado)
+    refetchInterval: 60_000,          // alineado con la lista del escritorio (mismo cadence)
     refetchOnWindowFocus: true,
     refetchOnMount: 'always',
     staleTime: 0,

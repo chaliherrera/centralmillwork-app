@@ -230,16 +230,12 @@ export async function getMuestra(req: Request, res: Response, next: NextFunction
     // que se aplicó a oc_imagenes el 2026-06-08).
     if (supabaseEnabled && supabase) {
       const sb = supabase
-      for (const e of envios) {
-        if (e.foto_filename) {
-          const { data } = await sb.storage
-            .from(SUPABASE_BUCKET)
-            .createSignedUrl(e.foto_filename, 3600)
-          ;(e as any).foto_url = data?.signedUrl ?? null
-        } else {
-          ;(e as any).foto_url = null
-        }
-      }
+      // Signed URLs en paralelo (antes: un await de red por envío, en serie).
+      await Promise.all(envios.map(async (e) => {
+        (e as any).foto_url = e.foto_filename
+          ? (await sb.storage.from(SUPABASE_BUCKET).createSignedUrl(e.foto_filename, 3600)).data?.signedUrl ?? null
+          : null
+      }))
     }
 
     // Timeline reciente (últimos 50 eventos)

@@ -78,7 +78,9 @@ export default function Escritorio({ rol, asignado, titulo, subtitulo, hideWhenE
   const { data, isLoading } = useQuery({
     queryKey: ['escritorio', rol ?? '', asignado ?? ''],
     queryFn: () => ingenieriaService.escritorio({ rol, asignado }),
-    refetchInterval: 20_000,
+    // Polling de fondo cada 60s (antes 20s): las tareas de OTROS roles no cambian tan
+    // rápido, y al completar una acá la mutación ya invalida el query (refresh inmediato).
+    refetchInterval: 60_000,
     refetchOnWindowFocus: true,
     // Refrescar SIEMPRE al montar (navegar y volver): sin esto, el staleTime global de
     // 5 min mostraba el caché viejo hasta el próximo tick → la lista no coincidía con el badge.
