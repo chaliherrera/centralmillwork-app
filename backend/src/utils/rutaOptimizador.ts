@@ -1,9 +1,6 @@
 import pool from '../db/pool'
 import { obtenerDistancia } from './distanciaCalculador'
-
-const ORDEN_BASE_SECUENCIA = [
-  'cnc', 'edge_banding', 'assembly', 'lamina', 'pintura', 'final', 'registro', 'shipping',
-] as const
+import { ORDEN_BASE_SECUENCIA } from './estaciones'
 
 export interface RutaPaso {
   paso: number

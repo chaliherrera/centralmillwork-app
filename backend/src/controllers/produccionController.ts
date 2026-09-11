@@ -4,10 +4,7 @@ import { createError } from '../middleware/errorHandler'
 import { parsePagination, paginatedResponse } from '../utils/pagination'
 import { findAutoAssignableOperator } from '../utils/autoAsignarOperario'
 import { recomputeScheduleSafe } from '../modules/schedule'
-
-const ORDEN_BASE_SECUENCIA = [
-  'cnc', 'edge_banding', 'assembly', 'lamina', 'pintura', 'final', 'registro', 'shipping',
-]
+import { ORDEN_BASE_SECUENCIA } from '../utils/estaciones'
 
 const STATUS_VALIDOS = ['Pendiente', 'En Proceso', 'Pausada', 'Completada', 'Cancelada'] as const
 type Status = typeof STATUS_VALIDOS[number]
