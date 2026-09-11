@@ -96,10 +96,10 @@ export async function truncateAll(pool: Pool): Promise<void> {
       ordenes_produccion,
       muestras_archivos, muestras_envios, muestras_eventos, muestras_versiones, muestras,
       items_recepcion, recepciones,
-      items_orden_compra_backup_2026_05_11, items_orden_compra, oc_imagenes,
-      ordenes_compra_backup_2026_05_11, ordenes_compra,
+      items_orden_compra, oc_imagenes,
+      ordenes_compra,
       tareas,
-      mto_freight, materiales_mto_backup_2026_05_11, materiales_mto,
+      mto_freight, materiales_mto,
       solicitudes_cotizacion,
       personal_estaciones, personal_taller,
       proyectos, proveedores
