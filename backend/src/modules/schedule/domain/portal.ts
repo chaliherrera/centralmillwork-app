@@ -13,6 +13,8 @@ import pool from '../../../db/pool'
 import { recomputeScheduleForProyecto } from './recompute'
 import { latestSubmittalUrl, marcarRespuestaSubmittal } from './submittals'
 import { bloqueoPorPredecesores } from './gates'
+import { logger } from '../../../utils/logger'
+import { captureException } from '../../../utils/sentry'
 
 type QueryRunner = PoolClient | typeof pool
 
@@ -251,7 +253,15 @@ export async function aplicarAprobacion(
   try {
     const { sincronizarDecisionCliente } = await import('../../ingenieria/domain/tareas')
     await sincronizarDecisionCliente(runner, info.proyectoId, codigo, decision, comentario)
-  } catch { /* best-effort: no romper la respuesta del portal */ }
+  } catch (err) {
+    // Best-effort: no romper la respuesta del portal. Pero NO tragar el error en
+    // silencio: si falla, el cliente ve "aprobado" y la ruta de Ingeniería no avanza,
+    // y nadie se entera. Lo dejamos visible en logs + Sentry para diagnosticarlo.
+    logger.error('portal: sincronizarDecisionCliente falló', {
+      proyectoId: info.proyectoId, codigo, decision, err: (err as Error)?.message,
+    })
+    captureException(err, { tags: { area: 'portal_sync' }, extra: { proyectoId: info.proyectoId, codigo, decision } })
+  }
 
   await recomputeScheduleForProyecto(runner, info.proyectoId, 'manual')
   return { ok: true }

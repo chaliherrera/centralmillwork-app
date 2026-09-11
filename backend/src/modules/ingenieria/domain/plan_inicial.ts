@@ -16,6 +16,8 @@ import { recomputarYGuardar } from './tareas'
 import { loadFeriados } from '../../schedule/domain/calendario'
 import { crearToken } from '../../schedule/domain/portal'
 import { cargarPlantillaRuta, cargarColaIngenieros, ubicarProyecto, ROLES_INGENIERO, type Ubicacion } from './planificador'
+import { logger } from '../../../utils/logger'
+import { captureException } from '../../../utils/sentry'
 
 type QueryRunner = PoolClient | typeof pool
 
@@ -105,13 +107,16 @@ export async function aceptarPlanPM(runner: QueryRunner, proyectoId: number): Pr
     `SELECT to_char(sh.fecha_real,'YYYY-MM-DD') AS firma
        FROM schedule_hitos sh JOIN schedule_planes sp ON sp.id = sh.plan_id
       WHERE sp.proyecto_id = $1 AND sp.scope = 'proyecto' AND sh.codigo = 'C-03' AND sh.fecha_real IS NOT NULL`, [proyectoId])
-  if (c03[0]?.firma) { try { await reanclarPlanAFirma(runner, proyectoId, c03[0].firma) } catch { /* best-effort */ } }
-  else {
+  if (c03[0]?.firma) {
+    try { await reanclarPlanAFirma(runner, proyectoId, c03[0].firma) }
+    catch (err) { logger.error('aceptarPlanPM: reanclarPlanAFirma falló', { proyectoId, err: (err as Error)?.message }); captureException(err, { tags: { area: 'aceptar_plan_reanclar' }, extra: { proyectoId } }) }
+  } else {
     // Sin firma aún: igual proyectamos el journey desde el plan recién endurecido, para que
     // los hitos de schedule_hitos queden con su estado real (no_aplica los que aún no aplican)
     // ANTES de que el cliente vea el portal. Si no, quedan en 'pendiente' (default) y el portal
     // los muestra como aprobables. reanclarPlanAFirma ya recomputa en la otra rama.
-    try { await recomputarYGuardar(runner, ext) } catch { /* best-effort */ }
+    try { await recomputarYGuardar(runner, ext) }
+    catch (err) { logger.error('aceptarPlanPM: recomputarYGuardar falló', { proyectoId, ext, err: (err as Error)?.message }); captureException(err, { tags: { area: 'aceptar_plan_recompute' }, extra: { proyectoId, ext } }) }
   }
   return { aceptadas: r.rowCount ?? 0 }
 }

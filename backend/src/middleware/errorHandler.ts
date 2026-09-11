@@ -43,14 +43,15 @@ export function errorHandler(err: AppError, req: Request, res: Response, _next: 
     })
   }
 
-  // Exponer detail solo en errores 500 — útil para debugging cuando el frontend
-  // reporta problemas y no hay acceso a Sentry/logs. No incluye stack trace (info
-  // sensible). El requestId permite cruzar con logs del backend si hace falta.
-  // 2026-07-17: agregado tras bug de import MTO donde solo veíamos "500" sin causa.
+  // En 500 devolvemos requestId (para cruzar con Sentry/logs) pero NO el mensaje
+  // interno del error por defecto: err.message suele traer texto crudo de Postgres
+  // (nombres de constraint/columna, fragmentos de query) → fuga del esquema a
+  // cualquier cliente, incluido el portal público. El detalle se puede habilitar
+  // puntualmente para debugging con EXPOSE_ERROR_DETAIL=true.
   const body: { message: string; detail?: string; requestId?: string } = { message }
   if (status === 500) {
-    body.detail = err?.message || String(err)
     body.requestId = req.id
+    if (process.env.EXPOSE_ERROR_DETAIL === 'true') body.detail = err?.message || String(err)
   }
   res.status(status).json(body)
 }
