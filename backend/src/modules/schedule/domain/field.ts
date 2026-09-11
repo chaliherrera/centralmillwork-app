@@ -163,6 +163,17 @@ export async function listPunch(runner: QueryRunner, proyectoId: number): Promis
 export async function registrarSignoff(
   runner: QueryRunner, proyectoId: number, nombreCliente: string | null, firma: string | null
 ): Promise<{ ok: boolean; error?: string }> {
+  // Punch list sin defectos: I-06 solo se cierra solo al RESOLVER un punch item
+  // existente (resolverPunchItem), así que una instalación sin defectos nunca lo
+  // cerraba y el sign-off quedaba trabado. Si no quedan defectos ABIERTOS, el punch
+  // list está satisfecho → cerramos I-06 acá. Si hay defectos abiertos NO se cierra,
+  // y el freno de predecesores de abajo bloquea el sign-off como corresponde.
+  const { rows: pu } = await runner.query<{ abiertos: string }>(
+    `SELECT count(*) FILTER (WHERE estado = 'abierto')::text AS abiertos
+       FROM schedule_punch_items WHERE proyecto_id = $1`, [proyectoId])
+  if (Number(pu[0]?.abiertos ?? 0) === 0) {
+    await completarHito(runner, proyectoId, 'I-06', { source: 'punch_list', sin_defectos: true })
+  }
   // Freno hacia adelante (server-side): no cerrar la entrega si faltan pasos
   // previos (punch list, instalación…). Antes esto solo lo frenaba la UI móvil.
   const bloqueo = await bloqueoPorPredecesores(runner, proyectoId, 'I-07')
