@@ -6,6 +6,12 @@
 // Mismo patrón ya aplicado en migrate.ts, seed.ts, seedAdmin.ts (commit 77c299d).
 import 'dotenv/config'
 
+// Guardas de proceso PRIMERO: registra el handler de unhandledRejection antes
+// de que se evalúen los imports de abajo (en particular middleware/rateLimit,
+// que dispara migraciones fire-and-forget del library al cargarse). Ver el
+// comentario grande en utils/processGuards.ts.
+import './utils/processGuards'
+
 import express from 'express'
 import helmet from 'helmet'
 import cors from 'cors'
