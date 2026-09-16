@@ -2,8 +2,15 @@ import { useEffect, useMemo, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import toast from 'react-hot-toast'
 import clsx from 'clsx'
-import { CalendarClock, Check, Clock, ThumbsUp, MessageSquare, X, ShieldCheck, Lock, FileText } from 'lucide-react'
+import { CalendarClock, Check, Clock, ThumbsUp, MessageSquare, X, ShieldCheck, Lock, FileText, RefreshCw, ClipboardList } from 'lucide-react'
 import { portalService, type PortalVista, type Decision } from '@/services/portal'
+
+// Etiqueta legible de cada decisión del cliente en el historial.
+const DECISION_LABEL: Record<Decision, { t: string; c: string }> = {
+  aprobado: { t: 'Aprobaste', c: 'text-emerald-700' },
+  aprobado_con_comentarios: { t: 'Aprobaste con comentarios', c: 'text-amber-700' },
+  rechazado: { t: 'Pediste cambios', c: 'text-rose-700' },
+}
 import CronogramaCliente from '@/components/schedule/CronogramaCliente'
 
 function fmt(d: string | null): string {
@@ -124,6 +131,17 @@ export default function ClientPortal() {
           </div>
         </div>
 
+        {/* Estado post-decisión de planos: el "mientras tanto" tras pedir cambios. */}
+        {data.planosEstado?.estado === 'cambios' && (
+          <div className="rounded-2xl border border-amber-200 bg-amber-50/70 px-4 py-3.5 flex items-start gap-3">
+            <RefreshCw size={18} className="text-amber-600 shrink-0 mt-0.5" />
+            <div>
+              <div className="font-semibold text-amber-900 text-sm">Preparando la próxima versión de los planos</div>
+              <p className="text-[13px] text-amber-800/90 mt-0.5">{data.planosEstado.mensaje}</p>
+            </div>
+          </div>
+        )}
+
         {/* Cronograma del proyecto (Gantt completo) — la propuesta */}
         {data.gantt.length > 0 && (
           <CronogramaCliente nombre={data.proyecto.nombre} fechaObjetivo={data.proyecto.fecha_objetivo} gantt={data.gantt} />
@@ -170,6 +188,36 @@ export default function ClientPortal() {
             <Check className="mx-auto text-emerald-500" size={28} />
             <p className="mt-2 text-sm text-stone-600 font-medium">Por ahora no necesitamos nada de tu parte.</p>
             <p className="text-xs text-stone-400 mt-0.5">Te avisaremos cuando haya algo para aprobar. El equipo está trabajando en tu proyecto.</p>
+          </div>
+        )}
+
+        {/* Historial: constancia de las decisiones que el cliente ya tomó. */}
+        {data.decisiones.length > 0 && (
+          <div className="rounded-2xl border border-card-border bg-white overflow-hidden">
+            <div className="px-4 py-3 border-b border-stone-100">
+              <h2 className="font-semibold text-stone-700 flex items-center gap-2"><ClipboardList size={16} /> Tus decisiones</h2>
+              <p className="text-xs text-stone-400 mt-0.5">El registro de lo que aprobaste o comentaste.</p>
+            </div>
+            <div className="divide-y divide-stone-100">
+              {data.decisiones.map((d, i) => {
+                const lbl = DECISION_LABEL[d.decision]
+                return (
+                  <div key={i} className="px-4 py-3 flex items-start gap-3">
+                    <div className={clsx('shrink-0 mt-0.5', lbl.c)}>
+                      {d.decision === 'rechazado' ? <MessageSquare size={16} /> : <Check size={16} />}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="text-sm text-stone-800">
+                        <span className={clsx('font-semibold', lbl.c)}>{lbl.t}</span>
+                        <span className="text-stone-500"> · {d.que}</span>
+                      </div>
+                      {d.comentario && <div className="text-[13px] text-stone-500 mt-0.5 italic">“{d.comentario}”</div>}
+                    </div>
+                    <div className="text-xs text-stone-400 shrink-0 whitespace-nowrap">{fmt(d.fecha)}</div>
+                  </div>
+                )
+              })}
+            </div>
           </div>
         )}
 

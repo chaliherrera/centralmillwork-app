@@ -9,12 +9,20 @@ export interface PortalMomento {
 export interface PortalGanttTarea {
   nombre: string; inicio: string | null; fin: string | null; estado: string; es_cliente: boolean
 }
+export interface PortalDecision {
+  fecha: string; que: string; decision: Decision; comentario: string | null
+}
+export interface PortalPlanosEstado {
+  rev: string; estado: 'cambios' | 'aprobado'; mensaje: string
+}
 export interface PortalVista {
   proyecto: { nombre: string; cliente: string; fecha_objetivo: string | null; semaforo: string }
   contacto: string | null
   momentos: PortalMomento[]
   pendientes: Array<{ codigo: string; titulo: string; fecha_planeada: string | null; documento_url?: string | null }>
   gantt: PortalGanttTarea[]
+  decisiones: PortalDecision[]
+  planosEstado: PortalPlanosEstado | null
 }
 
 export const portalService = {

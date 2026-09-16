@@ -38,6 +38,12 @@ export const CLIENT_MOMENTS: Array<{ codigo: string; label: string; tipo: 'accio
   { codigo: 'X-03', label: 'Pago final',         tipo: 'estado' },
 ]
 
+// Etiqueta (para el cliente) de cada código con el que decide, para el historial.
+const LABEL_MOMENTO: Record<string, string> = Object.fromEntries(
+  CLIENT_MOMENTS.map((m) => [m.codigo, m.label]))
+// Rev A/B/C… a partir del número de versión del submittal.
+const revLabel = (n: number) => `Rev ${String.fromCharCode(64 + n)}`
+
 // Tareas del Gantt en las que participa el cliente (se resaltan en el portal):
 // firma de contrato, depósito, aprobación de muestras, revisión y aprobación de planos.
 export const CLIENT_TASK_CLAVES = new Set<string>(['po_execution', 'material_deposit', 'samples', 'client_review', 'approval'])
@@ -92,6 +98,10 @@ export interface VistaPublica {
   pendientes: Array<{ codigo: string; titulo: string; fecha_planeada: string | null; documento_url?: string | null }>
   // El Gantt completo del proyecto (la propuesta): tareas con fechas; las del cliente marcadas.
   gantt: Array<{ nombre: string; inicio: string | null; fin: string | null; estado: string; es_cliente: boolean }>
+  // Historial "tus decisiones": lo que el cliente ya aprobó/rechazó/comentó (más reciente primero).
+  decisiones: Array<{ fecha: string; que: string; decision: 'aprobado' | 'aprobado_con_comentarios' | 'rechazado'; comentario: string | null }>
+  // Estado post-decisión de los planos (mensaje "mientras tanto"), o null si no aplica.
+  planosEstado: { rev: string; estado: 'cambios' | 'aprobado'; mensaje: string } | null
 }
 
 /**
@@ -169,12 +179,46 @@ export async function getVistaPublica(runner: QueryRunner, token: string): Promi
       ORDER BY t.fecha_inicio, t.id`, [info.proyectoId])
   const gantt = gr.map((g) => ({ nombre: g.nombre, inicio: g.inicio, fin: g.fin, estado: g.estado, es_cliente: !!g.clave && CLIENT_TASK_CLAVES.has(g.clave) }))
 
+  // Historial "tus decisiones": lo que el cliente aprobó/rechazó/comentó desde el
+  // portal (schedule_eventos disparados por el portal). Le da constancia de sus
+  // respuestas y cierra el círculo de cada decisión.
+  const { rows: dec } = await runner.query<{ hito_codigo: string | null; fecha: string; payload: { decision?: string; comentario?: string } | null }>(
+    `SELECT ev.hito_codigo, to_char(ev.created_at,'YYYY-MM-DD') AS fecha, ev.payload
+       FROM schedule_eventos ev
+       JOIN schedule_planes sp ON sp.id = ev.plan_id
+      WHERE sp.proyecto_id = $1 AND sp.scope = 'proyecto' AND ev.disparado_por = 'portal'
+      ORDER BY ev.created_at DESC`, [info.proyectoId])
+  const decisiones = dec.map((d) => ({
+    fecha: d.fecha,
+    que: (d.hito_codigo && LABEL_MOMENTO[d.hito_codigo]) || 'Tu proyecto',
+    decision: (d.payload?.decision as 'aprobado' | 'aprobado_con_comentarios' | 'rechazado' | undefined) ?? 'aprobado',
+    comentario: d.payload?.comentario ?? null,
+  }))
+
+  // Estado post-decisión de los planos: si el cliente pidió cambios en la última
+  // revisión, el equipo prepara la siguiente. Le contamos ese "mientras tanto"
+  // (si no, el portal no mostraba nada entre el rechazo y la Rev siguiente).
+  const { rows: sub } = await runner.query<{ version_numero: number; estado: string | null }>(
+    `SELECT version_numero, estado FROM schedule_submittals
+      WHERE proyecto_id = $1 ORDER BY version_numero DESC LIMIT 1`, [info.proyectoId])
+  let planosEstado: { rev: string; estado: 'cambios' | 'aprobado'; mensaje: string } | null = null
+  if (sub[0]?.estado) {
+    const rev = revLabel(sub[0].version_numero)
+    if (sub[0].estado === 'rechazado' || sub[0].estado === 'aprobado_con_comentarios') {
+      planosEstado = { rev, estado: 'cambios', mensaje: `Pediste cambios en los planos (${rev}). El equipo está preparando la próxima versión para tu revisión.` }
+    } else if (sub[0].estado === 'aprobado') {
+      planosEstado = { rev, estado: 'aprobado', mensaje: `Aprobaste los planos (${rev}). Tu proyecto avanzó a producción.` }
+    }
+  }
+
   return {
     proyecto: { nombre: pr[0].nombre, cliente: pr[0].cliente, fecha_objetivo: pr[0].fo, semaforo: pr[0].semaforo },
     contacto: info.contactoNombre,
     momentos,
     pendientes: [...planPendiente, ...pendientes],
     gantt,
+    decisiones,
+    planosEstado,
   }
 }
 
