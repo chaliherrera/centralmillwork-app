@@ -83,7 +83,13 @@ export default function EstimadosWizard() {
     setEnviandoPM(true); setError(null)
     try {
       await scheduleService.generar(sel.id, fechaComprometida)
-      try { const rr = await ingenieriaService.reservar(sel.id); setReservadas(rr.data?.creadas ?? 0) } catch { /* la reserva no bloquea */ }
+      // reservar() ES el handoff al PM: en el backend setea deal_estado=
+      // 'esperando_pm' y genera el plan sugerido. Antes su error se tragaba en un
+      // catch vacío → el wizard igual marcaba "enviado al PM" pero el deal nunca
+      // entraba a la cola del PM (fallo en silencio). Ahora propaga al catch de
+      // abajo: se muestra el error real y NO se marca enviadoPM.
+      const rr = await ingenieriaService.reservar(sel.id)
+      setReservadas(rr.data?.creadas ?? 0)
       setEnviadoPM(true); setTienePlan(true)
     } catch (e: any) { setError(e?.response?.data?.message || 'No se pudo enviar al PM') } finally { setEnviandoPM(false) }
   }
