@@ -930,11 +930,15 @@ export async function reasignarIngeniero(
   const disponible = cola.fin_ultima && cola.fin_ultima >= hoy ? addBusinessDays(cola.fin_ultima, 1, feriados) : hoy
 
   const rolesIng = [...ROLES_INGENIERO]
-  const { rows: ingRows } = await runner.query<{ id: number; asignado_nombre: string | null }>(
-    `SELECT t.id, t.asignado_nombre FROM ing_tareas t JOIN ing_tarea_tipos tt ON tt.id = t.tipo_id
+  const { rows: ingRows } = await runner.query<{ id: number; asignado_nombre: string | null; estado: string }>(
+    `SELECT t.id, t.asignado_nombre, t.estado FROM ing_tareas t JOIN ing_tarea_tipos tt ON tt.id = t.tipo_id
       WHERE t.proyecto_ext = $1 AND tt.rol = ANY($2)`, [proyectoExt, rolesIng])
   const ingIds = new Set(ingRows.map((r) => r.id))
   if (!ingIds.size) return { ...base, error: 'el proyecto no tiene tareas de ingeniería' }
+  // P7: solo se reasignan las tareas que TODAVÍA no se hicieron. Las 'hecha'
+  // conservan quién las hizo y su fecha real (si no, reasignar borraba la
+  // historia y les pisaba no_antes_de); las 'na' están fuera de la ruta.
+  const reasignables = new Set(ingRows.filter((r) => r.estado !== 'hecha' && r.estado !== 'na').map((r) => r.id))
   const freq = new Map<string, number>()
   for (const r of ingRows) if (r.asignado_nombre) freq.set(r.asignado_nombre, (freq.get(r.asignado_nombre) ?? 0) + 1)
   const ingeniero_actual = [...freq.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? null
@@ -951,7 +955,7 @@ export async function reasignarIngeniero(
   const correr = (pisoNuevo: boolean): string => {
     const cpmTareas: TareaCPM[] = tareas.map((t) => ({
       id: t.id, dur: t.dur_dias,
-      noAntesDe: pisoTarea(clave.get(t.id) ?? null, deposito, compras, pisoNuevo && ingIds.has(t.id) ? disponible : t.no_antes_de),
+      noAntesDe: pisoTarea(clave.get(t.id) ?? null, deposito, compras, pisoNuevo && reasignables.has(t.id) ? disponible : t.no_antes_de),
     }))
     return calcularHolgura(cpmTareas, aristas, h.ini!, h.entrega!, feriados).finProyectado ?? h.entrega!
   }
@@ -962,14 +966,15 @@ export async function reasignarIngeniero(
   const preview: ReasignarPreview = {
     ok: true, ingeniero_actual, ingeniero_nuevo: nuevoIng, disponible_desde: disponible,
     fin_actual, fin_nuevo, entrega: h.entrega, holgura_dias: businessDaysBetween(fin_nuevo, h.entrega, feriados),
-    entra: fin_nuevo <= h.entrega, n_tareas: ingIds.size,
+    entra: fin_nuevo <= h.entrega, n_tareas: reasignables.size,
   }
   if (dryRun) return preview
 
   await runner.query(
     `UPDATE ing_tareas t SET asignado_nombre = $2, no_antes_de = $3::date, updated_at = NOW()
        FROM ing_tarea_tipos tt
-      WHERE t.tipo_id = tt.id AND t.proyecto_ext = $1 AND tt.rol = ANY($4)`,
+      WHERE t.tipo_id = tt.id AND t.proyecto_ext = $1 AND tt.rol = ANY($4)
+        AND t.estado NOT IN ('hecha','na')`,
     [proyectoExt, nuevoIng, disponible, rolesIng])
   await recomputarYGuardar(runner, proyectoExt)
   return preview
