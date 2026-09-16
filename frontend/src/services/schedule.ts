@@ -3,6 +3,18 @@ import type { ApiResponse } from '@/types'
 
 export type Semaforo = 'verde' | 'amarillo' | 'rojo' | 'gris'
 
+export interface SubmittalRow {
+  id: number
+  version_label: string
+  original_name: string | null
+  estado: string
+  url: string | null
+  enviado_at: string
+  respondido_at: string | null
+  dias_cliente: number | null
+  comentarios_cliente?: string | null
+}
+
 export interface PortalTokenRow {
   id: number
   token: string
@@ -150,16 +162,20 @@ export const scheduleService = {
       .then((r) => r.data),
 
   // Lista los submittals (planos enviados) del proyecto, con URL firmada — para
-  // que el equipo interno pueda ver lo que se le mandó al cliente.
+  // que el equipo interno pueda ver lo que se le mandó al cliente + el ciclo.
   getSubmittals: (proyectoId: number) =>
     api
-      .get<ApiResponse<{ id: number; version_label: string; original_name: string | null; estado: string; url: string | null }[]>>(
+      .get<ApiResponse<SubmittalRow[]>>(
         `/schedule/proyecto/${proyectoId}/submittals`)
       .then((r) => r.data),
 
-  uploadSubmittal: (proyectoId: number, file: File) => {
+  // Envío consciente de planos al cliente: sube el PDF y, si se indica, deja el
+  // destinatario (nombre + email) en el link del portal (para acceso + aviso).
+  uploadSubmittal: (proyectoId: number, file: File, contacto?: { nombre?: string; email?: string }) => {
     const fd = new FormData()
     fd.append('planos', file)
+    if (contacto?.nombre) fd.append('contacto_nombre', contacto.nombre)
+    if (contacto?.email) fd.append('contacto_email', contacto.email)
     return api
       .post<ApiResponse<{ version_label: string }>>(`/schedule/proyecto/${proyectoId}/submittals`, fd, {
         headers: { 'Content-Type': 'multipart/form-data' },

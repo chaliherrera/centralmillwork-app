@@ -26,6 +26,10 @@ export interface Submittal {
   comentarios_cliente: string | null
   created_at: string
   url: string | null
+  // Envío consciente al cliente: fechas del ciclo + días atribuibles al cliente.
+  enviado_at: string          // cuándo se le envió (= created_at, ISO)
+  respondido_at: string | null // cuándo respondió el cliente (ISO), o null si pendiente
+  dias_cliente: number | null  // días que tardó (envío→respuesta), o corriendo (envío→hoy) si pendiente
 }
 
 const revLabel = (n: number) => `Rev ${String.fromCharCode(64 + n)}` // 1→Rev A
@@ -82,14 +86,20 @@ export async function listSubmittals(runner: QueryRunner, proyectoId: number): P
   const { rows } = await runner.query<{
     id: number; version_numero: number; original_name: string | null; estado: string
     comentarios_cliente: string | null; created_at: string; filename: string
+    respondido_at: string | null; dias_cliente: number | null
   }>(
     `SELECT id, version_numero, original_name, estado, comentarios_cliente, filename,
-            to_char(created_at,'YYYY-MM-DD') AS created_at
+            to_char(created_at,'YYYY-MM-DD') AS created_at,
+            to_char(respondido_at,'YYYY-MM-DD') AS respondido_at,
+            -- Días atribuibles al cliente: de que se le envió (created_at) a que
+            -- respondió (respondido_at); si aún no respondió, corriendo hasta hoy.
+            EXTRACT(DAY FROM (COALESCE(respondido_at, NOW()) - created_at))::int AS dias_cliente
        FROM schedule_submittals WHERE proyecto_id = $1 ORDER BY version_numero DESC`, [proyectoId])
   return Promise.all(rows.map(async (r) => ({
     id: r.id, version_numero: r.version_numero, version_label: revLabel(r.version_numero),
     original_name: r.original_name, estado: r.estado, comentarios_cliente: r.comentarios_cliente,
     created_at: r.created_at, url: await signed(r.filename),
+    enviado_at: r.created_at, respondido_at: r.respondido_at, dias_cliente: r.dias_cliente,
   })))
 }
 

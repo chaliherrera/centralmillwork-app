@@ -6,7 +6,7 @@ import {
   Target, User, Handshake, Activity, ChevronRight, Share2, Copy, X,
   AlertTriangle, Zap, FileText,
 } from 'lucide-react'
-import { scheduleService, type ScheduleData, type ScheduleHito, type Semaforo, type PortalTokenRow } from '@/services/schedule'
+import { scheduleService, type ScheduleData, type ScheduleHito, type Semaforo, type PortalTokenRow, type SubmittalRow } from '@/services/schedule'
 
 // ─── Orden y metadata de las 8 fases (el "recorrido") ─────────────────────────
 const FASES = [
@@ -87,6 +87,7 @@ export default function ScheduleTab({ proyectoId }: { proyectoId: number }) {
   const [portal, setPortal] = useState<{ open: boolean; nombre: string; email: string; link: string | null }>({ open: false, nombre: '', email: '', link: null })
   const [portalTokens, setPortalTokens] = useState<PortalTokenRow[]>([])
   const [planosUrl, setPlanosUrl] = useState<string | null>(null)
+  const [submittals, setSubmittals] = useState<SubmittalRow[]>([])
 
   async function load() {
     setLoading(true)
@@ -94,7 +95,8 @@ export default function ScheduleTab({ proyectoId }: { proyectoId: number }) {
       setData((await scheduleService.getPlan(proyectoId)).data)
       // Último submittal (planos enviados), para poder verlo desde el schedule.
       try {
-        const subs = (await scheduleService.getSubmittals(proyectoId)).data
+        const subs = (await scheduleService.getSubmittals(proyectoId)).data ?? []
+        setSubmittals(subs)
         setPlanosUrl(subs.find((s) => s.url)?.url ?? null)
       } catch { /* sin planos todavía */ }
     }
@@ -526,6 +528,20 @@ export default function ScheduleTab({ proyectoId }: { proyectoId: number }) {
                          className="shrink-0 inline-flex items-center gap-1 text-[11px] font-medium text-forest-700 hover:text-forest-900">
                         <FileText size={12} /> Ver planos
                       </a>
+                    )}
+                    {/* Ciclo del cliente sobre los planos (envío → respuesta): días atribuibles al cliente. */}
+                    {h.codigo === 'E-07' && submittals[0] && (
+                      submittals[0].respondido_at ? (
+                        <span className="shrink-0 inline-flex items-center gap-1 text-[10px] font-medium text-stone-600 bg-stone-100 rounded-full px-2 py-0.5"
+                              title="Días que tardó el cliente en responder los planos (envío → respuesta)">
+                          cliente: {submittals[0].dias_cliente}d
+                        </span>
+                      ) : (
+                        <span className="shrink-0 inline-flex items-center gap-1 text-[10px] font-medium text-amber-700 bg-amber-50 rounded-full px-2 py-0.5"
+                              title="Esperando la respuesta del cliente (días desde el envío)">
+                          esperando cliente · {submittals[0].dias_cliente}d
+                        </span>
+                      )
                     )}
                     {cumplido ? (
                       <span className="inline-flex items-center gap-1 text-[11px] font-medium text-emerald-700 bg-emerald-50 rounded-full px-2 py-0.5 shrink-0"><Check size={11} /> {fmt(h.fecha_real)}</span>

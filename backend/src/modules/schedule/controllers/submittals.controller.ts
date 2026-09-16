@@ -10,6 +10,7 @@ import { createError } from '../../../middleware/errorHandler'
 import { supabase, supabaseEnabled, SUPABASE_BUCKET } from '../../../utils/supabase'
 import { logger } from '../../../utils/logger'
 import { crearSubmittal, listSubmittals } from '../domain/submittals'
+import { asegurarContactoPortal } from '../domain/portal'
 import { notifyPortalCliente } from '../domain/notifyPortal'
 import { subirArchivoHito, listArchivosHito } from '../domain/archivos'
 
@@ -47,7 +48,16 @@ export async function uploadSubmittalHandler(req: Request, res: Response, next: 
       return next(createError(`Error subiendo el submittal: ${upErr.message}`, 500))
     }
 
+    // Envío consciente: el destinatario del cliente (nombre + email) viaja como
+    // campos del multipart. Antes de subir, aseguramos que el token del portal
+    // tenga ese contacto → el cliente accede + recibe el email de aviso.
+    const contactoNombre = typeof req.body?.contacto_nombre === 'string' ? req.body.contacto_nombre.trim().slice(0, 150) : ''
+    const contactoEmail = typeof req.body?.contacto_email === 'string' ? req.body.contacto_email.trim().slice(0, 200) : ''
+
     await client.query('BEGIN')
+    if (contactoNombre || contactoEmail) {
+      await asegurarContactoPortal(client, proyectoId, contactoNombre || null, contactoEmail || null, (req as any).user?.id ?? null)
+    }
     const r = await crearSubmittal(client, proyectoId,
       { filename: uniqueName, original_name: req.file.originalname, size: req.file.size },
       (req as any).user?.id ?? null)

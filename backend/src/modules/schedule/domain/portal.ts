@@ -76,6 +76,31 @@ export async function crearToken(
   return { id: rows[0].id, token }
 }
 
+/** Asegura que el proyecto tenga un token de portal ACTIVO para este contacto:
+ *  si ya hay uno, le completa/actualiza nombre y email; si no, lo crea. Lo usa el
+ *  "envío consciente" de planos, para que el destinatario tenga acceso + reciba el
+ *  email. Devuelve el token (para armar el link). */
+export async function asegurarContactoPortal(
+  runner: QueryRunner, proyectoId: number, nombre: string | null, email: string | null, createdBy: string | null,
+): Promise<{ token: string }> {
+  const { rows } = await runner.query<{ id: number; token: string }>(
+    `SELECT id, token FROM schedule_portal_tokens
+      WHERE proyecto_id = $1 AND activo = true AND (expires_at IS NULL OR expires_at > NOW())
+      ORDER BY created_at DESC LIMIT 1`, [proyectoId])
+  const ex = rows[0]
+  if (ex) {
+    // Actualiza solo con valores no vacíos (no borra lo que ya había).
+    await runner.query(
+      `UPDATE schedule_portal_tokens
+          SET contacto_nombre = COALESCE(NULLIF($2,''), contacto_nombre),
+              contacto_email  = COALESCE(NULLIF($3,''), contacto_email)
+        WHERE id = $1`, [ex.id, nombre ?? '', email ?? ''])
+    return { token: ex.token }
+  }
+  const nuevo = await crearToken(runner, proyectoId, nombre, email, createdBy)
+  return { token: nuevo.token }
+}
+
 /** Revoca (desactiva) un token del portal. Deja de funcionar de inmediato. */
 export async function revocarToken(runner: QueryRunner, proyectoId: number, tokenId: number): Promise<boolean> {
   const { rowCount } = await runner.query(

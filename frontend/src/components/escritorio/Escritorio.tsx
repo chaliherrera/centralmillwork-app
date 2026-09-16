@@ -74,6 +74,11 @@ export default function Escritorio({ rol, asignado, titulo, subtitulo, hideWhenE
   const [firmaFirma, setFirmaFirma] = useState('')
   const [firmaEnvio, setFirmaEnvio] = useState('')
   const [firmaPdf, setFirmaPdf] = useState<File | null>(null)
+  // Envío consciente de planos al cliente (shop_drawings / sd_update): destinatario + email + PDF.
+  const [planosOpen, setPlanosOpen] = useState<number | null>(null)
+  const [planosNombre, setPlanosNombre] = useState('')
+  const [planosEmail, setPlanosEmail] = useState('')
+  const [planosPdf, setPlanosPdf] = useState<File | null>(null)
 
   const { data, isLoading } = useQuery({
     queryKey: ['escritorio', rol ?? '', asignado ?? ''],
@@ -102,6 +107,21 @@ export default function Escritorio({ rol, asignado, titulo, subtitulo, hideWhenE
     },
     onSuccess: () => { toast.success('Tarea completada'); setArchivos({}); qc.invalidateQueries({ queryKey: ['escritorio'] }) },
     onError: (e: any) => toast.error(e?.response?.data?.message ?? 'No se pudo completar'),
+  })
+
+  function cerrarPlanos() { setPlanosOpen(null); setPlanosNombre(''); setPlanosEmail(''); setPlanosPdf(null) }
+  // Envío consciente de planos: sube el submittal con el destinatario (nombre+email,
+  // queda en el link del portal) y cierra la tarea. El cliente revisa y responde
+  // en el portal; ahí se capturan las fechas de envío y respuesta.
+  const enviarPlanos = useMutation({
+    mutationFn: async ({ t }: { t: EscritorioTarea }) => {
+      if (!planosPdf || t.proyecto_id == null) throw new Error('Falta el PDF de los planos')
+      await scheduleService.uploadSubmittal(t.proyecto_id, planosPdf,
+        { nombre: planosNombre.trim() || undefined, email: planosEmail.trim() || undefined })
+      return ingenieriaService.avanceTarea(t.id, { estado: 'hecha', fecha_fin_real: hoy() })
+    },
+    onSuccess: () => { toast.success('Planos enviados al cliente'); cerrarPlanos(); qc.invalidateQueries({ queryKey: ['escritorio'] }) },
+    onError: (e: any) => toast.error(e?.response?.data?.message ?? 'No se pudieron enviar los planos'),
   })
 
   // "Avisar al PM": el ingeniero no mueve fechas (son del PM, que replanifica 2×/semana);
@@ -234,7 +254,9 @@ export default function Escritorio({ rol, asignado, titulo, subtitulo, hideWhenE
                   // Field Measurements etapa 1 (pendiente): el ingeniero sube el PLANO de campo → handoff a Campo.
                   // En_curso lo ve Campo, que solo marca "Medida" (esCompletable, sin adjuntar nada).
                   const esPlanoCampo = clave === 'field_measurements' && t.estado !== 'en_curso'
-                  const esCompletable = COMPLETABLE.has(clave) && !esDecision && !esMto && !esPlanoCampo
+                  // Envío consciente de planos al cliente (shop_drawings / sd_update): modal propio.
+                  const esEnvioPlanos = (clave === 'shop_drawings' || clave === 'sd_update') && t.proyecto_id != null
+                  const esCompletable = COMPLETABLE.has(clave) && !esDecision && !esMto && !esPlanoCampo && !esEnvioPlanos
                   const link = LINK_MODULO[clave]
                   // material_proc pendiente = el ingeniero produce/importa el MTO ("Importar MTO");
                   // en_curso = Compras cotiza/compra ("Ir a Control MTOs"). Mismo destino (/mtos).
@@ -308,6 +330,11 @@ export default function Escritorio({ rol, asignado, titulo, subtitulo, hideWhenE
                               {subirPlano.isPending ? <Loader2 className="animate-spin" size={13} /> : <FileUp size={13} />} Enviar a Campo
                             </button>
                           </div>
+                        ) : esEnvioPlanos ? (
+                          <button onClick={() => { if (planosOpen === t.id) cerrarPlanos(); else { setPlanosNombre(''); setPlanosEmail(''); setPlanosPdf(null); setPlanosOpen(t.id) } }}
+                            className="inline-flex items-center gap-1 rounded-lg bg-forest-600 hover:bg-forest-700 text-white text-xs font-semibold px-2.5 py-1.5 shrink-0">
+                            <FileUp size={13} /> Enviar planos al cliente
+                          </button>
                         ) : esCompletable ? (
                           <div className="flex items-center gap-1.5 shrink-0 flex-wrap justify-end">
                             {art && (
@@ -391,6 +418,38 @@ export default function Escritorio({ rol, asignado, titulo, subtitulo, hideWhenE
                               disabled={registrarFirma.isPending || !firmaFirma || !firmaPdf || (!!firmaEnvio && firmaFirma < firmaEnvio)}
                               className="inline-flex items-center gap-1.5 rounded-lg bg-forest-600 hover:bg-forest-700 disabled:opacity-50 text-white text-xs font-semibold px-3 py-1.5">
                               {registrarFirma.isPending ? <Loader2 className="animate-spin" size={13} /> : <FileSignature size={13} />} Registrar firma
+                            </button>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Envío consciente de planos al cliente (shop_drawings / sd_update) */}
+                      {esEnvioPlanos && planosOpen === t.id && (
+                        <div className="mt-2.5 rounded-lg border border-forest-200 bg-forest-50/50 px-3 py-2.5 space-y-2">
+                          <p className="text-[11px] text-forest-800/80">El cliente recibe el aviso y <b>revisa y responde en el portal</b> (aprobar, rechazar o con observaciones). Se registran las fechas de envío y de respuesta.</p>
+                          <div className="grid grid-cols-2 gap-2">
+                            <label className="block">
+                              <span className="text-[10px] uppercase tracking-wide text-stone-400 font-semibold">Destinatario (opcional)</span>
+                              <input value={planosNombre} onChange={(e) => setPlanosNombre(e.target.value)} placeholder="Ej: Ana, Rivera Hotels"
+                                className="mt-0.5 w-full text-xs border border-stone-300 rounded-lg px-2 py-1.5" />
+                            </label>
+                            <label className="block">
+                              <span className="text-[10px] uppercase tracking-wide text-stone-400 font-semibold">Email (opcional)</span>
+                              <input type="email" value={planosEmail} onChange={(e) => setPlanosEmail(e.target.value)} placeholder="cliente@empresa.com"
+                                className="mt-0.5 w-full text-xs border border-stone-300 rounded-lg px-2 py-1.5" />
+                            </label>
+                          </div>
+                          <label className="flex items-center gap-2 rounded-lg border border-stone-300 bg-white px-2.5 py-1.5 cursor-pointer text-xs">
+                            <FileUp size={14} className="text-stone-500 shrink-0" />
+                            <span className="text-stone-600 truncate flex-1">{planosPdf ? planosPdf.name : 'PDF de los planos · obligatorio'}</span>
+                            <input type="file" accept="application/pdf" className="hidden" onChange={(e) => setPlanosPdf(e.target.files?.[0] ?? null)} />
+                          </label>
+                          <div className="flex items-center justify-end gap-2">
+                            <button onClick={cerrarPlanos} className="text-xs text-stone-500 hover:text-stone-800 px-2 py-1">Cancelar</button>
+                            <button onClick={() => enviarPlanos.mutate({ t })}
+                              disabled={enviarPlanos.isPending || !planosPdf}
+                              className="inline-flex items-center gap-1.5 rounded-lg bg-forest-600 hover:bg-forest-700 disabled:opacity-50 text-white text-xs font-semibold px-3 py-1.5">
+                              {enviarPlanos.isPending ? <Loader2 className="animate-spin" size={13} /> : <FileUp size={13} />} Enviar al cliente
                             </button>
                           </div>
                         </div>
