@@ -106,6 +106,20 @@ export async function createProyecto(req: Request, res: Response, next: NextFunc
 
 export async function updateProyecto(req: Request, res: Response, next: NextFunction) {
   try {
+    // Guarda (E2): un prospecto NO se activa por este endpoint genérico de
+    // edición. La activación tiene que ir por la máquina de deals
+    // (activarProyecto), que exige deal_estado='aprobado' + los gates de
+    // depósito. Sin esta guarda, editar un prospecto y guardarlo con
+    // estado='activo' lo activaba "por la puerta de atrás", salteando la
+    // aprobación del cliente. Solo bloqueamos la transición prospecto→activo;
+    // el resto de los cambios de estado (activo→completado, etc.) siguen libres.
+    if (req.body.estado === 'activo') {
+      const { rows: cur } = await pool.query('SELECT estado FROM proyectos WHERE id = $1', [req.params.id])
+      if (!cur[0]) return next(createError('Proyecto no encontrado', 404))
+      if (cur[0].estado === 'prospecto')
+        return next(createError('Un prospecto se activa desde el flujo del PM (con la aprobación del cliente), no editándolo.', 409))
+    }
+
     const fields = ['codigo','nombre','cliente','descripcion','estado',
                     'fecha_inicio','fecha_fin_estimada','fecha_fin_real','presupuesto','responsable',
                     'millwork_total','stone_total','items_qty','intake_comments','fecha_entrega_solicitada']

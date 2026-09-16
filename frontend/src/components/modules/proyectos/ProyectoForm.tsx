@@ -98,6 +98,10 @@ export default function ProyectoForm({ open, onClose, proyecto, hideDates, intak
       // Creado desde Estimados = nace como PROSPECTO (invisible para Compras/Producción
       // hasta que el cliente apruebe el schedule y pase a 'activo').
       if (!isEdit && intake) payload.estado = 'prospecto'
+      // Guarda E2: editar un prospecto no debe activarlo. Este form solo maneja
+      // activo/completado, así que al editar un prospecto NO mandamos `estado`
+      // (se mantiene como prospecto). La activación va por el flujo del PM.
+      if (isEdit && proyecto?.estado === 'prospecto') delete payload.estado
       return isEdit
         ? proyectosService.update(proyecto!.id, payload)
         : proyectosService.create(payload as Omit<Proyecto, 'id' | 'created_at' | 'updated_at'>)
