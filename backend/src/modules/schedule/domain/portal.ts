@@ -19,23 +19,26 @@ import { captureException } from '../../../utils/sentry'
 type QueryRunner = PoolClient | typeof pool
 
 // Hitos que el cliente puede APROBAR desde el portal (estaciones de acción).
+// Textos EN inglés: el portal es para clientes US (decisión Q1). Solo se usan
+// como etiqueta cara-al-cliente; el resto de los usos de APROBABLES son booleanos.
 export const APROBABLES: Record<string, string> = {
-  'E-05': 'Muestras de terminación',
-  'E-07': 'Planos de taller (shop drawings)',
-  'I-07': 'Entrega final (sign-off)',
+  'E-05': 'Samples',
+  'E-07': 'Shop drawings',
+  'I-07': 'Final delivery (sign-off)',
 }
 
 // El "recorrido del cliente": los momentos donde el cliente participa, en orden.
 // tipo 'accion'  → el cliente aprueba desde el portal (botón).
 // tipo 'estado'  → lo registra su dueño (DocuSign/Contabilidad); el cliente solo lo ve.
+// Labels EN inglés (portal cara-al-cliente, Q1).
 export const CLIENT_MOMENTS: Array<{ codigo: string; label: string; tipo: 'accion' | 'estado' }> = [
-  { codigo: 'PLAN', label: 'Aprobación del plan', tipo: 'accion' }, // el cliente lo aprueba desde el portal (mueve el deal)
-  { codigo: 'C-03', label: 'Firma de contrato', tipo: 'estado' },
-  { codigo: 'C-04', label: 'Down Payment',       tipo: 'estado' },
-  { codigo: 'E-05', label: 'Muestras',           tipo: 'accion' },
-  { codigo: 'E-07', label: 'Planos de taller',   tipo: 'accion' },
-  { codigo: 'I-07', label: 'Entrega (sign-off)', tipo: 'accion' },
-  { codigo: 'X-03', label: 'Pago final',         tipo: 'estado' },
+  { codigo: 'PLAN', label: 'Plan approval',     tipo: 'accion' }, // el cliente lo aprueba desde el portal (mueve el deal)
+  { codigo: 'C-03', label: 'Contract signed',   tipo: 'estado' },
+  { codigo: 'C-04', label: 'Down payment',      tipo: 'estado' },
+  { codigo: 'E-05', label: 'Samples',           tipo: 'accion' },
+  { codigo: 'E-07', label: 'Shop drawings',     tipo: 'accion' },
+  { codigo: 'I-07', label: 'Delivery sign-off', tipo: 'accion' },
+  { codigo: 'X-03', label: 'Final payment',     tipo: 'estado' },
 ]
 
 // Etiqueta (para el cliente) de cada código con el que decide, para el historial.
@@ -43,6 +46,27 @@ const LABEL_MOMENTO: Record<string, string> = Object.fromEntries(
   CLIENT_MOMENTS.map((m) => [m.codigo, m.label]))
 // Rev A/B/C… a partir del número de versión del submittal.
 const revLabel = (n: number) => `Rev ${String.fromCharCode(64 + n)}`
+
+// Cronograma POR FASES para el cliente (Q6): cada paso de la ruta (tipo_clave) va
+// a una fase cara-al-cliente. Se muestran solo las fases que el proyecto tiene.
+const PHASE_OF: Record<string, string> = {
+  po_execution: 'contract', material_deposit: 'contract',
+  meeting_designer: 'engineering', long_leads: 'engineering', shop_drawings: 'engineering',
+  samples: 'engineering', client_review: 'engineering', approval: 'engineering',
+  field_measurements: 'engineering', sd_update: 'engineering', release: 'engineering',
+  material_proc: 'materials',
+  cnc: 'production', fabrication: 'production',
+  shipment: 'installation', installation: 'installation',
+  stone_measure: 'countertops', stone_fab: 'countertops', stone_install: 'countertops',
+}
+const PHASE_DEF: Array<{ key: string; label: string; detalle: string }> = [
+  { key: 'contract',    label: 'Contract',     detalle: 'Signed & deposit received' },
+  { key: 'engineering', label: 'Engineering',  detalle: 'Shop drawings & samples' },
+  { key: 'materials',   label: 'Materials',    detalle: 'Procurement & delivery' },
+  { key: 'production',  label: 'Production',    detalle: 'Fabrication in the shop' },
+  { key: 'installation',label: 'Installation', detalle: 'Delivery & on-site install' },
+  { key: 'countertops', label: 'Countertops',  detalle: 'Stone measure, fab & install' },
+]
 
 // Tareas del Gantt en las que participa el cliente (se resaltan en el portal):
 // firma de contrato, depósito, aprobación de muestras, revisión y aprobación de planos.
@@ -130,6 +154,8 @@ export interface VistaPublica {
   pendientes: Array<{ codigo: string; titulo: string; fecha_planeada: string | null; documento_url?: string | null }>
   // El Gantt completo del proyecto (la propuesta): tareas con fechas; las del cliente marcadas.
   gantt: Array<{ nombre: string; inicio: string | null; fin: string | null; estado: string; es_cliente: boolean }>
+  // Cronograma POR FASES para el cliente (solo las fases que el proyecto tiene).
+  fases: Array<{ key: string; label: string; detalle: string; inicio: string | null; fin: string | null; estado: 'done' | 'now' | 'future'; n_done: number; n_total: number }>
   // Historial "tus decisiones": lo que el cliente ya aprobó/rechazó/comentó (más reciente primero).
   decisiones: Array<{ fecha: string; que: string; decision: 'aprobado' | 'aprobado_con_comentarios' | 'rechazado'; comentario: string | null }>
   // Estado post-decisión de los planos (mensaje "mientras tanto"), o null si no aplica.
@@ -232,6 +258,25 @@ export async function getVistaPublica(runner: QueryRunner, token: string): Promi
       ORDER BY t.fecha_inicio, t.id`, [info.proyectoId])
   const gantt = gr.map((g) => ({ nombre: g.nombre, inicio: g.inicio, fin: g.fin, estado: g.estado, es_cliente: !!g.clave && CLIENT_TASK_CLAVES.has(g.clave) }))
 
+  // Cronograma POR FASES (Q6): agrupa las tareas de la ruta por fase cara-al-cliente.
+  const fMap = new Map<string, { inicio: string | null; fin: string | null; nTotal: number; nDone: number; nStarted: number }>()
+  for (const g of gr) {
+    const pk = PHASE_OF[g.clave ?? '']
+    if (!pk) continue
+    const a = fMap.get(pk) ?? { inicio: null, fin: null, nTotal: 0, nDone: 0, nStarted: 0 }
+    a.nTotal++
+    if (g.estado === 'hecha') { a.nDone++; a.nStarted++ }
+    else if (g.estado === 'en_curso') a.nStarted++
+    if (g.inicio && (!a.inicio || g.inicio < a.inicio)) a.inicio = g.inicio
+    if (g.fin && (!a.fin || g.fin > a.fin)) a.fin = g.fin
+    fMap.set(pk, a)
+  }
+  const fases = PHASE_DEF.filter((p) => fMap.has(p.key)).map((p) => {
+    const a = fMap.get(p.key)!
+    const estado: 'done' | 'now' | 'future' = a.nDone === a.nTotal ? 'done' : a.nStarted > 0 ? 'now' : 'future'
+    return { key: p.key, label: p.label, detalle: p.detalle, inicio: a.inicio, fin: a.fin, estado, n_done: a.nDone, n_total: a.nTotal }
+  })
+
   // Historial "tus decisiones": lo que el cliente aprobó/rechazó/comentó desde el
   // portal (schedule_eventos disparados por el portal). Le da constancia de sus
   // respuestas y cierra el círculo de cada decisión.
@@ -258,9 +303,9 @@ export async function getVistaPublica(runner: QueryRunner, token: string): Promi
   if (sub[0]?.estado) {
     const rev = revLabel(sub[0].version_numero)
     if (sub[0].estado === 'rechazado' || sub[0].estado === 'aprobado_con_comentarios') {
-      planosEstado = { rev, estado: 'cambios', mensaje: `Pediste cambios en los planos (${rev}). El equipo está preparando la próxima versión para tu revisión.` }
+      planosEstado = { rev, estado: 'cambios', mensaje: `You requested changes to the shop drawings (${rev}). Our team is preparing the next version for your review.` }
     } else if (sub[0].estado === 'aprobado') {
-      planosEstado = { rev, estado: 'aprobado', mensaje: `Aprobaste los planos (${rev}). Tu proyecto avanzó a producción.` }
+      planosEstado = { rev, estado: 'aprobado', mensaje: `You approved the shop drawings (${rev}). Your project has moved into production.` }
     }
   }
 
@@ -270,6 +315,7 @@ export async function getVistaPublica(runner: QueryRunner, token: string): Promi
     momentos,
     pendientes: [...planPendiente, ...pendientes],
     gantt,
+    fases,
     decisiones,
     planosEstado,
   }

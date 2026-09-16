@@ -15,12 +15,18 @@ export interface PortalDecision {
 export interface PortalPlanosEstado {
   rev: string; estado: 'cambios' | 'aprobado'; mensaje: string
 }
+export interface PortalFase {
+  key: string; label: string; detalle: string
+  inicio: string | null; fin: string | null
+  estado: 'done' | 'now' | 'future'; n_done: number; n_total: number
+}
 export interface PortalVista {
   proyecto: { nombre: string; cliente: string; fecha_objetivo: string | null; semaforo: string }
   contacto: string | null
   momentos: PortalMomento[]
   pendientes: Array<{ codigo: string; titulo: string; fecha_planeada: string | null; documento_url?: string | null }>
   gantt: PortalGanttTarea[]
+  fases: PortalFase[]
   decisiones: PortalDecision[]
   planosEstado: PortalPlanosEstado | null
 }
