@@ -139,7 +139,14 @@ export interface PagoPorCobrar {
 export async function listPagosPorCobrar(runner: QueryRunner): Promise<PagoPorCobrar[]> {
   const { rows } = await runner.query<PagoPorCobrar>(
     `SELECT p.id AS proyecto_id, p.codigo AS proyecto_codigo, p.nombre, h.codigo AS hito,
-            GREATEST(0, (CURRENT_DATE - ip.fecha_inicio))::int AS dias_pendiente
+            -- El "hace N días" cuenta desde el día cero: tiene sentido para el
+            -- depósito (C-04), que vence al arrancar. Para el pago final (X-03),
+            -- que vence recién al terminar, contar desde el día cero es engañoso
+            -- (mostraría "pendiente hace 60 días" para algo que aún no vencía) →
+            -- NULL, y el frontend no muestra la línea de aging (P10).
+            CASE WHEN h.codigo = 'C-04'
+                 THEN GREATEST(0, (CURRENT_DATE - ip.fecha_inicio))::int
+                 ELSE NULL END AS dias_pendiente
        FROM proyectos p
        JOIN ing_proyectos ip ON ip.proyecto_id = p.id
        JOIN schedule_planes sp ON sp.proyecto_id = p.id AND sp.scope = 'proyecto'

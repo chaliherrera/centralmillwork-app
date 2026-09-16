@@ -51,7 +51,11 @@ export default function PagosPorCobrar() {
                   <span className="text-[10px] font-bold uppercase tracking-wide rounded px-1.5 py-0.5 bg-forest-100 text-forest-700 mr-2">{LABEL[d.hito] ?? d.hito}</span>
                   {d.nombre || d.proyecto_codigo} <span className="text-[11px] font-mono text-stone-400">· {d.proyecto_codigo}</span>
                 </div>
-                <div className="text-[11px] text-stone-400">pendiente hace {d.dias_pendiente ?? 0} día{d.dias_pendiente === 1 ? '' : 's'}</div>
+                {/* Aging solo para el depósito (C-04). El pago final (X-03) trae
+                    dias_pendiente=null porque vence al final, no al día cero (P10). */}
+                {d.dias_pendiente != null && (
+                  <div className="text-[11px] text-stone-400">pendiente hace {d.dias_pendiente} día{d.dias_pendiente === 1 ? '' : 's'}</div>
+                )}
               </div>
               <div className="flex items-center gap-1.5 shrink-0">
                 <span className="text-stone-400 text-sm">$</span>

@@ -459,7 +459,14 @@ export async function escritorioResumenHandler(req: Request, res: Response, next
   try {
     const user = (req as any).user
     const rolApp = user?.rol ?? ''
-    const roles = ROLES_RUTA_POR_APP[rolApp] ?? []
+    // El badge de /pm cuenta la piedra (rol 'externo'), que en la página del
+    // PM/ADMIN se muestra como widget aparte. ROLES_RUTA_POR_APP no incluye
+    // 'externo' a propósito (para no mezclar la piedra en el escritorio
+    // principal), así que lo sumamos SOLO acá, para el conteo del badge. Sin
+    // esto la piedra nunca mostraba badge (P11).
+    const rolesBase = ROLES_RUTA_POR_APP[rolApp] ?? []
+    const roles = (rolApp === 'PROJECT_MANAGEMENT' || rolApp === 'ADMIN')
+      ? [...rolesBase, 'externo'] : rolesBase
     if (!roles.length) return res.json({ data: {} })
     let asignado: string | null = null
     if ((rolApp === 'ENGINEERING' || rolApp === 'FIELD') && user?.id) {
