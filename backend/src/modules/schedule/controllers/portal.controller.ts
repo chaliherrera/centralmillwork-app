@@ -9,6 +9,7 @@ import { Request, Response, NextFunction } from 'express'
 import { z } from 'zod'
 import pool from '../../../db/pool'
 import { getVistaPublica, aplicarAprobacion } from '../domain/portal'
+import { notifyPortalCliente, PORTAL_LABEL_EN } from '../domain/notifyPortal'
 
 // GET /api/portal/:token — vista de solo-lectura del proyecto + pendientes
 export async function portalVista(req: Request, res: Response, next: NextFunction) {
@@ -33,6 +34,13 @@ export async function portalAprobar(req: Request, res: Response, next: NextFunct
     const r = await aplicarAprobacion(client, String(req.params.token), codigo, decision, comentario ?? null)
     await client.query('COMMIT')
     if (!r.ok) return res.status(400).json({ message: r.error })
+    // Acuse al cliente (post-commit, best-effort, inerte hasta activar emails).
+    if (r.proyectoId != null) {
+      await notifyPortalCliente(pool, r.proyectoId, 'decision_recibida', {
+        que: PORTAL_LABEL_EN[codigo] ?? 'your review',
+        aprobado: decision !== 'rechazado',
+      })
+    }
     res.json({ data: { ok: true } })
   } catch (err: any) {
     await client.query('ROLLBACK').catch(() => {})

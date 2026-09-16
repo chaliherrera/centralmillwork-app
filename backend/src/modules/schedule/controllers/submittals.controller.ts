@@ -10,6 +10,7 @@ import { createError } from '../../../middleware/errorHandler'
 import { supabase, supabaseEnabled, SUPABASE_BUCKET } from '../../../utils/supabase'
 import { logger } from '../../../utils/logger'
 import { crearSubmittal, listSubmittals } from '../domain/submittals'
+import { notifyPortalCliente } from '../domain/notifyPortal'
 import { subirArchivoHito, listArchivosHito } from '../domain/archivos'
 
 // Multer en memoria — solo PDF, hasta 25 MB.
@@ -52,6 +53,10 @@ export async function uploadSubmittalHandler(req: Request, res: Response, next: 
       (req as any).user?.id ?? null)
     if (!r.ok) { await client.query('ROLLBACK'); return next(createError(r.error, 400)) }
     await client.query('COMMIT')
+
+    // Email al cliente: "los planos están listos para tu revisión" (E-07).
+    // Post-commit, best-effort, inerte hasta activar emails + cargar su email.
+    await notifyPortalCliente(pool, proyectoId, 'algo_por_aprobar', { que: 'Shop drawings' })
 
     res.status(201).json({ data: r, message: `Submittal ${r.version_label} emitido` })
   } catch (err) {

@@ -116,9 +116,9 @@ export const scheduleService = {
       .post<ApiResponse<{ ok: boolean; anterior: string }>>(`/schedule/proyecto/${proyectoId}/fecha-objetivo`, { fecha_objetivo })
       .then((r) => r.data),
 
-  crearPortalToken: (proyectoId: number, contacto_nombre?: string) =>
+  crearPortalToken: (proyectoId: number, contacto_nombre?: string, contacto_email?: string) =>
     api
-      .post<ApiResponse<{ token: string }>>(`/schedule/proyecto/${proyectoId}/portal-token`, { contacto_nombre })
+      .post<ApiResponse<{ token: string }>>(`/schedule/proyecto/${proyectoId}/portal-token`, { contacto_nombre, contacto_email })
       .then((r) => r.data),
 
   registrarHito: (proyectoId: number, codigo: string, fecha: string | null, nota?: string, importe?: number) =>

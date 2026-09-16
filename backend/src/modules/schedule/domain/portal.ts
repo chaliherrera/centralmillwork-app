@@ -189,7 +189,7 @@ export async function aplicarAprobacion(
   codigo: string,
   decision: Decision,
   comentario: string | null
-): Promise<{ ok: boolean; error?: string }> {
+): Promise<{ ok: boolean; error?: string; proyectoId?: number }> {
   const info = await resolverToken(runner, token)
   if (!info) return { ok: false, error: 'token inválido' }
 
@@ -211,7 +211,7 @@ export async function aplicarAprobacion(
         [plan[0].id, `Cliente${info.contactoNombre ? ` (${info.contactoNombre})` : ''}: ${decision.replace(/_/g, ' ')} — Aprobación del plan`,
          JSON.stringify({ source: 'portal', contacto: info.contactoNombre, decision, comentario: comentario || undefined })])
     } catch { /* traza best-effort */ }
-    return { ok: true }
+    return { ok: true, proyectoId: info.proyectoId }
   }
 
   if (!APROBABLES[codigo]) return { ok: false, error: 'ese hito no es aprobable por el cliente' }
@@ -270,5 +270,5 @@ export async function aplicarAprobacion(
   }
 
   await recomputeScheduleForProyecto(runner, info.proyectoId, 'manual')
-  return { ok: true }
+  return { ok: true, proyectoId: info.proyectoId }
 }

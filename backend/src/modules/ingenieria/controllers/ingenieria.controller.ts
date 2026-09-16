@@ -5,6 +5,7 @@ import { Request, Response, NextFunction } from 'express'
 import { z } from 'zod'
 import pool from '../../../db/pool'
 import { createError } from '../../../middleware/errorHandler'
+import { notifyPortalCliente } from '../../schedule/domain/notifyPortal'
 import {
   getResumen, listProyectos, listTareas, getCargaPorIngeniero, getTareasDeCelda,
   getCargaPorEtapa, getProyectosDeEtapa,
@@ -77,8 +78,12 @@ export async function dealsEnCursoHandler(_req: Request, res: Response, next: Ne
 // POST /api/ingenieria/proyecto/:id/enviar-cliente — Estimados manda el schedule al cliente
 export async function enviarClienteHandler(req: Request, res: Response, next: NextFunction) {
   try {
-    const r = await enviarAClienteDeal(pool, pid(req), req.user?.id ?? null)
+    const id = pid(req)
+    const r = await enviarAClienteDeal(pool, id, req.user?.id ?? null)
     if (!r.ok) return next(createError(r.error ?? 'no se pudo enviar', 400))
+    // Email al cliente: "tu cronograma está listo para aprobar". Best-effort e
+    // inerte hasta que el token tenga email + Resend esté configurado.
+    await notifyPortalCliente(pool, id, 'plan_listo')
     res.json({ data: r })
   } catch (e) { next(e) }
 }

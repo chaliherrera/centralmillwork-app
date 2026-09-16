@@ -563,3 +563,115 @@ export function muestraRechazadaEmail(input: {
 
   return { subject, html, text }
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Portal del cliente — emails transaccionales (Fase 1)
+// ─────────────────────────────────────────────────────────────────────────────
+// A diferencia de los de arriba (internos, español), estos van AL CLIENTE final.
+// En INGLÉS por defecto (los clientes son de US). Si más adelante se decide
+// bilingüe/español (decisión Q1), es un cambio acá — la plomería (notifyPortal)
+// no cambia. Enlazan al PORTAL público (/portal/<token>), no a la app interna.
+//
+// Todos reciben el `portalUrl` ya armado (con el token). El helper notifyPortal
+// solo los manda si el token del cliente tiene email cargado; si no, no manda.
+
+/** Plantilla base del portal: cabecera + cuerpo + botón + pie, look del portal. */
+function portalShell(input: { preheader: string; heading: string; bodyHtml: string; ctaLabel: string; portalUrl: string }): string {
+  return `
+<!DOCTYPE html>
+<html lang="en">
+<body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; background: #f8f6f0;">
+  <div style="display:none; max-height:0; overflow:hidden; opacity:0;">${escapeHtml(input.preheader)}</div>
+  <div style="background: #2C3126; border-radius: 12px 12px 0 0; padding: 20px 24px;">
+    <div style="color: #E8E2D5; font-weight: 700; font-size: 16px; letter-spacing: 0.3px;">Central Millwork</div>
+  </div>
+  <div style="background: white; border-radius: 0 0 12px 12px; padding: 28px 24px;">
+    <h1 style="font-size: 20px; color: #2C3126; margin: 0 0 16px;">${escapeHtml(input.heading)}</h1>
+    <div style="font-size: 15px; color: #1F1B14; line-height: 1.6;">${input.bodyHtml}</div>
+    <div style="margin-top: 28px;">
+      <a href="${input.portalUrl}" style="display: inline-block; background: #4A5240; color: white; padding: 12px 24px; border-radius: 8px; text-decoration: none; font-weight: 600; font-size: 15px;">
+        ${escapeHtml(input.ctaLabel)}
+      </a>
+    </div>
+    <div style="margin-top: 20px; font-size: 13px; color: #6B6356;">
+      Or open this link: <a href="${input.portalUrl}" style="color:#9B7200;">${input.portalUrl}</a>
+    </div>
+    <div style="margin-top: 28px; padding-top: 16px; border-top: 1px solid #ECE7DC; font-size: 12px; color: #B0A89A;">
+      This is an automated message from Central Millwork. Please don't reply to this address — for questions, contact your project manager.
+    </div>
+  </div>
+</body>
+</html>`.trim()
+}
+
+/** "Tu cronograma está listo para aprobar" — se dispara al mandar el deal al cliente. */
+export function portalPlanListoEmail(input: {
+  proyecto: string
+  contacto: string | null
+  portalUrl: string
+}): { subject: string; html: string; text: string } {
+  const hi = input.contacto ? `Hi ${input.contacto},` : 'Hello,'
+  const subject = `Your project schedule is ready to review — ${input.proyecto}`
+  const bodyHtml = `
+    <p style="margin:0 0 12px;">${escapeHtml(hi)}</p>
+    <p style="margin:0 0 12px;">Your project schedule for <strong>${escapeHtml(input.proyecto)}</strong> is ready. You can review the full timeline and approve the plan from your project portal.</p>
+    <p style="margin:0;">Once you approve, we'll get your project underway.</p>`
+  const html = portalShell({ preheader: `Your schedule for ${input.proyecto} is ready to review.`, heading: 'Your project schedule is ready', bodyHtml, ctaLabel: 'Review & approve', portalUrl: input.portalUrl })
+  const text = [
+    hi, '',
+    `Your project schedule for ${input.proyecto} is ready to review and approve.`,
+    `Open your portal: ${input.portalUrl}`, '',
+    'Once you approve, we\'ll get your project underway.', '',
+    '--', 'Central Millwork · automated message. Please don\'t reply.',
+  ].join('\n')
+  return { subject, html, text }
+}
+
+/** "Hay algo esperando tu revisión" (planos / muestras / entrega). */
+export function portalAlgoPorAprobarEmail(input: {
+  proyecto: string
+  contacto: string | null
+  que: string          // p.ej. "Shop drawings", "Samples", "Final delivery"
+  portalUrl: string
+}): { subject: string; html: string; text: string } {
+  const hi = input.contacto ? `Hi ${input.contacto},` : 'Hello,'
+  const subject = `Action needed: ${input.que} ready for your review — ${input.proyecto}`
+  const bodyHtml = `
+    <p style="margin:0 0 12px;">${escapeHtml(hi)}</p>
+    <p style="margin:0 0 12px;"><strong>${escapeHtml(input.que)}</strong> for <strong>${escapeHtml(input.proyecto)}</strong> ${/s$/.test(input.que) ? 'are' : 'is'} ready for your review.</p>
+    <p style="margin:0;">Please open your portal to approve or send us your comments — your response keeps the project moving.</p>`
+  const html = portalShell({ preheader: `${input.que} ready for your review.`, heading: `${input.que} ready for review`, bodyHtml, ctaLabel: 'Review now', portalUrl: input.portalUrl })
+  const text = [
+    hi, '',
+    `${input.que} for ${input.proyecto} is ready for your review.`,
+    `Open your portal to approve or comment: ${input.portalUrl}`, '',
+    '--', 'Central Millwork · automated message. Please don\'t reply.',
+  ].join('\n')
+  return { subject, html, text }
+}
+
+/** Acuse: "recibimos tu respuesta". */
+export function portalDecisionRecibidaEmail(input: {
+  proyecto: string
+  contacto: string | null
+  que: string
+  aprobado: boolean
+  portalUrl: string
+}): { subject: string; html: string; text: string } {
+  const hi = input.contacto ? `Hi ${input.contacto},` : 'Hello,'
+  const verbo = input.aprobado ? 'approval' : 'response'
+  const subject = `We received your ${verbo} — ${input.proyecto}`
+  const bodyHtml = `
+    <p style="margin:0 0 12px;">${escapeHtml(hi)}</p>
+    <p style="margin:0 0 12px;">Thank you — we've recorded your ${escapeHtml(verbo)} for <strong>${escapeHtml(input.que)}</strong> on <strong>${escapeHtml(input.proyecto)}</strong>.</p>
+    <p style="margin:0;">${input.aprobado ? 'The project moves forward from here.' : 'Our team will review your comments and follow up.'} You can always check the latest status in your portal.</p>`
+  const html = portalShell({ preheader: `We received your ${verbo} for ${input.que}.`, heading: `Thank you — ${verbo} received`, bodyHtml, ctaLabel: 'View project status', portalUrl: input.portalUrl })
+  const text = [
+    hi, '',
+    `We've recorded your ${verbo} for ${input.que} on ${input.proyecto}.`,
+    input.aprobado ? 'The project moves forward from here.' : 'Our team will review your comments and follow up.',
+    `Portal: ${input.portalUrl}`, '',
+    '--', 'Central Millwork · automated message. Please don\'t reply.',
+  ].join('\n')
+  return { subject, html, text }
+}

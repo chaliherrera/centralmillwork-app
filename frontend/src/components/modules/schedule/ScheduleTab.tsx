@@ -84,7 +84,7 @@ export default function ScheduleTab({ proyectoId }: { proyectoId: number }) {
   const [busy, setBusy] = useState(false)
   const [fechaObjetivo, setFechaObjetivo] = useState('')
   const [selected, setSelected] = useState<string | null>(null)
-  const [portal, setPortal] = useState<{ open: boolean; nombre: string; link: string | null }>({ open: false, nombre: '', link: null })
+  const [portal, setPortal] = useState<{ open: boolean; nombre: string; email: string; link: string | null }>({ open: false, nombre: '', email: '', link: null })
   const [planosUrl, setPlanosUrl] = useState<string | null>(null)
 
   async function load() {
@@ -115,7 +115,7 @@ export default function ScheduleTab({ proyectoId }: { proyectoId: number }) {
   async function generarLink() {
     setBusy(true)
     try {
-      const r = await scheduleService.crearPortalToken(proyectoId, portal.nombre.trim() || undefined)
+      const r = await scheduleService.crearPortalToken(proyectoId, portal.nombre.trim() || undefined, portal.email.trim() || undefined)
       setPortal((p) => ({ ...p, link: `${window.location.origin}/portal/${r.data.token}` }))
     } catch { /* toast */ } finally { setBusy(false) }
   }
@@ -232,7 +232,7 @@ export default function ScheduleTab({ proyectoId }: { proyectoId: number }) {
           </div>
         </div>
         <div className="ml-auto flex items-center gap-3">
-          <button onClick={() => setPortal({ open: true, nombre: '', link: null })}
+          <button onClick={() => setPortal({ open: true, nombre: '', email: '', link: null })}
                   className="inline-flex items-center gap-1.5 text-xs font-medium text-forest-600 hover:text-forest-800">
             <Share2 size={14} /> Compartir con cliente
           </button>
@@ -245,12 +245,12 @@ export default function ScheduleTab({ proyectoId }: { proyectoId: number }) {
 
       {/* modal compartir portal */}
       {portal.open && (
-        <div className="fixed inset-0 bg-black/30 flex items-center justify-center p-4 z-50" onClick={() => setPortal({ open: false, nombre: '', link: null })}>
+        <div className="fixed inset-0 bg-black/30 flex items-center justify-center p-4 z-50" onClick={() => setPortal({ open: false, nombre: '', email: '', link: null })}>
           <div className="bg-white rounded-2xl max-w-md w-full p-5 shadow-xl" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center gap-2">
               <Share2 size={18} className="text-forest-600" />
               <h3 className="font-semibold text-stone-800">Compartir seguimiento con el cliente</h3>
-              <button onClick={() => setPortal({ open: false, nombre: '', link: null })} className="ml-auto text-stone-400 hover:text-stone-700"><X size={18} /></button>
+              <button onClick={() => setPortal({ open: false, nombre: '', email: '', link: null })} className="ml-auto text-stone-400 hover:text-stone-700"><X size={18} /></button>
             </div>
             {!portal.link ? (
               <>
@@ -258,8 +258,12 @@ export default function ScheduleTab({ proyectoId }: { proyectoId: number }) {
                 <label className="block mt-3 text-xs font-medium text-stone-500">Nombre del contacto (opcional)</label>
                 <input value={portal.nombre} onChange={(e) => setPortal((p) => ({ ...p, nombre: e.target.value }))}
                        placeholder="Ej: Ana, Rivera Hotels" className="input w-full mt-1" />
+                <label className="block mt-3 text-xs font-medium text-stone-500">Email del contacto (opcional)</label>
+                <input type="email" value={portal.email} onChange={(e) => setPortal((p) => ({ ...p, email: e.target.value }))}
+                       placeholder="cliente@empresa.com" className="input w-full mt-1" />
+                <p className="mt-1 text-[11px] text-stone-400">Si lo cargás, el cliente recibe avisos automáticos por email (cuando el sistema de correo esté activo).</p>
                 <div className="mt-4 flex justify-end gap-2">
-                  <button onClick={() => setPortal({ open: false, nombre: '', link: null })} className="px-3 py-2 text-sm text-stone-500">Cancelar</button>
+                  <button onClick={() => setPortal({ open: false, nombre: '', email: '', link: null })} className="px-3 py-2 text-sm text-stone-500">Cancelar</button>
                   <button onClick={generarLink} disabled={busy} className="btn-primary"><Share2 size={15} /> Generar link</button>
                 </div>
               </>
@@ -272,7 +276,7 @@ export default function ScheduleTab({ proyectoId }: { proyectoId: number }) {
                           className="btn-primary shrink-0"><Copy size={15} /> Copiar</button>
                 </div>
                 <div className="mt-4 flex justify-end">
-                  <button onClick={() => setPortal({ open: false, nombre: '', link: null })} className="px-3 py-2 text-sm font-medium text-stone-600">Listo</button>
+                  <button onClick={() => setPortal({ open: false, nombre: '', email: '', link: null })} className="px-3 py-2 text-sm font-medium text-stone-600">Listo</button>
                 </div>
               </>
             )}
