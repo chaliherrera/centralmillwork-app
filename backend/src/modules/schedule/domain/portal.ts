@@ -110,8 +110,14 @@ export async function getVistaPublica(runner: QueryRunner, token: string): Promi
        JOIN schedule_planes sp ON sp.proyecto_id = p.id AND sp.scope = 'proyecto'
       WHERE p.id = $1 LIMIT 1`, [info.proyectoId])
   if (!pr[0]) return null
-  // El cliente ya aprobó el plan cuando el deal llegó a 'aprobado' (o más allá).
-  const planAprobado = pr[0].deal_estado === 'aprobado'
+  // El cliente ya aprobó el plan cuando el deal llegó a 'aprobado' (queda en ese
+  // estado también tras activar el proyecto). Los proyectos heredados (pre
+  // máquina de deals, los 28 de prod) tienen deal_estado NULL: son proyectos ya
+  // activos cuyo plan está aprobado de facto. Tratamos NULL como aprobado — si
+  // no, el momento "Aprobación del plan" queda trabado en "now" sin ninguna
+  // acción posible (planPendiente solo aparece con 'esperando_cliente') y el
+  // journey del cliente se ve roto.
+  const planAprobado = pr[0].deal_estado === 'aprobado' || pr[0].deal_estado == null
 
   // Estado de los hitos que son "momentos del cliente"
   const codigos = CLIENT_MOMENTS.map((m) => m.codigo)
