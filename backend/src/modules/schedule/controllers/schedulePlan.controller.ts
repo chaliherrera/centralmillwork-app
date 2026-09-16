@@ -198,7 +198,11 @@ export async function listPortalTokensHandler(req: Request, res: Response, next:
     const { rows } = await pool.query(
       `SELECT id, token, contacto_nombre, contacto_email, activo,
               to_char(created_at,'YYYY-MM-DD') AS created_at,
-              to_char(last_access_at,'YYYY-MM-DD"T"HH24:MI') AS last_access_at
+              to_char(last_access_at,'YYYY-MM-DD"T"HH24:MI') AS last_access_at,
+              to_char(expires_at,'YYYY-MM-DD') AS expires_at,
+              (expires_at IS NOT NULL AND expires_at <= NOW()) AS vencido,
+              CASE WHEN expires_at IS NULL THEN NULL
+                   ELSE GREATEST(0, EXTRACT(DAY FROM (expires_at - NOW()))::int) END AS dias_para_vencer
          FROM schedule_portal_tokens WHERE proyecto_id = $1 ORDER BY created_at DESC`, [proyectoId])
     res.json({ data: rows })
   } catch (err) { next(err) }

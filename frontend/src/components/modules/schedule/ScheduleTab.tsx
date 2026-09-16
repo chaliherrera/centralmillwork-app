@@ -6,7 +6,7 @@ import {
   Target, User, Handshake, Activity, ChevronRight, Share2, Copy, X,
   AlertTriangle, Zap, FileText,
 } from 'lucide-react'
-import { scheduleService, type ScheduleData, type ScheduleHito, type Semaforo } from '@/services/schedule'
+import { scheduleService, type ScheduleData, type ScheduleHito, type Semaforo, type PortalTokenRow } from '@/services/schedule'
 
 // ─── Orden y metadata de las 8 fases (el "recorrido") ─────────────────────────
 const FASES = [
@@ -85,6 +85,7 @@ export default function ScheduleTab({ proyectoId }: { proyectoId: number }) {
   const [fechaObjetivo, setFechaObjetivo] = useState('')
   const [selected, setSelected] = useState<string | null>(null)
   const [portal, setPortal] = useState<{ open: boolean; nombre: string; email: string; link: string | null }>({ open: false, nombre: '', email: '', link: null })
+  const [portalTokens, setPortalTokens] = useState<PortalTokenRow[]>([])
   const [planosUrl, setPlanosUrl] = useState<string | null>(null)
 
   async function load() {
@@ -112,12 +113,28 @@ export default function ScheduleTab({ proyectoId }: { proyectoId: number }) {
     try { await scheduleService.recalcular(proyectoId); toast.success('Schedule recalculado'); await load() }
     catch { /* toast */ } finally { setBusy(false) }
   }
+  async function loadTokens() {
+    try { setPortalTokens((await scheduleService.listPortalTokens(proyectoId)).data ?? []) } catch { /* silencioso */ }
+  }
+  function abrirPortal() {
+    setPortal({ open: true, nombre: '', email: '', link: null })
+    setPortalTokens([])
+    loadTokens()
+  }
   async function generarLink() {
     setBusy(true)
     try {
       const r = await scheduleService.crearPortalToken(proyectoId, portal.nombre.trim() || undefined, portal.email.trim() || undefined)
       setPortal((p) => ({ ...p, link: `${window.location.origin}/portal/${r.data.token}` }))
+      await loadTokens()
     } catch { /* toast */ } finally { setBusy(false) }
+  }
+  async function revocarLink(tokenId: number) {
+    if (!window.confirm('¿Revocar este link? El cliente deja de poder acceder de inmediato.')) return
+    try {
+      await scheduleService.revocarPortalToken(proyectoId, tokenId)
+      toast.success('Link revocado'); await loadTokens()
+    } catch { /* toast */ }
   }
   const { fases, totalHitos, totalCumplidos } = useMemo(() => {
     const rank: Record<Semaforo, number> = { gris: 0, verde: 1, amarillo: 2, rojo: 3 }
@@ -232,7 +249,7 @@ export default function ScheduleTab({ proyectoId }: { proyectoId: number }) {
           </div>
         </div>
         <div className="ml-auto flex items-center gap-3">
-          <button onClick={() => setPortal({ open: true, nombre: '', email: '', link: null })}
+          <button onClick={abrirPortal}
                   className="inline-flex items-center gap-1.5 text-xs font-medium text-forest-600 hover:text-forest-800">
             <Share2 size={14} /> Compartir con cliente
           </button>
@@ -246,12 +263,54 @@ export default function ScheduleTab({ proyectoId }: { proyectoId: number }) {
       {/* modal compartir portal */}
       {portal.open && (
         <div className="fixed inset-0 bg-black/30 flex items-center justify-center p-4 z-50" onClick={() => setPortal({ open: false, nombre: '', email: '', link: null })}>
-          <div className="bg-white rounded-2xl max-w-md w-full p-5 shadow-xl" onClick={(e) => e.stopPropagation()}>
+          <div className="bg-white rounded-2xl max-w-lg w-full p-5 shadow-xl max-h-[88vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center gap-2">
               <Share2 size={18} className="text-forest-600" />
               <h3 className="font-semibold text-stone-800">Compartir seguimiento con el cliente</h3>
               <button onClick={() => setPortal({ open: false, nombre: '', email: '', link: null })} className="ml-auto text-stone-400 hover:text-stone-700"><X size={18} /></button>
             </div>
+
+            {/* Links ya generados: estado, vencimiento, copiar y revocar. */}
+            {portalTokens.length > 0 && (
+              <div className="mt-3">
+                <div className="text-xs font-semibold text-stone-500 uppercase tracking-wide mb-2">Links generados</div>
+                <div className="space-y-2">
+                  {portalTokens.map((t) => {
+                    const estado = !t.activo ? 'revocado' : t.vencido ? 'vencido' : 'activo'
+                    const badge = estado === 'activo' ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                      : estado === 'vencido' ? 'bg-rose-50 text-rose-700 border-rose-200'
+                      : 'bg-stone-100 text-stone-500 border-stone-200'
+                    const venceTxt = t.expires_at == null ? 'sin vencimiento'
+                      : t.vencido ? `vencido el ${fmt(t.expires_at)}`
+                      : `vence en ${t.dias_para_vencer}d`
+                    return (
+                      <div key={t.id} className="rounded-xl border border-stone-200 px-3 py-2.5">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="text-sm font-medium text-stone-800 truncate">{t.contacto_nombre || t.contacto_email || 'Contacto sin nombre'}</span>
+                          <span className={clsx('text-[10px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded border', badge)}>{estado}</span>
+                        </div>
+                        <div className="text-[11px] text-stone-400 mt-0.5">
+                          {t.contacto_email && <span>{t.contacto_email} · </span>}
+                          generado {fmt(t.created_at)} · {t.last_access_at ? 'abierto por el cliente' : 'sin abrir aún'} · {venceTxt}
+                        </div>
+                        {t.activo && (
+                          <div className="flex items-center gap-3 mt-2">
+                            {!t.vencido && (
+                              <button onClick={() => { navigator.clipboard?.writeText(`${window.location.origin}/portal/${t.token}`); toast.success('Link copiado') }}
+                                      className="inline-flex items-center gap-1 text-xs font-medium text-forest-600 hover:text-forest-800"><Copy size={13} /> Copiar link</button>
+                            )}
+                            <button onClick={() => revocarLink(t.id)}
+                                    className="inline-flex items-center gap-1 text-xs font-medium text-rose-600 hover:text-rose-700"><X size={13} /> Revocar</button>
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+                <div className="border-t border-stone-100 mt-4 pt-3 text-xs font-semibold text-stone-500 uppercase tracking-wide">Generar otro link</div>
+              </div>
+            )}
+
             {!portal.link ? (
               <>
                 <p className="text-sm text-stone-500 mt-2">Se genera un link privado (sin cuenta) donde el cliente ve el estado de su proyecto y aprueba lo que depende de él. No ve costos ni información interna.</p>

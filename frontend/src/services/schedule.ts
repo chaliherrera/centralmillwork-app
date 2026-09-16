@@ -3,6 +3,19 @@ import type { ApiResponse } from '@/types'
 
 export type Semaforo = 'verde' | 'amarillo' | 'rojo' | 'gris'
 
+export interface PortalTokenRow {
+  id: number
+  token: string
+  contacto_nombre: string | null
+  contacto_email: string | null
+  activo: boolean
+  created_at: string
+  last_access_at: string | null
+  expires_at: string | null
+  vencido: boolean
+  dias_para_vencer: number | null
+}
+
 export interface ScheduleHito {
   codigo: string
   fase: string
@@ -119,6 +132,16 @@ export const scheduleService = {
   crearPortalToken: (proyectoId: number, contacto_nombre?: string, contacto_email?: string) =>
     api
       .post<ApiResponse<{ token: string }>>(`/schedule/proyecto/${proyectoId}/portal-token`, { contacto_nombre, contacto_email })
+      .then((r) => r.data),
+
+  listPortalTokens: (proyectoId: number) =>
+    api
+      .get<ApiResponse<PortalTokenRow[]>>(`/schedule/proyecto/${proyectoId}/portal-tokens`)
+      .then((r) => r.data),
+
+  revocarPortalToken: (proyectoId: number, tokenId: number) =>
+    api
+      .post<ApiResponse<{ ok: boolean }>>(`/schedule/proyecto/${proyectoId}/portal-token/${tokenId}/revocar`)
       .then((r) => r.data),
 
   registrarHito: (proyectoId: number, codigo: string, fecha: string | null, nota?: string, importe?: number) =>

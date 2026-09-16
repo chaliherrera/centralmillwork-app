@@ -55,19 +55,24 @@ export interface TokenInfo {
   contactoNombre: string | null
 }
 
+// Vida por defecto de un link nuevo del portal (días). Cubre proyectos típicos;
+// si un proyecto se estira, el PM genera un link nuevo desde la gestión de links.
+const PORTAL_TOKEN_DIAS_DEFAULT = 180
+
 /** Crea un token de acceso al portal para un contacto del cliente. */
 export async function crearToken(
   runner: QueryRunner,
   proyectoId: number,
   contactoNombre: string | null,
   contactoEmail: string | null,
-  createdBy: string | null
+  createdBy: string | null,
+  expiraEnDias: number = PORTAL_TOKEN_DIAS_DEFAULT,
 ): Promise<{ id: number; token: string }> {
   const token = crypto.randomBytes(24).toString('hex') // 48 chars, no adivinable
   const { rows } = await runner.query<{ id: number }>(
-    `INSERT INTO schedule_portal_tokens (token, proyecto_id, contacto_nombre, contacto_email, created_by)
-       VALUES ($1,$2,$3,$4,$5) RETURNING id`,
-    [token, proyectoId, contactoNombre, contactoEmail, createdBy])
+    `INSERT INTO schedule_portal_tokens (token, proyecto_id, contacto_nombre, contacto_email, created_by, expires_at)
+       VALUES ($1,$2,$3,$4,$5, NOW() + ($6 || ' days')::interval) RETURNING id`,
+    [token, proyectoId, contactoNombre, contactoEmail, createdBy, String(expiraEnDias)])
   return { id: rows[0].id, token }
 }
 
@@ -82,7 +87,8 @@ export async function revocarToken(runner: QueryRunner, proyectoId: number, toke
 /** Valida un token activo y devuelve a qué proyecto/contacto corresponde. */
 export async function resolverToken(runner: QueryRunner, token: string): Promise<TokenInfo | null> {
   const { rows } = await runner.query<{ proyecto_id: number; contacto_nombre: string | null }>(
-    `SELECT proyecto_id, contacto_nombre FROM schedule_portal_tokens WHERE token = $1 AND activo = true`,
+    `SELECT proyecto_id, contacto_nombre FROM schedule_portal_tokens
+      WHERE token = $1 AND activo = true AND (expires_at IS NULL OR expires_at > NOW())`,
     [token])
   if (!rows[0]) return null
   await runner.query(`UPDATE schedule_portal_tokens SET last_access_at = NOW() WHERE token = $1`, [token])
