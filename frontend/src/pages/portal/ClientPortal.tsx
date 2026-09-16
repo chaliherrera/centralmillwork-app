@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import toast from 'react-hot-toast'
 import clsx from 'clsx'
-import { CalendarClock, Check, Clock, ThumbsUp, MessageSquare, X, ShieldCheck, Lock, FileText, RefreshCw, ClipboardList } from 'lucide-react'
+import { CalendarClock, Check, Clock, ThumbsUp, MessageSquare, X, ShieldCheck, Lock, FileText, RefreshCw, ClipboardList, Minus } from 'lucide-react'
 import { portalService, type PortalVista, type Decision } from '@/services/portal'
 
 // Etiqueta legible de cada decisión del cliente en el historial.
@@ -116,17 +116,30 @@ export default function ClientPortal() {
                   <span className={clsx('w-9 h-9 rounded-full flex items-center justify-center border-2 z-10',
                     m.estado === 'done' ? 'bg-emerald-600 border-emerald-600'
                       : m.estado === 'now' ? 'bg-white border-forest-600 ring-4 ring-forest-100'
+                      : m.estado === 'na' ? 'bg-stone-50 border-stone-200 border-dashed'
                       : 'bg-white border-stone-300')}>
                     {m.estado === 'done' ? <Check size={17} className="text-white" />
                       : m.estado === 'now' ? <span className="w-3 h-3 rounded-full bg-forest-600" />
+                      : m.estado === 'na' ? <Minus size={13} className="text-stone-300" />
                       : <Lock size={13} className="text-stone-300" />}
                   </span>
                   <span className={clsx('mt-2 text-[11px] font-medium leading-tight px-0.5',
-                    m.estado === 'done' ? 'text-emerald-700' : m.estado === 'now' ? 'text-forest-700' : 'text-stone-400')}>
+                    m.estado === 'done' ? 'text-emerald-700'
+                      : m.estado === 'now' ? 'text-forest-700'
+                      : m.estado === 'na' ? 'text-stone-300'
+                      : 'text-stone-400')}>
                     {m.label}
+                    {m.estado === 'na' && <span className="block text-[9px] font-normal text-stone-300">no aplica</span>}
                   </span>
                 </div>
               ))}
+            </div>
+            {/* Qué significa cada estado del recorrido (explicado para el cliente). */}
+            <div className="mt-4 pt-3 border-t border-stone-100 flex flex-wrap items-center justify-center gap-x-4 gap-y-1 text-[10px] text-stone-400">
+              <span className="inline-flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-emerald-600" /> Listo</span>
+              <span className="inline-flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full border-2 border-forest-600" /> En curso</span>
+              <span className="inline-flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full border-2 border-stone-300" /> Más adelante</span>
+              <span className="inline-flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full border-2 border-dashed border-stone-200" /> No aplica</span>
             </div>
           </div>
         </div>

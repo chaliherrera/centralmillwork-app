@@ -124,7 +124,8 @@ export interface VistaPublica {
   proyecto: { nombre: string; cliente: string; fecha_objetivo: string | null; semaforo: string }
   contacto: string | null
   // El recorrido del cliente: sus momentos, con estado en el camino.
-  momentos: Array<{ codigo: string; label: string; tipo: 'accion' | 'estado'; estado: 'done' | 'now' | 'future' }>
+  // 'na' = no aplica a este proyecto (no bloquea el journey).
+  momentos: Array<{ codigo: string; label: string; tipo: 'accion' | 'estado'; estado: 'done' | 'now' | 'future' | 'na' }>
   // Solo las aprobaciones que YA corresponden (predecesores cumplidos, sin resolver).
   pendientes: Array<{ codigo: string; titulo: string; fecha_planeada: string | null; documento_url?: string | null }>
   // El Gantt completo del proyecto (la propuesta): tareas con fechas; las del cliente marcadas.
@@ -171,17 +172,38 @@ export async function getVistaPublica(runner: QueryRunner, token: string): Promi
     [info.proyectoId, codigos])
   const st = new Map(rows.map((r) => [r.codigo, r]))
 
-  // Recorrido: el primer momento no cumplido es "now"; los siguientes "future".
-  let yaHuboNow = false
+  // Recorrido del cliente, respetando pasos EN PARALELO y los NO_APLICA:
+  //   done   = ya cumplido (lo ve tildado)
+  //   na     = no aplica a este proyecto (p.ej. sin muestras / sin piedra) → no bloquea
+  //   now    = está en marcha / le toca ahora
+  //   future = todavía no arrancó
+  // Varios momentos pueden estar 'now' a la vez: muestras (E-05) y planos (E-07)
+  // suelen ir en paralelo. Antes la lógica era estrictamente secuencial (el primer
+  // no-cumplido = 'now', el resto 'future') e ignoraba los no_aplica.
+  const hoyISO = new Date().toISOString().slice(0, 10)
   const momentos = CLIENT_MOMENTS.map((m) => {
-    let estado: 'done' | 'now' | 'future'
+    const h = st.get(m.codigo)
     // 'PLAN' no es un hito del schedule: su estado sale del deal (aprobación del cliente).
-    const cumplido = m.codigo === 'PLAN' ? planAprobado : (st.get(m.codigo)?.tiene_real ?? false)
+    const cumplido = m.codigo === 'PLAN' ? planAprobado : (h?.tiene_real ?? false)
+    let estado: 'done' | 'now' | 'future' | 'na'
     if (cumplido) estado = 'done'
-    else if (!yaHuboNow) { estado = 'now'; yaHuboNow = true }
-    else estado = 'future'
+    else if (h?.estado === 'no_aplica') estado = 'na'
+    else {
+      // En marcha si ya está en riesgo/vencido, o si su fecha planeada ya llegó.
+      // PLAN pendiente: en marcha cuando el deal está esperando la respuesta del cliente.
+      const enMarcha = m.codigo === 'PLAN'
+        ? pr[0].deal_estado === 'esperando_cliente'
+        : (h?.estado === 'vencido' || h?.estado === 'en_riesgo' || (h?.fp != null && h.fp <= hoyISO))
+      estado = enMarcha ? 'now' : 'future'
+    }
     return { codigo: m.codigo, label: m.label, tipo: m.tipo, estado }
   })
+  // Si nada quedó 'now' (todo lo activo es futuro), destacamos el próximo como 'now'
+  // para que el cliente siempre vea "qué sigue" (sin inventar un paso no_aplica).
+  if (!momentos.some((x) => x.estado === 'now')) {
+    const next = momentos.find((x) => x.estado === 'future')
+    if (next) next.estado = 'now'
+  }
 
   // Pendientes: aprobables ACTIVOS (no bloqueados por predecesores, sin resolver).
   const pendientesBase = CLIENT_MOMENTS

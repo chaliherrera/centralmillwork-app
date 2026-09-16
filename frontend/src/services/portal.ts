@@ -4,7 +4,7 @@ import type { ApiResponse } from '@/types'
 export type Decision = 'aprobado' | 'aprobado_con_comentarios' | 'rechazado'
 
 export interface PortalMomento {
-  codigo: string; label: string; tipo: 'accion' | 'estado'; estado: 'done' | 'now' | 'future'
+  codigo: string; label: string; tipo: 'accion' | 'estado'; estado: 'done' | 'now' | 'future' | 'na'
 }
 export interface PortalGanttTarea {
   nombre: string; inicio: string | null; fin: string | null; estado: string; es_cliente: boolean
