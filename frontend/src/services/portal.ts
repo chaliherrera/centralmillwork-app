@@ -35,6 +35,10 @@ export const portalService = {
   getVista: (token: string) =>
     api.get<ApiResponse<PortalVista>>(`/portal/${token}`).then((r) => r.data),
 
+  // Preview del portal para la consola de admin (autenticado, por proyecto).
+  getPreview: (proyectoId: number) =>
+    api.get<ApiResponse<PortalVista>>(`/schedule/proyecto/${proyectoId}/portal-preview`).then((r) => r.data),
+
   aprobar: (token: string, codigo: string, decision: Decision, comentario?: string) =>
     api.post<ApiResponse<{ ok: boolean }>>(`/portal/${token}/aprobar`, { codigo, decision, comentario })
       .then((r) => r.data),

@@ -170,6 +170,15 @@ export interface VistaPublica {
 export async function getVistaPublica(runner: QueryRunner, token: string): Promise<VistaPublica | null> {
   const info = await resolverToken(runner, token)
   if (!info) return null
+  return armarVistaPublica(runner, info.proyectoId, info.contactoNombre)
+}
+
+/** Arma la vista del portal a partir del proyecto (sin token). La usan el portal
+ *  público (vía getVistaPublica) y la CONSOLA de admin (preview del portal). */
+export async function armarVistaPublica(
+  runner: QueryRunner, proyectoId: number, contactoNombre: string | null,
+): Promise<VistaPublica | null> {
+  const info = { proyectoId, contactoNombre }
 
   const { rows: pr } = await runner.query<{ nombre: string; cliente: string; fo: string | null; semaforo: string; deal_estado: string }>(
     `SELECT p.nombre, p.cliente, p.deal_estado,

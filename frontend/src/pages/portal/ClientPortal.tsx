@@ -32,8 +32,9 @@ function statusChip(sem: string): { t: string; c: string } {
   return { t: 'Getting started', c: 'text-stone-600 bg-stone-50 border-stone-200' }
 }
 
-export default function ClientPortal() {
+export default function ClientPortal({ previewProyectoId }: { previewProyectoId?: number } = {}) {
   const { token = '' } = useParams()
+  const preview = previewProyectoId != null   // consola de admin: previsualizar, sin acciones
   const [data, setData] = useState<PortalVista | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(false)
@@ -44,10 +45,13 @@ export default function ClientPortal() {
   async function load(silent = false) {
     if (!silent) setLoading(true)
     setError(false)
-    try { setData((await portalService.getVista(token)).data) }
+    try {
+      const res = preview ? await portalService.getPreview(previewProyectoId!) : await portalService.getVista(token)
+      setData(res.data)
+    }
     catch { if (!silent) setError(true) } finally { if (!silent) setLoading(false) }
   }
-  useEffect(() => { load() }, [token])
+  useEffect(() => { load() }, [token, previewProyectoId])
 
   async function confirmar() {
     if (!action) return
@@ -81,7 +85,7 @@ export default function ClientPortal() {
   const hdCls = 'px-4 py-3 border-b border-card-border'
 
   return (
-    <div className="min-h-screen bg-[#F6F4EE] text-stone-800">
+    <div className={clsx('bg-[#F6F4EE] text-stone-800', !preview && 'min-h-screen')}>
       <div className="bg-forest-600 text-white">
         <div className="max-w-[1120px] mx-auto px-5 py-3 flex items-center gap-2">
           <ShieldCheck size={18} className="opacity-90" />
@@ -180,6 +184,9 @@ export default function ClientPortal() {
                           <FileText size={15} /> View the document
                         </a>
                       )}
+                      {preview ? (
+                        <div className="text-[11px] text-stone-400 italic">Preview — the client would approve, comment, or request changes here.</div>
+                      ) : (
                       <div className="flex items-center gap-2 flex-wrap">
                         <button onClick={() => { setAction({ codigo: p.codigo, titulo: p.titulo, decision: 'aprobado' }); setComentario('') }}
                                 className="inline-flex items-center gap-1.5 text-sm font-medium text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg px-4 py-2">
@@ -194,6 +201,7 @@ export default function ClientPortal() {
                           <X size={15} /> Request changes
                         </button>
                       </div>
+                      )}
                     </div>
                   ))}
                 </div>

@@ -19,6 +19,7 @@ import Muestras from '@/pages/Muestras'
 import Estimacion from '@/pages/Estimacion'
 import Ingenieria from '@/pages/Ingenieria'
 import ProjectMgmt from '@/pages/ProjectMgmt'
+import PortalConsole from '@/pages/PortalConsole'
 import Schedule from '@/pages/Schedule'
 import ScheduleProyecto from '@/pages/ScheduleProyecto'
 import Finanzas from '@/pages/Finanzas'
@@ -158,6 +159,7 @@ export default function App() {
         {/* Plan de Ingeniería ahora vive dentro de /pm (es herramienta del PM). Redirect por links viejos. */}
         <Route path="ingenieria-plan"  element={<Navigate to="/pm" replace />} />
         <Route path="pm"               element={<PmRoute><ProjectMgmt /></PmRoute>} />
+        <Route path="portal-console"   element={<PmRoute><PortalConsole /></PmRoute>} />
         <Route path="finanzas"         element={<FinanzasRoute><Finanzas /></FinanzasRoute>} />
         <Route path="logistica"        element={<LogisticaRoute><Logistica /></LogisticaRoute>} />
         <Route path="field"            element={<FieldRoute><Field /></FieldRoute>} />

@@ -3,7 +3,7 @@ import {
   LayoutDashboard, FolderOpen, ShoppingCart,
   Package, Truck, Users, ChevronLeft, ChevronRight, ShieldCheck,
   Factory, Inbox, Beaker, Layers, FileSignature, DraftingCompass, ClipboardList, Wallet, Send, Ruler,
-  Route as RouteIcon,
+  Route as RouteIcon, MonitorSmartphone,
 } from 'lucide-react'
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
@@ -36,6 +36,7 @@ const NAV_ITEMS: NavItem[] = [
   { to: '/estimados',      label: 'Estimados',          icon: FileSignature,   roles: ['ADMIN','PROJECT_MANAGEMENT'] },
   { to: '/ingenieria',     label: 'Ingeniería',         icon: DraftingCompass, roles: ['ADMIN','ENGINEERING','PROJECT_MANAGEMENT'] },
   { to: '/pm',             label: 'PM',                 icon: ClipboardList,   roles: ['ADMIN','PROJECT_MANAGEMENT'] },
+  { to: '/portal-console', label: 'Portal cliente',     icon: MonitorSmartphone, roles: ['ADMIN','PROJECT_MANAGEMENT'] },
   { to: '/finanzas',       label: 'Finanzas',           icon: Wallet,          roles: ['ADMIN','CONTABILIDAD'] },
   { to: '/logistica',      label: 'Logística',          icon: Send,            roles: ['ADMIN','LOGISTICA','PROJECT_MANAGEMENT'] },
   { to: '/field',          label: 'Campo',              icon: Ruler,           roles: ['ADMIN','FIELD','ENGINEERING','PROJECT_MANAGEMENT'] },

@@ -10,7 +10,7 @@ import { z } from 'zod'
 import pool from '../../../db/pool'
 import { createError } from '../../../middleware/errorHandler'
 import { generarPlan, recomputeScheduleForProyecto, cambiarFechaObjetivo } from '../domain/recompute'
-import { crearToken, revocarToken } from '../domain/portal'
+import { crearToken, revocarToken, armarVistaPublica } from '../domain/portal'
 import { registrarHito } from '../domain/registro'
 import { chequearFactibilidad } from '../domain/factibilidad'
 
@@ -217,6 +217,18 @@ export async function revocarPortalTokenHandler(req: Request, res: Response, nex
     const ok = await revocarToken(pool, proyectoId, tokenId)
     if (!ok) return next(createError('token no encontrado o ya revocado', 404))
     res.json({ data: { ok: true }, message: 'Link del portal revocado' })
+  } catch (err) { next(err) }
+}
+
+// ── GET /api/schedule/proyecto/:id/portal-preview ────────────────────────────
+// La MISMA vista que ve el cliente, pero autenticada y por proyecto (sin token).
+// Para la consola de control del portal: previsualizar cualquier proyecto.
+export async function portalPreviewHandler(req: Request, res: Response, next: NextFunction) {
+  try {
+    const proyectoId = parseProyectoId(req)
+    const vista = await armarVistaPublica(pool, proyectoId, null)
+    if (!vista) return next(createError('El proyecto no tiene plan / portal disponible', 404))
+    res.json({ data: vista })
   } catch (err) { next(err) }
 }
 
