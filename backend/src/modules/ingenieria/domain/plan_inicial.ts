@@ -214,6 +214,7 @@ export async function cerrarDeal(
 export interface DealEnCurso {
   proyecto_id: number; codigo: string; nombre: string; cliente: string | null
   estado: string; deal_estado: string; fecha_objetivo: string | null; n_tareas: number
+  fecha_realista: string | null    // fin real del plan (última tarea) — la fecha que compromete el PM
   portal_token: string | null
   deal_aprobado_at: string | null   // cuándo aprobó el cliente (ISO), para la confirmación en Estimados
   cliente_rechazo: boolean          // el cliente rechazó el plan desde el portal (2.6)
@@ -227,6 +228,7 @@ export async function listDealsEnCurso(runner: QueryRunner): Promise<DealEnCurso
             to_char(sp.fecha_objetivo,'YYYY-MM-DD') AS fecha_objetivo,
             to_char(p.deal_aprobado_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS deal_aprobado_at,
             (SELECT count(*)::int FROM ing_tareas t WHERE t.proyecto_id = p.id AND t.origen = 'app') AS n_tareas,
+            (SELECT to_char(MAX(t.fecha_fin),'YYYY-MM-DD') FROM ing_tareas t WHERE t.proyecto_id = p.id AND t.origen = 'app') AS fecha_realista,
             (SELECT spt.token FROM schedule_portal_tokens spt WHERE spt.proyecto_id = p.id AND spt.activo = true ORDER BY spt.created_at DESC LIMIT 1) AS portal_token,
             -- 2.6: ¿el cliente RECHAZÓ el plan? (última decisión del portal sobre PLAN).
             COALESCE((SELECT (ev.payload->>'decision') = 'rechazado'

@@ -110,9 +110,18 @@ export default function DealsEnCurso({ mode, emptyHint }: { mode: 'estimados' | 
                 {chip && <span className={`text-[10px] font-bold uppercase tracking-wide rounded px-1.5 py-0.5 ${chip.cls}`}>{chip.label}</span>}
               </div>
               <div className="text-sm text-stone-500 flex items-center gap-3 flex-wrap">
-                {d.fecha_objetivo && <span className="inline-flex items-center gap-1"><CalendarRange size={12} /> entrega {fmt(d.fecha_objetivo)}</span>}
+                {d.fecha_objetivo && <span className="inline-flex items-center gap-1"><CalendarRange size={12} /> fecha solicitada por el cliente {fmt(d.fecha_objetivo)}</span>}
                 <span><b className="text-stone-700">{d.n_tareas}</b> tarea{d.n_tareas === 1 ? '' : 's'} en el plan</span>
               </div>
+              {/* Vista 2: sólo se avisa cuando el plan del PM cae MÁS TARDE que la fecha que
+                  pidió el cliente (el PM ajustó el Gantt y la entrega se corrió). Si cumple, no
+                  se muestra nada: la fecha solicitada ya la conoce Estimados. */}
+              {mode === 'estimados' && d.fecha_realista && d.fecha_objetivo && d.fecha_realista > d.fecha_objetivo && (
+                <div className="mt-2 flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[12.5px] text-amber-800">
+                  <AlertTriangle size={15} className="mt-0.5 shrink-0 text-amber-600" />
+                  <span>El PM confirmó entrega para el <b>{fmt(d.fecha_realista)}</b> — más tarde que la fecha que pidió el cliente (<b>{fmt(d.fecha_objetivo)}</b>). <b>Renegociá la fecha</b> con el cliente antes de mandarle el schedule.</span>
+                </div>
+              )}
               <div className="mt-3 flex items-center gap-2 flex-wrap">
                 {/* Ver el plan que se manda al cliente (revisar antes de enviar / activar). */}
                 <Link to={`/schedule/${d.proyecto_id}`}
