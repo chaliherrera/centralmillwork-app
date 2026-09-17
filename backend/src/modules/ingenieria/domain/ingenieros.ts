@@ -53,7 +53,7 @@ export async function sincronizarIngenieroDesdeUsuario(
 
   const { rows: link } = await runner.query<{ nombre: string }>(
     `SELECT nombre FROM ing_ingenieros
-      WHERE usuario_id = $1 OR ($2 IS NOT NULL AND lower(email) = $2) LIMIT 1`, [u.id, email])
+      WHERE usuario_id = $1::uuid OR ($2::text IS NOT NULL AND lower(email) = $2::text) LIMIT 1`, [u.id, email])
 
   // No-ingeniero o usuario inactivo: apagar la ficha linkeada (si existe).
   if (!esIng || !u.activo) {
