@@ -138,7 +138,11 @@ export async function getCargaPorIngeniero(runner: QueryRunner): Promise<CargaRe
        FROM ing_tareas t
        JOIN semanas s ON t.fecha_inicio <= s.wk + 6 AND t.fecha_fin >= s.wk
        LEFT JOIN ing_ingenieros i ON i.nombre = t.asignado_nombre
-      WHERE t.asignado_nombre IS NOT NULL AND t.estado <> 'hecha'
+      WHERE t.asignado_nombre IS NOT NULL
+        -- P6: contar lo MISMO que la cola del planificador (cargarColaIngenieros):
+        -- excluir 'na' y las reservas 'sugerencia' (antes solo filtraba estado<>'hecha').
+        AND t.estado NOT IN ('hecha','na')
+        AND t.origen IN ('app','import_excel','manual')
         AND (i.nombre IS NULL OR i.activo = true)
       GROUP BY 1, 2`)
 

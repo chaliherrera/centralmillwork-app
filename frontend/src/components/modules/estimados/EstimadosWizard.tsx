@@ -79,7 +79,7 @@ export default function EstimadosWizard() {
 
   // ── Paso 3 → crea el plan (hacia atrás) + reserva provisional para el PM ──
   const enviarAlPM = async () => {
-    if (!sel || !fechaComprometida) return
+    if (!sel || !fechaComprometidaOk) return
     setEnviandoPM(true); setError(null)
     try {
       await scheduleService.generar(sel.id, fechaComprometida)
@@ -111,9 +111,16 @@ export default function EstimadosWizard() {
     } catch (e: any) { setError(e?.response?.data?.message || 'No se pudo registrar la firma') } finally { setFirmando(false) }
   }
 
+  // E8: la fecha comprometida NO puede ser anterior a la más temprana factible ni
+  // al día de hoy. El input dejaba poner cualquier fecha (incluso pasada) y se
+  // mandaba al PM así. Ahora se valida (mínimo = max(hoy, fecha factible)).
+  const hoyISO = new Date().toISOString().slice(0, 10)
+  const fechaMin = factRes ? (factRes.fecha_real_mas_temprana > hoyISO ? factRes.fecha_real_mas_temprana : hoyISO) : hoyISO
+  const fechaComprometidaOk = !!fechaComprometida && fechaComprometida >= fechaMin
+
   const canNext =
     paso === 1 ? !!sel && (!tienePlan || enviadoPM) :
-    paso === 2 ? !!fechaComprometida :
+    paso === 2 ? fechaComprometidaOk :
     paso === 3 ? enviadoPM :
     paso === 4 ? true :
     false
@@ -213,9 +220,12 @@ export default function EstimadosWizard() {
                 <p className="text-xs text-stone-500 mt-0.5">
                   {factRes.factible ? 'La fecha pedida entra. Podés proponerla.' : 'La pedida no entra. Proponé la fecha real, o negociá otra con el cliente.'}
                 </p>
-                <input type="date" value={fechaComprometida} onChange={(e) => setFechaComprometida(e.target.value)}
+                <input type="date" value={fechaComprometida} min={fechaMin} onChange={(e) => setFechaComprometida(e.target.value)}
                   className="mt-2 rounded-lg border border-stone-300 px-3 py-2 text-sm text-stone-800 focus:outline-none focus:ring-2 focus:ring-forest-300" />
                 <span className="ml-2 text-xs text-stone-400">esta será la fecha objetivo (sagrada) del schedule</span>
+                {!fechaComprometidaOk && (
+                  <p className="mt-1.5 text-xs text-rose-600">La fecha no puede ser anterior a la más temprana factible ({fmt(fechaMin)}){factRes.factible ? '' : ' — la pedida no entraba'}, ni al día de hoy.</p>
+                )}
               </div>
             )}
           </div>

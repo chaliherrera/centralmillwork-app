@@ -165,6 +165,7 @@ export interface DealEnCurso {
   estado: string; deal_estado: string; fecha_objetivo: string | null; n_tareas: number
   portal_token: string | null
   deal_aprobado_at: string | null   // cuándo aprobó el cliente (ISO), para la confirmación en Estimados
+  cliente_rechazo: boolean          // el cliente rechazó el plan desde el portal (2.6)
 }
 
 /** Deals post-aceptación del PM que siguen en curso (prospecto): esperando el handoff
@@ -175,10 +176,16 @@ export async function listDealsEnCurso(runner: QueryRunner): Promise<DealEnCurso
             to_char(sp.fecha_objetivo,'YYYY-MM-DD') AS fecha_objetivo,
             to_char(p.deal_aprobado_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS deal_aprobado_at,
             (SELECT count(*)::int FROM ing_tareas t WHERE t.proyecto_id = p.id AND t.origen = 'app') AS n_tareas,
-            (SELECT spt.token FROM schedule_portal_tokens spt WHERE spt.proyecto_id = p.id AND spt.activo = true ORDER BY spt.created_at DESC LIMIT 1) AS portal_token
+            (SELECT spt.token FROM schedule_portal_tokens spt WHERE spt.proyecto_id = p.id AND spt.activo = true ORDER BY spt.created_at DESC LIMIT 1) AS portal_token,
+            -- 2.6: ¿el cliente RECHAZÓ el plan? (última decisión del portal sobre PLAN).
+            COALESCE((SELECT (ev.payload->>'decision') = 'rechazado'
+                        FROM schedule_eventos ev
+                        JOIN schedule_planes sp2 ON sp2.id = ev.plan_id AND sp2.scope = 'proyecto'
+                       WHERE sp2.proyecto_id = p.id AND ev.hito_codigo = 'PLAN' AND ev.disparado_por = 'portal'
+                       ORDER BY ev.created_at DESC LIMIT 1), false) AS cliente_rechazo
        FROM proyectos p
        LEFT JOIN schedule_planes sp ON sp.proyecto_id = p.id AND sp.scope = 'proyecto'
-      WHERE p.estado = 'prospecto' AND p.deal_estado IN ('plan_propuesto','esperando_cliente','aprobado')
+      WHERE p.estado = 'prospecto' AND p.deal_estado IN ('esperando_pm','plan_propuesto','esperando_cliente','aprobado')
       ORDER BY p.codigo`)
   return rows
 }

@@ -28,6 +28,7 @@ const fmtDateTime = (iso: string | null) => {
 }
 
 const CHIP: Record<string, { label: string; cls: string }> = {
+  esperando_pm:      { label: 'con el PM',           cls: 'text-stone-600 bg-stone-100' },
   plan_propuesto:    { label: 'PM aceptó el plan',  cls: 'text-forest-700 bg-forest-100' },
   esperando_cliente: { label: 'con el cliente',      cls: 'text-amber-700 bg-amber-100' },
   aprobado:          { label: 'cliente aprobó',      cls: 'text-blue-700 bg-blue-100' },
@@ -57,7 +58,7 @@ export default function DealsEnCurso({ mode, emptyHint }: { mode: 'estimados' | 
   // Estimados también ve el deal 'aprobado' (como confirmación con fecha/hora) hasta que
   // el PM activa; antes desaparecía apenas el cliente aprobaba y Estimados quedaba sin cierre.
   const visibles = deals.filter((d) =>
-    mode === 'estimados' ? (d.deal_estado === 'plan_propuesto' || d.deal_estado === 'esperando_cliente' || d.deal_estado === 'aprobado')
+    mode === 'estimados' ? (d.deal_estado === 'esperando_pm' || d.deal_estado === 'plan_propuesto' || d.deal_estado === 'esperando_cliente' || d.deal_estado === 'aprobado')
                          : d.deal_estado === 'aprobado')
 
   const qc = useQueryClient()
@@ -133,11 +134,19 @@ export default function DealsEnCurso({ mode, emptyHint }: { mode: 'estimados' | 
                   </button>
                 )}
                 <span className="text-[11px] text-stone-400">
+                  {d.deal_estado === 'esperando_pm' && 'Con el PM — está revisando/aceptando el plan.'}
                   {d.deal_estado === 'plan_propuesto' && 'El PM aceptó — mandale el schedule al cliente para su OK.'}
-                  {d.deal_estado === 'esperando_cliente' && 'Esperando el OK del cliente. Registralo cuando responda.'}
+                  {d.deal_estado === 'esperando_cliente' && !d.cliente_rechazo && 'Esperando el OK del cliente. Registralo cuando responda.'}
                   {d.deal_estado === 'aprobado' && esPM && 'El cliente ya aprobó. Activá para poner el plan en marcha.'}
                 </span>
               </div>
+              {/* 2.6: el cliente rechazó el plan desde el portal → Estimados lo ve para renegociar. */}
+              {mode === 'estimados' && d.deal_estado === 'esperando_cliente' && d.cliente_rechazo && (
+                <div className="mt-2 flex items-start gap-2 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-[12.5px] text-rose-800">
+                  <X size={15} className="mt-0.5 shrink-0 text-rose-600" />
+                  <span>El cliente <b>pidió cambios en el plan</b> desde el portal. Revisá el schedule, ajustalo y reenvialo.</span>
+                </div>
+              )}
               {/* Estimados: confirmación de que el cliente aprobó (con fecha y hora). Queda
                   visible hasta que el PM activa, así Estimados tiene el cierre del handoff. */}
               {mode === 'estimados' && d.deal_estado === 'aprobado' && (
