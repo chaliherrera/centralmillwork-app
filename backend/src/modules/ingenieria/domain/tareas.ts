@@ -779,12 +779,14 @@ export async function sincronizarDecisionCliente(
           [ext, `Cliente aprobo con comentarios: ${comentario}`])
       }
     }
-  } else if (codigo === 'E-05' && !decision.includes('rechaz')) {
-    await runner.query(
-      `INSERT INTO tareas (area, title, description, priority, estado, origen)
-       VALUES ('ingenieria', $1, $2, 'medium', 'pendiente', 'sistema')`,
-      [`Cliente aprobó las muestras — ${ext}`,
-       `El cliente aprobó las muestras del proyecto ${ext} desde el portal. Reflejalo en el módulo de Muestras.${comentario ? ' Comentario: ' + comentario : ''}`])
+  } else if (codigo === 'E-05') {
+    // El cliente respondió las muestras DESDE EL PORTAL (Q3) → escribir directo en
+    // el módulo de Muestras (antes se creaba una tarea para que Ingeniería lo
+    // reflejara a mano). Aprobó / aprobó con comentarios → APROBADA; pidió cambios
+    // → RECHAZADA + V+1. El paso samples deriva del módulo, así que el recompute
+    // de abajo lo refleja.
+    const { responderMuestrasCliente } = await import('../../muestras/domain/respuestaCliente')
+    await responderMuestrasCliente(runner, proyectoId, !decision.includes('rechaz'), comentario)
   }
 
   await recomputarYGuardar(runner, ext)

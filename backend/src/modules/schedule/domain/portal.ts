@@ -231,11 +231,17 @@ export async function getVistaPublica(runner: QueryRunner, token: string): Promi
     if (next) next.estado = 'now'
   }
 
+  // E-05 (muestras) solo es aprobable en el portal si hay una muestra ENVIADA
+  // esperando respuesta del cliente (Q3). Sin muestra enviada, no se ofrece.
+  const { countMuestrasEnviadas } = await import('../../muestras/domain/respuestaCliente')
+  const muestrasEnviadas = await countMuestrasEnviadas(runner, info.proyectoId)
+
   // Pendientes: aprobables ACTIVOS (no bloqueados por predecesores, sin resolver).
   const pendientesBase = CLIENT_MOMENTS
     .filter((m) => m.tipo === 'accion' && APROBABLES[m.codigo])
     .map((m) => ({ m, h: st.get(m.codigo) }))
-    .filter(({ h }) => h && !h.tiene_real && h.estado !== 'no_aplica')
+    .filter(({ m, h }) => h && !h.tiene_real && h.estado !== 'no_aplica'
+      && (m.codigo !== 'E-05' || muestrasEnviadas > 0))
     .map(({ m, h }) => ({ codigo: m.codigo, titulo: APROBABLES[m.codigo], fecha_planeada: h!.fp }))
 
   // Para la aprobación de planos, adjuntar el PDF del último submittal.
