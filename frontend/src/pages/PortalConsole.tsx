@@ -3,6 +3,7 @@ import { MonitorSmartphone, Share2, Info } from 'lucide-react'
 import { proyectosService } from '@/services/proyectos'
 import type { Proyecto } from '@/types'
 import ClientPortal from './portal/ClientPortal'
+import PortalLinksManager from '@/components/portal/PortalLinksManager'
 
 // Consola de control del portal del cliente: previsualizar lo que ve el cliente
 // en CUALQUIER proyecto (verificar look & feel + los pasos del journey), sin
@@ -30,7 +31,7 @@ export default function PortalConsole() {
           </div>
           <div>
             <h1 className="text-xl font-bold text-stone-900">Consola del portal del cliente</h1>
-            <p className="text-sm text-stone-500">Previsualizá lo que ve el cliente en cualquier proyecto. No manda nada.</p>
+            <p className="text-sm text-stone-500">Previsualizá el portal, generá links de prueba y abrilo en vivo — todo desde acá.</p>
           </div>
         </div>
 
@@ -53,16 +54,22 @@ export default function PortalConsole() {
         </div>
 
         {sel && (
-          <div className="mt-3 flex items-start gap-2 text-xs text-stone-500 bg-white border border-card-border rounded-xl px-3 py-2">
-            <Info size={14} className="text-stone-400 shrink-0 mt-0.5" />
-            <span>Vista previa de <b>{sel.codigo}</b>. Las acciones (aprobar/rechazar) están deshabilitadas — es solo para ver. Para compartir el link con el cliente, entrá al <b>Schedule</b> del proyecto → <Share2 size={11} className="inline" /> <b>Compartir con cliente</b>.</span>
+          <div className="mt-4 grid lg:grid-cols-2 gap-4 items-start">
+            <PortalLinksManager proyectoId={sel.id} />
+            <div className="flex items-start gap-2 text-xs text-stone-500 bg-white border border-card-border rounded-xl px-3 py-2.5">
+              <Info size={14} className="text-stone-400 shrink-0 mt-0.5" />
+              <span>La <b>vista previa</b> de abajo es de solo lectura (para ver look &amp; feel y los pasos). Para <b>probar de verdad</b> (aprobar / rechazar como el cliente), generá un link y usá <b>«Abrir portal en vivo»</b>. Compartir con cliente también está disponible en el <b>Schedule</b> del proyecto <Share2 size={11} className="inline" />.</span>
+            </div>
           </div>
         )}
 
         {selId ? (
-          <div className="mt-4 flex justify-center">
-            <div className={`overflow-hidden rounded-2xl border border-card-border-strong shadow-sm bg-[#F6F4EE] ${device === 'mobile' ? 'w-[390px]' : 'w-full'}`}>
-              <ClientPortal key={`${selId}-${device}`} previewProyectoId={selId} />
+          <div className="mt-5">
+            <div className="text-xs font-semibold text-stone-500 uppercase tracking-wide mb-2">Vista previa (solo lectura)</div>
+            <div className="flex justify-center">
+              <div className={`overflow-hidden rounded-2xl border border-card-border-strong shadow-sm bg-[#F6F4EE] ${device === 'mobile' ? 'w-[390px]' : 'w-full'}`}>
+                <ClientPortal key={`${selId}-${device}`} previewProyectoId={selId} />
+              </div>
             </div>
           </div>
         ) : (
