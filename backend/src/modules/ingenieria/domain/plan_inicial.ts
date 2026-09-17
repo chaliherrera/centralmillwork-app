@@ -135,6 +135,11 @@ export async function enviarAClienteDeal(runner: QueryRunner, proyectoId: number
   const { rowCount } = await runner.query(
     `UPDATE proyectos SET deal_estado = 'esperando_cliente' WHERE id = $1 AND deal_estado = 'plan_propuesto'`, [proyectoId])
   if (!rowCount) return { ok: false, error: 'el plan tiene que estar aceptado por el PM antes de mandarlo al cliente' }
+  // Congelar la fecha que verá el cliente = la fecha interna actual. A partir de acá, si el PM
+  // mueve la fecha interna, el cliente NO lo ve (2.2): sólo cambia si se le re-comunica.
+  await runner.query(
+    `UPDATE schedule_planes SET fecha_cliente = fecha_objetivo
+      WHERE proyecto_id = $1 AND scope = 'proyecto'`, [proyectoId])
   // Reusa el token activo del proyecto o crea uno (a nombre del cliente).
   const ex = await runner.query<{ token: string }>(
     `SELECT token FROM schedule_portal_tokens WHERE proyecto_id = $1 AND activo = true ORDER BY created_at DESC LIMIT 1`, [proyectoId])

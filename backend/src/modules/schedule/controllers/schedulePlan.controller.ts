@@ -171,15 +171,40 @@ export async function crearPortalTokenHandler(req: Request, res: Response, next:
 
 // ── POST /api/schedule/proyecto/:id/fecha-objetivo ───────────────────────────
 // Mueve la fecha de entrega comprometida (decisión humana registrada).
-const fechaObjetivoSchema = z.object({ fecha_objetivo: z.string().regex(/^\d{4}-\d{2}-\d{2}$/) })
+const fechaObjetivoSchema = z.object({
+  fecha_objetivo: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  // 2.2: el PM puede pedir, en el mismo paso, que se avise a Estimados que la fecha con el
+  // cliente necesita reajuste (aviso al escritorio, area='admin'). No toca lo que ve el cliente.
+  avisar_estimados: z.boolean().optional(),
+  motivo: z.string().max(500).optional(),
+})
 export async function cambiarFechaObjetivoHandler(req: Request, res: Response, next: NextFunction) {
   const client = await pool.connect()
   try {
     const proyectoId = parseProyectoId(req)
-    const { fecha_objetivo } = fechaObjetivoSchema.parse(req.body ?? {})
+    const { fecha_objetivo, avisar_estimados, motivo } = fechaObjetivoSchema.parse(req.body ?? {})
+    const usuario = (req as any).user?.email ?? null
     await client.query('BEGIN')
-    const r = await cambiarFechaObjetivo(client, proyectoId, fecha_objetivo, (req as any).user?.nombre ?? null)
+    const r = await cambiarFechaObjetivo(client, proyectoId, fecha_objetivo, usuario)
     if (!r.ok) { await client.query('ROLLBACK'); return next(createError(r.error ?? 'no se pudo cambiar', 400)) }
+    // Aviso opcional a Estimados por el escritorio: la fecha con el cliente necesita reajuste.
+    // NO cambia lo que ve el cliente (fecha_cliente) — sólo dispara la renegociación.
+    if (avisar_estimados) {
+      const { rows: p } = await client.query<{ codigo: string; nombre: string }>(
+        `SELECT codigo, nombre FROM proyectos WHERE id = $1`, [proyectoId])
+      if (p[0]) {
+        await client.query(
+          `INSERT INTO tareas (area, title, description, priority, from_email, subject, source_email_id, origen, source_ref)
+             VALUES ('admin',$1,$2,'high','sistema@centralmillwork.com',$3,NULL,'sistema',$4)
+           ON CONFLICT (source_ref) WHERE origen='sistema' AND source_ref IS NOT NULL DO NOTHING`,
+          [`Reajuste de fecha con el cliente: ${p[0].codigo} — ${p[0].nombre}`,
+           `El PM movió la fecha de entrega interna${r.anterior ? ` (de ${r.anterior} a ${fecha_objetivo})` : ` a ${fecha_objetivo}`}${usuario ? ` — ${usuario}` : ''}.\n` +
+           `La fecha que ve el cliente NO cambió. Hay que renegociar la fecha con el cliente y, cuando esté acordada, comunicarla.\n\n` +
+           `Motivo: ${motivo?.trim() || '(sin especificar)'}`,
+           `Reajuste de fecha: ${p[0].codigo}`,
+           `deal:${proyectoId}:reajuste_fecha:${Date.now()}`])
+      }
+    }
     await client.query('COMMIT')
     res.json({ data: { ok: true, anterior: r.anterior }, message: 'Fecha de entrega actualizada' })
   } catch (err: any) {

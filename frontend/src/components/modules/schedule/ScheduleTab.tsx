@@ -4,7 +4,7 @@ import clsx from 'clsx'
 import {
   CalendarClock, Lock, RefreshCw, Flag, Check,
   Target, User, Handshake, Activity, ChevronRight, Share2, Copy, X,
-  AlertTriangle, Zap, FileText,
+  AlertTriangle, Zap, FileText, CalendarCog, Loader2,
 } from 'lucide-react'
 import { scheduleService, type ScheduleData, type ScheduleHito, type Semaforo, type PortalTokenRow, type SubmittalRow } from '@/services/schedule'
 
@@ -88,6 +88,8 @@ export default function ScheduleTab({ proyectoId }: { proyectoId: number }) {
   const [portalTokens, setPortalTokens] = useState<PortalTokenRow[]>([])
   const [planosUrl, setPlanosUrl] = useState<string | null>(null)
   const [submittals, setSubmittals] = useState<SubmittalRow[]>([])
+  // 2.2: mover la fecha de entrega INTERNA del PM (el cliente no lo ve).
+  const [mover, setMover] = useState<{ open: boolean; fecha: string; avisar: boolean; motivo: string }>({ open: false, fecha: '', avisar: false, motivo: '' })
 
   async function load() {
     setLoading(true)
@@ -114,6 +116,20 @@ export default function ScheduleTab({ proyectoId }: { proyectoId: number }) {
     setBusy(true)
     try { await scheduleService.recalcular(proyectoId); toast.success('Schedule recalculado'); await load() }
     catch { /* toast */ } finally { setBusy(false) }
+  }
+  function abrirMover() {
+    setMover({ open: true, fecha: data?.plan?.fecha_objetivo ?? '', avisar: false, motivo: '' })
+  }
+  async function moverFecha() {
+    if (!mover.fecha) { toast.error('Elegí la nueva fecha de entrega'); return }
+    setBusy(true)
+    try {
+      await scheduleService.cambiarFechaObjetivo(proyectoId, mover.fecha,
+        mover.avisar ? { avisar_estimados: true, motivo: mover.motivo.trim() || undefined } : undefined)
+      toast.success(mover.avisar ? 'Fecha movida — se avisó a Estimados' : 'Fecha de entrega movida (interna)')
+      setMover({ open: false, fecha: '', avisar: false, motivo: '' })
+      await load()
+    } catch { /* toast */ } finally { setBusy(false) }
   }
   async function loadTokens() {
     try { setPortalTokens((await scheduleService.listPortalTokens(proyectoId)).data ?? []) } catch { /* silencioso */ }
@@ -251,6 +267,10 @@ export default function ScheduleTab({ proyectoId }: { proyectoId: number }) {
           </div>
         </div>
         <div className="ml-auto flex items-center gap-3">
+          <button onClick={abrirMover} disabled={busy}
+                  className="inline-flex items-center gap-1.5 text-xs font-medium text-stone-500 hover:text-stone-800">
+            <CalendarCog size={14} /> Mover fecha
+          </button>
           <button onClick={abrirPortal}
                   className="inline-flex items-center gap-1.5 text-xs font-medium text-forest-600 hover:text-forest-800">
             <Share2 size={14} /> Compartir con cliente
@@ -341,6 +361,42 @@ export default function ScheduleTab({ proyectoId }: { proyectoId: number }) {
                 </div>
               </>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* modal mover fecha de entrega (interna del PM) */}
+      {mover.open && (
+        <div className="fixed inset-0 bg-black/30 flex items-center justify-center p-4 z-50" onClick={() => setMover((m) => ({ ...m, open: false }))}>
+          <div className="bg-white rounded-2xl max-w-md w-full p-5 shadow-xl" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center gap-2">
+              <CalendarCog size={18} className="text-forest-600" />
+              <h3 className="font-semibold text-stone-800">Mover fecha de entrega</h3>
+              <button onClick={() => setMover((m) => ({ ...m, open: false }))} className="ml-auto text-stone-400 hover:text-stone-700"><X size={18} /></button>
+            </div>
+            <div className="mt-3 flex items-start gap-2 rounded-lg border border-stone-200 bg-stone-50 px-3 py-2.5 text-[12.5px] text-stone-600">
+              <AlertTriangle size={15} className="mt-0.5 shrink-0 text-stone-400" />
+              <span>Es tu fecha <b>interna</b> de trabajo: recalcula el plan y la carga. <b>El cliente no la ve</b> — su portal sigue mostrando la fecha que se le comunicó.</span>
+            </div>
+            <label className="block mt-3 text-xs font-medium text-stone-500">Nueva fecha de entrega interna</label>
+            <input type="date" value={mover.fecha} onChange={(e) => setMover((m) => ({ ...m, fecha: e.target.value }))} className="input w-full mt-1" />
+            <label className="mt-4 flex items-start gap-2 cursor-pointer">
+              <input type="checkbox" checked={mover.avisar} onChange={(e) => setMover((m) => ({ ...m, avisar: e.target.checked }))} className="mt-0.5" />
+              <span className="text-[13px] text-stone-700">Avisar a Estimados que la fecha con el cliente necesita reajuste
+                <span className="block text-[11px] text-stone-400">Les llega al escritorio para que renegocien con el cliente. Recién ahí se le comunica la nueva fecha.</span>
+              </span>
+            </label>
+            {mover.avisar && (
+              <textarea value={mover.motivo} onChange={(e) => setMover((m) => ({ ...m, motivo: e.target.value }))}
+                        placeholder="Motivo del reajuste (opcional). Ej: atraso del cliente en aprobar planos." rows={2}
+                        className="input w-full mt-2 text-sm" />
+            )}
+            <div className="mt-4 flex justify-end gap-2">
+              <button onClick={() => setMover((m) => ({ ...m, open: false }))} className="px-3 py-2 text-sm text-stone-500">Cancelar</button>
+              <button onClick={moverFecha} disabled={busy} className="btn-primary">
+                {busy ? <Loader2 size={15} className="animate-spin" /> : <CalendarCog size={15} />} Mover fecha
+              </button>
+            </div>
           </div>
         </div>
       )}

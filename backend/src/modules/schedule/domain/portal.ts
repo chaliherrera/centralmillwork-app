@@ -182,7 +182,8 @@ export async function armarVistaPublica(
 
   const { rows: pr } = await runner.query<{ nombre: string; cliente: string; fo: string | null; semaforo: string; deal_estado: string }>(
     `SELECT p.nombre, p.cliente, p.deal_estado,
-            to_char(sp.fecha_objetivo,'YYYY-MM-DD') AS fo, sp.semaforo
+            -- El cliente ve la fecha COMUNICADA (fecha_cliente); la interna del PM no filtra.
+            to_char(COALESCE(sp.fecha_cliente, sp.fecha_objetivo),'YYYY-MM-DD') AS fo, sp.semaforo
        FROM proyectos p
        JOIN schedule_planes sp ON sp.proyecto_id = p.id AND sp.scope = 'proyecto'
       WHERE p.id = $1 LIMIT 1`, [info.proyectoId])

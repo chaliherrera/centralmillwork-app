@@ -135,10 +135,11 @@ export const scheduleService = {
       .post<ApiResponse<{ semaforo: string; holguraDias: number | null }>>(`/schedule/proyecto/${proyectoId}/recalcular`)
       .then((r) => r.data),
 
-  // Mueve la fecha de entrega comprometida (decisión registrada).
-  cambiarFechaObjetivo: (proyectoId: number, fecha_objetivo: string) =>
+  // Mueve la fecha de entrega INTERNA del PM (decisión registrada; el cliente no lo ve).
+  // Opcional: avisa a Estimados por el escritorio que la fecha con el cliente necesita reajuste.
+  cambiarFechaObjetivo: (proyectoId: number, fecha_objetivo: string, opts?: { avisar_estimados?: boolean; motivo?: string }) =>
     api
-      .post<ApiResponse<{ ok: boolean; anterior: string }>>(`/schedule/proyecto/${proyectoId}/fecha-objetivo`, { fecha_objetivo })
+      .post<ApiResponse<{ ok: boolean; anterior: string }>>(`/schedule/proyecto/${proyectoId}/fecha-objetivo`, { fecha_objetivo, ...opts })
       .then((r) => r.data),
 
   crearPortalToken: (proyectoId: number, contacto_nombre?: string, contacto_email?: string) =>
