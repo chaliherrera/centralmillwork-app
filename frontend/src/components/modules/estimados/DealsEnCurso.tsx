@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
-import { Loader2, Send, Check, Rocket, CalendarRange, UserCheck, Eye, Link2, Copy, CalendarClock, X } from 'lucide-react'
+import { Loader2, Send, Check, Rocket, CalendarRange, UserCheck, Eye, Link2, Copy, CalendarClock, X, Pause, Ban, AlertTriangle } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { ingenieriaService, type IngDealEnCurso } from '@/services/ingenieria'
 import type { PortalGanttTarea } from '@/services/portal'
@@ -40,6 +40,8 @@ export default function DealsEnCurso({ mode, emptyHint }: { mode: 'estimados' | 
   const [loading, setLoading] = useState(true)
   const [cronoBusy, setCronoBusy] = useState<number | null>(null)
   const [crono, setCrono] = useState<{ nombre: string; fecha: string | null; gantt: PortalGanttTarea[] } | null>(null)
+  // Confirmación de baja del deal (pausar/cancelar) — acción destructiva, se confirma.
+  const [cerrar, setCerrar] = useState<{ d: IngDealEnCurso; accion: 'pausar' | 'cancelar' } | null>(null)
 
   async function abrirCrono(d: IngDealEnCurso) {
     setCronoBusy(d.proyecto_id)
@@ -73,6 +75,12 @@ export default function DealsEnCurso({ mode, emptyHint }: { mode: 'estimados' | 
     catch (e: any) { toast.error(e?.response?.data?.message || 'No se pudo completar') }
     finally { setBusy(null) }
   }
+
+  const accionCerrar = (d: IngDealEnCurso, ac: 'pausar' | 'cancelar') =>
+    accion(d, () => ingenieriaService.cerrarDeal(d.proyecto_id, ac),
+      ac === 'pausar'
+        ? `${d.codigo} pausado — se liberó la Ingeniería y se avisó al PM`
+        : `${d.codigo} cancelado — se liberó la Ingeniería y se avisó al PM`)
 
   if (loading) return null
   if (!visibles.length) return emptyHint
@@ -133,6 +141,20 @@ export default function DealsEnCurso({ mode, emptyHint }: { mode: 'estimados' | 
                     {isBusy ? <Loader2 className="animate-spin" size={15} /> : <Rocket size={15} />} Activar proyecto
                   </button>
                 )}
+                {/* 2.1: sólo Estimados puede dar de baja el deal (tiene el contacto con el cliente).
+                    Pausar (reactivable) o cancelar; en ambos se libera toda la Ingeniería + aviso al PM. */}
+                {mode === 'estimados' && (
+                  <div className="inline-flex items-center gap-2 ml-auto">
+                    <button onClick={() => setCerrar({ d, accion: 'pausar' })} disabled={isBusy}
+                      className="inline-flex items-center gap-1.5 rounded-lg border border-amber-300 text-amber-700 hover:bg-amber-50 disabled:opacity-50 text-sm font-semibold px-3 py-2">
+                      <Pause size={15} /> Pausar
+                    </button>
+                    <button onClick={() => setCerrar({ d, accion: 'cancelar' })} disabled={isBusy}
+                      className="inline-flex items-center gap-1.5 rounded-lg border border-rose-300 text-rose-700 hover:bg-rose-50 disabled:opacity-50 text-sm font-semibold px-3 py-2">
+                      <Ban size={15} /> Cancelar deal
+                    </button>
+                  </div>
+                )}
                 <span className="text-[11px] text-stone-400">
                   {d.deal_estado === 'esperando_pm' && 'Con el PM — está revisando/aceptando el plan.'}
                   {d.deal_estado === 'plan_propuesto' && 'El PM aceptó — mandale el schedule al cliente para su OK.'}
@@ -188,6 +210,47 @@ export default function DealsEnCurso({ mode, emptyHint }: { mode: 'estimados' | 
           </div>
           <p className="text-[11px] text-stone-400 mb-3">Es lo que ve el cliente en el portal. Descargalo para adjuntarlo a un email.</p>
           <CronogramaCliente nombre={crono.nombre} fechaObjetivo={crono.fecha} gantt={crono.gantt} />
+        </div>
+      </div>
+    )}
+
+    {/* Confirmación de baja del deal (2.1) — acción destructiva: se libera Ingeniería. */}
+    {cerrar && (
+      <div className="fixed inset-0 bg-black/30 flex items-center justify-center p-4 z-50" onClick={() => setCerrar(null)}>
+        <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-5" onClick={(e) => e.stopPropagation()}>
+          <div className="flex items-start gap-3 mb-3">
+            <div className={`shrink-0 rounded-full p-2 ${cerrar.accion === 'pausar' ? 'bg-amber-100 text-amber-700' : 'bg-rose-100 text-rose-700'}`}>
+              {cerrar.accion === 'pausar' ? <Pause size={18} /> : <Ban size={18} />}
+            </div>
+            <div>
+              <h3 className="font-bold text-stone-800">
+                {cerrar.accion === 'pausar' ? 'Pausar el deal' : 'Cancelar el deal'}
+                <span className="font-mono text-[12px] text-forest-700 ml-2">{cerrar.d.codigo}</span>
+              </h3>
+              <p className="text-[12px] text-stone-500 mt-0.5">{cerrar.d.nombre}</p>
+            </div>
+          </div>
+          <div className="flex items-start gap-2 rounded-lg border border-stone-200 bg-stone-50 px-3 py-2.5 text-[12.5px] text-stone-700 mb-4">
+            <AlertTriangle size={15} className="mt-0.5 shrink-0 text-amber-500" />
+            <span>
+              Se <b>libera toda la reserva de Ingeniería</b> (el ingeniero recupera esa capacidad) y se
+              dan de baja los links del portal del cliente. El PM recibe el aviso en su escritorio.
+              {cerrar.accion === 'pausar'
+                ? ' El proyecto queda en pausa y se puede reactivar más adelante.'
+                : ' El proyecto queda cancelado.'}
+            </span>
+          </div>
+          <div className="flex items-center justify-end gap-2">
+            <button onClick={() => setCerrar(null)}
+              className="rounded-lg border border-stone-300 hover:bg-stone-50 text-stone-700 text-sm font-semibold px-3.5 py-2">
+              No, volver
+            </button>
+            <button
+              onClick={() => { const { d, accion } = cerrar; setCerrar(null); accionCerrar(d, accion) }}
+              className={`inline-flex items-center gap-1.5 rounded-lg text-white text-sm font-semibold px-3.5 py-2 ${cerrar.accion === 'pausar' ? 'bg-amber-600 hover:bg-amber-700' : 'bg-rose-600 hover:bg-rose-700'}`}>
+              {cerrar.accion === 'pausar' ? <><Pause size={15} /> Sí, pausar</> : <><Ban size={15} /> Sí, cancelar</>}
+            </button>
+          </div>
         </div>
       </div>
     )}

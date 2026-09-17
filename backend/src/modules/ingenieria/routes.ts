@@ -6,7 +6,7 @@ import {
   crearTareaHandler, actualizarTareaHandler, avanceTareaHandler, borrarTareaHandler,
   agregarDepHandler, borrarDepHandler, bulkDepsHandler, moverTareaHandler, reordenarVisualHandler, reasignarIngenieroHandler,
   reservarHandler, reservasPendientesHandler, confirmarReservaHandler, liberarReservaHandler,
-  dealsEnCursoHandler, enviarClienteHandler, clienteAproboHandler, activarProyectoHandler,
+  dealsEnCursoHandler, enviarClienteHandler, clienteAproboHandler, activarProyectoHandler, cerrarDealHandler,
   overrideDepositoHandler, reprogramacionesHandler, depositosBloqueandoHandler, pagosPorCobrarHandler, instalacionesPMHandler, muestrasEstadoHandler,
   comprasEstadoHandler, instalacionDetalleHandler, escritorioHandler, escritorioResumenHandler,
   novedadesClienteHandler, ingenierosHandler, actualizarIngenieroHandler,
@@ -72,5 +72,8 @@ router.get('/deals', READ, dealsEnCursoHandler)
 router.post('/proyecto/:id/enviar-cliente', PM, enviarClienteHandler)
 router.post('/proyecto/:id/cliente-aprobo', PM, clienteAproboHandler)
 router.post('/proyecto/:id/activar', PM, activarProyectoHandler)
+// Estimados da de baja el deal (pausar/cancelar) → libera toda la Ingeniería + avisa al PM.
+// El botón vive sólo en la vista de Estimados (así "sólo Estimados" cierra el deal).
+router.post('/proyecto/:id/cerrar-deal', PM, cerrarDealHandler)
 
 export default router

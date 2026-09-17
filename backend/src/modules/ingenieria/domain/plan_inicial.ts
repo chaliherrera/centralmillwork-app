@@ -160,6 +160,57 @@ export async function activarProyecto(runner: QueryRunner, proyectoId: number): 
   return rowCount ? { ok: true } : { ok: false, error: 'el cliente todavía no aprobó el schedule' }
 }
 
+/**
+ * Estimados da de baja un deal en curso: lo PAUSA (reactivable) o lo CANCELA.
+ * Único punto que puede cerrar un deal — Estimados tiene el contacto con el cliente.
+ * En ambos casos se LIBERA TODA la reserva de Ingeniería (se borran las tareas del
+ * proyecto → el ingeniero recupera su capacidad) y se revocan los links del portal.
+ * Al PM se le avisa por su ESCRITORIO (tarea area='admin'), no por email.
+ */
+export async function cerrarDeal(
+  runner: QueryRunner, proyectoId: number, accion: 'pausar' | 'cancelar', usuarioNombre: string | null = null
+): Promise<{ ok: boolean; error?: string }> {
+  const { rows } = await runner.query<{ codigo: string; nombre: string; estado: string }>(
+    `SELECT codigo, nombre, estado FROM proyectos WHERE id = $1`, [proyectoId])
+  const p = rows[0]
+  if (!p) return { ok: false, error: 'proyecto no encontrado' }
+  if (p.estado !== 'prospecto') {
+    return { ok: false, error: 'solo se puede pausar o cancelar un deal en curso (todavía sin activar)' }
+  }
+
+  // 1) Liberar TODA la Ingeniería: borrar las tareas del proyecto devuelve la capacidad
+  //    del ingeniero (el heatmap de carga sólo cuenta tareas vivas del proyecto).
+  await runner.query(`DELETE FROM ing_tareas WHERE proyecto_id = $1`, [proyectoId])
+  // 2) Revocar los links del portal: el cliente deja de ver el schedule.
+  await runner.query(
+    `UPDATE schedule_portal_tokens SET activo = false WHERE proyecto_id = $1 AND activo = true`, [proyectoId])
+  // 3) Estado del proyecto: en_pausa (reactivable) o cancelado. El deal se cierra (deal_estado → NULL);
+  //    si más adelante se retoma, Estimados vuelve a arrancar el flujo desde cero.
+  const nuevoEstado = accion === 'pausar' ? 'en_pausa' : 'cancelado'
+  await runner.query(
+    `UPDATE proyectos SET estado = $2, deal_estado = NULL WHERE id = $1`, [proyectoId, nuevoEstado])
+
+  // 4) Avisar al PM por su escritorio (tabla tareas, area='admin' = bandeja del PM).
+  const verbo = accion === 'pausar' ? 'pausado' : 'cancelado'
+  const quien = usuarioNombre ? ` (${usuarioNombre})` : ''
+  const cierre = accion === 'pausar'
+    ? 'El proyecto queda EN PAUSA y se puede reactivar más adelante.'
+    : 'El proyecto queda CANCELADO.'
+  await runner.query(
+    `INSERT INTO tareas (area, title, description, priority, from_email, subject, source_email_id, origen, source_ref)
+       VALUES ('admin',$1,$2,'high','sistema@centralmillwork.com',$3,NULL,'sistema',$4)
+     ON CONFLICT (source_ref) WHERE origen='sistema' AND source_ref IS NOT NULL DO NOTHING`,
+    [`Deal ${verbo}: ${p.codigo} — ${p.nombre}`,
+     `Estimados ${verbo} el deal ${p.codigo} (${p.nombre})${quien}.\n` +
+     `Se liberó la reserva de Ingeniería (el ingeniero recuperó esa capacidad) y se dieron de baja los links del portal.\n\n` +
+     cierre,
+     `Deal ${verbo}: ${p.codigo}`,
+     `deal:${proyectoId}:${accion}:${Date.now()}`])
+
+  logger.info('deal cerrado por Estimados', { proyectoId, accion, codigo: p.codigo })
+  return { ok: true }
+}
+
 export interface DealEnCurso {
   proyecto_id: number; codigo: string; nombre: string; cliente: string | null
   estado: string; deal_estado: string; fecha_objetivo: string | null; n_tareas: number

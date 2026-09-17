@@ -264,6 +264,8 @@ export const ingenieriaService = {
     api.post<ApiResponse<{ ok: boolean }>>(`/ingenieria/proyecto/${proyectoId}/cliente-aprobo`).then((r) => r.data),
   activarProyecto: (proyectoId: number) =>
     api.post<ApiResponse<{ ok: boolean }>>(`/ingenieria/proyecto/${proyectoId}/activar`).then((r) => r.data),
+  cerrarDeal: (proyectoId: number, accion: 'pausar' | 'cancelar') =>
+    api.post<ApiResponse<{ ok: boolean }>>(`/ingenieria/proyecto/${proyectoId}/cerrar-deal`, { accion }).then((r) => r.data),
   actualizarTarea: (id: number, t: Partial<TareaInput>) =>
     api.patch<ApiResponse<{ ok: boolean }>>(`/ingenieria/tareas/${id}`, t).then((r) => r.data),
   // Ingeniería reporta avance de su tarea (solo estado/comentario)

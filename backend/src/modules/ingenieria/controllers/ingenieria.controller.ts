@@ -18,7 +18,7 @@ import { listReservasPendientes, liberarReserva } from '../domain/reservas'
 import { listIngenieros, actualizarIngeniero } from '../domain/ingenieros'
 import {
   generarPlanIngenieria, aceptarPlanPM,
-  enviarAClienteDeal, registrarAprobacionCliente, activarProyecto, listDealsEnCurso,
+  enviarAClienteDeal, registrarAprobacionCliente, activarProyecto, listDealsEnCurso, cerrarDeal,
 } from '../domain/plan_inicial'
 import { estadoDeposito, overrideGate, listDepositosBloqueando, listPagosPorCobrar } from '../domain/deposito'
 import { listMuestrasPorProyecto } from '../domain/muestras'
@@ -102,6 +102,22 @@ export async function activarProyectoHandler(req: Request, res: Response, next: 
     if (!r.ok) return next(createError(r.error ?? 'no se pudo activar', 400))
     res.json({ data: r })
   } catch (e) { next(e) }
+}
+
+// POST /api/ingenieria/proyecto/:id/cerrar-deal — Estimados pausa o cancela un deal en curso.
+// Body: { accion: 'pausar' | 'cancelar' }. Libera TODA la Ingeniería y avisa al PM por su escritorio.
+const cerrarDealSchema = z.object({ accion: z.enum(['pausar', 'cancelar']) })
+export async function cerrarDealHandler(req: Request, res: Response, next: NextFunction) {
+  const client = await pool.connect()
+  try {
+    const id = pid(req)
+    const { accion } = cerrarDealSchema.parse(req.body)
+    await client.query('BEGIN')
+    const r = await cerrarDeal(client, id, accion, req.user?.email ?? null)
+    if (!r.ok) { await client.query('ROLLBACK'); return next(createError(r.error ?? 'no se pudo cerrar el deal', 400)) }
+    await client.query('COMMIT')
+    res.json({ data: r })
+  } catch (e) { await client.query('ROLLBACK').catch(() => {}); next(e) } finally { client.release() }
 }
 
 export async function resumenHandler(_req: Request, res: Response, next: NextFunction) {
