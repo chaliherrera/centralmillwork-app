@@ -17,17 +17,20 @@ export default function PortalLinksManager({ proyectoId }: { proyectoId: number 
   const [nombre, setNombre] = useState('')
   const [email, setEmail] = useState('')
   const [busy, setBusy] = useState(false)
+  const [nuevo, setNuevo] = useState<string | null>(null)   // link recién generado, para copiar
 
   async function load() {
     try { setTokens((await scheduleService.listPortalTokens(proyectoId)).data ?? []) } catch { /* silencioso */ }
   }
-  useEffect(() => { setTokens([]); setNombre(''); setEmail(''); load() }, [proyectoId])
+  useEffect(() => { setTokens([]); setNombre(''); setEmail(''); setNuevo(null); load() }, [proyectoId])
 
   async function generar() {
     setBusy(true)
     try {
-      await scheduleService.crearPortalToken(proyectoId, nombre.trim() || undefined, email.trim() || undefined)
-      toast.success('Link generado')
+      const r = await scheduleService.crearPortalToken(proyectoId, nombre.trim() || undefined, email.trim() || undefined)
+      const url = `${window.location.origin}/portal/${r.data.token}`
+      setNuevo(url)
+      navigator.clipboard?.writeText(url).then(() => toast.success('Link generado y copiado'), () => toast.success('Link generado'))
       setNombre(''); setEmail(''); await load()
     } catch { /* toast */ } finally { setBusy(false) }
   }
@@ -95,6 +98,18 @@ export default function PortalLinksManager({ proyectoId }: { proyectoId: number 
             <Plus size={15} /> Generar link
           </button>
         </div>
+        {nuevo && (
+          <div className="mt-3 rounded-xl border border-forest-200 bg-forest-50/60 p-2.5">
+            <div className="text-[11px] font-semibold text-forest-700 mb-1.5">Link listo (ya copiado):</div>
+            <div className="flex gap-2 items-center">
+              <input readOnly value={nuevo} onFocus={(e) => e.target.select()} className="input w-full text-xs bg-white" />
+              <button onClick={() => { navigator.clipboard?.writeText(nuevo); toast.success('Copiado') }}
+                      className="shrink-0 inline-flex items-center gap-1 rounded-lg bg-forest-600 hover:bg-forest-700 text-white text-xs font-semibold px-2.5 py-2"><Copy size={13} /> Copiar</button>
+              <button onClick={() => window.open(nuevo, '_blank', 'noopener')}
+                      className="shrink-0 inline-flex items-center gap-1 rounded-lg border border-forest-300 text-forest-700 hover:bg-forest-50 text-xs font-semibold px-2.5 py-2"><ExternalLink size={13} /> Abrir</button>
+            </div>
+          </div>
+        )}
         <p className="mt-1.5 text-[11px] text-stone-400">"Abrir portal en vivo" abre el portal real (con las acciones habilitadas) para que pruebes aprobar/rechazar como el cliente.</p>
       </div>
     </div>
