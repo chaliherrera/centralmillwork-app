@@ -42,15 +42,21 @@ export async function simularMomento(runner: QueryRunner, proyectoId: number, co
   const idx = orden.indexOf(codigo)
   if (idx < 0) return { ok: false, error: 'momento inválido' }
 
-  // Anteriores → hechos; posteriores → limpios (pendientes).
+  // Anteriores → hechos. Posteriores → "no aplica" (fuera del foco): así el único
+  // pendiente/aprobable en el portal es el momento elegido.
   for (let i = 0; i < orden.length; i++) {
     if (i === idx) continue
     const c = orden[i]
-    const done = i < idx
     if (c === 'PLAN') {
-      await runner.query(`UPDATE proyectos SET deal_estado = $2 WHERE id = $1`, [proyectoId, done ? 'aprobado' : 'esperando_pm'])
+      await runner.query(`UPDATE proyectos SET deal_estado = 'aprobado' WHERE id = $1`, [proyectoId])
+    } else if (i < idx) {
+      await marcarHito(runner, proyectoId, c, true)
     } else {
-      await marcarHito(runner, proyectoId, c, done)
+      await runner.query(
+        `UPDATE schedule_hitos sh SET fecha_real = NULL, estado = 'no_aplica', updated_at = NOW()
+           FROM schedule_planes sp
+          WHERE sp.id = sh.plan_id AND sp.proyecto_id = $1 AND sp.scope = 'proyecto' AND sh.codigo = $2`,
+        [proyectoId, c])
     }
   }
 
