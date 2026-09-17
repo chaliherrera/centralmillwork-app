@@ -41,12 +41,13 @@ export default function GestionIngenieros() {
       <div className="px-4 py-3 border-b border-stone-100">
         <h2 className="font-bold text-stone-800 flex items-center gap-2"><Users size={17} /> Ingenieros</h2>
         <p className="text-xs text-stone-400">{activos} activo{activos === 1 ? '' : 's'} de {ingenieros.length}. Solo los activos entran en la factibilidad y las propuestas. Desactivar no borra el historial.</p>
+        <p className="text-[11px] text-stone-400 mt-1">Los ingenieros se dan de alta creando su usuario (rol <b>Engineering</b>) en la consola de <b>Usuarios</b>. Acá solo se activa/desactiva o se marca "hace CNC".</p>
       </div>
 
       {isLoading ? (
         <div className="py-12 text-center text-stone-400"><Loader2 className="animate-spin inline" size={20} /></div>
       ) : ingenieros.length === 0 ? (
-        <div className="py-12 text-center text-stone-400 text-sm">No hay ingenieros cargados todavía.</div>
+        <div className="py-12 text-center text-stone-400 text-sm">No hay ingenieros todavía. Creá su usuario (rol Engineering) en la consola de Usuarios y aparecen acá.</div>
       ) : (
         <div className="divide-y divide-stone-100">
           <div className="hidden sm:grid grid-cols-[1fr_auto_auto] gap-4 px-4 py-2 text-[11px] uppercase tracking-wide text-stone-400 font-semibold">

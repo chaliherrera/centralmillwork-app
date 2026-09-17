@@ -51,8 +51,18 @@ export default function FactibilidadCheck({ onResult, fechaInicial, proyectoId }
 
         {r && (
           <div className="mt-4 space-y-3">
+            {/* 2.7: sin ingenieros activos no se puede reservar (bloqueo), aunque la fecha "entre". */}
+            {r.motivo === 'sin_ingenieros' && (
+              <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 flex items-start gap-3">
+                <XCircle size={22} className="text-rose-600 shrink-0 mt-0.5" />
+                <div className="text-sm text-rose-800">
+                  <b>No hay ingenieros activos.</b> No se puede reservar este deal hasta que haya uno.
+                  Creá el usuario del ingeniero (rol <b>Engineering</b>) en la consola de Usuarios, o activá uno en la lista de ingenieros del PM.
+                </div>
+              </div>
+            )}
             {/* veredicto simple */}
-            {r.factible ? (
+            {r.motivo === 'sin_ingenieros' ? null : r.factible ? (
               <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 flex items-center gap-3">
                 <CheckCircle2 size={26} className="text-emerald-600 shrink-0" />
                 <div className="font-bold text-emerald-800">Factible para el {fmt(r.fecha_pedida)}</div>
@@ -66,9 +76,7 @@ export default function FactibilidadCheck({ onResult, fechaInicial, proyectoId }
                     <div className="text-xs text-rose-700/90 mt-0.5">
                       {r.motivo === 'cadena'
                         ? 'La cadena de tareas no entra en ese plazo, ni con un ingeniero libre hoy.'
-                        : r.motivo === 'sin_ingenieros'
-                          ? 'No hay ingenieros activos para asignar.'
-                          : 'Los ingenieros están ocupados — el que se libera antes no llega a esa fecha.'}
+                        : 'Los ingenieros están ocupados — el que se libera antes no llega a esa fecha.'}
                     </div>
                   </div>
                 </div>

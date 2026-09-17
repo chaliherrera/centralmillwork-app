@@ -37,6 +37,10 @@ export async function generarPlanIngenieria(
   if (!pr[0]) return { creadas: 0, error: 'proyecto no encontrado' }
   const { codigo, items_qty, presupuesto, stone_total, incluye, fecha_objetivo } = pr[0]
   if (!fecha_objetivo) return { creadas: 0, error: 'el proyecto no tiene fecha comprometida' }
+  // 2.7: sin ningún ingeniero activo no hay a quién proponer → se bloquea la reserva.
+  //      Estimados debe cargar/activar un ingeniero antes de mandar el deal al PM.
+  const { rows: ing } = await runner.query<{ n: number }>(`SELECT count(*)::int AS n FROM ing_ingenieros WHERE activo`)
+  if ((ing[0]?.n ?? 0) === 0) return { creadas: 0, error: 'No hay ingenieros activos. Creá el usuario del ingeniero (rol Engineering) o activá uno antes de reservar.' }
   const proyectoExt = codigo
   const hayStone = stone_total != null && Number(stone_total) > 0
   const incluyeInstalacion = incluye ?? true

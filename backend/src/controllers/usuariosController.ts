@@ -3,6 +3,15 @@ import bcrypt from 'bcryptjs'
 import pool from '../db/pool'
 import { createError } from '../middleware/errorHandler'
 import { parsePagination, paginatedResponse } from '../utils/pagination'
+import { sincronizarIngenieroDesdeUsuario } from '../modules/ingenieria/domain/ingenieros'
+import { logger } from '../utils/logger'
+
+// 2.3: un usuario ENGINEERING queda dado de alta/linkeado como recurso del planificador
+// (ing_ingenieros). Best-effort: si falla, NO tumba el alta/edición del usuario.
+async function syncIngeniero(u: { id: string; nombre: string; email: string; rol: string; activo: boolean }) {
+  try { await sincronizarIngenieroDesdeUsuario(pool, u) }
+  catch (err) { logger.error('sincronizarIngenieroDesdeUsuario falló', { usuarioId: u.id, err: (err as Error)?.message }) }
+}
 
 // Mantener sincronizado con el ENUM user_rol en la DB (migraciones 015 + 030 + 043)
 // y con `Role` en middleware/auth.ts.
@@ -36,6 +45,7 @@ export async function createUsuario(req: Request, res: Response, next: NextFunct
        RETURNING id, nombre, email, rol, activo, created_at`,
       [nombre.trim(), String(email).toLowerCase().trim(), hash, rol]
     )
+    await syncIngeniero(rows[0])
     res.status(201).json({ data: rows[0], message: 'Usuario creado' })
   } catch (err: any) {
     if (err.code === '23505') return next(createError('El email ya está registrado', 409))
@@ -64,6 +74,7 @@ export async function updateUsuario(req: Request, res: Response, next: NextFunct
       vals
     )
     if (!rows[0]) return next(createError('Usuario no encontrado', 404))
+    await syncIngeniero(rows[0])
     res.json({ data: rows[0], message: 'Usuario actualizado' })
   } catch (err: any) {
     if (err.code === '23505') return next(createError('El email ya está registrado', 409))

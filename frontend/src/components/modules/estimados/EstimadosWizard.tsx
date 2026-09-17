@@ -117,10 +117,12 @@ export default function EstimadosWizard() {
   const hoyISO = new Date().toISOString().slice(0, 10)
   const fechaMin = factRes ? (factRes.fecha_real_mas_temprana > hoyISO ? factRes.fecha_real_mas_temprana : hoyISO) : hoyISO
   const fechaComprometidaOk = !!fechaComprometida && fechaComprometida >= fechaMin
+  // 2.7: sin ingenieros activos no se puede avanzar (el backend además bloquea la reserva).
+  const sinIngenieros = factRes?.motivo === 'sin_ingenieros'
 
   const canNext =
     paso === 1 ? !!sel && (!tienePlan || enviadoPM) :
-    paso === 2 ? fechaComprometidaOk :
+    paso === 2 ? fechaComprometidaOk && !sinIngenieros :
     paso === 3 ? enviadoPM :
     paso === 4 ? true :
     false
