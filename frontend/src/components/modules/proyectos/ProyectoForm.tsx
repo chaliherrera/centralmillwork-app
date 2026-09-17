@@ -25,6 +25,8 @@ const schema = z.object({
   items_qty:               z.string().optional(),
   intake_comments:         z.string().optional(),
   fecha_entrega_solicitada: z.string().optional().transform((v) => v || undefined),
+  // 2.5: ¿el deal incluye instalación? Si se destilda, el plan saltea los pasos de instalación.
+  incluye_instalacion:     z.boolean().optional(),
 })
 
 // Convierte los campos de intake (texto del form) a número/undefined limpios.
@@ -85,9 +87,10 @@ export default function ProyectoForm({ open, onClose, proyecto, hideDates, intak
             items_qty:          proyecto.items_qty != null ? String(proyecto.items_qty) : '',
             intake_comments:    proyecto.intake_comments ?? '',
             fecha_entrega_solicitada: proyecto.fecha_entrega_solicitada?.slice(0, 10) ?? '',
+            incluye_instalacion: proyecto.incluye_instalacion ?? true,
           }
         : { codigo: '', nombre: '', cliente: '', descripcion: '', estado: 'activo', fecha_inicio: '', fecha_fin_estimada: '', presupuesto: 0, responsable: '',
-            millwork_total: '', stone_total: '', items_qty: '', intake_comments: '', fecha_entrega_solicitada: '' }
+            millwork_total: '', stone_total: '', items_qty: '', intake_comments: '', fecha_entrega_solicitada: '', incluye_instalacion: true }
       )
     }
   }, [open])
@@ -185,6 +188,12 @@ export default function ProyectoForm({ open, onClose, proyecto, hideDates, intak
                 <input type="number" step="0.01" min="0" {...register('stone_total')} className="input" placeholder="0.00" />
               </div>
             </div>
+            <label className="flex items-start gap-2.5 cursor-pointer rounded-lg border border-forest-100 bg-white px-3 py-2.5">
+              <input type="checkbox" {...register('incluye_instalacion')} className="mt-0.5 h-4 w-4 accent-forest-600" />
+              <span className="text-[13px] text-stone-700">Incluye instalación
+                <span className="block text-[11px] text-stone-400">Si el deal <b>no</b> incluye instalación, destildá esto: el plan saltea los pasos de instalación. La mayoría la incluye (viene tildado).</span>
+              </span>
+            </label>
             <div>
               <label className="label">Comentarios / lead times</label>
               <textarea {...register('intake_comments')} rows={2} className="input resize-none"

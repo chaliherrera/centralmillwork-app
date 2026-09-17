@@ -62,6 +62,7 @@ export interface Proyecto {
   items_qty?: number | null
   intake_comments?: string | null
   fecha_entrega_solicitada?: string | null   // Millwork Date = fecha que pide el cliente
+  incluye_instalacion?: boolean              // 2.5: si es false, el plan saltea instalación
   deal_estado?: string | null                 // handoff Estimados→Cliente→PM (migración 060)
   total_ocs?: number
   created_at: string

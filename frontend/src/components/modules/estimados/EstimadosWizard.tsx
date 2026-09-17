@@ -200,6 +200,9 @@ export default function EstimadosWizard() {
                 {sel.items_qty != null && (
                   <span className="text-xs text-stone-500">Intake: <b>{sel.items_qty}</b> ítems{sel.presupuesto ? ` · Project Total $${Number(sel.presupuesto).toLocaleString()}` : ''}{sel.fecha_entrega_solicitada ? ` · Millwork Date ${fmt(sel.fecha_entrega_solicitada.slice(0,10))}` : ''}.</span>
                 )}
+                {sel.incluye_instalacion === false && (
+                  <span className="text-[10px] font-bold uppercase tracking-wide text-amber-700 bg-amber-100 rounded px-1.5 py-0.5">sin instalación</span>
+                )}
               </div>
             )}
           </div>
