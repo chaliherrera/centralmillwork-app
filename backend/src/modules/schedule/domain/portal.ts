@@ -349,7 +349,8 @@ export async function aplicarAprobacion(
   comentario: string | null
 ): Promise<{ ok: boolean; error?: string; proyectoId?: number }> {
   const info = await resolverToken(runner, token)
-  if (!info) return { ok: false, error: 'token inválido' }
+  // Mensajes de error del portal EN INGLÉS (los ve el cliente, Q1).
+  if (!info) return { ok: false, error: 'Invalid or expired link.' }
 
   // 'PLAN' no es un hito del schedule: es la aprobación del plan por el cliente, que
   // mueve el deal a 'aprobado'. Se resuelve acá y no sigue por la lógica de hitos.
@@ -357,7 +358,7 @@ export async function aplicarAprobacion(
     if (decision === 'aprobado' || decision === 'aprobado_con_comentarios') {
       const { registrarAprobacionCliente } = await import('../../ingenieria/domain/plan_inicial')
       const r = await registrarAprobacionCliente(runner, info.proyectoId)
-      if (!r.ok) return { ok: false, error: r.error }
+      if (!r.ok) return { ok: false, error: 'This plan isn\'t ready for approval yet.' }
     }
     // Traza de la decisión (best-effort): no debe frenar la aprobación.
     try {
@@ -372,19 +373,20 @@ export async function aplicarAprobacion(
     return { ok: true, proyectoId: info.proyectoId }
   }
 
-  if (!APROBABLES[codigo]) return { ok: false, error: 'ese hito no es aprobable por el cliente' }
+  if (!APROBABLES[codigo]) return { ok: false, error: 'This item isn\'t available for your approval.' }
 
   const { rows: sh } = await runner.query<{ id: number; fecha_real: string | null }>(
     `SELECT sh.id, sh.fecha_real
        FROM schedule_hitos sh JOIN schedule_planes sp ON sp.id = sh.plan_id
       WHERE sp.proyecto_id = $1 AND sp.scope = 'proyecto' AND sh.codigo = $2`,
     [info.proyectoId, codigo])
-  if (!sh[0]) return { ok: false, error: 'hito no encontrado en el plan' }
-  if (sh[0].fecha_real) return { ok: false, error: 'este hito ya fue resuelto' }
+  if (!sh[0]) return { ok: false, error: 'Item not found.' }
+  if (sh[0].fecha_real) return { ok: false, error: 'This item was already resolved.' }
   // Freno hacia adelante (server-side): no aprobar si faltan pasos previos.
   if (decision === 'aprobado' || decision === 'aprobado_con_comentarios') {
     const bloqueo = await bloqueoPorPredecesores(runner, info.proyectoId, codigo)
-    if (bloqueo) return { ok: false, error: bloqueo }
+    // El detalle de predecesores es interno (español) → mensaje genérico al cliente.
+    if (bloqueo) return { ok: false, error: 'This step isn\'t ready to approve yet — an earlier step is still in progress.' }
   }
 
   const evidencia = JSON.stringify({

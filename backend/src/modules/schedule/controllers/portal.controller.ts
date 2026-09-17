@@ -15,7 +15,7 @@ import { notifyPortalCliente, PORTAL_LABEL_EN } from '../domain/notifyPortal'
 export async function portalVista(req: Request, res: Response, next: NextFunction) {
   try {
     const vista = await getVistaPublica(pool, String(req.params.token))
-    if (!vista) return res.status(404).json({ message: 'Link inválido o desactivado' })
+    if (!vista) return res.status(404).json({ message: 'Invalid or deactivated link.' })
     res.json({ data: vista })
   } catch (err) { next(err) }
 }
@@ -44,7 +44,7 @@ export async function portalAprobar(req: Request, res: Response, next: NextFunct
     res.json({ data: { ok: true } })
   } catch (err: any) {
     await client.query('ROLLBACK').catch(() => {})
-    if (err?.issues) return res.status(400).json({ message: 'datos inválidos' })
+    if (err?.issues) return res.status(400).json({ message: 'Invalid data.' })
     next(err)
   } finally {
     client.release()
