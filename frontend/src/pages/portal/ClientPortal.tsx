@@ -4,7 +4,7 @@ import toast from 'react-hot-toast'
 import clsx from 'clsx'
 import {
   CalendarClock, Check, Clock, ChevronRight, ThumbsUp, MessageSquare, X,
-  ShieldCheck, Lock, FileText, RefreshCw, ClipboardList, Minus,
+  Lock, FileText, RefreshCw, ClipboardList, Minus,
 } from 'lucide-react'
 import { portalService, type PortalVista, type Decision } from '@/services/portal'
 
@@ -87,8 +87,8 @@ export default function ClientPortal({ previewProyectoId }: { previewProyectoId?
   return (
     <div className={clsx('bg-[#F6F4EE] text-stone-800', !preview && 'min-h-screen')}>
       <div className="bg-forest-600 text-white">
-        <div className="max-w-[1120px] mx-auto px-5 py-3 flex items-center gap-2">
-          <ShieldCheck size={18} className="opacity-90" />
+        <div className="max-w-[1120px] mx-auto px-5 py-3 flex items-center gap-2.5">
+          <img src="/logo_cm_login.png" alt="" className="h-7 w-auto object-contain" />
           <span className="font-semibold tracking-tight">Central Millwork</span>
           <span className="ml-auto text-xs opacity-75">Project tracking</span>
         </div>

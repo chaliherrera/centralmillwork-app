@@ -11,6 +11,7 @@ import pool from '../../../db/pool'
 import { createError } from '../../../middleware/errorHandler'
 import { generarPlan, recomputeScheduleForProyecto, cambiarFechaObjetivo } from '../domain/recompute'
 import { crearToken, revocarToken, armarVistaPublica } from '../domain/portal'
+import { simularMomento } from '../domain/simulacion'
 import { registrarHito } from '../domain/registro'
 import { chequearFactibilidad } from '../domain/factibilidad'
 
@@ -218,6 +219,28 @@ export async function revocarPortalTokenHandler(req: Request, res: Response, nex
     if (!ok) return next(createError('token no encontrado o ya revocado', 404))
     res.json({ data: { ok: true }, message: 'Link del portal revocado' })
   } catch (err) { next(err) }
+}
+
+// ── POST /api/schedule/proyecto/:id/simular-momento ──────────────────────────
+// Herramienta de test de la consola: deja un momento del cliente PENDIENTE en el
+// portal (marca los anteriores hechos + los predecesores del elegido). Escribe
+// estado real del proyecto — para proyectos de prueba.
+const simularSchema = z.object({ codigo: z.string().trim().min(1).max(12) })
+export async function simularMomentoHandler(req: Request, res: Response, next: NextFunction) {
+  const client = await pool.connect()
+  try {
+    const proyectoId = parseProyectoId(req)
+    const { codigo } = simularSchema.parse(req.body ?? {})
+    await client.query('BEGIN')
+    const r = await simularMomento(client, proyectoId, codigo)
+    if (!r.ok) { await client.query('ROLLBACK'); return next(createError(r.error ?? 'no se pudo simular', 400)) }
+    await client.query('COMMIT')
+    res.json({ data: { ok: true }, message: 'Momento simulado' })
+  } catch (err: any) {
+    await client.query('ROLLBACK').catch(() => {})
+    if (err?.issues) return next(createError('datos inválidos', 400))
+    next(err)
+  } finally { client.release() }
 }
 
 // ── GET /api/schedule/proyecto/:id/portal-preview ────────────────────────────

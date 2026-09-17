@@ -1,6 +1,6 @@
 import { Router } from 'express'
 import { requireRole } from '../../middleware/auth'
-import { getPlan, generarPlanHandler, recalcularHandler, crearPortalTokenHandler, listPortalTokensHandler, revocarPortalTokenHandler, portalPreviewHandler, registrarHitoHandler, cambiarFechaObjetivoHandler, factibilidadHandler, proyectosOverviewHandler } from './controllers/schedulePlan.controller'
+import { getPlan, generarPlanHandler, recalcularHandler, crearPortalTokenHandler, listPortalTokensHandler, revocarPortalTokenHandler, portalPreviewHandler, simularMomentoHandler, registrarHitoHandler, cambiarFechaObjetivoHandler, factibilidadHandler, proyectosOverviewHandler } from './controllers/schedulePlan.controller'
 import { uploadSubmittal, uploadSubmittalHandler, listSubmittalsHandler, uploadArchivo, uploadArchivoHitoHandler, listArchivosHitoHandler, uploadPlanoCampoHandler } from './controllers/submittals.controller'
 import { uploadFoto, installQueueHandler, listItemsHandler, marcarItemHandler, desmarcarItemHandler, listPunchHandler, crearPunchHandler, resolverPunchHandler, signoffHandler } from './controllers/field.controller'
 import { uploadContrato, intakeHandler } from './controllers/intake.controller'
@@ -33,6 +33,7 @@ router.post('/proyecto/:id/portal-token',  SCHEDULE_WRITE, crearPortalTokenHandl
 // listan (no VIEWER) y pueden revocarlos.
 router.get ('/proyecto/:id/portal-tokens', SCHEDULE_WRITE, listPortalTokensHandler)
 router.get ('/proyecto/:id/portal-preview', SCHEDULE_READ, portalPreviewHandler)
+router.post('/proyecto/:id/simular-momento', SCHEDULE_WRITE, simularMomentoHandler)
 router.post('/proyecto/:id/portal-token/:tokenId/revocar', SCHEDULE_WRITE, revocarPortalTokenHandler)
 router.post('/proyecto/:id/hito/:codigo/registrar', SCHEDULE_REGISTRAR, registrarHitoHandler)
 

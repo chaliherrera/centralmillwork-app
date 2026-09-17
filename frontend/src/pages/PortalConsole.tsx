@@ -1,51 +1,55 @@
 import { useEffect, useMemo, useState } from 'react'
 import toast from 'react-hot-toast'
-import { MonitorSmartphone, Share2, Info, Check, RotateCcw, PlayCircle } from 'lucide-react'
+import { MonitorSmartphone, Share2, Info, PlayCircle } from 'lucide-react'
 import { proyectosService } from '@/services/proyectos'
 import { scheduleService } from '@/services/schedule'
 import type { Proyecto } from '@/types'
 import ClientPortal from './portal/ClientPortal'
 import PortalLinksManager from '@/components/portal/PortalLinksManager'
 
-// Hitos "de estado" que se pueden simular a mano (los de acción los aprueba el
-// cliente desde el portal → se prueban con "Abrir portal en vivo").
-const SIM_HITOS = [
-  { codigo: 'C-03', label: 'Firma de contrato' },
-  { codigo: 'C-04', label: 'Down payment' },
-  { codigo: 'X-03', label: 'Pago final' },
+// Momentos del journey del cliente. accion=true → el cliente los APRUEBA en el
+// portal (después de simular, abrís el portal en vivo y los aprobás/rechazás).
+const SIM_MOMENTOS = [
+  { codigo: 'PLAN', label: 'Aprobar el plan', accion: true },
+  { codigo: 'C-03', label: 'Firma de contrato', accion: false },
+  { codigo: 'C-04', label: 'Down payment', accion: false },
+  { codigo: 'E-05', label: 'Aprobar muestras', accion: true },
+  { codigo: 'E-07', label: 'Aprobar planos', accion: true },
+  { codigo: 'I-07', label: 'Entrega (sign-off)', accion: true },
+  { codigo: 'X-03', label: 'Pago final', accion: false },
 ]
 
 function Simulador({ proyectoId, onCambio }: { proyectoId: number; onCambio: () => void }) {
   const [busy, setBusy] = useState<string | null>(null)
-  const hoy = () => new Date().toISOString().slice(0, 10)
-  async function set(codigo: string, hecho: boolean) {
+  async function poner(codigo: string) {
     setBusy(codigo)
     try {
-      await scheduleService.registrarHito(proyectoId, codigo, hecho ? hoy() : null)
-      toast.success(hecho ? 'Marcado como hecho' : 'Reseteado')
+      await scheduleService.simularMomento(proyectoId, codigo)
+      toast.success('Momento puesto pendiente en el portal')
       onCambio()
-    } catch (e: any) { toast.error(e?.response?.data?.message ?? 'No se pudo (¿falta un paso previo?)') }
+    } catch (e: any) { toast.error(e?.response?.data?.message ?? 'No se pudo simular') }
     finally { setBusy(null) }
   }
   return (
     <div className="rounded-2xl border border-card-border bg-white overflow-hidden">
-      <div className="px-4 py-3 border-b border-card-border flex items-center gap-2">
-        <PlayCircle size={16} className="text-forest-600" />
-        <h3 className="font-semibold text-stone-800 text-[15px]">Simular el recorrido</h3>
+      <div className="px-4 py-3 border-b border-card-border">
+        <h3 className="font-semibold text-stone-800 text-[15px] flex items-center gap-2"><PlayCircle size={16} className="text-forest-600" /> Simular el recorrido</h3>
+        <p className="text-[11px] text-stone-400 mt-0.5">Elegí una tarea y ponela pendiente en el portal. Marca las anteriores como hechas.</p>
       </div>
       <div className="divide-y divide-stone-100">
-        {SIM_HITOS.map((h) => (
-          <div key={h.codigo} className="px-4 py-2.5 flex items-center gap-2">
-            <span className="text-sm text-stone-700 flex-1">{h.label}</span>
-            <button onClick={() => set(h.codigo, true)} disabled={busy === h.codigo}
-                    className="inline-flex items-center gap-1 rounded-lg bg-forest-600 hover:bg-forest-700 disabled:opacity-50 text-white text-xs font-semibold px-2.5 py-1.5"><Check size={13} /> Marcar hecho</button>
-            <button onClick={() => set(h.codigo, false)} disabled={busy === h.codigo}
-                    className="inline-flex items-center gap-1 rounded-lg border border-stone-300 text-stone-600 hover:bg-stone-50 text-xs font-medium px-2.5 py-1.5"><RotateCcw size={12} /> Resetear</button>
+        {SIM_MOMENTOS.map((m) => (
+          <div key={m.codigo} className="px-4 py-2.5 flex items-center gap-2">
+            <span className="text-sm text-stone-700 flex-1">{m.label}</span>
+            {m.accion
+              ? <span className="text-[9px] font-bold uppercase tracking-wide rounded px-1.5 py-0.5 bg-forest-50 text-forest-600">aprueba el cliente</span>
+              : <span className="text-[9px] font-bold uppercase tracking-wide rounded px-1.5 py-0.5 bg-stone-100 text-stone-400">estado</span>}
+            <button onClick={() => poner(m.codigo)} disabled={busy === m.codigo}
+                    className="inline-flex items-center gap-1 rounded-lg bg-forest-600 hover:bg-forest-700 disabled:opacity-50 text-white text-xs font-semibold px-2.5 py-1.5">Poner pendiente</button>
           </div>
         ))}
       </div>
       <p className="px-4 py-2.5 text-[11px] text-stone-400 border-t border-card-border">
-        Los pasos que aprueba el cliente (plan, muestras, planos, entrega) se prueban abriendo el portal en vivo. Simular respeta el orden (no podés marcar el depósito antes del contrato).
+        Después de simular, generá un link y usá <b>«Abrir portal en vivo»</b> para aprobar/rechazar como el cliente. Es una herramienta de test — cambia el estado del proyecto (usá proyectos de prueba).
       </p>
     </div>
   )

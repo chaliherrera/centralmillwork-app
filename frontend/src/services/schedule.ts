@@ -146,6 +146,10 @@ export const scheduleService = {
       .post<ApiResponse<{ token: string }>>(`/schedule/proyecto/${proyectoId}/portal-token`, { contacto_nombre, contacto_email })
       .then((r) => r.data),
 
+  // Simulación (consola): deja un momento del cliente PENDIENTE en el portal.
+  simularMomento: (proyectoId: number, codigo: string) =>
+    api.post<ApiResponse<{ ok: boolean }>>(`/schedule/proyecto/${proyectoId}/simular-momento`, { codigo }).then((r) => r.data),
+
   listPortalTokens: (proyectoId: number) =>
     api
       .get<ApiResponse<PortalTokenRow[]>>(`/schedule/proyecto/${proyectoId}/portal-tokens`)
