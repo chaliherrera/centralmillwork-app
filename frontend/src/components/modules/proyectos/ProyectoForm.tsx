@@ -25,8 +25,9 @@ const schema = z.object({
   items_qty:               z.string().optional(),
   intake_comments:         z.string().optional(),
   fecha_entrega_solicitada: z.string().optional().transform((v) => v || undefined),
-  // 2.5: ¿el deal incluye instalación? Si se destilda, el plan saltea los pasos de instalación.
+  // 2.5: alcance del deal. Si se destildan, el plan saltea esos pasos.
   incluye_instalacion:     z.boolean().optional(),
+  incluye_stone:           z.boolean().optional(),
 })
 
 // Convierte los campos de intake (texto del form) a número/undefined limpios.
@@ -88,9 +89,10 @@ export default function ProyectoForm({ open, onClose, proyecto, hideDates, intak
             intake_comments:    proyecto.intake_comments ?? '',
             fecha_entrega_solicitada: proyecto.fecha_entrega_solicitada?.slice(0, 10) ?? '',
             incluye_instalacion: proyecto.incluye_instalacion ?? true,
+            incluye_stone: proyecto.incluye_stone ?? true,
           }
         : { codigo: '', nombre: '', cliente: '', descripcion: '', estado: 'activo', fecha_inicio: '', fecha_fin_estimada: '', presupuesto: 0, responsable: '',
-            millwork_total: '', stone_total: '', items_qty: '', intake_comments: '', fecha_entrega_solicitada: '', incluye_instalacion: true }
+            millwork_total: '', stone_total: '', items_qty: '', intake_comments: '', fecha_entrega_solicitada: '', incluye_instalacion: true, incluye_stone: true }
       )
     }
   }, [open])
@@ -188,12 +190,24 @@ export default function ProyectoForm({ open, onClose, proyecto, hideDates, intak
                 <input type="number" step="0.01" min="0" {...register('stone_total')} className="input" placeholder="0.00" />
               </div>
             </div>
-            <label className="flex items-start gap-2.5 cursor-pointer rounded-lg border border-forest-100 bg-white px-3 py-2.5">
-              <input type="checkbox" {...register('incluye_instalacion')} className="mt-0.5 h-4 w-4 accent-forest-600" />
-              <span className="text-[13px] text-stone-700">Incluye instalación
-                <span className="block text-[11px] text-stone-400">Si el deal <b>no</b> incluye instalación, destildá esto: el plan saltea los pasos de instalación. La mayoría la incluye (viene tildado).</span>
-              </span>
-            </label>
+            <div>
+              <div className="text-[11px] uppercase tracking-wider text-forest-700 font-semibold mb-1.5">Alcance del schedule</div>
+              <p className="text-[11px] text-stone-400 mb-2">Destildá lo que el deal <b>no</b> incluye: el plan se crea sin esos pasos. Vienen tildados por defecto.</p>
+              <div className="grid grid-cols-2 gap-2">
+                <label className="flex items-start gap-2.5 cursor-pointer rounded-lg border border-forest-100 bg-white px-3 py-2.5">
+                  <input type="checkbox" {...register('incluye_instalacion')} className="mt-0.5 h-4 w-4 accent-forest-600" />
+                  <span className="text-[13px] text-stone-700">Incluye instalación
+                    <span className="block text-[11px] text-stone-400">Pasos de instalación en obra.</span>
+                  </span>
+                </label>
+                <label className="flex items-start gap-2.5 cursor-pointer rounded-lg border border-forest-100 bg-white px-3 py-2.5">
+                  <input type="checkbox" {...register('incluye_stone')} className="mt-0.5 h-4 w-4 accent-forest-600" />
+                  <span className="text-[13px] text-stone-700">Incluye stone / countertops
+                    <span className="block text-[11px] text-stone-400">Medición, fabricación e instalación de piedra.</span>
+                  </span>
+                </label>
+              </div>
+            </div>
             <div>
               <label className="label">Comentarios / lead times</label>
               <textarea {...register('intake_comments')} rows={2} className="input resize-none"

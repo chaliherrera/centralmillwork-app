@@ -63,6 +63,7 @@ export interface Proyecto {
   intake_comments?: string | null
   fecha_entrega_solicitada?: string | null   // Millwork Date = fecha que pide el cliente
   incluye_instalacion?: boolean              // 2.5: si es false, el plan saltea instalación
+  incluye_stone?: boolean                    // 2.5b: si es false, el plan saltea stone/countertops
   deal_estado?: string | null                 // handoff Estimados→Cliente→PM (migración 060)
   total_ocs?: number
   created_at: string

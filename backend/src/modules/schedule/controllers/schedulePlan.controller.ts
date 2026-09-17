@@ -26,11 +26,12 @@ export async function factibilidadHandler(req: Request, res: Response, next: Nex
     let incluyeInstalacion = req.body?.incluye_instalacion !== false
     const pid = req.body?.proyecto_id != null ? parseInt(String(req.body.proyecto_id), 10) : NaN
     if (!Number.isNaN(pid)) {
-      const { rows } = await pool.query<{ items_qty: number | null; stone_total: number | null; incluye_instalacion: boolean | null }>(
-        `SELECT items_qty, stone_total, COALESCE(incluye_instalacion, TRUE) AS incluye_instalacion FROM proyectos WHERE id = $1`, [pid])
+      const { rows } = await pool.query<{ items_qty: number | null; incluye_stone: boolean | null; incluye_instalacion: boolean | null }>(
+        `SELECT items_qty, COALESCE(incluye_stone, TRUE) AS incluye_stone,
+                COALESCE(incluye_instalacion, TRUE) AS incluye_instalacion FROM proyectos WHERE id = $1`, [pid])
       if (rows[0]) {
         itemsQty = rows[0].items_qty
-        hayStone = rows[0].stone_total != null && Number(rows[0].stone_total) > 0
+        hayStone = rows[0].incluye_stone ?? true   // 2.5b: explícito, ya no por stone_total
         incluyeInstalacion = rows[0].incluye_instalacion ?? true
       }
     }

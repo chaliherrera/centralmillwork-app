@@ -27,22 +27,23 @@ export async function generarPlanIngenieria(
   runner: QueryRunner, proyectoId: number, opts?: { origen?: string }
 ): Promise<{ creadas: number; error?: string; ubicacion?: Ubicacion }> {
   const origen = opts?.origen ?? 'app'
-  const { rows: pr } = await runner.query<{ codigo: string; items_qty: number | null; presupuesto: number | null; stone_total: number | null; incluye: boolean; fecha_objetivo: string | null }>(
-    `SELECT p.codigo, p.items_qty, p.presupuesto, p.stone_total,
+  const { rows: pr } = await runner.query<{ codigo: string; items_qty: number | null; presupuesto: number | null; incluye_stone: boolean; incluye: boolean; fecha_objetivo: string | null }>(
+    `SELECT p.codigo, p.items_qty, p.presupuesto,
+            COALESCE(p.incluye_stone, TRUE) AS incluye_stone,
             COALESCE(p.incluye_instalacion, TRUE) AS incluye,
             to_char(sp.fecha_objetivo,'YYYY-MM-DD') AS fecha_objetivo
        FROM proyectos p
        LEFT JOIN schedule_planes sp ON sp.proyecto_id = p.id AND sp.scope = 'proyecto'
       WHERE p.id = $1`, [proyectoId])
   if (!pr[0]) return { creadas: 0, error: 'proyecto no encontrado' }
-  const { codigo, items_qty, presupuesto, stone_total, incluye, fecha_objetivo } = pr[0]
+  const { codigo, items_qty, presupuesto, incluye_stone, incluye, fecha_objetivo } = pr[0]
   if (!fecha_objetivo) return { creadas: 0, error: 'el proyecto no tiene fecha comprometida' }
   // 2.7: sin ningún ingeniero activo no hay a quién proponer → se bloquea la reserva.
   //      Estimados debe cargar/activar un ingeniero antes de mandar el deal al PM.
   const { rows: ing } = await runner.query<{ n: number }>(`SELECT count(*)::int AS n FROM ing_ingenieros WHERE activo`)
   if ((ing[0]?.n ?? 0) === 0) return { creadas: 0, error: 'No hay ingenieros activos. Creá el usuario del ingeniero (rol Engineering) o activá uno antes de reservar.' }
   const proyectoExt = codigo
-  const hayStone = stone_total != null && Number(stone_total) > 0
+  const hayStone = incluye_stone   // 2.5b: explícito (checkbox), ya no se deduce de stone_total
   const incluyeInstalacion = incluye ?? true
   const diaCero = hoyISO()   // provisional; se re-ancla a la firma del contrato
 

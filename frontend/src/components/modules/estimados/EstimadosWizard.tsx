@@ -203,6 +203,9 @@ export default function EstimadosWizard() {
                 {sel.incluye_instalacion === false && (
                   <span className="text-[10px] font-bold uppercase tracking-wide text-amber-700 bg-amber-100 rounded px-1.5 py-0.5">sin instalación</span>
                 )}
+                {sel.incluye_stone === false && (
+                  <span className="text-[10px] font-bold uppercase tracking-wide text-amber-700 bg-amber-100 rounded px-1.5 py-0.5">sin stone</span>
+                )}
               </div>
             )}
           </div>

@@ -16,9 +16,11 @@ const intakeShape = {
   items_qty:               z.coerce.number().int().min(0).nullable().optional(),
   intake_comments:         z.string().max(4000).nullable().optional(),
   fecha_entrega_solicitada: z.string().regex(/^\d{4}-\d{2}-\d{2}/, 'formato YYYY-MM-DD').nullable().optional(),
-  // 2.5: ¿el deal incluye instalación? Si es false, el plan saltea los pasos de
-  // instalación (planificador). Default en la base = TRUE (la mayoría la incluye).
+  // 2.5: ¿el deal incluye instalación / stone? Si es false, el plan saltea esos pasos
+  // (planificador). Default en la base = TRUE. incluye_stone reemplaza la vieja deducción
+  // por stone_total > 0 (ahora es explícito).
   incluye_instalacion:     z.boolean().optional(),
+  incluye_stone:           z.boolean().optional(),
 }
 
 export const createProyectoSchema = z.object({
@@ -93,18 +95,18 @@ export async function createProyecto(req: Request, res: Response, next: NextFunc
     const { codigo, nombre, cliente, descripcion, estado, fecha_inicio,
             fecha_fin_estimada, presupuesto, responsable,
             millwork_total, stone_total, items_qty, intake_comments, fecha_entrega_solicitada,
-            incluye_instalacion } = req.body
+            incluye_instalacion, incluye_stone } = req.body
     const { rows } = await pool.query(
       `INSERT INTO proyectos (codigo, nombre, cliente, descripcion, estado,
         fecha_inicio, fecha_fin_estimada, presupuesto, responsable,
         millwork_total, stone_total, items_qty, intake_comments, fecha_entrega_solicitada,
-        incluye_instalacion)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15) RETURNING *`,
+        incluye_instalacion, incluye_stone)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16) RETURNING *`,
       [codigo, nombre, cliente, descripcion || null, estado || 'activo',
        fecha_inicio || null, fecha_fin_estimada || null, presupuesto ?? 0, responsable || null,
        millwork_total ?? null, stone_total ?? null, items_qty ?? null,
        intake_comments || null, fecha_entrega_solicitada || null,
-       incluye_instalacion ?? true]
+       incluye_instalacion ?? true, incluye_stone ?? true]
     )
     res.status(201).json({ data: rows[0], message: 'Proyecto creado exitosamente' })
   } catch (err) { next(err) }
@@ -129,7 +131,7 @@ export async function updateProyecto(req: Request, res: Response, next: NextFunc
     const fields = ['codigo','nombre','cliente','descripcion','estado',
                     'fecha_inicio','fecha_fin_estimada','fecha_fin_real','presupuesto','responsable',
                     'millwork_total','stone_total','items_qty','intake_comments','fecha_entrega_solicitada',
-                    'incluye_instalacion']
+                    'incluye_instalacion','incluye_stone']
     const updates = fields
       .filter((f) => req.body[f] !== undefined)
       .map((f, i) => `${f} = $${i + 2}`)
