@@ -12,6 +12,7 @@ import OrdenCompraForm from '@/components/modules/ordenes_compra/OrdenCompraForm
 import NuevaCompraNoMTOModal from '@/components/modules/ordenes_compra/NuevaCompraNoMTOModal'
 import Modal from '@/components/ui/Modal'
 import ReporteModal from '@/components/ui/ReporteModal'
+import { useAuth } from '@/context/AuthContext'
 import { ordenesCompraService } from '@/services/ordenesCompra'
 import { recepcionesService } from '@/services/recepciones'
 import DynamicImageGrid from '@/components/ui/DynamicImageGrid'
@@ -210,12 +211,14 @@ function OcDetailPanel({
   onEdit,
   onDelete,
   onOpenReporte,
+  canWrite = false,
 }: {
   oc: OrdenCompra
   onClose: () => void
   onEdit: (o: OrdenCompra) => void
   onDelete: (o: OrdenCompra) => void
   onOpenReporte: () => void
+  canWrite?: boolean
 }) {
   return (
     <div className="flex flex-col h-full overflow-hidden bg-white">
@@ -260,12 +263,16 @@ function OcDetailPanel({
             <p className="text-base font-bold text-gold-300 mt-0.5">{fmt(Number(oc.total))}</p>
           </div>
           <div className="flex items-center gap-1 flex-shrink-0">
-            <button onClick={() => onEdit(oc)} className="p-1.5 hover:bg-white/10 rounded transition-colors" title="Editar">
-              <Pencil size={14} />
-            </button>
-            <button onClick={() => onDelete(oc)} className="p-1.5 hover:bg-red-400/20 rounded transition-colors" title="Cancelar orden">
-              <Trash2 size={14} />
-            </button>
+            {canWrite && (
+              <>
+                <button onClick={() => onEdit(oc)} className="p-1.5 hover:bg-white/10 rounded transition-colors" title="Editar">
+                  <Pencil size={14} />
+                </button>
+                <button onClick={() => onDelete(oc)} className="p-1.5 hover:bg-red-400/20 rounded transition-colors" title="Cancelar orden">
+                  <Trash2 size={14} />
+                </button>
+              </>
+            )}
             <button onClick={onClose} className="p-1.5 hover:bg-white/10 rounded transition-colors">
               <X size={14} />
             </button>
@@ -479,6 +486,10 @@ function OcCard({ oc, selected, onClick }: { oc: OrdenCompra; selected: boolean;
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
 export default function OrdenesCompra() {
+  // Solo Compras/Admin pueden modificar. El resto (ej. Engineering para seguimiento de
+  // materiales) ve todo en SOLO LECTURA — el backend además bloquea las escrituras.
+  const { user } = useAuth()
+  const canWrite = user?.rol === 'ADMIN' || user?.rol === 'PROCUREMENT'
   const [search, setSearch]             = useState('')
   const [vendorFilter, setVendorFilter] = useState('')
   const [catFilter, setCatFilter]       = useState('')
@@ -719,14 +730,16 @@ export default function OrdenesCompra() {
             )}
           </div>
 
-          {/* Compra SIN-MTO (DIRECTA / URGENTE) */}
-          <button
-            onClick={() => setNoMtoOpen(true)}
-            className="px-3 py-2 rounded-lg text-white font-medium text-sm flex items-center gap-1.5 bg-cyan-600 hover:bg-cyan-700 transition-colors"
-            title="Compra fuera del MTO (DIRECTA o URGENTE)"
-          >
-            <AlertTriangle size={15} /> Compra SIN-MTO
-          </button>
+          {/* Compra SIN-MTO (DIRECTA / URGENTE) — solo quien puede escribir */}
+          {canWrite && (
+            <button
+              onClick={() => setNoMtoOpen(true)}
+              className="px-3 py-2 rounded-lg text-white font-medium text-sm flex items-center gap-1.5 bg-cyan-600 hover:bg-cyan-700 transition-colors"
+              title="Compra fuera del MTO (DIRECTA o URGENTE)"
+            >
+              <AlertTriangle size={15} /> Compra SIN-MTO
+            </button>
+          )}
         </div>
       </div>
 
@@ -831,6 +844,7 @@ export default function OrdenesCompra() {
               onEdit={openEdit}
               onDelete={confirmDelete}
               onOpenReporte={() => setReporteOpen(true)}
+              canWrite={canWrite}
             />
           </div>
         </>

@@ -40,7 +40,7 @@ const NAV_ITEMS: NavItem[] = [
   { to: '/finanzas',       label: 'Finanzas',           icon: Wallet,          roles: ['ADMIN','CONTABILIDAD'] },
   { to: '/logistica',      label: 'Logística',          icon: Send,            roles: ['ADMIN','LOGISTICA','PROJECT_MANAGEMENT'] },
   { to: '/field',          label: 'Campo',              icon: Ruler,           roles: ['ADMIN','FIELD','ENGINEERING','PROJECT_MANAGEMENT'] },
-  { to: '/ordenes-compra', label: 'Órdenes de Compra',  icon: ShoppingCart,    roles: ['ADMIN','PROCUREMENT','PROJECT_MANAGEMENT','PRODUCTION','CONTABILIDAD','VIEWER'] },
+  { to: '/ordenes-compra', label: 'Órdenes de Compra',  icon: ShoppingCart,    roles: ['ADMIN','PROCUREMENT','PROJECT_MANAGEMENT','PRODUCTION','CONTABILIDAD','ENGINEERING','VIEWER'] },
   { to: '/materiales',     label: 'Materiales MTO',     icon: Package,         roles: ['ADMIN','PROCUREMENT','PROJECT_MANAGEMENT','PRODUCTION','VIEWER'] },
   { to: '/mtos',           label: 'Control MTOs',       icon: Layers,          roles: ['ADMIN','PROCUREMENT','VIEWER'] },
   { to: '/recepciones',    label: 'Recepciones',        icon: Truck,           roles: ['ADMIN','PROCUREMENT','PRODUCTION','SHOP_MANAGER','VIEWER'] },
