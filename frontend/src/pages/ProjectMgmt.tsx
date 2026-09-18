@@ -46,19 +46,26 @@ export default function ProjectMgmt() {
       </div>
 
       {tab === 'bandeja' && (
-        <div className="max-w-3xl mx-auto space-y-5 mt-4">
-          <AvisosPM />
-          <PagosPorCobrar />
-          {/* Instalaciones (handoff 3 etapas): el PM inicia y, tras la verificación de Campo, cierra. */}
-          <InstalacionesPM />
-          <DepositosBloqueando onRevisar={onRevisar} />
-          <ReprogramacionesPendientes onRevisar={onRevisar} />
-          <ReservasPendientes onRevisar={onRevisar} />
-          <DealsEnCurso mode="pm" />
-          {/* Piedra (countertops): proveedor externo, 100% del PM. Los 3 pasos (medición →
-              fabricación → instalación) aparecen acá encadenados. Solo si hay algo (hideWhenEmpty). */}
-          <Escritorio rol="externo" hideWhenEmpty titulo="Piedra · countertops"
-            subtitulo="Proveedor externo — confirmá cada paso: medición, fabricación e instalación." />
+        <div className="max-w-[1180px] mx-auto mt-4 grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-5 items-start">
+          {/* AVISOS — panel compacto (últimos 3). Arriba en móvil, columna derecha en escritorio.
+              Son novedades para enterarse, no trabajo: van al costado, no ocupan el centro. */}
+          <div className="lg:col-start-2 lg:row-start-1">
+            <AvisosPM />
+          </div>
+          {/* TAREAS — la entrada principal: lo accionable del PM. */}
+          <div className="lg:col-start-1 lg:row-start-1 space-y-5">
+            <PagosPorCobrar />
+            {/* Instalaciones (handoff 3 etapas): el PM inicia y, tras la verificación de Campo, cierra. */}
+            <InstalacionesPM />
+            <DepositosBloqueando onRevisar={onRevisar} />
+            <ReprogramacionesPendientes onRevisar={onRevisar} />
+            <ReservasPendientes onRevisar={onRevisar} />
+            <DealsEnCurso mode="pm" />
+            {/* Piedra (countertops): proveedor externo, 100% del PM. Plegada como UNA TAREA MÁS
+                (compact): solo aparece cuando es su turno (hideWhenEmpty), sin panel aparte. */}
+            <Escritorio rol="externo" hideWhenEmpty compact titulo="Piedra · countertops"
+              subtitulo="proveedor externo — confirmá cada paso" />
+          </div>
         </div>
       )}
       {tab === 'plan' && (

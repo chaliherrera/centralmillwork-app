@@ -58,9 +58,10 @@ const fmtD = (iso: string | null) => {
   return `${+d} ${M[+m - 1]}`
 }
 
-export default function Escritorio({ rol, asignado, titulo, subtitulo, hideWhenEmpty }: {
+export default function Escritorio({ rol, asignado, titulo, subtitulo, hideWhenEmpty, compact }: {
   rol?: string; asignado?: string; titulo?: string; subtitulo?: string
   hideWhenEmpty?: boolean   // no renderiza nada si no hay tareas ni bloqueadas (ej. piedra en el PM)
+  compact?: boolean         // header slim (etiqueta chica) para plegarlo como "una tarea más" (ej. Piedra en la Bandeja del PM)
 }) {
   const qc = useQueryClient()
   const [verEspera, setVerEspera] = useState(false)
@@ -227,11 +228,20 @@ export default function Escritorio({ rol, asignado, titulo, subtitulo, hideWhenE
   if (hideWhenEmpty && (isLoading || (tareas.length === 0 && bloqueadas.length === 0))) return null
 
   return (
-    <div className="rounded-2xl border border-stone-200 bg-white overflow-hidden">
-      <div className="px-4 py-3 border-b border-stone-100">
-        <h2 className="font-bold text-stone-800 flex items-center gap-2"><ClipboardList size={17} /> {titulo ?? 'Mi escritorio'}</h2>
-        <p className="text-xs text-stone-400">{subtitulo ?? 'Solo lo que te toca ahora, de todos tus proyectos — completá y aparece lo siguiente.'}</p>
-      </div>
+    <div className={compact ? '' : 'rounded-2xl border border-stone-200 bg-white overflow-hidden'}>
+      {compact ? (
+        <div className="flex items-center gap-2 mb-2">
+          <span className="inline-flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wide text-forest-700 bg-forest-50 rounded-full px-2.5 py-1">
+            <ClipboardList size={13} /> {titulo ?? 'Piedra'}
+          </span>
+          {subtitulo && <span className="text-[11px] text-stone-400 truncate">{subtitulo}</span>}
+        </div>
+      ) : (
+        <div className="px-4 py-3 border-b border-stone-100">
+          <h2 className="font-bold text-stone-800 flex items-center gap-2"><ClipboardList size={17} /> {titulo ?? 'Mi escritorio'}</h2>
+          <p className="text-xs text-stone-400">{subtitulo ?? 'Solo lo que te toca ahora, de todos tus proyectos — completá y aparece lo siguiente.'}</p>
+        </div>
+      )}
 
       {isLoading ? (
         <div className="py-14 text-center text-stone-400"><Loader2 className="animate-spin inline" size={22} /></div>
