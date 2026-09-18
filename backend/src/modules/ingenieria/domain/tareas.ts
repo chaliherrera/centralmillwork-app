@@ -133,8 +133,13 @@ export async function getCargaPorIngeniero(runner: QueryRunner): Promise<CargaRe
          FROM ing_tareas WHERE fecha_inicio IS NOT NULL),
      semanas AS (
        SELECT generate_series((SELECT d0 FROM bounds), (SELECT d1 FROM bounds), interval '7 day')::date AS wk)
+     -- Carga PRORRATEADA por días hábiles: cada tarea aporta allocation × (días que ocupa
+     -- DENTRO de la semana hábil Lun-Vie / 5). Así tareas SECUENCIALES (una tras otra) no
+     -- inflan la semana (antes se sumaba cada tarea que tocaba la semana al 100%). La ventana
+     -- hábil es [wk, wk+4] (Lun-Vie); las fechas de las tareas ya son días hábiles.
      SELECT t.asignado_nombre AS ing, to_char(s.wk,'YYYY-MM-DD') AS wk,
-            SUM(t.allocation_pct) AS load_pct, COUNT(*) AS n
+            SUM(t.allocation_pct * GREATEST(0, LEAST(t.fecha_fin, s.wk + 4) - GREATEST(t.fecha_inicio, s.wk) + 1)::numeric / 5) AS load_pct,
+            COUNT(*) AS n
        FROM ing_tareas t
        JOIN semanas s ON t.fecha_inicio <= s.wk + 6 AND t.fecha_fin >= s.wk
        LEFT JOIN ing_ingenieros i ON i.nombre = t.asignado_nombre
