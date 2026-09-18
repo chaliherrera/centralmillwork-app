@@ -1,16 +1,17 @@
-import { useEffect, useState } from 'react'
+import toast from 'react-hot-toast'
 import { Wallet, Loader2 } from 'lucide-react'
 import { ingenieriaService, type DepositoBloqueando } from '@/services/ingenieria'
+import { usePollNovedades } from '@/hooks/usePollNovedades'
 
 // Bandeja del PM: proyectos donde la aprobación (#8) está lista y el ingeniero llegó al
 // paso 9 (Material Procurement / enviar MTO), pero el depósito NO se pagó ni el candado
 // está abierto. El PM decide: abrir el candado (seguir) o frenar hasta que paguen.
 export default function DepositosBloqueando({ onRevisar }: { onRevisar: (ext: string) => void }) {
-  const [items, setItems] = useState<DepositoBloqueando[]>([])
-  const [loading, setLoading] = useState(true)
-  useEffect(() => {
-    ingenieriaService.depositosBloqueando().then((r) => setItems(r.data ?? [])).catch(() => {}).finally(() => setLoading(false))
-  }, [])
+  const { items, loading } = usePollNovedades<DepositoBloqueando>(
+    () => ingenieriaService.depositosBloqueando().then((r) => r.data ?? []),
+    (d) => d.proyecto_ext,
+    { onNuevo: (n) => toast(`${n} proyecto${n === 1 ? '' : 's'} con depósito impago frenando compras`, { icon: '💳' }) },
+  )
 
   if (loading) return <div className="py-4 text-center text-stone-300"><Loader2 className="animate-spin inline" size={18} /></div>
   if (!items.length) return null

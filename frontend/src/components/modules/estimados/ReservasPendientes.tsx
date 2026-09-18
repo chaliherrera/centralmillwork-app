@@ -1,6 +1,8 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
+import toast from 'react-hot-toast'
 import { Lock, Loader2, Check, CalendarRange, Eye } from 'lucide-react'
 import { ingenieriaService, type ReservaProyecto } from '@/services/ingenieria'
+import { usePollNovedades } from '@/hooks/usePollNovedades'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Bandeja del PM — planes de ingeniería SUGERIDOS por Estimados, pendientes de
@@ -12,18 +14,16 @@ const MES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct
 const fmt = (iso: string | null) => { if (!iso) return '—'; const d = new Date(iso + 'T00:00:00'); return `${d.getDate()} ${MES[d.getMonth()]}` }
 
 export default function ReservasPendientes({ onRevisar }: { onRevisar?: (proyectoExt: string) => void }) {
-  const [reservas, setReservas] = useState<ReservaProyecto[]>([])
   const [busy, setBusy] = useState<number | null>(null)
-  const [loading, setLoading] = useState(true)
-
-  const cargar = () => ingenieriaService.reservasPendientes()
-    .then((r) => setReservas(r.data))
-    .catch(() => {}).finally(() => setLoading(false))
-  useEffect(() => { cargar() }, [])
+  const { items: reservas, loading, refetch } = usePollNovedades<ReservaProyecto>(
+    () => ingenieriaService.reservasPendientes().then((r) => r.data ?? []),
+    (p) => p.proyecto_id,
+    { onNuevo: (n) => toast(`${n} plan${n === 1 ? '' : 'es'} nuevo${n === 1 ? '' : 's'} por aceptar`, { icon: '📋' }) },
+  )
 
   const aceptar = async (p: ReservaProyecto) => {
     setBusy(p.proyecto_id)
-    try { await ingenieriaService.confirmarReserva(p.proyecto_id); await cargar() }
+    try { await ingenieriaService.confirmarReserva(p.proyecto_id); await refetch() }
     catch { /* toast */ } finally { setBusy(null) }
   }
 

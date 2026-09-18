@@ -1,6 +1,7 @@
-import { useEffect, useState } from 'react'
+import toast from 'react-hot-toast'
 import { CalendarClock, Loader2 } from 'lucide-react'
 import { ingenieriaService, type Reprogramacion } from '@/services/ingenieria'
+import { usePollNovedades } from '@/hooks/usePollNovedades'
 
 // Bandeja del PM: pedidos de reprogramación del ingeniero (#2). El ingeniero no mueve
 // fechas — avisa; acá el PM los ve sin tener que entrar a cada proyecto, y abre el plan.
@@ -8,11 +9,11 @@ const MES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct
 const fmt = (iso: string | null) => { if (!iso) return ''; const d = new Date(iso + 'T00:00:00'); return `${d.getDate()} ${MES[d.getMonth()]}` }
 
 export default function ReprogramacionesPendientes({ onRevisar }: { onRevisar: (ext: string) => void }) {
-  const [items, setItems] = useState<Reprogramacion[]>([])
-  const [loading, setLoading] = useState(true)
-  useEffect(() => {
-    ingenieriaService.reprogramaciones().then((r) => setItems(r.data ?? [])).catch(() => {}).finally(() => setLoading(false))
-  }, [])
+  const { items, loading } = usePollNovedades<Reprogramacion>(
+    () => ingenieriaService.reprogramaciones().then((r) => r.data ?? []),
+    (t) => t.id,
+    { onNuevo: (n) => toast(`${n} pedido${n === 1 ? '' : 's'} de reprogramación nuevo${n === 1 ? '' : 's'}`, { icon: '🔁' }) },
+  )
 
   if (loading) return <div className="py-4 text-center text-stone-300"><Loader2 className="animate-spin inline" size={18} /></div>
   if (!items.length) return null   // sin pedidos = no ocupa espacio

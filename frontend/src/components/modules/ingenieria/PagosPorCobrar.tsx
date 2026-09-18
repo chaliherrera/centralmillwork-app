@@ -4,6 +4,7 @@ import { Wallet, Check } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { ingenieriaService } from '@/services/ingenieria'
 import { scheduleService } from '@/services/schedule'
+import { useToastNuevos } from '@/hooks/usePollNovedades'
 
 // Bandeja del PM: "pagos por cobrar" = el depósito (C-04) y el pago final (X-03) que el
 // cliente todavía no pagó (o no se registró). Finanzas avisa que el dinero entró y el PM
@@ -19,6 +20,8 @@ export default function PagosPorCobrar() {
     queryFn: () => ingenieriaService.pagosPorCobrar().then((r) => r.data ?? []),
     refetchInterval: 60_000,
   })
+  useToastNuevos(data ?? [], (d) => `${d.proyecto_id}-${d.hito}`,
+    (n) => toast(`${n} pago${n === 1 ? '' : 's'} por registrar`, { icon: '💰' }))
   const registrar = useMutation({
     mutationFn: ({ proyecto_id, hito, monto }: { proyecto_id: number; hito: string; monto: number }) =>
       scheduleService.registrarHito(proyecto_id, hito, hoy(), undefined, monto),

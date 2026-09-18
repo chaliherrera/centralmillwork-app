@@ -1,9 +1,10 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
 import { Loader2, Send, Check, Rocket, CalendarRange, UserCheck, Eye, Link2, Copy, CalendarClock, X, Pause, Ban, AlertTriangle } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { ingenieriaService, type IngDealEnCurso } from '@/services/ingenieria'
+import { usePollNovedades } from '@/hooks/usePollNovedades'
 import type { PortalGanttTarea } from '@/services/portal'
 import CronogramaCliente, { ganttDesdePlan } from '@/components/schedule/CronogramaCliente'
 
@@ -35,9 +36,7 @@ const CHIP: Record<string, { label: string; cls: string }> = {
 }
 
 export default function DealsEnCurso({ mode, emptyHint }: { mode: 'estimados' | 'pm'; emptyHint?: string }) {
-  const [deals, setDeals] = useState<IngDealEnCurso[]>([])
   const [busy, setBusy] = useState<number | null>(null)
-  const [loading, setLoading] = useState(true)
   const [cronoBusy, setCronoBusy] = useState<number | null>(null)
   const [crono, setCrono] = useState<{ nombre: string; fecha: string | null; gantt: PortalGanttTarea[] } | null>(null)
   // Confirmación de baja del deal (pausar/cancelar) — acción destructiva, se confirma.
@@ -52,22 +51,23 @@ export default function DealsEnCurso({ mode, emptyHint }: { mode: 'estimados' | 
     finally { setCronoBusy(null) }
   }
 
-  const cargar = () => ingenieriaService.dealsEnCurso()
-    .then((r) => setDeals(r.data ?? []))
-    .catch(() => {}).finally(() => setLoading(false))
-  useEffect(() => { cargar() }, [])
-
   // Estimados también ve el deal 'aprobado' (como confirmación con fecha/hora) hasta que
   // el PM activa; antes desaparecía apenas el cliente aprobaba y Estimados quedaba sin cierre.
-  const visibles = deals.filter((d) =>
+  const esVisible = (d: IngDealEnCurso) =>
     mode === 'estimados' ? (d.deal_estado === 'esperando_pm' || d.deal_estado === 'plan_propuesto' || d.deal_estado === 'esperando_cliente' || d.deal_estado === 'aprobado')
-                         : d.deal_estado === 'aprobado')
+                         : d.deal_estado === 'aprobado'
+  // P9: se refresca solo y avisa cuando entra un deal nuevo a esta bandeja.
+  const { items: visibles, loading, refetch } = usePollNovedades<IngDealEnCurso>(
+    () => ingenieriaService.dealsEnCurso().then((r) => (r.data ?? []).filter(esVisible)),
+    (d) => d.proyecto_id,
+    { onNuevo: (n) => toast(mode === 'pm' ? `${n} deal${n === 1 ? '' : 's'} listo${n === 1 ? '' : 's'} para activar` : `${n} deal${n === 1 ? '' : 's'} nuevo${n === 1 ? '' : 's'} en tu bandeja`, { icon: '🤝' }) },
+  )
 
   const qc = useQueryClient()
   const accion = async (d: IngDealEnCurso, fn: () => Promise<unknown>, ok: string) => {
     setBusy(d.proyecto_id)
     try {
-      await fn(); toast.success(ok); await cargar()
+      await fn(); toast.success(ok); await refetch()
       // Aprobar/activar cambia lo que "te toca": refrescá el escritorio y su badge ya.
       qc.invalidateQueries({ queryKey: ['escritorio'] })
       qc.invalidateQueries({ queryKey: ['escritorio-resumen'] })
