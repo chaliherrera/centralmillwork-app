@@ -77,6 +77,14 @@ export async function getTareas(req: Request, res: Response, next: NextFunction)
       conds.push(`subject ILIKE $${vals.length}`)
     }
 
+    // origen: filtro opcional ('email' | 'sistema'). Lo usa el widget de Avisos del PM
+    // para traer solo los avisos del sistema (deal cancelado/pausado, reajuste de fecha).
+    const origen = req.query.origen as string | undefined
+    if (origen && (origen === 'email' || origen === 'sistema')) {
+      vals.push(origen)
+      conds.push(`origen = $${vals.length}`)
+    }
+
     // Scoping por rol: los no-ADMIN solo ven las áreas de las que son dueños.
     const areas = areasForUser(req)
     if (areas !== null) {
@@ -89,7 +97,7 @@ export async function getTareas(req: Request, res: Response, next: NextFunction)
     // Orden: estados activos primero (pendiente, en_progreso), luego prioridad, luego fecha
     const { rows } = await pool.query(
       `SELECT id, area, title, description, priority, from_email, subject,
-              source_email_id, estado, asignado_a, created_at, completed_at
+              source_email_id, origen, estado, asignado_a, created_at, completed_at
        FROM tareas
        ${whereClause}
        ORDER BY

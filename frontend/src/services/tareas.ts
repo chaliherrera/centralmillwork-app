@@ -12,6 +12,11 @@ export const tareasService = {
     return api.get<ApiResponse<Tarea[]>>('/tareas', { params }).then((r) => r.data)
   },
 
+  // Avisos del sistema pendientes para el rol (ej. escritorio del PM): deal cancelado/
+  // pausado, reajuste de fecha. Acotado por área en el backend (el PM ve admin/administracion).
+  avisosSistema: () =>
+    api.get<ApiResponse<Tarea[]>>('/tareas', { params: { origen: 'sistema', estado: 'pendiente,en_progreso' } }).then((r) => r.data),
+
   getById: (id: number) =>
     api.get<ApiResponse<Tarea>>(`/tareas/${id}`).then((r) => r.data),
 
