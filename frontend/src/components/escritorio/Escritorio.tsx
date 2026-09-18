@@ -1,7 +1,7 @@
-import { useMemo, useState } from 'react'
+import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Loader2, CheckCircle2, ClipboardList, ChevronDown, ChevronUp, ExternalLink, MessageSquarePlus, FileSignature, FileUp, FileText } from 'lucide-react'
+import { Loader2, CheckCircle2, ClipboardList, ChevronDown, ChevronUp, ExternalLink, MessageSquarePlus, FileSignature, FileUp, FileText, CalendarDays } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { ingenieriaService, type EscritorioTarea } from '@/services/ingenieria'
 import { materialesService } from '@/services/materiales'
@@ -216,13 +216,9 @@ export default function Escritorio({ rol, asignado, titulo, subtitulo, hideWhenE
     onError: (e: any) => toast.error(e?.response?.data?.message ?? 'No se pudo registrar la firma'),
   })
 
+  // Ya vienen ordenadas por fecha_inicio (backend) → orden cronológico de ejecución.
   const tareas = data?.data.tareas ?? []
   const bloqueadas = data?.data.bloqueadas ?? []
-  const porProyecto = useMemo(() => {
-    const m = new Map<string, EscritorioTarea[]>()
-    for (const t of tareas) { const k = t.proyecto_ext ?? '—'; if (!m.has(k)) m.set(k, []); m.get(k)!.push(t) }
-    return [...m.entries()]
-  }, [tareas])
 
   // Modo "solo si hay algo" (para escritorios secundarios como la piedra en el PM):
   // no ocupa lugar mientras carga ni cuando no hay nada.
@@ -254,12 +250,10 @@ export default function Escritorio({ rol, asignado, titulo, subtitulo, hideWhenE
           <p className="mt-2 text-sm text-stone-500">No tenés nada pendiente ahora mismo. 🎉</p>
         </div>
       ) : (
-        <div className={compact ? 'mt-2 rounded-xl border border-stone-200 bg-white divide-y divide-stone-100' : 'divide-y divide-stone-100'}>
-          {porProyecto.map(([proj, ts]) => (
-            <div key={proj} className="px-4 py-3">
-              <div className="text-[11px] font-bold text-forest-700 uppercase tracking-wide mb-2">{shortProj(proj)}</div>
-              <div className="space-y-2">
-                {ts.map((t) => {
+        <div className={compact ? 'mt-2 rounded-xl border border-stone-200 bg-white p-3 space-y-2' : 'px-4 py-3 space-y-2'}>
+          {/* Orden CRONOLÓGICO (por fecha del plan, la más próxima primero) — el backend ya
+              las ordena por fecha_inicio. El proyecto va como etiqueta en cada tarea. */}
+          {tareas.map((t) => {
                   const clave = t.tipo_clave ?? ''
                   const esFirma = clave === 'po_execution' && t.proyecto_id != null
                   const esDecision = t.entregable === 'decision'   // registrar la respuesta del cliente
@@ -285,6 +279,7 @@ export default function Escritorio({ rol, asignado, titulo, subtitulo, hideWhenE
                         <div className="min-w-0 flex-1">
                           <div className="flex items-center gap-2 flex-wrap">
                             <span className="text-sm font-semibold text-stone-800">{t.nombre}</span>
+                            {t.proyecto_ext && <span className="text-[10px] font-mono font-semibold text-forest-700 bg-forest-50 rounded px-1.5 py-0.5">{shortProj(t.proyecto_ext)}</span>}
                             {t.es_critico ? (
                               <span className="text-[9px] font-bold uppercase tracking-wide rounded px-1.5 py-0.5 bg-rose-100 text-rose-700">crítico</span>
                             ) : t.holgura_dias != null && (
@@ -294,10 +289,13 @@ export default function Escritorio({ rol, asignado, titulo, subtitulo, hideWhenE
                               </span>
                             )}
                           </div>
-                          <div className="text-[12px] text-stone-500 mt-0.5">
-                            <span className="text-[10px] uppercase tracking-wide text-stone-400">Programada </span>
-                            <span className="font-semibold text-stone-700">{fmtD(t.fecha_inicio)} → {fmtD(t.fecha_fin)}</span>
-                            <span className="text-stone-400"> · {t.dur_dias}d{t.fecha_entrega ? ` · entrega ${fmtD(t.fecha_entrega)}` : ''}{t.estado === 'en_curso' ? ' · en curso' : ''}</span>
+                          <div className="mt-1 flex items-center gap-2 flex-wrap">
+                            <span className="inline-flex items-center gap-1.5 text-[11.5px] font-semibold text-forest-800 bg-forest-100 rounded-md px-2 py-1">
+                              <CalendarDays size={12} className="text-forest-600" />
+                              <span className="text-[9px] uppercase tracking-wide font-bold text-forest-600">Programada</span>
+                              {fmtD(t.fecha_inicio)} → {fmtD(t.fecha_fin)}
+                            </span>
+                            <span className="text-[11px] text-stone-400">{t.dur_dias}d{t.fecha_entrega ? ` · entrega ${fmtD(t.fecha_entrega)}` : ''}{t.estado === 'en_curso' ? ' · en curso' : ''}</span>
                           </div>
                         </div>
                         {esFirma ? (
@@ -502,9 +500,6 @@ export default function Escritorio({ rol, asignado, titulo, subtitulo, hideWhenE
                     </div>
                   )
                 })}
-              </div>
-            </div>
-          ))}
         </div>
       )}
 
