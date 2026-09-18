@@ -65,6 +65,7 @@ export default function Escritorio({ rol, asignado, titulo, subtitulo, hideWhenE
 }) {
   const qc = useQueryClient()
   const [verEspera, setVerEspera] = useState(false)
+  const [abierto, setAbierto] = useState(false)   // compact (Piedra): colapsado por defecto
   const [fechas, setFechas] = useState<Record<number, string>>({})
   const [archivos, setArchivos] = useState<Record<number, File | null>>({})   // adjuntos por tarea (planos/CNC)
   const [decComent, setDecComent] = useState<Record<number, string>>({})       // comentario de la decisión del cliente
@@ -230,12 +231,14 @@ export default function Escritorio({ rol, asignado, titulo, subtitulo, hideWhenE
   return (
     <div className={compact ? '' : 'rounded-2xl border border-stone-200 bg-white overflow-hidden'}>
       {compact ? (
-        <div className="flex items-center gap-2 mb-2">
+        <button onClick={() => setAbierto((v) => !v)}
+          className="w-full flex items-center gap-2 rounded-xl border border-stone-200 bg-white hover:bg-stone-50 px-3 py-2.5 text-left">
           <span className="inline-flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wide text-forest-700 bg-forest-50 rounded-full px-2.5 py-1">
             <ClipboardList size={13} /> {titulo ?? 'Piedra'}
           </span>
-          {subtitulo && <span className="text-[11px] text-stone-400 truncate">{subtitulo}</span>}
-        </div>
+          <span className="text-[12px] text-stone-500">{tareas.length} pendiente{tareas.length === 1 ? '' : 's'}</span>
+          {abierto ? <ChevronUp size={15} className="ml-auto text-stone-400" /> : <ChevronDown size={15} className="ml-auto text-stone-400" />}
+        </button>
       ) : (
         <div className="px-4 py-3 border-b border-stone-100">
           <h2 className="font-bold text-stone-800 flex items-center gap-2"><ClipboardList size={17} /> {titulo ?? 'Mi escritorio'}</h2>
@@ -243,7 +246,7 @@ export default function Escritorio({ rol, asignado, titulo, subtitulo, hideWhenE
         </div>
       )}
 
-      {isLoading ? (
+      {compact && !abierto ? null : isLoading ? (
         <div className="py-14 text-center text-stone-400"><Loader2 className="animate-spin inline" size={22} /></div>
       ) : tareas.length === 0 ? (
         <div className="py-12 text-center">
@@ -251,7 +254,7 @@ export default function Escritorio({ rol, asignado, titulo, subtitulo, hideWhenE
           <p className="mt-2 text-sm text-stone-500">No tenés nada pendiente ahora mismo. 🎉</p>
         </div>
       ) : (
-        <div className="divide-y divide-stone-100">
+        <div className={compact ? 'mt-2 rounded-xl border border-stone-200 bg-white divide-y divide-stone-100' : 'divide-y divide-stone-100'}>
           {porProyecto.map(([proj, ts]) => (
             <div key={proj} className="px-4 py-3">
               <div className="text-[11px] font-bold text-forest-700 uppercase tracking-wide mb-2">{shortProj(proj)}</div>
@@ -498,7 +501,7 @@ export default function Escritorio({ rol, asignado, titulo, subtitulo, hideWhenE
         </div>
       )}
 
-      {bloqueadas.length > 0 && (
+      {(!compact || abierto) && bloqueadas.length > 0 && (
         <div className="border-t border-stone-100">
           <button onClick={() => setVerEspera((v) => !v)}
             className="w-full px-4 py-2.5 text-left text-xs font-medium text-stone-500 hover:bg-stone-50 flex items-center gap-1.5">
