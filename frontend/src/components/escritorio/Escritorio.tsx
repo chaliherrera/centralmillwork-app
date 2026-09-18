@@ -256,7 +256,9 @@ export default function Escritorio({ rol, asignado, titulo, subtitulo, hideWhenE
                   const esPlanoCampo = clave === 'field_measurements' && t.estado !== 'en_curso'
                   // Envío consciente de planos al cliente (shop_drawings / sd_update): modal propio.
                   const esEnvioPlanos = (clave === 'shop_drawings' || clave === 'sd_update') && t.proyecto_id != null
-                  const esCompletable = COMPLETABLE.has(clave) && !esDecision && !esMto && !esPlanoCampo && !esEnvioPlanos
+                  // 2.4 (A): tarea manual del PM (sin tipo de los 18) → se completa a mano, con fecha.
+                  const esManual = !t.tipo_clave
+                  const esCompletable = (COMPLETABLE.has(clave) || esManual) && !esDecision && !esMto && !esPlanoCampo && !esEnvioPlanos
                   const link = LINK_MODULO[clave]
                   // material_proc pendiente = el ingeniero produce/importa el MTO ("Importar MTO");
                   // en_curso = Compras cotiza/compra ("Ir a Control MTOs"). Mismo destino (/mtos).

@@ -109,6 +109,35 @@ export async function getEscritorio(
        ${base} AND NOT ${BLOQUEADA}
       ORDER BY t.fecha_inicio NULLS LAST, t.proyecto_ext, tt.orden`, params)
 
+  // 2.4 (A): tareas MANUALES que el PM sumó al plan (origen='manual', sin tipo de los 18).
+  // La query tipada de arriba las excluye a propósito; acá las traemos para que le lleguen
+  // al ingeniero en su escritorio "te toca ahora" (no solo en el Gantt). Van al escritorio de
+  // Ingeniería (se asignan a un ingeniero), acotadas al asignado y a proyectos activos. No
+  // tienen dependencias de ruta → nunca están "en espera": van directo a lo accionable.
+  let tareas = rows
+  if (opts.roles.includes('ingenieria')) {
+    const mp: unknown[] = []
+    let mAsig = ''
+    if (opts.asignado) { mp.push(opts.asignado); mAsig = `AND t.asignado_nombre = $${mp.length}` }
+    const { rows: manuales } = await runner.query<EscritorioTarea>(
+      `SELECT t.id, t.proyecto_ext, t.proyecto_id, t.nombre,
+              NULL::text AS tipo_clave, NULL::text AS entregable, NULL::text AS cierre, 'ingenieria'::text AS rol, t.asignado_nombre,
+              to_char(t.fecha_inicio,'YYYY-MM-DD') AS fecha_inicio,
+              to_char(t.fecha_fin,'YYYY-MM-DD')    AS fecha_fin,
+              to_char(ip.fecha_entrega,'YYYY-MM-DD') AS fecha_entrega,
+              t.es_critico, t.holgura_dias, t.dur_dias, t.estado, t.reprogramacion_pedida, t.reprogramacion_motivo
+         FROM ing_tareas t
+         LEFT JOIN ing_proyectos ip ON ip.proyecto_ext = t.proyecto_ext
+         LEFT JOIN proyectos p ON p.id = t.proyecto_id
+        WHERE t.estado NOT IN ('hecha','na')
+          AND t.origen = 'manual'
+          AND (t.proyecto_id IS NULL OR p.estado = 'activo')
+          AND t.asignado_nombre IS NOT NULL
+          ${mAsig}
+        ORDER BY t.fecha_inicio NULLS LAST, t.proyecto_ext`, mp)
+    tareas = [...rows, ...manuales]
+  }
+
   // Las bloqueadas, con el predecesor que las traba (el más tardío = el que manda).
   const { rows: bloq } = await runner.query<EnEspera>(
     `SELECT DISTINCT ON (t.id) t.id, t.proyecto_ext, t.nombre,
@@ -130,7 +159,7 @@ export async function getEscritorio(
                               AND d2.tipo = 'FS' AND p2.estado NOT IN ('hecha','na'))) )
       ORDER BY t.id, pr.fecha_fin DESC NULLS LAST`, params)
 
-  return { tareas: rows, bloqueadas: bloq }
+  return { tareas, bloqueadas: bloq }
 }
 
 /** Conteo liviano de tareas ACCIONABLES (desbloqueadas) por rol de escritorio, para el
@@ -165,6 +194,19 @@ export async function getEscritorioResumen(
       GROUP BY erol`, params)
   const m: Record<string, number> = {}
   for (const r of rows) if (r.erol) m[r.erol] = r.n
+  // 2.4 (A): sumar las tareas manuales del PM (van al escritorio de Ingeniería).
+  if (opts.roles.includes('ingenieria')) {
+    const mp: unknown[] = []
+    let mAsig = ''
+    if (opts.asignado) { mp.push(opts.asignado); mAsig = `AND t.asignado_nombre = $${mp.length}` }
+    const { rows: mc } = await runner.query<{ n: number }>(
+      `SELECT COUNT(*)::int AS n FROM ing_tareas t
+         LEFT JOIN proyectos p ON p.id = t.proyecto_id
+        WHERE t.estado NOT IN ('hecha','na') AND t.origen = 'manual'
+          AND (t.proyecto_id IS NULL OR p.estado = 'activo')
+          AND t.asignado_nombre IS NOT NULL ${mAsig}`, mp)
+    if (mc[0]?.n) m['ingenieria'] = (m['ingenieria'] ?? 0) + mc[0].n
+  }
   return m
 }
 
