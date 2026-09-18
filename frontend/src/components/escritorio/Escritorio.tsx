@@ -294,7 +294,11 @@ export default function Escritorio({ rol, asignado, titulo, subtitulo, hideWhenE
                               </span>
                             )}
                           </div>
-                          <div className="text-[11px] text-stone-400">plan {fmtD(t.fecha_inicio)} → {fmtD(t.fecha_fin)} · {t.dur_dias}d{t.fecha_entrega ? ` · entrega ${fmtD(t.fecha_entrega)}` : ''}{t.estado === 'en_curso' ? ' · en curso' : ''}</div>
+                          <div className="text-[12px] text-stone-500 mt-0.5">
+                            <span className="text-[10px] uppercase tracking-wide text-stone-400">Programada </span>
+                            <span className="font-semibold text-stone-700">{fmtD(t.fecha_inicio)} → {fmtD(t.fecha_fin)}</span>
+                            <span className="text-stone-400"> · {t.dur_dias}d{t.fecha_entrega ? ` · entrega ${fmtD(t.fecha_entrega)}` : ''}{t.estado === 'en_curso' ? ' · en curso' : ''}</span>
+                          </div>
                         </div>
                         {esFirma ? (
                           <button onClick={() => { if (firmaOpen === t.id) cerrarFirma(); else { setFirmaFirma(''); setFirmaEnvio(''); setFirmaPdf(null); setFirmaOpen(t.id) } }}
@@ -366,8 +370,11 @@ export default function Escritorio({ rol, asignado, titulo, subtitulo, hideWhenE
                                 <ExternalLink size={13} /> Ver plano
                               </button>
                             )}
-                            <input type="date" value={fecha} onChange={(e) => setFechas((f) => ({ ...f, [t.id]: e.target.value }))}
-                              className="text-xs border border-stone-300 rounded-lg px-2 py-1.5" title={CUMPLIDA_LABEL[clave] ?? 'Fecha de cumplimiento'} />
+                            <label className="inline-flex items-center gap-1 text-[10px] text-stone-400">
+                              <span className="uppercase tracking-wide">Completada el</span>
+                              <input type="date" value={fecha} onChange={(e) => setFechas((f) => ({ ...f, [t.id]: e.target.value }))}
+                                className="text-xs border border-stone-300 rounded-lg px-2 py-1.5 text-stone-700" title={CUMPLIDA_LABEL[clave] ?? 'Fecha en que la completaste'} />
+                            </label>
                             <button onClick={() => completar.mutate({ t, fecha })}
                               disabled={completar.isPending || (ENTREGABLE_OBLIGATORIO.has(t.entregable ?? '') && !archivos[t.id])}
                               title={ENTREGABLE_OBLIGATORIO.has(t.entregable ?? '') && !archivos[t.id] ? 'Adjuntá el documento del paso para completar' : undefined}
