@@ -278,8 +278,8 @@ export default function Escritorio({ rol, asignado, titulo, subtitulo, hideWhenE
                       <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
                         <div className="min-w-0 flex-1">
                           <div className="flex items-center gap-2 flex-wrap">
-                            <span className="text-sm font-semibold text-stone-800">{t.nombre}</span>
-                            {t.proyecto_ext && <span className="text-[10px] font-mono font-semibold text-forest-700 bg-forest-50 rounded px-1.5 py-0.5">{shortProj(t.proyecto_ext)}</span>}
+                            {t.proyecto_ext && <span className="text-[15px] font-bold text-stone-900">{shortProj(t.proyecto_ext)}</span>}
+                            <span className="text-[11px] font-semibold text-forest-700 bg-forest-50 rounded px-1.5 py-0.5">{t.nombre}</span>
                             {t.es_critico ? (
                               <span className="text-[9px] font-bold uppercase tracking-wide rounded px-1.5 py-0.5 bg-rose-100 text-rose-700">crítico</span>
                             ) : t.holgura_dias != null && (
@@ -290,9 +290,9 @@ export default function Escritorio({ rol, asignado, titulo, subtitulo, hideWhenE
                             )}
                           </div>
                           <div className="mt-1 flex items-center gap-2 flex-wrap">
-                            <span className="inline-flex items-center gap-1.5 text-[11.5px] font-semibold text-forest-800 bg-forest-100 rounded-md px-2 py-1">
-                              <CalendarDays size={12} className="text-forest-600" />
-                              <span className="text-[9px] uppercase tracking-wide font-bold text-forest-600">Programada</span>
+                            <span className="inline-flex items-center gap-1.5 text-[11.5px] font-semibold text-amber-800 bg-amber-100 rounded-md px-2 py-1">
+                              <CalendarDays size={12} className="text-amber-600" />
+                              <span className="text-[9px] uppercase tracking-wide font-bold text-amber-600">Programada</span>
                               {fmtD(t.fecha_inicio)} → {fmtD(t.fecha_fin)}
                             </span>
                             <span className="text-[11px] text-stone-400">{t.dur_dias}d{t.fecha_entrega ? ` · entrega ${fmtD(t.fecha_entrega)}` : ''}{t.estado === 'en_curso' ? ' · en curso' : ''}</span>
