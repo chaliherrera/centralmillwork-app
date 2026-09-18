@@ -23,3 +23,4 @@ TESTING_CHECKLIST.pdf
 GUIA_MODULO_PRODUCCION.pdf
 database/seed_prodtest.sql
 database/import_ing.sql
+import_ing.sql

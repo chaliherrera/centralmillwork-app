@@ -102,9 +102,20 @@ lines.append("UPDATE ing_tarea_tipos SET dias_por_item = 1.0 WHERE clave IN ('sh
 lines.append("UPDATE ing_tarea_tipos SET dias_por_item = 2.0 WHERE clave = 'fabrication';")
 
 cur_proj=None; cur_code=None; cur_phase=None; ntask=0; nproj=0; deps=[]
+skip=False   # saltear el bloque "SAMPLE PROJECT" (plantilla al tope del Excel)
 for rn,r in enumerate(ws.iter_rows(min_row=2,values_only=True),start=2):
     name=(g(r,'Project Name') or '').strip()
     if not name: continue
+    # SAMPLE PROJECT = plantilla (usa tareas reales como ejemplo). Se saltea todo el bloque
+    # hasta el PRIMER encabezado de proyecto real (codigo + nombre que NO es un tipo de tarea).
+    if name.upper().startswith('SAMPLE PROJECT'):
+        skip=True; continue
+    if skip:
+        mm=proj_re.match(name); resto=prefix_re.sub('',name).strip() if mm else name
+        if mm and resolve(resto) is None and not resto.lower().startswith('phase') and not resto.lower().startswith('co#'):
+            skip=False   # primer proyecto real -> dejar de saltear y procesarlo abajo
+        else:
+            continue
     # El formato nuevo del Excel prefija TODAS las filas con el codigo ("25-562 Field
     # measurements"). El encabezado de proyecto = primera fila con un codigo NUEVO; las
     # tareas prefijadas repiten el codigo del proyecto actual, asi que NO son proyectos.
@@ -154,12 +165,9 @@ for src_row, tgt_row, tipo, lag in deps:
       f"SELECT t.id, d.id, {sq(tipo)}, {lag} FROM ing_tareas t JOIN ing_tareas d ON true "
       f"WHERE t.external_ref='xlsx-row-{src_row}' AND d.external_ref='xlsx-row-{tgt_row}' "
       "ON CONFLICT (tarea_id,depende_de_id) DO UPDATE SET tipo=EXCLUDED.tipo, lag_dias=EXCLUDED.lag_dias;")
-# Anti doble-conteo: si el Excel trae las tareas reales de un proyecto que tenia una
-# reserva provisional (sin confirmar), esas reservas ya no aplican -> estado='na'.
-# Las confirmadas por el PM se preservan (son compromiso real).
-lines.append("UPDATE ing_tareas SET estado='na', updated_at=NOW() "
-             "WHERE origen='reserva' AND reserva_confirmada_at IS NULL "
-             "AND proyecto_ext IN (SELECT DISTINCT proyecto_ext FROM ing_tareas WHERE origen='import_excel');")
+# (Se retiró la sentencia anti doble-conteo de 'reserva': el modelo de reservas cambió a
+#  'sugerencia' y la columna reserva_confirmada_at ya no existe. Las sugerencias son de
+#  deals en prospecto (origen='app'), no chocan con el import_excel.)
 lines.append("COMMIT;")
 open(OUT,"w",encoding="utf-8").write("\n".join(lines))
 print(f"SQL generado: {OUT} | proyectos={nproj} tareas={ntask} dependencias={len(deps)}")
