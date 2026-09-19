@@ -1,8 +1,9 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // Domain — Calendario laboral (días hábiles)
 // ─────────────────────────────────────────────────────────────────────────────
-// Días hábiles = lunes a viernes MENOS los feriados cargados en la tabla
-// schedule_feriados (decisión 2026-08-10: lun-vie).
+// Días hábiles = lunes a SÁBADO MENOS los feriados cargados en la tabla
+// schedule_feriados (decisión 2026-09-18: los ingenieros trabajan sábado;
+// solo el domingo es no-hábil. Antes era lun-vie, decisión 2026-08-10).
 //
 // Todo se maneja como strings 'YYYY-MM-DD' y aritmética en UTC para evitar
 // corrimientos por zona horaria / horario de verano. El CPM (holgura.ts) y la
@@ -33,10 +34,10 @@ function weekday(date: ISODate): number {
   return toUTC(date).getUTCDay()
 }
 
-/** true si `date` es lunes-viernes y no está en el set de feriados. */
+/** true si `date` es lunes-SÁBADO y no está en el set de feriados. */
 export function isBusinessDay(date: ISODate, feriados: Set<ISODate>): boolean {
   const wd = weekday(date)
-  return wd >= 1 && wd <= 5 && !feriados.has(date)
+  return wd >= 1 && wd <= 6 && !feriados.has(date)
 }
 
 /**
