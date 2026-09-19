@@ -822,6 +822,17 @@ export async function transicionarMuestra(req: Request, res: Response, next: Nex
           [op.id, versionRow.id]
         )
 
+        // El sample request (spec) subido al crear la muestra tiene que llegar a la OP,
+        // para que el taller lo vea sin re-subirlo. Copiamos los archivos 'sample_request'
+        // de la muestra a los documentos de la OP.
+        await client.query(
+          `INSERT INTO orden_documentos (orden_id, nombre, descripcion, filename, mime_type, size_bytes, url, uploaded_by)
+           SELECT $1, nombre, 'Sample request', filename, mime_type, size_bytes, url, $2
+             FROM muestras_archivos
+            WHERE muestra_id = $3 AND tipo = 'sample_request'`,
+          [op.id, req.user?.id ?? null, id]
+        )
+
         // Evento adicional para el timeline
         await client.query(
           `INSERT INTO muestras_eventos (muestra_id, version_numero, tipo, detalle, usuario_id)
