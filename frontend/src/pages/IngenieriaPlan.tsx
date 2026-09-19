@@ -61,6 +61,25 @@ export default function IngenieriaPlan({ embedded, initialProyecto, initialMode 
   }
   useEffect(() => { if (mode === 'proyecto') loadPlan() }, [selProj, mode])
 
+  // Refresco en vivo: al VOLVER a la pestaña y cada 30s, re-consulta — así el Gantt/plan
+  // refleja lo que ingeniería (o el PM) acaba de completar, sin recargar la página a mano.
+  useEffect(() => {
+    const refrescar = () => {
+      if (document.visibilityState === 'hidden') return
+      loadAll()
+      if (mode === 'proyecto') loadPlan()
+    }
+    window.addEventListener('focus', refrescar)
+    document.addEventListener('visibilitychange', refrescar)
+    const iv = setInterval(refrescar, 30_000)
+    return () => {
+      window.removeEventListener('focus', refrescar)
+      document.removeEventListener('visibilitychange', refrescar)
+      clearInterval(iv)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mode, selProj])
+
   // #8: precargar el ingeniero PROPUESTO del proyecto en foco (el más asignado en su
   // plan), una sola vez, para que "Carga por ingeniero" abra en él y no en el alfabético.
   useEffect(() => {
