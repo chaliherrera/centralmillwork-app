@@ -969,7 +969,7 @@ function EditModal({ tarea, proyecto, engineers, planTareas, aristas, onClose, o
   ]
   return (
     <div className="fixed inset-0 bg-black/30 flex items-center justify-center p-4 z-50" onClick={() => !busy && onClose()}>
-      <div className="bg-white rounded-2xl max-w-lg w-full p-5 shadow-xl" onClick={(e) => e.stopPropagation()}>
+      <div className="bg-white rounded-2xl max-w-lg w-full p-5 shadow-xl max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center gap-2 mb-3">
           <ClipboardList size={18} className="text-forest-600" /><h3 className="font-semibold text-stone-800">{tarea ? 'Editar tarea' : 'Nueva tarea'}</h3>
           <span className="text-xs text-stone-400">· {shortProj(f.proyecto_ext ?? '')}</span>
