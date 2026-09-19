@@ -4,10 +4,12 @@ import MisMuestrasEnProceso from '@/components/modules/muestras/MisMuestrasEnPro
 import NovedadesCliente from '@/components/escritorio/NovedadesCliente'
 
 // Escritorio de Ingeniería — "lo que le toca a Ingeniería", en todos los proyectos.
+// Misma estructura que la Bandeja del PM: tareas cronológicas al centro, y a la derecha
+// las notificaciones (decisiones del cliente en el portal + muestras en proceso).
 export default function Ingenieria() {
   return (
-    <div className="max-w-3xl mx-auto py-6 px-1 space-y-5">
-      <div className="flex items-center gap-3">
+    <div className="py-6 px-2">
+      <div className="max-w-[1180px] mx-auto flex items-center gap-3">
         <div className="w-11 h-11 rounded-2xl bg-forest-50 flex items-center justify-center">
           <DraftingCompass className="text-forest-600" size={22} />
         </div>
@@ -16,11 +18,22 @@ export default function Ingenieria() {
           <p className="text-sm text-stone-500">Lo que le toca a Ingeniería, en todos los proyectos.</p>
         </div>
       </div>
-      <Escritorio rol="ingenieria,field" titulo="Escritorio de Ingeniería" subtitulo="Solo lo desbloqueado, de todos los proyectos. Completá (y adjuntá planos/CNC cuando corresponda) y aparece lo siguiente." />
-      {/* Aviso: decisiones del cliente en el portal (planos/plan/muestras) — cotejá y registrá. */}
-      <NovedadesCliente />
-      {/* Aviso: tus muestras en proceso (fabricación / QC / enviada). */}
-      <MisMuestrasEnProceso />
+
+      <div className="max-w-[1180px] mx-auto mt-4 grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-5 items-start">
+        {/* Tareas cronológicas — centro/izquierda */}
+        <div className="lg:col-start-1 lg:row-start-1">
+          <Escritorio rol="ingenieria,field" titulo="Escritorio de Ingeniería"
+            subtitulo="Solo lo desbloqueado, de todos los proyectos. Completá (y adjuntá planos/CNC cuando corresponda) y aparece lo siguiente." />
+        </div>
+
+        {/* Notificaciones — derecha */}
+        <div className="lg:col-start-2 lg:row-start-1 space-y-5">
+          {/* Decisiones del cliente en el portal (planos/plan/muestras) — cotejá y registrá. */}
+          <NovedadesCliente />
+          {/* Tus muestras en proceso (fabricación / QC / enviada). */}
+          <MisMuestrasEnProceso />
+        </div>
+      </div>
     </div>
   )
 }
