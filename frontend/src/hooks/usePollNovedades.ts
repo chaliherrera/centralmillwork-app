@@ -34,7 +34,7 @@ export function usePollNovedades<T>(
   const vivo = useRef(true)
   const cbs = useRef({ fetcher, getId, onNuevo: opts?.onNuevo })
   cbs.current = { fetcher, getId, onNuevo: opts?.onNuevo }
-  const intervalMs = opts?.intervalMs ?? 30_000
+  const intervalMs = opts?.intervalMs ?? 10_000
 
   const cargar = useCallback(async () => {
     try {
@@ -55,7 +55,17 @@ export function usePollNovedades<T>(
     vivo.current = true
     cargar()
     const iv = setInterval(cargar, intervalMs)
-    return () => { vivo.current = false; clearInterval(iv) }
+    // Refresco inmediato al VOLVER a la pestaña/ventana: el handoff (ej. el PM aceptó)
+    // aparece al instante sin esperar el ciclo ni refrescar a mano.
+    const alVolver = () => { if (document.visibilityState !== 'hidden') cargar() }
+    window.addEventListener('focus', alVolver)
+    document.addEventListener('visibilitychange', alVolver)
+    return () => {
+      vivo.current = false
+      clearInterval(iv)
+      window.removeEventListener('focus', alVolver)
+      document.removeEventListener('visibilitychange', alVolver)
+    }
   }, [cargar, intervalMs])
 
   return { items, loading, refetch: cargar }

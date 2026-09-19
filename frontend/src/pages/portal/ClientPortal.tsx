@@ -81,6 +81,12 @@ export default function ClientPortal({ previewProyectoId }: { previewProyectoId?
   const idxNow = data.momentos.findIndex((m) => m.estado === 'now')
   const idxSolido = idxNow >= 0 ? idxNow : N - 1
 
+  // 'PLAN' = la aprobación del plan propuesto. Se muestra en su propia sección (con el
+  // Gantt completo) para que el cliente vea lo que aprueba; el resto de aprobaciones
+  // (muestras, planos) van en "You're up now".
+  const planPend = data.pendientes.find((p) => p.codigo === 'PLAN')
+  const otras = data.pendientes.filter((p) => p.codigo !== 'PLAN')
+
   const cardCls = 'rounded-2xl border border-card-border bg-white shadow-[0_1px_3px_rgba(31,27,20,0.04)]'
   const hdCls = 'px-4 py-3 border-b border-card-border'
 
@@ -110,6 +116,51 @@ export default function ClientPortal({ previewProyectoId }: { previewProyectoId?
             </div>
           </div>
         </div>
+
+        {/* REVIEW & APPROVE YOUR PROJECT PLAN — full proposed schedule + approve/reject */}
+        {planPend && (
+          <div className="mt-5 rounded-2xl border-2 border-forest-200 bg-white overflow-hidden shadow-[0_1px_3px_rgba(31,27,20,0.04)]">
+            <div className="px-4 py-3.5 bg-forest-50 border-b border-forest-100">
+              <h2 className="font-semibold text-forest-700 flex items-center gap-2 text-[15px]"><ClipboardList size={16} /> Review &amp; approve your project plan</h2>
+              <p className="text-xs text-forest-600/85 mt-0.5">This is the proposed schedule for your project. Please review it and approve, or request changes.</p>
+            </div>
+            <div className="px-4 pt-3.5 pb-1 flex items-center gap-2 text-sm">
+              <CalendarClock size={15} className="text-forest-600" />
+              <span className="text-stone-500">Estimated delivery:</span>
+              <span className="font-bold text-stone-900">{dLong(data.proyecto.fecha_objetivo)}</span>
+            </div>
+            <div className="px-2 py-2 max-h-[430px] overflow-y-auto">
+              {data.gantt.map((t, i) => (
+                <div key={i} className="flex items-center gap-3 px-2 py-1.5 rounded-lg hover:bg-stone-50">
+                  <span className={clsx('w-1.5 h-1.5 rounded-full shrink-0', t.es_cliente ? 'bg-forest-600' : 'bg-stone-300')} />
+                  <span className="text-sm text-stone-800 min-w-0 flex-1 truncate">
+                    {t.nombre}
+                    {t.es_cliente && <span className="ml-2 text-[10px] font-semibold uppercase tracking-wide text-forest-700 bg-forest-50 rounded px-1.5 py-0.5">Your input</span>}
+                  </span>
+                  <span className="text-xs text-stone-400 shrink-0 whitespace-nowrap tabular-nums">
+                    {dShort(t.inicio)}{t.fin && t.fin !== t.inicio ? ` – ${dShort(t.fin)}` : ''}
+                  </span>
+                </div>
+              ))}
+            </div>
+            <div className="px-4 py-3 border-t border-stone-100">
+              {preview ? (
+                <div className="text-[11px] text-stone-400 italic">Preview — the client would approve or request changes to the plan here.</div>
+              ) : (
+                <div className="flex items-center gap-2 flex-wrap">
+                  <button onClick={() => { setAction({ codigo: 'PLAN', titulo: 'your project plan', decision: 'aprobado' }); setComentario('') }}
+                          className="inline-flex items-center gap-1.5 text-sm font-medium text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg px-4 py-2">
+                    <ThumbsUp size={15} /> Approve the plan
+                  </button>
+                  <button onClick={() => { setAction({ codigo: 'PLAN', titulo: 'your project plan', decision: 'rechazado' }); setComentario('') }}
+                          className="inline-flex items-center gap-1.5 text-sm font-medium text-rose-600 hover:text-rose-700 border border-rose-200 rounded-lg px-3.5 py-2">
+                    <X size={15} /> Request changes
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* changes-requested banner (post-decision on drawings) */}
         {data.planosEstado?.estado === 'cambios' && (
@@ -167,14 +218,14 @@ export default function ClientPortal({ previewProyectoId }: { previewProyectoId?
 
           {/* YOU'RE UP NOW — top-right */}
           <div className="order-2 lg:col-start-2 lg:row-start-1">
-            {data.pendientes.length > 0 ? (
+            {otras.length > 0 ? (
               <div className="rounded-2xl border-2 border-forest-100 bg-white overflow-hidden shadow-[0_1px_3px_rgba(31,27,20,0.04)]">
                 <div className="px-4 py-3 bg-forest-50 border-b border-forest-100">
                   <h2 className="font-semibold text-forest-700 flex items-center gap-2 text-[15px]"><Clock size={16} /> You're up now</h2>
                   <p className="text-xs text-forest-600/85 mt-0.5">Your response keeps the project moving. It's recorded.</p>
                 </div>
                 <div className="divide-y divide-stone-100">
-                  {data.pendientes.map((p) => (
+                  {otras.map((p) => (
                     <div key={p.codigo} className="px-4 py-3.5">
                       <div className="font-semibold text-stone-800">{p.titulo}</div>
                       {p.fecha_planeada && <div className="text-xs text-stone-400 mb-2.5">Suggested before {dShort(p.fecha_planeada)}</div>}
@@ -206,13 +257,13 @@ export default function ClientPortal({ previewProyectoId }: { previewProyectoId?
                   ))}
                 </div>
               </div>
-            ) : (
+            ) : !planPend ? (
               <div className={clsx(cardCls, 'px-5 py-6 text-center')}>
                 <Check className="mx-auto text-emerald-500" size={26} />
                 <p className="mt-2 text-sm text-stone-600 font-medium">Nothing needed from you right now.</p>
                 <p className="text-xs text-stone-400 mt-0.5">We'll let you know when there's something to review. The team is working on your project.</p>
               </div>
-            )}
+            ) : null}
           </div>
 
           {/* YOUR DECISIONS — bottom-right */}
