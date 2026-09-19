@@ -153,13 +153,13 @@ export interface VistaPublica {
   // Solo las aprobaciones que YA corresponden (predecesores cumplidos, sin resolver).
   pendientes: Array<{ codigo: string; titulo: string; fecha_planeada: string | null; documento_url?: string | null }>
   // El Gantt completo del proyecto (la propuesta): tareas con fechas; las del cliente marcadas.
-  gantt: Array<{ nombre: string; inicio: string | null; fin: string | null; estado: string; es_cliente: boolean }>
+  gantt: Array<{ nombre: string; inicio: string | null; fin: string | null; estado: string; es_cliente: boolean; clave: string | null }>
   // Dependencias del Gantt como pares de índices [predecesor, sucesor] dentro de `gantt`.
   deps: Array<[number, number]>
   // Documentos del cliente: revisiones de planos (submittals) con su PDF.
   documentos: Array<{ rev: string; estado: string; fecha: string | null; comentario: string | null; url: string | null }>
   // Fotos de avance marcadas visibles al cliente (curadas por el taller).
-  fotos: Array<{ url: string; estacion: string | null; comentario: string | null; fecha: string | null }>
+  fotos: Array<{ url: string; estacion: string | null; comentario: string | null; fecha: string | null; es_muestra: boolean }>
   // Cronograma POR FASES para el cliente (solo las fases que el proyecto tiene).
   fases: Array<{ key: string; label: string; detalle: string; inicio: string | null; fin: string | null; estado: 'done' | 'now' | 'future'; n_done: number; n_total: number }>
   // Historial "tus decisiones": lo que el cliente ya aprobó/rechazó/comentó (más reciente primero).
@@ -281,7 +281,7 @@ export async function armarVistaPublica(
        LEFT JOIN ing_tarea_tipos tt ON tt.id = t.tipo_id
       WHERE t.proyecto_id = $1 AND t.fecha_inicio IS NOT NULL AND t.fecha_fin IS NOT NULL AND t.estado <> 'na'
       ORDER BY t.fecha_inicio, t.id`, [info.proyectoId])
-  const gantt = gr.map((g) => ({ nombre: g.nombre, inicio: g.inicio, fin: g.fin, estado: g.estado, es_cliente: !!g.clave && CLIENT_TASK_CLAVES.has(g.clave) }))
+  const gantt = gr.map((g) => ({ nombre: g.nombre, inicio: g.inicio, fin: g.fin, estado: g.estado, es_cliente: !!g.clave && CLIENT_TASK_CLAVES.has(g.clave), clave: g.clave }))
   // Dependencias entre las tareas del Gantt (para dibujar los conectores en el portal),
   // como pares de ÍNDICES [predecesor, sucesor] dentro del array `gantt`.
   const idxById = new Map(gr.map((g, i) => [g.id, i]))
@@ -304,13 +304,13 @@ export async function armarVistaPublica(
   }))
   // Fotos de avance que el taller marcó VISIBLES AL CLIENTE (flag visible_cliente),
   // de las OPs del proyecto (muestras y fabricación). El taller cura qué ve el cliente.
-  const { rows: pf } = await runner.query<{ url: string; estacion: string | null; comentario: string | null; fecha: string | null }>(
-    `SELECT af.url, af.estacion, af.comentario, to_char(af.created_at,'YYYY-MM-DD') AS fecha
+  const { rows: pf } = await runner.query<{ url: string; estacion: string | null; comentario: string | null; fecha: string | null; tipo: string | null }>(
+    `SELECT af.url, af.estacion, af.comentario, o.tipo, to_char(af.created_at,'YYYY-MM-DD') AS fecha
        FROM orden_avance_fotos af
        JOIN ordenes_produccion o ON o.id = af.orden_id
       WHERE o.proyecto_id = $1 AND af.visible_cliente = true AND af.url IS NOT NULL
       ORDER BY af.created_at`, [info.proyectoId])
-  const fotos = pf.map((f) => ({ url: f.url, estacion: f.estacion, comentario: f.comentario, fecha: f.fecha }))
+  const fotos = pf.map((f) => ({ url: f.url, estacion: f.estacion, comentario: f.comentario, fecha: f.fecha, es_muestra: f.tipo === 'MUESTRA' }))
 
   // Cronograma POR FASES (Q6): agrupa las tareas de la ruta por fase cara-al-cliente.
   const fMap = new Map<string, { inicio: string | null; fin: string | null; nTotal: number; nDone: number; nStarted: number }>()

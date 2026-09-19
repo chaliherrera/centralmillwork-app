@@ -240,27 +240,10 @@ export default function ClientPortal({ previewProyectoId }: { previewProyectoId?
               <h2 className="font-semibold text-forest-700 flex items-center gap-2 text-[15px]"><ClipboardList size={16} /> Your project</h2>
               <p className="text-xs text-stone-400 mt-0.5">Every milestone, document and photo in one place. When we need you, the step shows the action here.</p>
             </div>
-            {data.fotos.length > 0 && (
-              <div className="px-4 pt-3.5 pb-1 border-b border-card-border">
-                <div className="text-[11px] uppercase tracking-wider text-stone-400 font-semibold mb-2">Progress photos</div>
-                <div className="flex gap-2 overflow-x-auto pb-2">
-                  {data.fotos.map((f, i) => (
-                    <a key={i} href={f.url} target="_blank" rel="noopener noreferrer" title={f.comentario ?? undefined}
-                       className="relative shrink-0 w-[88px] h-[64px] rounded-lg overflow-hidden border border-card-border bg-stone-50">
-                      <img src={f.url} alt="" loading="lazy" className="w-full h-full object-cover" />
-                      {(f.estacion || f.fecha) && (
-                        <span className="absolute inset-x-0 bottom-0 text-[8.5px] text-white bg-black/45 px-1 py-0.5 text-center truncate capitalize">
-                          {f.estacion ?? ''}{f.fecha ? ` · ${dShort(f.fecha)}` : ''}
-                        </span>
-                      )}
-                    </a>
-                  ))}
-                </div>
-              </div>
-            )}
             <Timeline
               gantt={data.gantt}
               docs={data.documentos}
+              fotos={data.fotos}
               planApproved={planApproved}
               drawPend={!!drawPend}
               preview={preview}
@@ -401,17 +384,19 @@ function Gantt({ gantt, deps }: { gantt: PortalVista['gantt']; deps: PortalVista
 
 // ── Unified timeline: milestones (from the Gantt) + drawing revisions, by date ──
 type TLItem =
-  | { kind: 'task'; date: string | null; name: string; estado: string; fin: string | null; cli: boolean }
+  | { kind: 'task'; date: string | null; name: string; estado: string; fin: string | null; cli: boolean; clave: string | null }
   | { kind: 'doc'; date: string | null; rev: string; estado: string; comentario: string | null; url: string | null; pending: boolean }
   | { kind: 'plan'; date: string | null }
 
-function Timeline({ gantt, docs, planApproved, drawPend, preview, onScrollPlan, onAct }: {
-  gantt: PortalVista['gantt']; docs: PortalVista['documentos']; planApproved: boolean; drawPend: boolean
+function Timeline({ gantt, docs, fotos, planApproved, drawPend, preview, onScrollPlan, onAct }: {
+  gantt: PortalVista['gantt']; docs: PortalVista['documentos']; fotos: PortalVista['fotos']; planApproved: boolean; drawPend: boolean
   preview: boolean; onScrollPlan: () => void; onAct: (d: Decision) => void
 }) {
+  const samplePhotos = fotos.filter((f) => f.es_muestra)
+  const fabPhotos = fotos.filter((f) => !f.es_muestra)
   const items: TLItem[] = []
   if (planApproved) items.push({ kind: 'plan', date: null })
-  gantt.forEach((t) => items.push({ kind: 'task', date: t.inicio, name: t.nombre, estado: t.estado, fin: t.fin, cli: t.es_cliente }))
+  gantt.forEach((t) => items.push({ kind: 'task', date: t.inicio, name: t.nombre, estado: t.estado, fin: t.fin, cli: t.es_cliente, clave: t.clave ?? null }))
   // La revisión más nueva sin resolver es la accionable (si el cliente tiene la revisión pendiente).
   const pendingRev = drawPend ? docs.find((d) => d.estado !== 'aprobado') : undefined
   docs.forEach((d) => items.push({ kind: 'doc', date: d.fecha, rev: d.rev, estado: d.estado, comentario: d.comentario, url: d.url, pending: !!pendingRev && pendingRev.rev === d.rev }))
@@ -466,6 +451,7 @@ function Timeline({ gantt, docs, planApproved, drawPend, preview, onScrollPlan, 
           )
         }
         const s = taskStatus(it.estado)
+        const photos = it.clave === 'samples' ? samplePhotos : it.clave === 'fabrication' ? fabPhotos : []
         return (
           <Row key={i} status={s} last={last} dot={dot}>
             <div className="flex items-baseline gap-2">
@@ -473,6 +459,21 @@ function Timeline({ gantt, docs, planApproved, drawPend, preview, onScrollPlan, 
               {it.cli && <span className="text-[8.5px] font-bold uppercase tracking-wide text-rose-700 bg-rose-50 border border-rose-200 rounded px-1.5 py-px">Your input</span>}
               <span className="text-[11px] text-stone-400 ml-auto whitespace-nowrap">{dRange(it.date, it.fin)}</span>
             </div>
+            {photos.length > 0 && (
+              <div className="flex gap-2 overflow-x-auto mt-2 pb-1">
+                {photos.map((f, j) => (
+                  <a key={j} href={f.url} target="_blank" rel="noopener noreferrer" title={f.comentario ?? undefined}
+                     className="relative shrink-0 w-[78px] h-[58px] rounded-lg overflow-hidden border border-card-border bg-stone-50">
+                    <img src={f.url} alt="" loading="lazy" className="w-full h-full object-cover" />
+                    {(f.estacion || f.fecha) && (
+                      <span className="absolute inset-x-0 bottom-0 text-[8px] text-white bg-black/45 px-1 py-0.5 text-center truncate capitalize">
+                        {f.estacion ?? ''}{f.fecha ? ` · ${dShort(f.fecha)}` : ''}
+                      </span>
+                    )}
+                  </a>
+                ))}
+              </div>
+            )}
           </Row>
         )
       })}

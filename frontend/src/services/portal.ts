@@ -7,13 +7,13 @@ export interface PortalMomento {
   codigo: string; label: string; tipo: 'accion' | 'estado'; estado: 'done' | 'now' | 'future' | 'na'; fecha: string | null
 }
 export interface PortalGanttTarea {
-  nombre: string; inicio: string | null; fin: string | null; estado: string; es_cliente: boolean
+  nombre: string; inicio: string | null; fin: string | null; estado: string; es_cliente: boolean; clave?: string | null
 }
 export interface PortalDocumento {
   rev: string; estado: string; fecha: string | null; comentario: string | null; url: string | null
 }
 export interface PortalFoto {
-  url: string; estacion: string | null; comentario: string | null; fecha: string | null
+  url: string; estacion: string | null; comentario: string | null; fecha: string | null; es_muestra: boolean
 }
 export interface PortalDecision {
   fecha: string; que: string; decision: Decision; comentario: string | null
