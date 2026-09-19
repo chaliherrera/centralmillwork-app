@@ -8,6 +8,7 @@
 import { Request, Response, NextFunction } from 'express'
 import { z } from 'zod'
 import pool from '../../../db/pool'
+import { logger } from '../../../utils/logger'
 import { createError } from '../../../middleware/errorHandler'
 import { generarPlan, recomputeScheduleForProyecto, cambiarFechaObjetivo } from '../domain/recompute'
 import { crearToken, revocarToken, armarVistaPublica } from '../domain/portal'
@@ -93,6 +94,25 @@ export async function proyectosOverviewHandler(_req: Request, res: Response, nex
 export async function getPlan(req: Request, res: Response, next: NextFunction) {
   try {
     const proyectoId = parseProyectoId(req)
+
+    // Journey EN VIVO, de la mano del Gantt: si el proyecto tiene plan (journey), lo
+    // recomputamos ANTES de leer. Así el journey guardado refleja el Gantt actual incluso
+    // tras cambios GLOBALES (calendario/feriados) que no pasan por una edición de proyecto.
+    // Gateado por existencia de plan: los proyectos SIN journey (importados) no se tocan —
+    // su Gantt solo se actualiza vía el importador, nunca en línea. Idempotente y best-effort:
+    // si el recompute falla, se lee igual el cache previo (no rompe la vista).
+    const { rows: planExt } = await pool.query<{ ext: string }>(
+      `SELECT p.codigo AS ext
+         FROM schedule_planes sp JOIN proyectos p ON p.id = sp.proyecto_id
+        WHERE sp.proyecto_id = $1 AND sp.scope = 'proyecto' LIMIT 1`, [proyectoId])
+    if (planExt[0]?.ext) {
+      try {
+        const { recomputarYGuardar } = await import('../../ingenieria/domain/tareas')
+        await recomputarYGuardar(pool, planExt[0].ext)
+      } catch (err) {
+        logger.error('getPlan: recomputarYGuardar falló (se lee el cache previo)', { proyectoId, ext: planExt[0].ext, err: (err as Error)?.message })
+      }
+    }
 
     const { rows: planRows } = await pool.query(
       `SELECT id, plantilla_id, scope,
