@@ -9,7 +9,7 @@ import NovedadesCliente from '@/components/escritorio/NovedadesCliente'
 export default function Ingenieria() {
   return (
     <div className="py-6 px-2">
-      <div className="max-w-[1180px] mx-auto flex items-center gap-3">
+      <div className="max-w-[1280px] mx-auto flex items-center gap-3">
         <div className="w-11 h-11 rounded-2xl bg-forest-50 flex items-center justify-center">
           <DraftingCompass className="text-forest-600" size={22} />
         </div>
@@ -19,7 +19,7 @@ export default function Ingenieria() {
         </div>
       </div>
 
-      <div className="max-w-[1180px] mx-auto mt-4 grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-5 items-start">
+      <div className="max-w-[1280px] mx-auto mt-4 grid grid-cols-1 lg:grid-cols-[1fr_400px] gap-5 items-start">
         {/* Tareas cronológicas — centro/izquierda */}
         <div className="lg:col-start-1 lg:row-start-1">
           <Escritorio rol="ingenieria,field" titulo="Escritorio de Ingeniería"
