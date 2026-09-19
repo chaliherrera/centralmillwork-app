@@ -37,7 +37,7 @@ const LINK_MODULO: Record<string, { to: string; label: string }> = {
 // archivo se adjunta acá mismo, al completar el paso — reemplaza al viejo "Mi trabajo".
 const ARTIFACT: Record<string, { kind: 'submittal' | 'archivo'; codigo?: string; label: string; accept?: string }> = {
   shop_drawings:      { kind: 'submittal', label: 'Adjuntar planos (PDF)', accept: 'application/pdf' },
-  sd_update:          { kind: 'submittal', label: 'Adjuntar set final (PDF)', accept: 'application/pdf' },
+  sd_update:          { kind: 'archivo', codigo: 'E-08', label: 'Adjuntar set final de producción (PDF)', accept: 'application/pdf' },
   cnc:                { kind: 'archivo', codigo: 'E-11', label: 'Adjuntar archivos CNC' },
   // field_measurements NO va acá: es un handoff en 2 etapas (etapa 1 sube el plano vía
   // subirPlanoCampo → Campo; Campo solo marca "Medida"). Ver esPlanoCampo / verPlano.
@@ -261,8 +261,10 @@ export default function Escritorio({ rol, asignado, titulo, subtitulo, hideWhenE
                   // Field Measurements etapa 1 (pendiente): el ingeniero sube el PLANO de campo → handoff a Campo.
                   // En_curso lo ve Campo, que solo marca "Medida" (esCompletable, sin adjuntar nada).
                   const esPlanoCampo = clave === 'field_measurements' && t.estado !== 'en_curso'
-                  // Envío consciente de planos al cliente (shop_drawings / sd_update): modal propio.
-                  const esEnvioPlanos = (clave === 'shop_drawings' || clave === 'sd_update') && t.proyecto_id != null
+                  // Envío consciente de planos al cliente: SOLO shop_drawings (E-06 → el cliente
+                  // revisa/aprueba). sd_update es el SET FINAL DE PRODUCCIÓN (interno), no va al
+                  // cliente → se completa como archivo normal (adjuntar PDF + Completada el).
+                  const esEnvioPlanos = clave === 'shop_drawings' && t.proyecto_id != null
                   // 2.4 (A): tarea manual del PM (sin tipo de los 18) → se completa a mano, con fecha.
                   const esManual = !t.tipo_clave
                   const esCompletable = (COMPLETABLE.has(clave) || esManual) && !esDecision && !esMto && !esPlanoCampo && !esEnvioPlanos

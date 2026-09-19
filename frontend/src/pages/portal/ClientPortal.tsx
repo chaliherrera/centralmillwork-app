@@ -195,8 +195,9 @@ export default function ClientPortal({ previewProyectoId }: { previewProyectoId?
         {/* GRID: plan (left) + your-project timeline (right) */}
         <div className="mt-4 grid gap-4 lg:grid-cols-[1fr_340px] lg:items-start">
 
-          {/* LEFT: Review & approve (bar-timeline Gantt) */}
-          <div id="plan-card" className={clsx('order-1 rounded-2xl bg-white overflow-hidden shadow-[0_1px_3px_rgba(31,27,20,0.04)]', planPend ? 'border-2 border-forest-200' : 'border border-card-border')}>
+          {/* LEFT: Review & approve (Gantt) + Your decisions, apiladas */}
+          <div className="lg:col-start-1 lg:row-start-1 space-y-4">
+          <div id="plan-card" className={clsx('rounded-2xl bg-white overflow-hidden shadow-[0_1px_3px_rgba(31,27,20,0.04)]', planPend ? 'border-2 border-forest-200' : 'border border-card-border')}>
             <div className={clsx('px-4 py-3.5 border-b', planPend ? 'bg-forest-50 border-forest-100' : 'border-card-border')}>
               <h2 className="font-semibold text-forest-700 flex items-center gap-2 text-[15px]">
                 <ClipboardList size={16} /> {planPend ? 'Review & approve your project plan' : 'Your project plan'}
@@ -233,9 +234,39 @@ export default function ClientPortal({ previewProyectoId }: { previewProyectoId?
               <div className="px-4 py-3 border-t border-stone-100 text-[11px] text-stone-400 italic">Preview — the client would approve or request changes to the plan here.</div>
             )}
           </div>
+          {/* YOUR DECISIONS — debajo del plan/Gantt, misma columna */}
+          {data.decisiones.length > 0 && (
+            <div className={clsx(cardCls, 'overflow-hidden')}>
+              <div className={hdCls}>
+                <h2 className="font-semibold text-stone-700 flex items-center gap-2 text-[15px]"><ClipboardList size={16} /> Your decisions</h2>
+                <p className="text-xs text-stone-400 mt-0.5">A record of what you approved or commented.</p>
+              </div>
+              <div className="divide-y divide-stone-100">
+                {data.decisiones.map((d, i) => {
+                  const lbl = DECISION_LABEL[d.decision]
+                  return (
+                    <div key={i} className="px-4 py-3 flex items-start gap-3">
+                      <div className={clsx('shrink-0 mt-0.5', lbl.c)}>
+                        {d.decision === 'rechazado' ? <MessageSquare size={16} /> : <Check size={16} />}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="text-sm text-stone-800">
+                          <span className={clsx('font-semibold', lbl.c)}>{lbl.t}</span>
+                          <span className="text-stone-500"> · {d.que}</span>
+                        </div>
+                        {d.comentario && <div className="text-[13px] text-stone-500 mt-0.5 italic">“{d.comentario}”</div>}
+                      </div>
+                      <div className="text-xs text-stone-400 shrink-0 whitespace-nowrap">{dShort(d.fecha)}</div>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          )}
+          </div>
 
           {/* RIGHT: unified "Your project" timeline (roadmap + documents) */}
-          <div className={clsx(cardCls, 'order-2 overflow-hidden')}>
+          <div className={clsx(cardCls, 'lg:col-start-2 lg:row-start-1 overflow-hidden')}>
             <div className={hdCls}>
               <h2 className="font-semibold text-forest-700 flex items-center gap-2 text-[15px]"><ClipboardList size={16} /> Your project</h2>
               <p className="text-xs text-stone-400 mt-0.5">Every milestone, document and photo in one place. When we need you, the step shows the action here.</p>
@@ -252,36 +283,6 @@ export default function ClientPortal({ previewProyectoId }: { previewProyectoId?
             />
           </div>
         </div>
-
-        {/* YOUR DECISIONS */}
-        {data.decisiones.length > 0 && (
-          <div className={clsx(cardCls, 'mt-4 overflow-hidden')}>
-            <div className={hdCls}>
-              <h2 className="font-semibold text-stone-700 flex items-center gap-2 text-[15px]"><ClipboardList size={16} /> Your decisions</h2>
-              <p className="text-xs text-stone-400 mt-0.5">A record of what you approved or commented.</p>
-            </div>
-            <div className="divide-y divide-stone-100">
-              {data.decisiones.map((d, i) => {
-                const lbl = DECISION_LABEL[d.decision]
-                return (
-                  <div key={i} className="px-4 py-3 flex items-start gap-3">
-                    <div className={clsx('shrink-0 mt-0.5', lbl.c)}>
-                      {d.decision === 'rechazado' ? <MessageSquare size={16} /> : <Check size={16} />}
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <div className="text-sm text-stone-800">
-                        <span className={clsx('font-semibold', lbl.c)}>{lbl.t}</span>
-                        <span className="text-stone-500"> · {d.que}</span>
-                      </div>
-                      {d.comentario && <div className="text-[13px] text-stone-500 mt-0.5 italic">“{d.comentario}”</div>}
-                    </div>
-                    <div className="text-xs text-stone-400 shrink-0 whitespace-nowrap">{dShort(d.fecha)}</div>
-                  </div>
-                )
-              })}
-            </div>
-          </div>
-        )}
 
         <p className="text-center text-xs text-stone-400 pt-6">Central Millwork · This tracker updates automatically.</p>
       </div>
