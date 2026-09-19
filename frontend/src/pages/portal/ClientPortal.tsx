@@ -62,7 +62,21 @@ export default function ClientPortal({ previewProyectoId }: { previewProyectoId?
     }
     catch { if (!silent) setError(true) } finally { if (!silent) setLoading(false) }
   }
-  useEffect(() => { load() }, [token, previewProyectoId])
+  // El tracker se actualiza solo (como promete el pie): recarga silenciosa cada 20s y al
+  // volver a la pestaña, así el cliente ve el avance (planos aprobados, muestra lista…) sin refrescar.
+  useEffect(() => {
+    load()
+    const iv = setInterval(() => load(true), 20_000)
+    const alVolver = () => { if (document.visibilityState !== 'hidden') load(true) }
+    window.addEventListener('focus', alVolver)
+    document.addEventListener('visibilitychange', alVolver)
+    return () => {
+      clearInterval(iv)
+      window.removeEventListener('focus', alVolver)
+      document.removeEventListener('visibilitychange', alVolver)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [token, previewProyectoId])
 
   async function confirmar() {
     if (!action) return
