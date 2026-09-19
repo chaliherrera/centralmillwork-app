@@ -158,6 +158,8 @@ export interface VistaPublica {
   deps: Array<[number, number]>
   // Documentos del cliente: revisiones de planos (submittals) con su PDF.
   documentos: Array<{ rev: string; estado: string; fecha: string | null; comentario: string | null; url: string | null }>
+  // Fotos de avance marcadas visibles al cliente (curadas por el taller).
+  fotos: Array<{ url: string; estacion: string | null; comentario: string | null; fecha: string | null }>
   // Cronograma POR FASES para el cliente (solo las fases que el proyecto tiene).
   fases: Array<{ key: string; label: string; detalle: string; inicio: string | null; fin: string | null; estado: 'done' | 'now' | 'future'; n_done: number; n_total: number }>
   // Historial "tus decisiones": lo que el cliente ya aprobó/rechazó/comentó (más reciente primero).
@@ -300,6 +302,15 @@ export async function armarVistaPublica(
     rev: s.version_label, estado: s.estado, fecha: s.enviado_at,
     comentario: s.comentarios_cliente, url: s.url,
   }))
+  // Fotos de avance que el taller marcó VISIBLES AL CLIENTE (flag visible_cliente),
+  // de las OPs del proyecto (muestras y fabricación). El taller cura qué ve el cliente.
+  const { rows: pf } = await runner.query<{ url: string; estacion: string | null; comentario: string | null; fecha: string | null }>(
+    `SELECT af.url, af.estacion, af.comentario, to_char(af.created_at,'YYYY-MM-DD') AS fecha
+       FROM orden_avance_fotos af
+       JOIN ordenes_produccion o ON o.id = af.orden_id
+      WHERE o.proyecto_id = $1 AND af.visible_cliente = true AND af.url IS NOT NULL
+      ORDER BY af.created_at`, [info.proyectoId])
+  const fotos = pf.map((f) => ({ url: f.url, estacion: f.estacion, comentario: f.comentario, fecha: f.fecha }))
 
   // Cronograma POR FASES (Q6): agrupa las tareas de la ruta por fase cara-al-cliente.
   const fMap = new Map<string, { inicio: string | null; fin: string | null; nTotal: number; nDone: number; nStarted: number }>()
@@ -360,6 +371,7 @@ export async function armarVistaPublica(
     gantt,
     deps,
     documentos,
+    fotos,
     fases,
     decisiones,
     planosEstado,

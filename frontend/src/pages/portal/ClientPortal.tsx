@@ -238,8 +238,26 @@ export default function ClientPortal({ previewProyectoId }: { previewProyectoId?
           <div className={clsx(cardCls, 'order-2 overflow-hidden')}>
             <div className={hdCls}>
               <h2 className="font-semibold text-forest-700 flex items-center gap-2 text-[15px]"><ClipboardList size={16} /> Your project</h2>
-              <p className="text-xs text-stone-400 mt-0.5">Every milestone and document in one place. When we need you, the step shows the action here.</p>
+              <p className="text-xs text-stone-400 mt-0.5">Every milestone, document and photo in one place. When we need you, the step shows the action here.</p>
             </div>
+            {data.fotos.length > 0 && (
+              <div className="px-4 pt-3.5 pb-1 border-b border-card-border">
+                <div className="text-[11px] uppercase tracking-wider text-stone-400 font-semibold mb-2">Progress photos</div>
+                <div className="flex gap-2 overflow-x-auto pb-2">
+                  {data.fotos.map((f, i) => (
+                    <a key={i} href={f.url} target="_blank" rel="noopener noreferrer" title={f.comentario ?? undefined}
+                       className="relative shrink-0 w-[88px] h-[64px] rounded-lg overflow-hidden border border-card-border bg-stone-50">
+                      <img src={f.url} alt="" loading="lazy" className="w-full h-full object-cover" />
+                      {(f.estacion || f.fecha) && (
+                        <span className="absolute inset-x-0 bottom-0 text-[8.5px] text-white bg-black/45 px-1 py-0.5 text-center truncate capitalize">
+                          {f.estacion ?? ''}{f.fecha ? ` · ${dShort(f.fecha)}` : ''}
+                        </span>
+                      )}
+                    </a>
+                  ))}
+                </div>
+              </div>
+            )}
             <Timeline
               gantt={data.gantt}
               docs={data.documentos}

@@ -12,6 +12,9 @@ export interface PortalGanttTarea {
 export interface PortalDocumento {
   rev: string; estado: string; fecha: string | null; comentario: string | null; url: string | null
 }
+export interface PortalFoto {
+  url: string; estacion: string | null; comentario: string | null; fecha: string | null
+}
 export interface PortalDecision {
   fecha: string; que: string; decision: Decision; comentario: string | null
 }
@@ -31,6 +34,7 @@ export interface PortalVista {
   gantt: PortalGanttTarea[]
   deps: [number, number][]
   documentos: PortalDocumento[]
+  fotos: PortalFoto[]
   fases: PortalFase[]
   decisiones: PortalDecision[]
   planosEstado: PortalPlanosEstado | null
