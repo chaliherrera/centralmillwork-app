@@ -4,10 +4,13 @@ import type { ApiResponse } from '@/types'
 export type Decision = 'aprobado' | 'aprobado_con_comentarios' | 'rechazado'
 
 export interface PortalMomento {
-  codigo: string; label: string; tipo: 'accion' | 'estado'; estado: 'done' | 'now' | 'future' | 'na'
+  codigo: string; label: string; tipo: 'accion' | 'estado'; estado: 'done' | 'now' | 'future' | 'na'; fecha: string | null
 }
 export interface PortalGanttTarea {
   nombre: string; inicio: string | null; fin: string | null; estado: string; es_cliente: boolean
+}
+export interface PortalDocumento {
+  rev: string; estado: string; fecha: string | null; comentario: string | null; url: string | null
 }
 export interface PortalDecision {
   fecha: string; que: string; decision: Decision; comentario: string | null
@@ -26,6 +29,8 @@ export interface PortalVista {
   momentos: PortalMomento[]
   pendientes: Array<{ codigo: string; titulo: string; fecha_planeada: string | null; documento_url?: string | null }>
   gantt: PortalGanttTarea[]
+  deps: [number, number][]
+  documentos: PortalDocumento[]
   fases: PortalFase[]
   decisiones: PortalDecision[]
   planosEstado: PortalPlanosEstado | null

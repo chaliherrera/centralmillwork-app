@@ -11,7 +11,7 @@ import crypto from 'crypto'
 import type { PoolClient } from 'pg'
 import pool from '../../../db/pool'
 import { recomputeScheduleForProyecto } from './recompute'
-import { latestSubmittalUrl, marcarRespuestaSubmittal } from './submittals'
+import { latestSubmittalUrl, marcarRespuestaSubmittal, listSubmittals } from './submittals'
 import { bloqueoPorPredecesores } from './gates'
 import { logger } from '../../../utils/logger'
 import { captureException } from '../../../utils/sentry'
@@ -149,11 +149,15 @@ export interface VistaPublica {
   contacto: string | null
   // El recorrido del cliente: sus momentos, con estado en el camino.
   // 'na' = no aplica a este proyecto (no bloquea el journey).
-  momentos: Array<{ codigo: string; label: string; tipo: 'accion' | 'estado'; estado: 'done' | 'now' | 'future' | 'na' }>
+  momentos: Array<{ codigo: string; label: string; tipo: 'accion' | 'estado'; estado: 'done' | 'now' | 'future' | 'na'; fecha: string | null }>
   // Solo las aprobaciones que YA corresponden (predecesores cumplidos, sin resolver).
   pendientes: Array<{ codigo: string; titulo: string; fecha_planeada: string | null; documento_url?: string | null }>
   // El Gantt completo del proyecto (la propuesta): tareas con fechas; las del cliente marcadas.
   gantt: Array<{ nombre: string; inicio: string | null; fin: string | null; estado: string; es_cliente: boolean }>
+  // Dependencias del Gantt como pares de índices [predecesor, sucesor] dentro de `gantt`.
+  deps: Array<[number, number]>
+  // Documentos del cliente: revisiones de planos (submittals) con su PDF.
+  documentos: Array<{ rev: string; estado: string; fecha: string | null; comentario: string | null; url: string | null }>
   // Cronograma POR FASES para el cliente (solo las fases que el proyecto tiene).
   fases: Array<{ key: string; label: string; detalle: string; inicio: string | null; fin: string | null; estado: 'done' | 'now' | 'future'; n_done: number; n_total: number }>
   // Historial "tus decisiones": lo que el cliente ya aprobó/rechazó/comentó (más reciente primero).
@@ -199,8 +203,9 @@ export async function armarVistaPublica(
 
   // Estado de los hitos que son "momentos del cliente"
   const codigos = CLIENT_MOMENTS.map((m) => m.codigo)
-  const { rows } = await runner.query<{ codigo: string; estado: string; fp: string | null; tiene_real: boolean }>(
+  const { rows } = await runner.query<{ codigo: string; estado: string; fp: string | null; fr: string | null; tiene_real: boolean }>(
     `SELECT sh.codigo, sh.estado, to_char(sh.fecha_planeada,'YYYY-MM-DD') AS fp,
+            to_char(sh.fecha_real,'YYYY-MM-DD') AS fr,
             (sh.fecha_real IS NOT NULL) AS tiene_real
        FROM schedule_hitos sh
        JOIN schedule_planes sp ON sp.id = sh.plan_id
@@ -232,7 +237,9 @@ export async function armarVistaPublica(
         : (h?.estado === 'vencido' || h?.estado === 'en_riesgo' || (h?.fp != null && h.fp <= hoyISO))
       estado = enMarcha ? 'now' : 'future'
     }
-    return { codigo: m.codigo, label: m.label, tipo: m.tipo, estado }
+    // Fecha del momento: la real si se cumplió, si no la planeada. PLAN no tiene hito → sin fecha.
+    const fecha = m.codigo === 'PLAN' ? null : (cumplido ? (h?.fr ?? h?.fp ?? null) : (h?.fp ?? null))
+    return { codigo: m.codigo, label: m.label, tipo: m.tipo, estado, fecha }
   })
   // Si nada quedó 'now' (todo lo activo es futuro), destacamos el próximo como 'now'
   // para que el cliente siempre vea "qué sigue" (sin inventar un paso no_aplica).
@@ -265,14 +272,34 @@ export async function armarVistaPublica(
 
   // El Gantt completo (la propuesta): todas las tareas con fecha; se marcan las del cliente.
   // Sin costos ni responsables — el schedule no los tiene y esta capa es pública.
-  const { rows: gr } = await runner.query<{ nombre: string; inicio: string | null; fin: string | null; estado: string; clave: string | null }>(
-    `SELECT t.nombre, to_char(t.fecha_inicio,'YYYY-MM-DD') AS inicio, to_char(t.fecha_fin,'YYYY-MM-DD') AS fin,
+  const { rows: gr } = await runner.query<{ id: number; nombre: string; inicio: string | null; fin: string | null; estado: string; clave: string | null }>(
+    `SELECT t.id, t.nombre, to_char(t.fecha_inicio,'YYYY-MM-DD') AS inicio, to_char(t.fecha_fin,'YYYY-MM-DD') AS fin,
             t.estado, tt.clave
        FROM ing_tareas t
        LEFT JOIN ing_tarea_tipos tt ON tt.id = t.tipo_id
       WHERE t.proyecto_id = $1 AND t.fecha_inicio IS NOT NULL AND t.fecha_fin IS NOT NULL AND t.estado <> 'na'
       ORDER BY t.fecha_inicio, t.id`, [info.proyectoId])
   const gantt = gr.map((g) => ({ nombre: g.nombre, inicio: g.inicio, fin: g.fin, estado: g.estado, es_cliente: !!g.clave && CLIENT_TASK_CLAVES.has(g.clave) }))
+  // Dependencias entre las tareas del Gantt (para dibujar los conectores en el portal),
+  // como pares de ÍNDICES [predecesor, sucesor] dentro del array `gantt`.
+  const idxById = new Map(gr.map((g, i) => [g.id, i]))
+  const ids = gr.map((g) => g.id)
+  const deps: Array<[number, number]> = []
+  if (ids.length) {
+    const { rows: dr } = await runner.query<{ a: number; b: number }>(
+      `SELECT depende_de_id AS a, tarea_id AS b FROM ing_tarea_deps
+        WHERE tarea_id = ANY($1) AND depende_de_id = ANY($1)`, [ids])
+    for (const d of dr) {
+      const a = idxById.get(d.a), b = idxById.get(d.b)
+      if (a != null && b != null) deps.push([a, b])
+    }
+  }
+  // Documentos del cliente: revisiones de planos (submittals) con su PDF, estado y comentario.
+  const subs = await listSubmittals(runner, info.proyectoId)
+  const documentos = subs.map((s) => ({
+    rev: s.version_label, estado: s.estado, fecha: s.enviado_at,
+    comentario: s.comentarios_cliente, url: s.url,
+  }))
 
   // Cronograma POR FASES (Q6): agrupa las tareas de la ruta por fase cara-al-cliente.
   const fMap = new Map<string, { inicio: string | null; fin: string | null; nTotal: number; nDone: number; nStarted: number }>()
@@ -331,6 +358,8 @@ export async function armarVistaPublica(
     momentos,
     pendientes: [...planPendiente, ...pendientes],
     gantt,
+    deps,
+    documentos,
     fases,
     decisiones,
     planosEstado,
