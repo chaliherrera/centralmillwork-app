@@ -634,6 +634,8 @@ export default function Recepciones() {
     queryKey: ['oc-kpis-recepciones'],
     queryFn: () => ordenesCompraService.getKpis(),
     staleTime: 15_000,
+    refetchInterval: 30_000,
+    refetchOnWindowFocus: true,
   })
   const kpis = kpisData?.data
 
@@ -641,18 +643,24 @@ export default function Recepciones() {
     queryKey: ['recepciones-ocs', search, vendorFilter],
     queryFn: () => ordenesCompraService.getAll({ limit: 300, search: search || undefined, vendor: vendorFilter || undefined, estado_display: 'ORDENADO' }),
     staleTime: 15_000,
+    refetchInterval: 30_000,
+    refetchOnWindowFocus: true,
   })
 
   const { data: transitoData, isLoading: loadingTransito } = useQuery({
     queryKey: ['recepciones-ocs-transito', search, vendorFilter],
     queryFn: () => ordenesCompraService.getAll({ limit: 300, search: search || undefined, vendor: vendorFilter || undefined, estado_display: 'EN_TRANSITO' }),
     staleTime: 15_000,
+    refetchInterval: 30_000,
+    refetchOnWindowFocus: true,
   })
 
   const { data: tallerData, isLoading: loadingTaller } = useQuery({
     queryKey: ['recepciones-ocs-taller', search, vendorFilter],
     queryFn: () => ordenesCompraService.getAll({ limit: 100, search: search || undefined, vendor: vendorFilter || undefined, estado_display: 'EN_EL_TALLER' }),
     staleTime: 15_000,
+    refetchInterval: 30_000,
+    refetchOnWindowFocus: true,
   })
 
   const allOrdenados = ordenadosData?.data ?? []
