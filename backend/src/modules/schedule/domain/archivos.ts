@@ -29,13 +29,21 @@ async function signed(filename: string): Promise<string | null> {
 export interface SubirResult { ok: boolean; error?: string; id?: number }
 
 /** Adjunta un archivo a un hito y lo completa (si no lo estaba). */
+export interface SubirArchivoOpts {
+  // Cola offline del móvil: idempotencia + hora/lugar reales de la obra.
+  clientId?: string | null
+  clientTs?: string | null
+  gps?: { lat: number; lng: number } | null
+}
+
 export async function subirArchivoHito(
   runner: QueryRunner,
   proyectoId: number,
   codigo: string,
   file: { filename: string; original_name: string; size: number },
   usuarioId: string | null,
-  nota?: string | null
+  nota?: string | null,
+  opts: SubirArchivoOpts = {}
 ): Promise<SubirResult> {
   const { rows } = await runner.query<{ fuente_dato: string; fecha_real: string | null }>(
     `SELECT ph.fuente_dato, sh.fecha_real
@@ -54,19 +62,33 @@ export async function subirArchivoHito(
     if (bloqueo) return { ok: false, error: bloqueo }
   }
 
+  const clientId = opts.clientId ?? null
   const ins = await runner.query<{ id: number }>(
-    `INSERT INTO schedule_hito_archivos (proyecto_id, hito_codigo, filename, original_name, size_bytes, subido_por)
-       VALUES ($1,$2,$3,$4,$5,$6) RETURNING id`,
-    [proyectoId, codigo, file.filename, file.original_name, file.size, usuarioId])
+    `INSERT INTO schedule_hito_archivos (proyecto_id, hito_codigo, filename, original_name, size_bytes, subido_por, client_id)
+       VALUES ($1,$2,$3,$4,$5,$6,$7)
+     ON CONFLICT (client_id) WHERE client_id IS NOT NULL DO NOTHING
+     RETURNING id`,
+    [proyectoId, codigo, file.filename, file.original_name, file.size, usuarioId, clientId])
+
+  // Reintento de la cola offline (mismo client_id): no re-completar ni duplicar.
+  if (!ins.rows[0]) {
+    const { rows: ex } = await runner.query<{ id: number }>(
+      `SELECT id FROM schedule_hito_archivos WHERE client_id = $1`, [clientId])
+    return { ok: true, id: ex[0]?.id }
+  }
 
   // Completar el hito si aún no tenía fecha real (el primer archivo lo cierra).
+  // fecha_real usa la hora REAL de la obra (client_ts) si vino; si no, NOW().
   if (!h.fecha_real) {
-    const evidencia = JSON.stringify({ source: 'archivo', archivo: file.original_name, nota: nota || undefined })
+    const evidencia = JSON.stringify({
+      source: 'archivo', archivo: file.original_name, nota: nota || undefined,
+      gps: opts.gps ?? undefined,
+    })
     await runner.query(
-      `UPDATE schedule_hitos sh SET fecha_real = NOW(), evidencia_ref = $3::jsonb, updated_at = NOW()
+      `UPDATE schedule_hitos sh SET fecha_real = COALESCE($4::timestamptz, NOW()), evidencia_ref = $3::jsonb, updated_at = NOW()
          FROM schedule_planes sp
         WHERE sp.id = sh.plan_id AND sp.proyecto_id = $1 AND sp.scope = 'proyecto' AND sh.codigo = $2`,
-      [proyectoId, codigo, evidencia])
+      [proyectoId, codigo, evidencia, opts.clientTs ?? null])
   }
   await recomputeScheduleForProyecto(runner, proyectoId, 'manual')
   return { ok: true, id: ins.rows[0].id }

@@ -103,7 +103,8 @@ export async function listInstallQueue(runner: QueryRunner): Promise<InstallProy
 // ── PUNCH LIST ───────────────────────────────────────────────────────────────
 export interface PunchItem {
   id: number; descripcion: string; area: string | null; estado: string
-  foto_problema_url: string | null; foto_resuelto_url: string | null; created_at: string
+  foto_problema_url: string | null; foto_resuelto_url: string | null
+  nota_resuelto: string | null; created_at: string
 }
 
 export async function crearPunchItem(
@@ -124,14 +125,16 @@ export async function crearPunchItem(
 }
 
 export async function resolverPunchItem(
-  runner: QueryRunner, itemId: number, fotoResuelto: string | null, usuarioId: string | null
+  runner: QueryRunner, itemId: number, fotoResuelto: string | null, usuarioId: string | null,
+  nota: string | null = null
 ): Promise<{ ok: boolean; already?: boolean; proyectoId?: number }> {
   const { rows } = await runner.query<{ proyecto_id: number }>(
     `UPDATE schedule_punch_items
         SET estado = 'resuelto', foto_resuelto = COALESCE($2, foto_resuelto),
+            nota_resuelto = COALESCE($4, nota_resuelto),
             resolved_by = $3, resolved_at = NOW()
       WHERE id = $1 AND estado <> 'resuelto' RETURNING proyecto_id`,
-    [itemId, fotoResuelto, usuarioId])
+    [itemId, fotoResuelto, usuarioId, nota])
   if (!rows[0]) {
     // Idempotencia (reintento de la cola offline): si ya estaba resuelto, es éxito
     // silencioso; si no existe, sí es error real.
@@ -156,15 +159,15 @@ export async function resolverPunchItem(
 export async function listPunch(runner: QueryRunner, proyectoId: number): Promise<PunchItem[]> {
   const { rows } = await runner.query<{
     id: number; descripcion: string; area: string | null; estado: string
-    foto_problema: string | null; foto_resuelto: string | null; created_at: string
+    foto_problema: string | null; foto_resuelto: string | null; nota_resuelto: string | null; created_at: string
   }>(
-    `SELECT id, descripcion, area, estado, foto_problema, foto_resuelto,
+    `SELECT id, descripcion, area, estado, foto_problema, foto_resuelto, nota_resuelto,
             to_char(created_at,'YYYY-MM-DD') AS created_at
        FROM schedule_punch_items WHERE proyecto_id = $1 ORDER BY created_at DESC, id DESC`, [proyectoId])
   return Promise.all(rows.map(async (r) => ({
     id: r.id, descripcion: r.descripcion, area: r.area, estado: r.estado,
     foto_problema_url: await signed(r.foto_problema), foto_resuelto_url: await signed(r.foto_resuelto),
-    created_at: r.created_at,
+    nota_resuelto: r.nota_resuelto, created_at: r.created_at,
   })))
 }
 

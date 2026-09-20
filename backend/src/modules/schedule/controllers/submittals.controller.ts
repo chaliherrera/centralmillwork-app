@@ -107,10 +107,22 @@ export async function uploadArchivoHitoHandler(req: Request, res: Response, next
     if (upErr) return next(createError(`Error subiendo el archivo: ${upErr.message}`, 500))
 
     const nota = typeof req.body?.nota === 'string' ? req.body.nota.slice(0, 300) : null
+
+    // Cola offline del móvil: idempotency key + hora/lugar reales de la obra.
+    const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+    const clientId = typeof req.body?.client_id === 'string' && UUID_RE.test(req.body.client_id) ? req.body.client_id : null
+    let clientTs: string | null = null
+    if (typeof req.body?.client_ts === 'string') {
+      const t = Date.parse(req.body.client_ts)
+      if (!Number.isNaN(t) && t >= Date.now() - 7 * 864e5 && t <= Date.now() + 864e5) clientTs = new Date(t).toISOString()
+    }
+    const lat = Number(req.body?.lat), lng = Number(req.body?.lng)
+    const gps = Number.isFinite(lat) && Number.isFinite(lng) ? { lat, lng } : null
+
     await client.query('BEGIN')
     const r = await subirArchivoHito(client, proyectoId, codigo,
       { filename: uniqueName, original_name: req.file.originalname, size: req.file.size },
-      (req as any).user?.id ?? null, nota)
+      (req as any).user?.id ?? null, nota, { clientId, clientTs, gps })
     await client.query('COMMIT')
     if (!r.ok) return next(createError(r.error ?? 'no se pudo adjuntar', 400))
     res.status(201).json({ data: { id: r.id }, message: 'Archivo adjuntado' })

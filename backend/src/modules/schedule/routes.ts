@@ -1,5 +1,6 @@
 import { Router } from 'express'
 import { requireRole } from '../../middleware/auth'
+import { createError } from '../../middleware/errorHandler'
 import { getPlan, generarPlanHandler, recalcularHandler, crearPortalTokenHandler, listPortalTokensHandler, revocarPortalTokenHandler, portalPreviewHandler, registrarHitoHandler, cambiarFechaObjetivoHandler, factibilidadHandler, proyectosOverviewHandler } from './controllers/schedulePlan.controller'
 import { uploadSubmittal, uploadSubmittalHandler, listSubmittalsHandler, uploadArchivo, uploadArchivoHitoHandler, listArchivosHitoHandler, uploadPlanoCampoHandler } from './controllers/submittals.controller'
 import { uploadFoto, installQueueHandler, listItemsHandler, marcarItemHandler, desmarcarItemHandler, listPunchHandler, crearPunchHandler, resolverPunchHandler, signoffHandler, reporteObraHandler } from './controllers/field.controller'
@@ -60,5 +61,10 @@ router.post('/punch/:itemId/resolver',    SCHEDULE_FIELD, uploadFoto.single('fot
 router.post('/proyecto/:id/signoff',      SCHEDULE_FIELD, uploadFoto.single('firma'), signoffHandler)
 // Reporte de daño/faltante en obra → tarea al PM (decisión Chali 2026-09-20).
 router.post('/proyecto/:id/reporte-obra', SCHEDULE_FIELD, uploadFoto.single('foto'), reporteObraHandler)
+// Check-in (I-04) y avance (I-05) desde la obra: reusan el archivo de hito, pero con
+// permiso FIELD (SCHEDULE_REGISTRAR no incluye FIELD) y restringido a esos dos hitos.
+const soloCheckin: import('express').RequestHandler = (req, _res, next) =>
+  ['I-04', 'I-05'].includes(String(req.params.codigo)) ? next() : next(createError('Este endpoint es solo para check-in/avance de obra', 403))
+router.post('/proyecto/:id/hito/:codigo/archivo-field', SCHEDULE_FIELD, soloCheckin, uploadArchivo.single('archivo'), uploadArchivoHitoHandler)
 
 export default router

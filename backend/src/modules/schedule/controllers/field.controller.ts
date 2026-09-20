@@ -164,9 +164,10 @@ export async function resolverPunchHandler(req: Request, res: Response, next: Ne
     const itemId = parseInt(String(req.params.itemId), 10)
     if (Number.isNaN(itemId)) return next(createError('id de ítem inválido', 400))
     const foto = await subirFoto(req.file)
+    const nota = typeof req.body?.nota === 'string' ? req.body.nota.trim().slice(0, 500) || null : null
 
     await client.query('BEGIN')
-    const r = await resolverPunchItem(client, itemId, foto, (req as any).user?.id ?? null)
+    const r = await resolverPunchItem(client, itemId, foto, (req as any).user?.id ?? null, nota)
     await client.query('COMMIT')
     if (!r.ok) return next(createError('El ítem no existe', 404))
     res.json({ data: r, message: r.already ? 'Ítem ya estaba resuelto' : 'Ítem resuelto' })
