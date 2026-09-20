@@ -41,9 +41,14 @@ export default function OrdenesCompraScreen() {
   return (
     <View style={styles.container}>
       <View style={styles.filters}>
-        <TouchableOpacity style={styles.generarBtn} onPress={() => nav.navigate('GenerarOC')}>
-          <Text style={styles.generarText}>＋ Emitir OC de vendors cotizados</Text>
-        </TouchableOpacity>
+        <View style={styles.accRow}>
+          <TouchableOpacity style={[styles.generarBtn, { flex: 1 }]} onPress={() => nav.navigate('NuevaCompra')}>
+            <Text style={styles.generarText}>＋ Compra sin MTO</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={[styles.generarBtn, styles.generarBtnAlt, { flex: 1 }]} onPress={() => nav.navigate('GenerarOC')}>
+            <Text style={styles.generarTextAlt}>Emitir OC cotizada</Text>
+          </TouchableOpacity>
+        </View>
         <TextInput
           value={search} onChangeText={setSearch}
           placeholder="Buscar OC, vendor o proyecto…" placeholderTextColor="#999" style={styles.search}
@@ -94,8 +99,11 @@ function OCCard({ oc }: { oc: OrdenCompra }) {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F4F5F2' },
   filters: { paddingHorizontal: 16, paddingTop: 12, paddingBottom: 4 },
-  generarBtn: { backgroundColor: '#2c3126', borderRadius: 10, paddingVertical: 12, alignItems: 'center', marginBottom: 10 },
-  generarText: { color: '#E8C684', fontWeight: '800', fontSize: 14 },
+  accRow: { flexDirection: 'row', gap: 8, marginBottom: 10 },
+  generarBtn: { backgroundColor: '#2c3126', borderRadius: 10, paddingVertical: 12, alignItems: 'center' },
+  generarText: { color: '#E8C684', fontWeight: '800', fontSize: 13 },
+  generarBtnAlt: { backgroundColor: '#fff', borderWidth: 1, borderColor: '#C18A2D' },
+  generarTextAlt: { color: '#C18A2D', fontWeight: '800', fontSize: 13 },
   search: { backgroundColor: '#fff', borderRadius: 10, paddingHorizontal: 14, paddingVertical: 11, fontSize: 14, borderWidth: 1, borderColor: '#E0DFD9', color: '#1F2419' },
   tabs: { flexDirection: 'row', gap: 7, marginTop: 10, flexWrap: 'wrap' },
   tab: { backgroundColor: '#fff', borderWidth: 1, borderColor: '#E0DFD9', borderRadius: 999, paddingHorizontal: 12, paddingVertical: 6 },

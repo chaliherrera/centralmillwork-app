@@ -17,7 +17,40 @@ export interface OCGenerada {
   materiales_count: number
 }
 
+export type OrigenNoMTO = 'DIRECTA' | 'URGENTE' | 'OPERATIVA'
+
+export interface CompraItem {
+  descripcion: string
+  unidad: string
+  qty: number
+  unit_price: number
+}
+
+export interface NuevaCompraPayload {
+  proyecto_id: number | null
+  vendor: string
+  origen: OrigenNoMTO
+  categoria?: string | null
+  notas?: string | null
+  fecha_entrega_estimada?: string | null
+  items: CompraItem[]
+  freight?: number
+}
+
+export interface CompraCreada {
+  id: number
+  numero: string
+  total: number
+  freight: number
+  materiales_count: number
+  origen: OrigenNoMTO
+}
+
 export const comprasService = {
+  // Compra SIN MTO (DIRECTA / URGENTE / OPERATIVA). ONLINE-only.
+  crearOCNoMTO: (payload: NuevaCompraPayload) =>
+    api.post('/ordenes-compra/no-mto', payload).then((r) => r.data.data as CompraCreada),
+
   // Vendors de un proyecto con material COTIZADO listo para emitir OC.
   getVendorsCotizados: (proyectoId: number) =>
     api.get('/ordenes-compra/vendors-cotizados', { params: { proyecto_id: proyectoId } })

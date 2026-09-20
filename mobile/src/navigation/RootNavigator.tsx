@@ -19,6 +19,7 @@ import ProyectosScreen from '../screens/ProyectosScreen'
 import ReporteObraScreen from '../screens/ReporteObraScreen'
 import PlanosScreen from '../screens/PlanosScreen'
 import GenerarOCScreen from '../screens/GenerarOCScreen'
+import NuevaCompraScreen from '../screens/NuevaCompraScreen'
 
 const Stack = createNativeStackNavigator<RootStackParamList>()
 type Nav = NativeStackNavigationProp<RootStackParamList>
@@ -84,6 +85,7 @@ export default function RootNavigator() {
             <Stack.Screen name="Instalacion" component={InstalacionRoute} />
             <Stack.Screen name="InstallDetail" component={InstallDetailRoute} />
             <Stack.Screen name="ReporteObra" component={ReporteObraScreen} />
+            <Stack.Screen name="NuevaCompra" component={NuevaCompraScreen} />
           </Stack.Group>
           {/* Consola Admin + planos (nuevas): header nativo tematizado */}
           <Stack.Group screenOptions={HEADER}>
