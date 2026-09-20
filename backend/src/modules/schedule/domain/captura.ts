@@ -58,11 +58,16 @@ export async function capturarFechasReales(
   set('M-03', m03, { source: 'oc_emitida', regla: 'primera OC emitida' })
 
   // ── M-04 · MTO cotizado = última cotización recibida ───────────────────────
-  const m04 = await scalarDate(runner,
+  // Si no hay cotización formal PERO ya se emitió una OC (m03 = primera OC), el MTO se
+  // cotizó sí o sí (no se puede emitir una OC sin cotizar/precio). Se implica desde la OC,
+  // así el hito no queda pendiente cuando la procura se hizo con OC directa (sin solicitud
+  // de cotización formal). Evita el falso "MTO cotizado pendiente" con material ya recibido.
+  const m04cot = await scalarDate(runner,
     `SELECT to_char(MAX(fecha_respuesta),'YYYY-MM-DD') AS d
        FROM solicitudes_cotizacion
       WHERE proyecto_id = $1 AND estado = 'recibida' AND fecha_respuesta IS NOT NULL`, [proyectoId])
-  set('M-04', m04, { source: 'cotizacion' })
+  const m04 = m04cot ?? m03
+  set('M-04', m04, m04cot ? { source: 'cotizacion' } : { source: 'oc_emitida', regla: 'implícito: OC emitida ⇒ MTO cotizado' })
 
   // ── M-05 · OCs emitidas = última OC emitida (hay al menos una) ─────────────
   {
