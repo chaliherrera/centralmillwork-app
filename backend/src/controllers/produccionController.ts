@@ -5,6 +5,7 @@ import { parsePagination, paginatedResponse } from '../utils/pagination'
 import { findAutoAssignableOperator } from '../utils/autoAsignarOperario'
 import { recomputeScheduleSafe } from '../modules/schedule'
 import { ORDEN_BASE_SECUENCIA } from '../utils/estaciones'
+import { supabase, supabaseEnabled, SUPABASE_BUCKET } from '../utils/supabase'
 
 const STATUS_VALIDOS = ['Pendiente', 'En Proceso', 'Pausada', 'Completada', 'Cancelada'] as const
 type Status = typeof STATUS_VALIDOS[number]
@@ -219,6 +220,28 @@ export async function createOrden(req: Request, res: Response, next: NextFunctio
          WHERE orden_id = $2 AND estacion = $3`,
         [operadorPrimera, orden.id, primeraEstacion]
       )
+    }
+
+    // Asociar el PLANO DE PRODUCCIÓN del proyecto (set final E-08 de ingeniería) a la OP,
+    // para que el taller lo tenga sin re-subirlo (ya se cargó en ingeniería como requisito
+    // para llegar a producción). Se guarda la URL pública completa del bucket de ingeniería;
+    // getDocumentos NO re-firma una URL http completa (respeta el bucket de origen).
+    if (proyecto_id) {
+      const { rows: planos } = await client.query<{ filename: string; original_name: string | null; size_bytes: number | null; subido_por: string | null }>(
+        `SELECT filename, original_name, size_bytes, subido_por
+           FROM schedule_hito_archivos WHERE proyecto_id = $1 AND hito_codigo = 'E-08'
+           ORDER BY created_at DESC`, [proyecto_id])
+      for (const p of planos) {
+        let url: string | null = null
+        if (supabaseEnabled && supabase) {
+          const { data } = supabase.storage.from(SUPABASE_BUCKET).getPublicUrl(p.filename)
+          url = data?.publicUrl ?? null
+        }
+        await client.query(
+          `INSERT INTO orden_documentos (orden_id, nombre, descripcion, filename, mime_type, size_bytes, url, uploaded_by)
+             VALUES ($1,$2,'Plano de producción (set final)',$3,'application/pdf',$4,$5,$6)`,
+          [orden.id, p.original_name ?? 'Plano de producción', p.filename, p.size_bytes ?? null, url, p.subido_por ?? null])
+      }
     }
 
     // Historial: registrar la creación
