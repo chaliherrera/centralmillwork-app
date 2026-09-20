@@ -10,6 +10,7 @@ import { useNavigation } from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import { scheduleService, InstallProyecto, PunchItem, InstallItem } from '../services/schedule'
 import SignaturePad from '../components/SignaturePad'
+import OutboxBanner from '../components/OutboxBanner'
 import type { RootStackParamList } from '../navigation/types'
 
 interface Props {
@@ -87,10 +88,10 @@ export default function InstallDetailScreen({ proyecto, onBack, onChanged }: Pro
     setBusy('I-04')
     try {
       const gps = await obtenerGps()
-      await scheduleService.registrarConFoto(proyecto.proyecto_id, 'I-04', uri, gps ? { gps } : undefined)
-      await recargar()
+      const r = await scheduleService.registrarConFoto(proyecto.proyecto_id, 'I-04', uri, gps ? { gps } : undefined)
       onChanged()
-      Alert.alert('Listo', gps ? 'Check-in registrado con foto y ubicación.' : 'Check-in registrado con foto.')
+      if (r.queued) Alert.alert('Guardado sin señal', 'El check-in se enviará solo al reconectar.')
+      else { await recargar(); Alert.alert('Listo', gps ? 'Check-in registrado con foto y ubicación.' : 'Check-in registrado con foto.') }
     } catch (err: any) {
       Alert.alert('Error', err?.response?.data?.message || 'No se pudo registrar el check-in')
     } finally {
@@ -105,9 +106,10 @@ export default function InstallDetailScreen({ proyecto, onBack, onChanged }: Pro
   const doInstalar = async (item: InstallItem, uri?: string) => {
     setBusy(`item-${item.op_id}`)
     try {
-      await scheduleService.marcarItem(proyecto.proyecto_id, item.op_id, uri)
-      await recargar()
+      const r = await scheduleService.marcarItem(proyecto.proyecto_id, item.op_id, uri)
       onChanged()
+      if (r.queued) Alert.alert('Guardado sin señal', 'El ítem se marcará al reconectar.')
+      else await recargar()
     } catch (err: any) {
       Alert.alert('Error', err?.response?.data?.message || 'No se pudo marcar el item')
     } finally {
@@ -154,10 +156,11 @@ export default function InstallDetailScreen({ proyecto, onBack, onChanged }: Pro
     if (conFoto) { uri = await tomarFoto(); if (!uri) return }
     setBusy('punch-add')
     try {
-      await scheduleService.crearPunch(proyecto.proyecto_id, desc, nuevoArea.trim() || undefined, uri || undefined)
+      const r = await scheduleService.crearPunch(proyecto.proyecto_id, desc, nuevoArea.trim() || undefined, uri || undefined)
       setNuevoPunch(''); setNuevoArea('')
-      await recargar()
       onChanged()
+      if (r.queued) Alert.alert('Guardado sin señal', 'El pendiente se enviará al reconectar.')
+      else await recargar()
     } catch (err: any) {
       Alert.alert('Error', err?.response?.data?.message || 'No se pudo agregar el pendiente')
     } finally {
@@ -175,9 +178,10 @@ export default function InstallDetailScreen({ proyecto, onBack, onChanged }: Pro
     setResolviendo(null)
     setBusy(`punch-${item.id}`)
     try {
-      await scheduleService.resolverPunch(item.id, uri, notaResolver.trim() || undefined)
-      await recargar()
+      const r = await scheduleService.resolverPunch(proyecto.proyecto_id, item.id, uri, notaResolver.trim() || undefined)
       onChanged()
+      if (r.queued) Alert.alert('Guardado sin señal', 'Se enviará al reconectar.')
+      else await recargar()
     } catch (err: any) {
       Alert.alert('Error', err?.response?.data?.message || 'No se pudo resolver')
     } finally {
@@ -199,10 +203,10 @@ export default function InstallDetailScreen({ proyecto, onBack, onChanged }: Pro
     setFirmando(false)
     setBusy('signoff')
     try {
-      await scheduleService.signoff(proyecto.proyecto_id, firmaCliente.trim() || undefined, firmaUri)
-      await recargar()
+      const r = await scheduleService.signoff(proyecto.proyecto_id, firmaCliente.trim() || undefined, firmaUri)
       onChanged()
-      Alert.alert('¡Entregado!', 'Sign-off del cliente registrado. Proyecto ENTREGADO.')
+      if (r.queued) Alert.alert('Guardado sin señal', 'La firma se enviará al reconectar; ahí se confirma la entrega.')
+      else { await recargar(); Alert.alert('¡Entregado!', 'Sign-off del cliente registrado. Proyecto ENTREGADO.') }
     } catch (err: any) {
       Alert.alert('Error', err?.response?.data?.message || 'No se pudo registrar el sign-off')
     } finally {
@@ -242,6 +246,8 @@ export default function InstallDetailScreen({ proyecto, onBack, onChanged }: Pro
             <Text style={styles.accText}>⚠️ Reportar daño</Text>
           </TouchableOpacity>
         </View>
+
+        <OutboxBanner />
 
         <ScrollView contentContainerStyle={styles.content}>
           {/* 1. Check-in */}

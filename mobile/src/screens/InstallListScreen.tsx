@@ -5,6 +5,7 @@ import {
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { scheduleService, InstallProyecto } from '../services/schedule'
+import OutboxBanner from '../components/OutboxBanner'
 
 interface Props {
   onSelect: (p: InstallProyecto) => void
@@ -52,6 +53,8 @@ export default function InstallListScreen({ onSelect, onBack }: Props) {
           <Text style={styles.headerTitle}>🔧 Instalación</Text>
           <View style={{ width: 60 }} />
         </View>
+
+        <OutboxBanner />
 
         <View style={styles.titleSection}>
           <Text style={styles.title}>Obras por instalar</Text>

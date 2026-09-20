@@ -28,10 +28,12 @@ export default function ReporteObraScreen() {
     if (!desc) { Alert.alert('Falta descripción', 'Describí el daño o faltante.'); return }
     setEnviando(true)
     try {
-      await scheduleService.reporteObra(params.proyectoId, desc, foto || undefined)
-      Alert.alert('Enviado', `El reporte se envió al PM de ${params.codigo}.`, [
-        { text: 'OK', onPress: () => nav.goBack() },
-      ])
+      const r = await scheduleService.reporteObra(params.proyectoId, desc, foto || undefined)
+      Alert.alert(
+        r.queued ? 'Guardado sin señal' : 'Enviado',
+        r.queued ? 'El reporte se enviará al PM al reconectar.' : `El reporte se envió al PM de ${params.codigo}.`,
+        [{ text: 'OK', onPress: () => nav.goBack() }]
+      )
     } catch (err: any) {
       Alert.alert('Error', err?.response?.data?.message || 'No se pudo enviar el reporte')
     } finally {
