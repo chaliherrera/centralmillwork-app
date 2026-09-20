@@ -46,7 +46,10 @@ router.post('/tarea/:tareaId/plano-campo', SCHEDULE_ENGINEERING, uploadArchivo.s
 
 // Field / Install — punch list + sign-off en obra (desde el móvil).
 // El check-in (I-04) y el avance (I-05) reusan el endpoint de archivo de arriba.
-const SCHEDULE_FIELD = requireRole('ADMIN', 'PROJECT_MANAGEMENT', 'PRODUCTION', 'SHOP_MANAGER')
+// FIELD = nuestro representante en obra (los que instalan son subcontratistas y NO
+// usan la app). El rol FIELD estaba ausente acá → un usuario field@ no podía hacer
+// check-in/instalar/punch/sign-off (bug 2026-09-20). ADMIN/PM quedan para supervisión.
+const SCHEDULE_FIELD = requireRole('ADMIN', 'PROJECT_MANAGEMENT', 'PRODUCTION', 'SHOP_MANAGER', 'FIELD')
 router.get ('/install-queue',             SCHEDULE_READ,  installQueueHandler)
 router.get ('/proyecto/:id/items',        SCHEDULE_READ,  listItemsHandler)
 router.post('/proyecto/:id/items/:opId/instalar',  SCHEDULE_FIELD, uploadFoto.single('foto'), marcarItemHandler)

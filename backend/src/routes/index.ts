@@ -122,7 +122,9 @@ router.get('/proyectos/:id/actividad',        getProyectoActividad)
 router.get('/proyectos/:id/items-readiness',  getProyectoItemsReadiness)
 // Planos por (proyecto, item) — solicitud shop manager 2026-07-17. Ver
 // planos PDF ANTES de definir la ruta de la OP. Compartidos entre OPs.
-router.get('/proyectos/:id/items/:numero/planos',  requireRole('ADMIN', 'SHOP_MANAGER', 'PROCUREMENT', 'ENGINEERING'), getPlanosItem)
+// Lectura ampliada 2026-09-20: PM, Producción y Field también necesitan ver los
+// planos (Field los consulta en obra desde el móvil). La subida sigue restringida.
+router.get('/proyectos/:id/items/:numero/planos',  requireRole('ADMIN', 'SHOP_MANAGER', 'PROCUREMENT', 'ENGINEERING', 'PROJECT_MANAGEMENT', 'PRODUCTION', 'FIELD'), getPlanosItem)
 router.post('/proyectos/:id/items/:numero/planos', requireRole('ADMIN', 'SHOP_MANAGER', 'PROCUREMENT', 'ENGINEERING'), uploadPlano.single('plano'), uploadPlanoItem)
 router.get('/proyectos/:id/muestras-aprobadas', getProyectoMuestrasAprobadas)
 router.get('/proyectos/:id',                  getProyecto)
