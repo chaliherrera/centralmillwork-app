@@ -105,12 +105,8 @@ export async function capturarFechasReales(
   // Producción/QC pueden no existir en deployments parciales o entornos de dev:
   // si faltan, esos hitos quedan sin capturar (null) en vez de romper.
   const hasOP = await tableExists(runner, 'ordenes_produccion')
-  const hasQC = hasOP && (await tableExists(runner, 'qc_inspecciones'))
   if (!hasOP) {
     for (const c of ['P-01', 'P-05', 'P-06']) set(c, null, { source: 'op_estacion', motivo: 'tabla ausente' })
-  }
-  if (!hasQC) {
-    for (const c of ['QC-01', 'QC-02', 'QC-03']) set(c, null, { source: 'qc', motivo: 'tabla ausente' })
   }
   if (!hasOP) return out
 
@@ -164,15 +160,9 @@ export async function capturarFechasReales(
         AND op2.estacion = 'shipping' AND op2.completado = true`, [proyectoId])
   set('S-04', s04, { source: 'op_estacion', regla: 'estación shipping completada' })
 
-  if (hasQC) {
-    // ── QC-02 · QC final aprobado = última inspección con decisión Aprobar ───
-    // (QC-01 y QC-03 se podaron de la plantilla en la migr. 074; no se capturan.)
-    const qc02 = await scalarDate(runner,
-      `SELECT to_char(MAX(q.fecha_inspeccion),'YYYY-MM-DD') AS d
-         FROM qc_inspecciones q JOIN ordenes_produccion op ON op.id = q.orden_id
-        WHERE op.proyecto_id = $1 AND q.decision = 'Aprobar' AND op.tipo IS DISTINCT FROM 'MUESTRA'`, [proyectoId])
-    set('QC-02', qc02, { source: 'qc', regla: 'última inspección aprobada' })
-  }
+  // QC-02 se eliminó del journey (migr. 095): el QC es implícito en la fabricación, no un
+  // milestone del recorrido. La herramienta de inspección (qc_inspecciones) sigue existiendo
+  // en Producción como función opcional, pero ya no se captura como hito.
 
   return out
 }
