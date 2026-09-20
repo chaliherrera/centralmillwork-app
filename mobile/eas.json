@@ -31,6 +31,20 @@
         "buildType": "apk"
       }
     },
+    "staging": {
+      "distribution": "internal",
+      "channel": "staging",
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://centralmillwork-backend-staging.up.railway.app/api",
+        "APP_VARIANT": "staging"
+      },
+      "ios": {
+        "resourceClass": "m-medium"
+      },
+      "android": {
+        "buildType": "apk"
+      }
+    },
     "production": {
       "channel": "production",
       "autoIncrement": true,
