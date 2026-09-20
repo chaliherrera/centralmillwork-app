@@ -18,5 +18,6 @@ export type RootStackParamList = {
   MaterialesMto: undefined
   ControlMto: undefined
   OrdenesCompra: undefined
+  GenerarOC: undefined
   Proyectos: undefined
 }

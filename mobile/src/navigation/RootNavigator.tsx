@@ -18,6 +18,7 @@ import OrdenesCompraScreen from '../screens/OrdenesCompraScreen'
 import ProyectosScreen from '../screens/ProyectosScreen'
 import ReporteObraScreen from '../screens/ReporteObraScreen'
 import PlanosScreen from '../screens/PlanosScreen'
+import GenerarOCScreen from '../screens/GenerarOCScreen'
 
 const Stack = createNativeStackNavigator<RootStackParamList>()
 type Nav = NativeStackNavigationProp<RootStackParamList>
@@ -89,6 +90,7 @@ export default function RootNavigator() {
             <Stack.Screen name="MaterialesMto" component={MaterialesMtoScreen} options={{ title: 'Materiales MTO' }} />
             <Stack.Screen name="ControlMto" component={ControlMtoScreen} options={{ title: 'Control MTO' }} />
             <Stack.Screen name="OrdenesCompra" component={OrdenesCompraScreen} options={{ title: 'Órdenes de Compra' }} />
+            <Stack.Screen name="GenerarOC" component={GenerarOCScreen} options={{ title: 'Generar OC' }} />
             <Stack.Screen name="Proyectos" component={ProyectosScreen} options={{ title: 'Proyectos' }} />
             <Stack.Screen name="PlanosObra" component={PlanosScreen} options={{ title: 'Planos' }} />
           </Stack.Group>
