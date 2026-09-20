@@ -58,6 +58,34 @@ export const uploadDocumento = multer({
  *
  * Query opcional: ?estacion=cnc → filtra a esa estación.
  */
+// Planos POR ÍTEM (proyecto_item_planos) de la OP: se suben una vez por (proyecto, ítem)
+// y deben verse también en el detalle de la OP y en el KIOSKO (junto al set E-08), no solo
+// al crear la OP. Se devuelven como docs GENERALES (estacion null), read-only (es_plano_item),
+// con id negativo para no colisionar con orden_documentos.
+async function planosItemDeOrden(ordenId: number): Promise<any[]> {
+  const { rows: op } = await pool.query<{ proyecto_id: number | null; numero_item: string | null }>(
+    `SELECT proyecto_id, numero_item FROM ordenes_produccion WHERE id = $1`, [ordenId])
+  const pid = op[0]?.proyecto_id, item = op[0]?.numero_item
+  if (!pid || !item) return []
+  const { rows } = await pool.query<{ id: number; filename: string; original_name: string | null; size_bytes: number | null; created_at: string; uploaded_by_nombre: string | null }>(
+    `SELECT p.id, p.filename, p.original_name, p.size_bytes, p.created_at::text AS created_at, u.nombre AS uploaded_by_nombre
+       FROM proyecto_item_planos p LEFT JOIN usuarios u ON u.id = p.uploaded_by
+      WHERE p.proyecto_id = $1 AND p.numero_item = $2 ORDER BY p.created_at DESC`, [pid, item])
+  return Promise.all(rows.map(async (r) => {
+    let url: string | null = null
+    if (supabaseEnabled && supabase) {
+      const { data } = await supabase.storage.from(SUPABASE_BUCKET).createSignedUrl(r.filename, 3600)
+      url = data?.signedUrl ?? null
+    }
+    return {
+      id: -r.id, orden_id: ordenId, estacion: null, nombre: r.original_name ?? 'Plano del ítem',
+      descripcion: 'Plano del ítem', filename: r.filename, mime_type: 'application/pdf',
+      size_bytes: r.size_bytes, url, uploaded_by: null, uploaded_by_nombre: r.uploaded_by_nombre,
+      created_at: r.created_at, es_plano_item: true,
+    }
+  }))
+}
+
 export async function getDocumentos(req: Request, res: Response, next: NextFunction) {
   try {
     const ordenId = parseInt(String(req.params.id))
@@ -98,7 +126,10 @@ export async function getDocumentos(req: Request, res: Response, next: NextFunct
       }
     }
 
-    res.json({ data: rows })
+    // Planos por ítem = generales: se agregan salvo que se filtre por una estación puntual.
+    const soloGeneral = !req.query.estacion || String(req.query.estacion) === 'null'
+    const planosItem = soloGeneral ? await planosItemDeOrden(ordenId) : []
+    res.json({ data: [...rows, ...planosItem] })
   } catch (err) { next(err) }
 }
 
@@ -248,6 +279,7 @@ export async function getDocumentosKiosk(req: Request, res: Response, next: Next
       }
     }
 
-    res.json({ data: docs })
+    // El operario ve también los planos POR ÍTEM (generales del ítem), junto al set E-08.
+    res.json({ data: [...docs, ...(await planosItemDeOrden(ordenId))] })
   } catch (err) { next(err) }
 }

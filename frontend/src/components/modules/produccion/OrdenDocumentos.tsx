@@ -167,16 +167,18 @@ function SeccionDocs({ ordenId, titulo, estacion, docs }: {
               >
                 <ExternalLink size={14} />
               </a>
-              <button
-                onClick={() => {
-                  if (confirm(`¿Eliminar "${d.nombre}"?`)) borrar.mutate(d.id)
-                }}
-                disabled={borrar.isPending}
-                className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
-                title="Eliminar"
-              >
-                <Trash2 size={14} />
-              </button>
+              {!d.es_plano_item && (
+                <button
+                  onClick={() => {
+                    if (confirm(`¿Eliminar "${d.nombre}"?`)) borrar.mutate(d.id)
+                  }}
+                  disabled={borrar.isPending}
+                  className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
+                  title="Eliminar"
+                >
+                  <Trash2 size={14} />
+                </button>
+              )}
             </li>
           ))}
         </ul>

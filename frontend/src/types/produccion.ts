@@ -263,6 +263,7 @@ export interface OrdenDocumento {
   uploaded_by: string | null           // UUID del usuario que subió
   uploaded_by_nombre?: string | null
   created_at: string
+  es_plano_item?: boolean               // plano por ítem (proyecto_item_planos): read-only en la OP
 }
 
 // ─── Fotos de avance (subidas desde el kiosko, vistas desde admin) ──────────
