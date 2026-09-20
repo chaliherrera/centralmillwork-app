@@ -9,8 +9,31 @@ import pool from '../../../db/pool'
 import { createError } from '../../../middleware/errorHandler'
 import { supabase, supabaseEnabled, SUPABASE_BUCKET } from '../../../utils/supabase'
 import { logger } from '../../../utils/logger'
-import { crearPunchItem, resolverPunchItem, listPunch, registrarSignoff, listInstallQueue } from '../domain/field'
+import { crearPunchItem, resolverPunchItem, listPunch, registrarSignoff, listInstallQueue, crearReporteObra } from '../domain/field'
 import { listInstallItems, marcarInstalado, desmarcarInstalado } from '../domain/installitems'
+
+// UUID válido (idempotency key de la cola offline). Se ignora si no matchea.
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+function clientId(req: Request): string | null {
+  const v = req.body?.client_id
+  return typeof v === 'string' && UUID_RE.test(v) ? v : null
+}
+// client_ts: hora real de la acción en obra. Se acepta solo si es razonable
+// (entre 7 días atrás y 1 día adelante) para tolerar relojes desfasados.
+function clientTs(req: Request): string | null {
+  const v = req.body?.client_ts
+  if (typeof v !== 'string') return null
+  const t = Date.parse(v)
+  if (Number.isNaN(t)) return null
+  const now = Date.now()
+  if (t < now - 7 * 864e5 || t > now + 864e5) return null
+  return new Date(t).toISOString()
+}
+// URL pública de un archivo ya subido a Supabase (para embeber en la tarea).
+function publicUrl(path: string | null): string | null {
+  if (!path || !supabaseEnabled || !supabase) return null
+  return supabase.storage.from(SUPABASE_BUCKET).getPublicUrl(path).data.publicUrl ?? null
+}
 
 // Fotos de punch list / firma — solo imágenes, hasta 15 MB.
 export const uploadFoto = multer({
@@ -123,7 +146,7 @@ export async function crearPunchHandler(req: Request, res: Response, next: NextF
     const foto = await subirFoto(req.file)
 
     await client.query('BEGIN')
-    const r = await crearPunchItem(client, proyectoId, descripcion, area, foto, (req as any).user?.id ?? null)
+    const r = await crearPunchItem(client, proyectoId, descripcion, area, foto, (req as any).user?.id ?? null, clientId(req), clientTs(req))
     await client.query('COMMIT')
     res.status(201).json({ data: r, message: 'Ítem de punch list agregado' })
   } catch (err) {
@@ -145,8 +168,8 @@ export async function resolverPunchHandler(req: Request, res: Response, next: Ne
     await client.query('BEGIN')
     const r = await resolverPunchItem(client, itemId, foto, (req as any).user?.id ?? null)
     await client.query('COMMIT')
-    if (!r.ok) return next(createError('El ítem no existe o ya estaba resuelto', 400))
-    res.json({ data: r, message: 'Ítem resuelto' })
+    if (!r.ok) return next(createError('El ítem no existe', 404))
+    res.json({ data: r, message: r.already ? 'Ítem ya estaba resuelto' : 'Ítem resuelto' })
   } catch (err) {
     await client.query('ROLLBACK').catch(() => {})
     next(err)
@@ -168,6 +191,29 @@ export async function signoffHandler(req: Request, res: Response, next: NextFunc
     if (!r.ok) { await client.query('ROLLBACK'); return next(createError(r.error ?? 'no se pudo registrar', 400)) }
     await client.query('COMMIT')
     res.status(201).json({ data: { ok: true }, message: 'Sign-off del cliente registrado — proyecto ENTREGADO' })
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => {})
+    next(err)
+  } finally {
+    client.release()
+  }
+}
+
+// POST /api/schedule/proyecto/:id/reporte-obra  (field: 'foto', body: descripcion)
+// Crea una tarea en el escritorio del PM del proyecto (daño/faltante en obra).
+export async function reporteObraHandler(req: Request, res: Response, next: NextFunction) {
+  const client = await pool.connect()
+  try {
+    const proyectoId = parseProyectoId(req)
+    const descripcion = typeof req.body?.descripcion === 'string' ? req.body.descripcion.trim().slice(0, 1000) : ''
+    if (!descripcion) return next(createError('La descripción es obligatoria', 400))
+    const foto = await subirFoto(req.file, 'reporte-obra')
+
+    await client.query('BEGIN')
+    const r = await crearReporteObra(client, proyectoId, descripcion, publicUrl(foto), clientId(req), (req as any).user?.email ?? null)
+    if (!r.ok) { await client.query('ROLLBACK'); return next(createError(r.error ?? 'no se pudo registrar', 400)) }
+    await client.query('COMMIT')
+    res.status(201).json({ data: { ok: true }, message: 'Reporte enviado al PM' })
   } catch (err) {
     await client.query('ROLLBACK').catch(() => {})
     next(err)

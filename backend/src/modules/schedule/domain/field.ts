@@ -108,25 +108,38 @@ export interface PunchItem {
 
 export async function crearPunchItem(
   runner: QueryRunner, proyectoId: number, descripcion: string, area: string | null,
-  fotoProblema: string | null, usuarioId: string | null
+  fotoProblema: string | null, usuarioId: string | null,
+  // Cola offline: clientId = idempotency key del teléfono (reintento no duplica);
+  // clientTs = hora real en que se creó en obra (no la hora en que volvió la señal).
+  clientId: string | null = null, clientTs: string | null = null
 ): Promise<{ id: number }> {
   const { rows } = await runner.query<{ id: number }>(
-    `INSERT INTO schedule_punch_items (proyecto_id, descripcion, area, foto_problema, created_by)
-       VALUES ($1,$2,$3,$4,$5) RETURNING id`,
-    [proyectoId, descripcion, area, fotoProblema, usuarioId])
+    `INSERT INTO schedule_punch_items (proyecto_id, descripcion, area, foto_problema, created_by, client_id, created_at)
+       VALUES ($1,$2,$3,$4,$5,$6, COALESCE($7::timestamptz, NOW()))
+     ON CONFLICT (client_id) WHERE client_id IS NOT NULL
+       DO UPDATE SET descripcion = schedule_punch_items.descripcion
+     RETURNING id`,
+    [proyectoId, descripcion, area, fotoProblema, usuarioId, clientId, clientTs])
   return { id: rows[0].id }
 }
 
 export async function resolverPunchItem(
   runner: QueryRunner, itemId: number, fotoResuelto: string | null, usuarioId: string | null
-): Promise<{ ok: boolean; proyectoId?: number }> {
+): Promise<{ ok: boolean; already?: boolean; proyectoId?: number }> {
   const { rows } = await runner.query<{ proyecto_id: number }>(
     `UPDATE schedule_punch_items
         SET estado = 'resuelto', foto_resuelto = COALESCE($2, foto_resuelto),
             resolved_by = $3, resolved_at = NOW()
       WHERE id = $1 AND estado <> 'resuelto' RETURNING proyecto_id`,
     [itemId, fotoResuelto, usuarioId])
-  if (!rows[0]) return { ok: false }
+  if (!rows[0]) {
+    // Idempotencia (reintento de la cola offline): si ya estaba resuelto, es éxito
+    // silencioso; si no existe, sí es error real.
+    const { rows: ex } = await runner.query<{ proyecto_id: number; estado: string }>(
+      `SELECT proyecto_id, estado FROM schedule_punch_items WHERE id = $1`, [itemId])
+    if (ex[0]?.estado === 'resuelto') return { ok: true, already: true, proyectoId: ex[0].proyecto_id }
+    return { ok: false }
+  }
   const proyectoId = rows[0].proyecto_id
 
   // ¿Quedan ítems abiertos? Si no, y hay al menos uno, se completa I-06.
@@ -162,7 +175,15 @@ export async function listPunch(runner: QueryRunner, proyectoId: number): Promis
 // ── SIGN-OFF DEL CLIENTE EN OBRA (completa I-07) ─────────────────────────────
 export async function registrarSignoff(
   runner: QueryRunner, proyectoId: number, nombreCliente: string | null, firma: string | null
-): Promise<{ ok: boolean; error?: string }> {
+): Promise<{ ok: boolean; already?: boolean; error?: string }> {
+  // Idempotencia (reintento de la cola offline): si I-07 ya se registró, éxito
+  // silencioso — no re-corremos gates ni recompute.
+  const { rows: done } = await runner.query<{ fecha_real: string | null }>(
+    `SELECT sh.fecha_real FROM schedule_hitos sh
+       JOIN schedule_planes sp ON sp.id = sh.plan_id
+      WHERE sp.proyecto_id = $1 AND sp.scope = 'proyecto' AND sh.codigo = 'I-07'`, [proyectoId])
+  if (done[0]?.fecha_real) return { ok: true, already: true }
+
   // Punch list sin defectos: I-06 solo se cierra solo al RESOLVER un punch item
   // existente (resolverPunchItem), así que una instalación sin defectos nunca lo
   // cerraba y el sign-off quedaba trabado. Si no quedan defectos ABIERTOS, el punch
@@ -181,5 +202,35 @@ export async function registrarSignoff(
   await completarHito(runner, proyectoId, 'I-07',
     { source: 'field_signoff', cliente: nombreCliente || undefined, firma: firma || undefined })
   await recomputeScheduleForProyecto(runner, proyectoId, 'op')
+  return { ok: true }
+}
+
+// ── REPORTE DE DAÑO / FALTANTE EN OBRA (→ tarea al PM) ───────────────────────
+// Field reporta desde el móvil un daño o faltante encontrado en obra. NO es un
+// punch item (decisión de Chali 2026-09-20: "solo al PM"): crea una tarea en el
+// escritorio del PM del proyecto (área 'administracion', que ve PROJECT_MANAGEMENT).
+// El código del proyecto va en `subject` (el filtro por proyecto busca ahí; la
+// tabla tareas no tiene proyecto_id). Idempotente por source_ref (índice único
+// parcial cuando origen='sistema'): un reintento de la cola offline no duplica.
+export async function crearReporteObra(
+  runner: QueryRunner, proyectoId: number, descripcion: string,
+  fotoUrl: string | null, clientId: string | null, usuario: string | null
+): Promise<{ ok: boolean; error?: string }> {
+  const { rows: p } = await runner.query<{ codigo: string; nombre: string }>(
+    `SELECT codigo, nombre FROM proyectos WHERE id = $1`, [proyectoId])
+  if (!p[0]) return { ok: false, error: 'Proyecto no encontrado' }
+
+  const ref = `obra:${proyectoId}:${clientId ?? Date.now()}`
+  const cuerpo = `Reporte de obra${usuario ? ` — ${usuario}` : ''}:\n\n${descripcion}` +
+    (fotoUrl ? `\n\nFoto: ${fotoUrl}` : '')
+
+  await runner.query(
+    `INSERT INTO tareas (area, title, description, priority, from_email, subject, source_email_id, origen, source_ref)
+       VALUES ('administracion',$1,$2,'high','sistema@centralmillwork.com',$3,NULL,'sistema',$4)
+     ON CONFLICT (source_ref) WHERE origen='sistema' AND source_ref IS NOT NULL DO NOTHING`,
+    [`Reporte de obra: ${p[0].codigo} — ${p[0].nombre}`,
+     cuerpo,
+     `Reporte de obra: ${p[0].codigo}`,
+     ref])
   return { ok: true }
 }

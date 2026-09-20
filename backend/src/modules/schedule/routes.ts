@@ -2,7 +2,7 @@ import { Router } from 'express'
 import { requireRole } from '../../middleware/auth'
 import { getPlan, generarPlanHandler, recalcularHandler, crearPortalTokenHandler, listPortalTokensHandler, revocarPortalTokenHandler, portalPreviewHandler, registrarHitoHandler, cambiarFechaObjetivoHandler, factibilidadHandler, proyectosOverviewHandler } from './controllers/schedulePlan.controller'
 import { uploadSubmittal, uploadSubmittalHandler, listSubmittalsHandler, uploadArchivo, uploadArchivoHitoHandler, listArchivosHitoHandler, uploadPlanoCampoHandler } from './controllers/submittals.controller'
-import { uploadFoto, installQueueHandler, listItemsHandler, marcarItemHandler, desmarcarItemHandler, listPunchHandler, crearPunchHandler, resolverPunchHandler, signoffHandler } from './controllers/field.controller'
+import { uploadFoto, installQueueHandler, listItemsHandler, marcarItemHandler, desmarcarItemHandler, listPunchHandler, crearPunchHandler, resolverPunchHandler, signoffHandler, reporteObraHandler } from './controllers/field.controller'
 import { uploadContrato, intakeHandler } from './controllers/intake.controller'
 
 const router = Router()
@@ -58,5 +58,7 @@ router.get ('/proyecto/:id/punch',        SCHEDULE_READ,  listPunchHandler)
 router.post('/proyecto/:id/punch',        SCHEDULE_FIELD, uploadFoto.single('foto'), crearPunchHandler)
 router.post('/punch/:itemId/resolver',    SCHEDULE_FIELD, uploadFoto.single('foto'), resolverPunchHandler)
 router.post('/proyecto/:id/signoff',      SCHEDULE_FIELD, uploadFoto.single('firma'), signoffHandler)
+// Reporte de daño/faltante en obra → tarea al PM (decisión Chali 2026-09-20).
+router.post('/proyecto/:id/reporte-obra', SCHEDULE_FIELD, uploadFoto.single('foto'), reporteObraHandler)
 
 export default router
