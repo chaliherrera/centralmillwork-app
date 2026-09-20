@@ -1,5 +1,5 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react'
-import { api, tokenStorage, userStorage } from '../services/api'
+import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react'
+import { api, tokenStorage, userStorage, setUnauthorizedHandler } from '../services/api'
 import { User } from '../types'
 
 interface AuthContextType {
@@ -15,12 +15,41 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
   const [loading, setLoading] = useState(true)
 
-  // Al iniciar la app, recuperar sesión guardada
+  const logout = useCallback(async () => {
+    await tokenStorage.remove()
+    await userStorage.remove()
+    setUser(null)
+  }, [])
+
+  // Un 401 en cualquier request (token vencido/inválido) cierra la sesión y vuelve
+  // al login. Se registra una sola vez.
+  useEffect(() => {
+    setUnauthorizedHandler(() => { logout() })
+    return () => setUnauthorizedHandler(null)
+  }, [logout])
+
+  // Al iniciar: restaurar la sesión guardada y VALIDAR el token contra el backend.
+  // - 200  → sesión válida, se refresca el usuario.
+  // - 401  → el interceptor de api.ts ya dispara logout (sesión fantasma resuelta).
+  // - error de red (sin señal) → se MANTIENE la sesión guardada (modo offline);
+  //   no deslogueamos por falta de conexión.
   useEffect(() => {
     (async () => {
       const savedUser = await userStorage.get()
-      if (savedUser) setUser(savedUser)
-      setLoading(false)
+      if (!savedUser) { setLoading(false); return }
+      setUser(savedUser) // optimista, para no parpadear el login
+      try {
+        const { data } = await api.get('/auth/me') // → { data: user }
+        if (data?.data) {
+          setUser(data.data)
+          await userStorage.save(data.data)
+        }
+      } catch (err: any) {
+        // Solo el 401 cierra sesión (lo hace el interceptor). Sin red, seguimos.
+        if (err?.response?.status === 401) setUser(null)
+      } finally {
+        setLoading(false)
+      }
     })()
   }, [])
 
@@ -29,12 +58,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await tokenStorage.save(data.token)
     await userStorage.save(data.user)
     setUser(data.user)
-  }
-
-  async function logout() {
-    await tokenStorage.remove()
-    await userStorage.remove()
-    setUser(null)
   }
 
   return (

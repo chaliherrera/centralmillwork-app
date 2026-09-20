@@ -7,6 +7,9 @@
     "development": {
       "developmentClient": true,
       "distribution": "internal",
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://centralmillwork-backend-staging.up.railway.app/api"
+      },
       "ios": {
         "simulator": false,
         "resourceClass": "m-medium"
@@ -18,6 +21,9 @@
     "preview": {
       "distribution": "internal",
       "channel": "preview",
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://centralmillwork-backend-staging.up.railway.app/api"
+      },
       "ios": {
         "resourceClass": "m-medium"
       },
@@ -28,6 +34,9 @@
     "production": {
       "channel": "production",
       "autoIncrement": true,
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://centralmillwork-backend-production.up.railway.app/api"
+      },
       "ios": {
         "resourceClass": "m-medium"
       },
@@ -39,6 +48,9 @@
       "channel": "production",
       "autoIncrement": true,
       "distribution": "internal",
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://centralmillwork-backend-production.up.railway.app/api"
+      },
       "ios": {
         "resourceClass": "m-medium"
       },

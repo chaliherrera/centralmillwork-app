@@ -1,3 +1,5 @@
+// Debe coincidir con `Role` del backend (backend/src/middleware/auth.ts). FIELD y
+// LOGISTICA faltaban acá: un usuario field@ entraba con un rol que el tipo no conocía.
 export type UserRole =
   | 'ADMIN'
   | 'PROCUREMENT'
@@ -6,6 +8,8 @@ export type UserRole =
   | 'CONTABILIDAD'
   | 'SHOP_MANAGER'
   | 'ENGINEERING'
+  | 'LOGISTICA'
+  | 'FIELD'
   | 'VIEWER'
 
 export interface User {

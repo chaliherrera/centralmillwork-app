@@ -17,6 +17,13 @@ export interface OrdenCompra {
   proveedor?: { id: number; nombre: string }
 }
 
+export interface OCFiltro {
+  estado_display?: 'ORDENADO' | 'EN_TRANSITO' | 'EN_EL_TALLER' | 'CANCELADA'
+  proyecto_id?: number
+  search?: string
+  limit?: number
+}
+
 export const ordenesCompraService = {
   // Trae OCs pendientes de recepción (ORDENADO + EN_TRANSITO)
   async getPendientesRecepcion(): Promise<OrdenCompra[]> {
@@ -25,6 +32,12 @@ export const ordenesCompraService = {
       api.get('/ordenes-compra', { params: { estado_display: 'EN_TRANSITO', limit: 100 } }),
     ])
     return [...ordenado.data.data, ...transito.data.data]
+  },
+
+  // Listado general de OCs (consola Admin/Compras). Devuelve la página `data`.
+  async getOrdenes(filtro: OCFiltro = {}): Promise<OrdenCompra[]> {
+    const { data } = await api.get('/ordenes-compra', { params: { limit: 100, ...filtro } })
+    return data.data
   },
 
   async getById(id: number): Promise<OrdenCompra> {
