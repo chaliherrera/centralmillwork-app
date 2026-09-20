@@ -20,6 +20,7 @@
         "NSCameraUsageDescription": "Central Millwork necesita acceso a la cámara para tomar fotos de los materiales recibidos durante el registro de recepciones.",
         "NSPhotoLibraryUsageDescription": "Central Millwork necesita acceso a la librería de fotos para adjuntar imágenes de materiales recibidos.",
         "NSPhotoLibraryAddUsageDescription": "Central Millwork puede guardar fotos tomadas con la cámara en tu librería para tu archivo personal.",
+        "NSLocationWhenInUseUsageDescription": "Central Millwork usa tu ubicación al hacer el check-in en obra, como evidencia de que estuviste en el sitio.",
         "ITSAppUsesNonExemptEncryption": false
       }
     },
@@ -43,6 +44,9 @@
     "platforms": [
       "ios",
       "android"
+    ],
+    "plugins": [
+      "expo-sqlite"
     ]
   }
 }

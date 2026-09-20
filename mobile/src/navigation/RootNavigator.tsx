@@ -16,6 +16,8 @@ import MaterialesMtoScreen from '../screens/MaterialesMtoScreen'
 import ControlMtoScreen from '../screens/ControlMtoScreen'
 import OrdenesCompraScreen from '../screens/OrdenesCompraScreen'
 import ProyectosScreen from '../screens/ProyectosScreen'
+import ReporteObraScreen from '../screens/ReporteObraScreen'
+import PlanosScreen from '../screens/PlanosScreen'
 
 const Stack = createNativeStackNavigator<RootStackParamList>()
 type Nav = NativeStackNavigationProp<RootStackParamList>
@@ -80,13 +82,15 @@ export default function RootNavigator() {
             <Stack.Screen name="Buscar" component={BuscarRoute} />
             <Stack.Screen name="Instalacion" component={InstalacionRoute} />
             <Stack.Screen name="InstallDetail" component={InstallDetailRoute} />
+            <Stack.Screen name="ReporteObra" component={ReporteObraScreen} />
           </Stack.Group>
-          {/* Consola Admin (nuevas): header nativo tematizado */}
+          {/* Consola Admin + planos (nuevas): header nativo tematizado */}
           <Stack.Group screenOptions={HEADER}>
             <Stack.Screen name="MaterialesMto" component={MaterialesMtoScreen} options={{ title: 'Materiales MTO' }} />
             <Stack.Screen name="ControlMto" component={ControlMtoScreen} options={{ title: 'Control MTO' }} />
             <Stack.Screen name="OrdenesCompra" component={OrdenesCompraScreen} options={{ title: 'Órdenes de Compra' }} />
             <Stack.Screen name="Proyectos" component={ProyectosScreen} options={{ title: 'Proyectos' }} />
+            <Stack.Screen name="PlanosObra" component={PlanosScreen} options={{ title: 'Planos' }} />
           </Stack.Group>
         </Stack.Navigator>
       )}

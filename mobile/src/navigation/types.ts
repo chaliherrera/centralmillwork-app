@@ -12,6 +12,8 @@ export type RootStackParamList = {
   Buscar: undefined
   Instalacion: undefined
   InstallDetail: { proyecto: InstallProyecto }
+  ReporteObra: { proyectoId: number; codigo: string; nombre: string }
+  PlanosObra: { proyectoId: number; codigo: string }
   // Consola Admin (nuevas, solo lectura en Fase 0)
   MaterialesMto: undefined
   ControlMto: undefined

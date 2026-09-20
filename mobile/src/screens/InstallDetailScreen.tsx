@@ -1,11 +1,16 @@
 import React, { useEffect, useState, useCallback } from 'react'
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
-  ActivityIndicator, Alert, TextInput, Image,
+  ActivityIndicator, Alert, TextInput, Image, Modal,
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import * as ImagePicker from 'expo-image-picker'
+import * as Location from 'expo-location'
+import { useNavigation } from '@react-navigation/native'
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import { scheduleService, InstallProyecto, PunchItem, InstallItem } from '../services/schedule'
+import SignaturePad from '../components/SignaturePad'
+import type { RootStackParamList } from '../navigation/types'
 
 interface Props {
   proyecto: InstallProyecto
@@ -27,6 +32,17 @@ async function tomarFoto(): Promise<string | null> {
   return null
 }
 
+// Obtiene la ubicación (para el check-in en obra). Si no hay permiso o falla, null
+// (no bloquea el check-in — la foto sigue siendo la evidencia principal).
+async function obtenerGps(): Promise<{ lat: number; lng: number } | null> {
+  try {
+    const perm = await Location.requestForegroundPermissionsAsync()
+    if (!perm.granted) return null
+    const pos = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced })
+    return { lat: pos.coords.latitude, lng: pos.coords.longitude }
+  } catch { return null }
+}
+
 export default function InstallDetailScreen({ proyecto, onBack, onChanged }: Props) {
   const [hitos, setHitos] = useState<HitoEstado[]>(proyecto.hitos)
   const [items, setItems] = useState<InstallItem[]>([])
@@ -36,6 +52,10 @@ export default function InstallDetailScreen({ proyecto, onBack, onChanged }: Pro
   const [nuevoPunch, setNuevoPunch] = useState('')
   const [nuevoArea, setNuevoArea] = useState('')
   const [firmaCliente, setFirmaCliente] = useState(proyecto.cliente || '')
+  const nav = useNavigation<NativeStackNavigationProp<RootStackParamList>>()
+  const [firmando, setFirmando] = useState(false)          // pad de firma abierto
+  const [resolviendo, setResolviendo] = useState<PunchItem | null>(null) // modal resolver punch
+  const [notaResolver, setNotaResolver] = useState('')
 
   const done = (codigo: string) => hitos.find((h) => h.codigo === codigo)?.fecha_real ?? null
 
@@ -66,10 +86,11 @@ export default function InstallDetailScreen({ proyecto, onBack, onChanged }: Pro
     if (!uri) return
     setBusy('I-04')
     try {
-      await scheduleService.registrarConFoto(proyecto.proyecto_id, 'I-04', uri)
+      const gps = await obtenerGps()
+      await scheduleService.registrarConFoto(proyecto.proyecto_id, 'I-04', uri, gps ? { gps } : undefined)
       await recargar()
       onChanged()
-      Alert.alert('Listo', 'Check-in registrado con foto.')
+      Alert.alert('Listo', gps ? 'Check-in registrado con foto y ubicación.' : 'Check-in registrado con foto.')
     } catch (err: any) {
       Alert.alert('Error', err?.response?.data?.message || 'No se pudo registrar el check-in')
     } finally {
@@ -144,11 +165,17 @@ export default function InstallDetailScreen({ proyecto, onBack, onChanged }: Pro
     }
   }
 
-  const resolverPunch = async (item: PunchItem) => {
-    const uri = await tomarFoto() // foto de resuelto (opcional: si cancela, resuelve sin foto)
+  // Abre el modal de resolución (nota + foto opcional).
+  const abrirResolver = (item: PunchItem) => { setNotaResolver(''); setResolviendo(item) }
+  const doResolver = async (conFoto: boolean) => {
+    const item = resolviendo
+    if (!item) return
+    let uri: string | undefined
+    if (conFoto) { const u = await tomarFoto(); if (!u) return; uri = u }
+    setResolviendo(null)
     setBusy(`punch-${item.id}`)
     try {
-      await scheduleService.resolverPunch(item.id, uri || undefined)
+      await scheduleService.resolverPunch(item.id, uri, notaResolver.trim() || undefined)
       await recargar()
       onChanged()
     } catch (err: any) {
@@ -162,31 +189,25 @@ export default function InstallDetailScreen({ proyecto, onBack, onChanged }: Pro
   const abiertos = punch.filter((p) => p.estado === 'abierto').length
   const puedeEntregar = !!done('I-04') && abiertos === 0
 
+  // Abre el pad de firma (requiere nombre de quien recibe).
   const hacerSignoff = () => {
-    Alert.alert(
-      'Confirmar entrega',
-      `Vas a registrar el sign-off del cliente. Esto marca el proyecto como ENTREGADO.\n\n¿Continuar?`,
-      [
-        { text: 'Cancelar', style: 'cancel' },
-        {
-          text: 'Confirmar',
-          onPress: async () => {
-            const uri = await tomarFoto() // firma/foto opcional
-            setBusy('signoff')
-            try {
-              await scheduleService.signoff(proyecto.proyecto_id, firmaCliente.trim() || undefined, uri || undefined)
-              await recargar()
-              onChanged()
-              Alert.alert('¡Entregado!', 'Sign-off del cliente registrado. Proyecto ENTREGADO.')
-            } catch (err: any) {
-              Alert.alert('Error', err?.response?.data?.message || 'No se pudo registrar el sign-off')
-            } finally {
-              setBusy(null)
-            }
-          },
-        },
-      ]
-    )
+    if (!firmaCliente.trim()) { Alert.alert('Falta el nombre', 'Ingresá quién recibe la entrega.'); return }
+    setFirmando(true)
+  }
+  // Se llama cuando el cliente firmó en el pad (firmaUri = PNG de la firma).
+  const doSignoff = async (firmaUri: string) => {
+    setFirmando(false)
+    setBusy('signoff')
+    try {
+      await scheduleService.signoff(proyecto.proyecto_id, firmaCliente.trim() || undefined, firmaUri)
+      await recargar()
+      onChanged()
+      Alert.alert('¡Entregado!', 'Sign-off del cliente registrado. Proyecto ENTREGADO.')
+    } catch (err: any) {
+      Alert.alert('Error', err?.response?.data?.message || 'No se pudo registrar el sign-off')
+    } finally {
+      setBusy(null)
+    }
   }
 
   if (loading) {
@@ -209,6 +230,17 @@ export default function InstallDetailScreen({ proyecto, onBack, onChanged }: Pro
             <Text style={styles.headerSub} numberOfLines={1}>{proyecto.nombre}</Text>
           </View>
           <View style={{ width: 60 }} />
+        </View>
+
+        <View style={styles.acciones}>
+          <TouchableOpacity style={styles.accBtn}
+            onPress={() => nav.navigate('PlanosObra', { proyectoId: proyecto.proyecto_id, codigo: proyecto.codigo })}>
+            <Text style={styles.accText}>📐 Planos</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.accBtn}
+            onPress={() => nav.navigate('ReporteObra', { proyectoId: proyecto.proyecto_id, codigo: proyecto.codigo, nombre: proyecto.nombre })}>
+            <Text style={styles.accText}>⚠️ Reportar daño</Text>
+          </TouchableOpacity>
         </View>
 
         <ScrollView contentContainerStyle={styles.content}>
@@ -281,6 +313,7 @@ export default function InstallDetailScreen({ proyecto, onBack, onChanged }: Pro
                 <View style={{ flex: 1 }}>
                   <Text style={styles.punchDesc}>{item.descripcion}</Text>
                   {item.area ? <Text style={styles.punchArea}>{item.area}</Text> : null}
+                  {item.nota_resuelto ? <Text style={styles.punchNota}>Resuelto: {item.nota_resuelto}</Text> : null}
                   <View style={styles.punchThumbs}>
                     {item.foto_problema_url ? <Image source={{ uri: item.foto_problema_url }} style={styles.punchThumb} /> : null}
                     {item.foto_resuelto_url ? <Image source={{ uri: item.foto_resuelto_url }} style={styles.punchThumb} /> : null}
@@ -289,7 +322,7 @@ export default function InstallDetailScreen({ proyecto, onBack, onChanged }: Pro
                 {item.estado === 'resuelto' ? (
                   <Text style={styles.punchResuelto}>✓ Resuelto</Text>
                 ) : (
-                  <TouchableOpacity onPress={() => resolverPunch(item)} disabled={busy === `punch-${item.id}`} style={styles.resolverBtn}>
+                  <TouchableOpacity onPress={() => abrirResolver(item)} disabled={busy === `punch-${item.id}`} style={styles.resolverBtn}>
                     {busy === `punch-${item.id}` ? <ActivityIndicator color="#fff" size="small" /> : <Text style={styles.resolverText}>Resolver</Text>}
                   </TouchableOpacity>
                 )}
@@ -323,7 +356,7 @@ export default function InstallDetailScreen({ proyecto, onBack, onChanged }: Pro
               <>
                 <TextInput value={firmaCliente} onChangeText={setFirmaCliente}
                   placeholder="Nombre de quien recibe" placeholderTextColor="#999" style={styles.input} />
-                <ActionBtn label="✍️ Registrar entrega (foto de firma)" loading={busy === 'signoff'}
+                <ActionBtn label="✍️ Firmar y registrar entrega" loading={busy === 'signoff'}
                   disabled={!puedeEntregar} green onPress={hacerSignoff} />
                 {!puedeEntregar && (
                   <Text style={styles.gateHint}>
@@ -334,6 +367,38 @@ export default function InstallDetailScreen({ proyecto, onBack, onChanged }: Pro
             )}
           </StepCard>
         </ScrollView>
+
+        {/* Pad de firma del cliente (sign-off I-07) */}
+        <SignaturePad
+          visible={firmando}
+          titulo={`Firma — ${proyecto.codigo}`}
+          onCancel={() => setFirmando(false)}
+          onSave={doSignoff}
+        />
+
+        {/* Modal para resolver un punch item con nota + foto opcional */}
+        <Modal visible={!!resolviendo} transparent animationType="fade" onRequestClose={() => setResolviendo(null)}>
+          <View style={styles.modalBg}>
+            <View style={styles.modalCard}>
+              <Text style={styles.modalTitle}>Resolver pendiente</Text>
+              {resolviendo ? <Text style={styles.modalDesc} numberOfLines={2}>{resolviendo.descripcion}</Text> : null}
+              <TextInput
+                value={notaResolver} onChangeText={setNotaResolver} multiline
+                placeholder="Nota de cómo se resolvió (opcional)…" placeholderTextColor="#999"
+                style={styles.modalInput}
+              />
+              <TouchableOpacity style={[styles.modalBtn, styles.modalBtnGold]} onPress={() => doResolver(true)}>
+                <Text style={styles.modalBtnText}>📷 Con foto</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[styles.modalBtn, styles.modalBtnGreen]} onPress={() => doResolver(false)}>
+                <Text style={styles.modalBtnText}>Resolver sin foto</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.modalCancel} onPress={() => setResolviendo(null)}>
+                <Text style={styles.modalCancelText}>Cancelar</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </Modal>
       </View>
     </SafeAreaView>
   )
@@ -464,4 +529,23 @@ const styles = StyleSheet.create({
   smallBtnGold: { backgroundColor: '#C18A2D' },
   smallBtnGhost: { backgroundColor: '#fff', borderWidth: 1, borderColor: '#C8C5BC' },
   smallBtnText: { color: '#fff', fontWeight: '700', fontSize: 13 },
+
+  // Barra de acciones (planos / reportar daño)
+  acciones: { flexDirection: 'row', gap: 10, backgroundColor: '#2c3126', paddingHorizontal: 16, paddingBottom: 12 },
+  accBtn: { flex: 1, backgroundColor: '#3a4133', borderRadius: 9, paddingVertical: 10, alignItems: 'center' },
+  accText: { color: '#E8C684', fontWeight: '700', fontSize: 13 },
+  punchNota: { fontSize: 11.5, color: '#2f6a12', marginTop: 3, fontStyle: 'italic' },
+
+  // Modal resolver punch
+  modalBg: { flex: 1, backgroundColor: 'rgba(20,25,16,0.55)', justifyContent: 'center', padding: 24 },
+  modalCard: { backgroundColor: '#fff', borderRadius: 14, padding: 18 },
+  modalTitle: { fontSize: 16, fontWeight: '800', color: '#2c3126' },
+  modalDesc: { fontSize: 13, color: '#5A5F52', marginTop: 4, marginBottom: 10 },
+  modalInput: { backgroundColor: '#F4F5F2', borderRadius: 9, borderWidth: 1, borderColor: '#E0DFD9', padding: 11, fontSize: 14, color: '#1F2419', minHeight: 70, textAlignVertical: 'top', marginBottom: 12 },
+  modalBtn: { borderRadius: 9, paddingVertical: 13, alignItems: 'center', marginBottom: 9 },
+  modalBtnGold: { backgroundColor: '#C18A2D' },
+  modalBtnGreen: { backgroundColor: '#16A34A' },
+  modalBtnText: { color: '#fff', fontWeight: '800', fontSize: 14 },
+  modalCancel: { alignItems: 'center', paddingVertical: 6 },
+  modalCancelText: { color: '#5A5F52', fontWeight: '600', fontSize: 13 },
 })
