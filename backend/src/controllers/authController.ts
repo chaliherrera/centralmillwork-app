@@ -6,7 +6,7 @@ import { createError } from '../middleware/errorHandler'
 
 export async function login(req: Request, res: Response, next: NextFunction) {
   try {
-    const { email, password } = req.body
+    const { email, password, client } = req.body
     if (!email || !password) return next(createError('Email y password requeridos', 400))
 
     const { rows: [user] } = await pool.query(
@@ -18,10 +18,16 @@ export async function login(req: Request, res: Response, next: NextFunction) {
     const valid = await bcrypt.compare(String(password), user.password_hash)
     if (!valid) return next(createError('Credenciales inválidas', 401))
 
+    // La app móvil usa una sesión larga (30d) para tolerar días de obra sin señal
+    // (la cola offline se rechazaría con un JWT de 8h). El token vive en el Keychain
+    // seguro del teléfono (con PIN/biometría). La web sigue con la sesión corta.
+    const expiresIn = (client === 'mobile'
+      ? (process.env.JWT_EXPIRES_IN_MOBILE ?? '30d')
+      : (process.env.JWT_EXPIRES_IN ?? '8h')) as jwt.SignOptions['expiresIn']
     const token = jwt.sign(
       { id: user.id, email: user.email, rol: user.rol },
       process.env.JWT_SECRET!,
-      { expiresIn: (process.env.JWT_EXPIRES_IN ?? '8h') as jwt.SignOptions['expiresIn'] }
+      { expiresIn }
     )
 
     const { password_hash: _ph, ...userData } = user

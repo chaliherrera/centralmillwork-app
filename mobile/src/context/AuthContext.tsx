@@ -54,7 +54,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [])
 
   async function login(email: string, password: string) {
-    const { data } = await api.post('/auth/login', { email, password })
+    // client:'mobile' → sesión larga (30d) para el modo offline de obra.
+    const { data } = await api.post('/auth/login', { email, password, client: 'mobile' })
     await tokenStorage.save(data.token)
     await userStorage.save(data.user)
     setUser(data.user)
