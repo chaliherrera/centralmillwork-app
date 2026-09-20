@@ -152,6 +152,18 @@ export async function capturarFechasReales(
         { source: 'op_estacion', activas, pendientes })
   }
 
+  // ── S-04 · Envío = estación 'shipping' de la OP del proyecto COMPLETADA ─────
+  // El diseño marca S-04 como fuente_dato='op_estacion': cierra desde el kiosko cuando
+  // el operario completa la estación shipping (fotos del camión). Antes NO estaba
+  // implementado → S-04 quedaba pendiente aunque la OP estuviera despachada.
+  const s04 = await scalarDate(runner,
+    `SELECT to_char(MAX(COALESCE(op2.fecha_fin, o.fecha_completada, o.updated_at)),'YYYY-MM-DD') AS d
+       FROM orden_procesos op2
+       JOIN ordenes_produccion o ON o.id = op2.orden_id
+      WHERE o.proyecto_id = $1 AND o.tipo IS DISTINCT FROM 'MUESTRA'
+        AND op2.estacion = 'shipping' AND op2.completado = true`, [proyectoId])
+  set('S-04', s04, { source: 'op_estacion', regla: 'estación shipping completada' })
+
   if (hasQC) {
     // ── QC-02 · QC final aprobado = última inspección con decisión Aprobar ───
     // (QC-01 y QC-03 se podaron de la plantilla en la migr. 074; no se capturan.)
