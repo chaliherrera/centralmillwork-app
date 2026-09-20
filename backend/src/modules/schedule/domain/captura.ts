@@ -50,11 +50,13 @@ export async function capturarFechasReales(
   const set = (codigo: string, fecha: ISODate | null, ev: Record<string, unknown>) =>
     out.set(codigo, { fecha_real: fecha, evidencia: fecha ? ev : null })
 
-  // ── M-03 · Long-lead ordenados ≈ primera OC emitida del proyecto ───────────
+  // ── M-03 · Long-lead ordenados ≈ primera OC de MATERIALES (MTO) del proyecto ─
+  // Solo OCs de origen MTO (las que salen del take-off/procura). Las OCs DIRECTA /
+  // URGENTE / OPERATIVA son compras ad-hoc y NO marcan el journey de materiales.
   const m03 = await scalarDate(runner,
     `SELECT to_char(MIN(fecha_emision),'YYYY-MM-DD') AS d
        FROM ordenes_compra
-      WHERE proyecto_id = $1 AND estado NOT IN ('borrador','cancelada')`, [proyectoId])
+      WHERE proyecto_id = $1 AND origen = 'MTO' AND estado NOT IN ('borrador','cancelada')`, [proyectoId])
   set('M-03', m03, { source: 'oc_emitida', regla: 'primera OC emitida' })
 
   // ── M-04 · MTO cotizado = última cotización recibida ───────────────────────
@@ -74,7 +76,7 @@ export async function capturarFechasReales(
     const { rows } = await runner.query<{ d: string | null; n: string }>(
       `SELECT to_char(MAX(fecha_emision),'YYYY-MM-DD') AS d, COUNT(*)::text AS n
          FROM ordenes_compra
-        WHERE proyecto_id = $1 AND estado NOT IN ('borrador','cancelada')`, [proyectoId])
+        WHERE proyecto_id = $1 AND origen = 'MTO' AND estado NOT IN ('borrador','cancelada')`, [proyectoId])
     const n = Number(rows[0]?.n ?? 0)
     set('M-05', n > 0 ? (rows[0]?.d ?? null) : null, { source: 'oc_emitida', ocs: n })
   }
