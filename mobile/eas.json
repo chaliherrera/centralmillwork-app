@@ -32,7 +32,6 @@
       }
     },
     "staging": {
-      "distribution": "internal",
       "channel": "staging",
       "env": {
         "EXPO_PUBLIC_API_URL": "https://centralmillwork-backend-staging.up.railway.app/api",
