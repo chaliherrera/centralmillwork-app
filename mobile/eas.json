@@ -79,6 +79,11 @@
         "ascAppId": "6766353641",
         "appleTeamId": "2SJL93M32F"
       }
+    },
+    "staging": {
+      "ios": {
+        "appleTeamId": "2SJL93M32F"
+      }
     }
   }
 }
