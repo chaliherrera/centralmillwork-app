@@ -82,6 +82,7 @@
     },
     "staging": {
       "ios": {
+        "appleId": "carlosherrerat@hotmail.com",
         "appleTeamId": "2SJL93M32F"
       }
     }
