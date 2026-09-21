@@ -295,7 +295,7 @@ export interface DashboardProyecto {
 
 // ─── Tareas (generadas por Task Agent) ────────────────────────────────────────
 
-export type TareaArea     = 'procurement' | 'despachos' | 'recepcion' | 'administracion' | 'shop_manager'
+export type TareaArea     = 'procurement' | 'despachos' | 'recepcion' | 'administracion' | 'shop_manager' | 'ingenieria' | 'admin'
 export type TareaPriority = 'low' | 'medium' | 'high'
 export type TareaEstado   = 'pendiente' | 'en_progreso' | 'completada' | 'descartada'
 export type TareaOrigen   = 'email' | 'sistema'

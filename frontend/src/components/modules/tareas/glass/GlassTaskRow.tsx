@@ -2,7 +2,7 @@ import { Check, Circle, CircleDot, MoreHorizontal, Trash2, RotateCcw, Cpu } from
 import { useEffect, useRef, useState } from 'react'
 import type { Tarea } from '@/types'
 import {
-  AREA_META, PRIORITY_META, ESTADO_NEXT,
+  areaMeta, PRIORITY_META, ESTADO_NEXT,
   shortSender, timeAgo, extractProjectCode,
 } from '../constants'
 
@@ -76,7 +76,7 @@ export default function GlassTaskRow({
 }: Props) {
   const [menuOpen, setMenuOpen] = useState(false)
   const rowRef = useRef<HTMLDivElement>(null)
-  const area = AREA_META[tarea.area]
+  const area = areaMeta(tarea.area)
   const prio = PRIORITY_META[tarea.priority]
   const code = extractProjectCode(tarea.subject)
   const isDone = tarea.estado === 'completada'

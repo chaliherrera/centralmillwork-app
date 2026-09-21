@@ -13,7 +13,15 @@ export const AREA_META: Record<TareaArea, {
   recepcion:      { label: 'Recepción',       short: 'RCPN', color: '#8A3F1E', bg: '#F8ECE5' },
   administracion: { label: 'Administración',  short: 'ADMN', color: '#9B7200', bg: '#F8F1DC' },
   shop_manager:   { label: 'Shop Manager',    short: 'SHOP', color: '#2c3126', bg: '#E8EAE4' },
+  ingenieria:     { label: 'Ingeniería',      short: 'ING',  color: '#7C3AED', bg: '#F1EAFB' },
+  admin:          { label: 'Admin',           short: 'ADM',  color: '#334155', bg: '#EAEEF3' },
 }
+
+// Lookup defensivo: si llega un área desconocida (backend agrega una nueva), no
+// crashea — cae a un meta neutro. Evita el "algo salió mal" de /tareas.
+export const areaMeta = (a: string | null | undefined) =>
+  (a && (AREA_META as Record<string, typeof AREA_META['administracion']>)[a]) ||
+  { label: a || 'Otra', short: (a || 'OTRA').slice(0, 4).toUpperCase(), color: '#6B7280', bg: '#EFEFEF' }
 
 export const PRIORITY_META: Record<TareaPriority, {
   label: string

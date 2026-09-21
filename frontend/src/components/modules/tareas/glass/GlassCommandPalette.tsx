@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Search, ArrowRight, Filter, X, FolderOpen, Inbox } from 'lucide-react'
 import type { Tarea, TareaArea, TareasFilters } from '@/types'
-import { AREA_META, extractProjectCode } from '../constants'
+import { AREA_META, areaMeta, extractProjectCode } from '../constants'
 
 interface Props {
   open: boolean
@@ -58,8 +58,8 @@ export default function GlassCommandPalette({
         type: 'task',
         id: t.id,
         title: t.title,
-        subtitle: `${code ? code + ' · ' : ''}${AREA_META[t.area].label}`,
-        areaColor: AREA_META[t.area].color,
+        subtitle: `${code ? code + ' · ' : ''}${areaMeta(t.area).label}`,
+        areaColor: areaMeta(t.area).color,
       })
     }
 

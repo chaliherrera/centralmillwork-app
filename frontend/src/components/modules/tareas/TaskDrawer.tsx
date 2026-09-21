@@ -6,7 +6,7 @@ import {
 } from 'lucide-react'
 import type { Tarea } from '@/types'
 import {
-  AREA_META, PRIORITY_META, ESTADO_META,
+  areaMeta, PRIORITY_META, ESTADO_META,
   extractProjectCode, timeAgo, shortSender, ruleLabel,
 } from './constants'
 
@@ -29,7 +29,7 @@ export default function TaskDrawer({ tarea, onClose, onStatusChange, onDescartar
 
   if (!tarea) return null
 
-  const area = AREA_META[tarea.area]
+  const area = areaMeta(tarea.area)
   const prio = PRIORITY_META[tarea.priority]
   const estado = ESTADO_META[tarea.estado]
   const code = extractProjectCode(tarea.subject)

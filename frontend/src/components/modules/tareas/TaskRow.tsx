@@ -1,7 +1,7 @@
 import { Check, Circle, CircleDot, MoreHorizontal, Trash2, RotateCcw, Cpu } from 'lucide-react'
 import { useState, useEffect, useRef } from 'react'
 import type { Tarea } from '@/types'
-import { AREA_META, PRIORITY_META, ESTADO_NEXT, shortSender, timeAgo, extractProjectCode } from './constants'
+import { areaMeta, PRIORITY_META, ESTADO_NEXT, shortSender, timeAgo, extractProjectCode } from './constants'
 
 interface Props {
   tarea: Tarea
@@ -64,7 +64,7 @@ function EstadoButton({ estado, onClick }: { estado: Tarea['estado']; onClick: (
 export default function TaskRow({ tarea, highlighted, dimmed, focused, onStatusCycle, onDescartar, onReactivar, onProjectClick, onOpen }: Props) {
   const [menuOpen, setMenuOpen] = useState(false)
   const rowRef = useRef<HTMLDivElement>(null)
-  const area = AREA_META[tarea.area]
+  const area = areaMeta(tarea.area)
   const prio = PRIORITY_META[tarea.priority]
   const code = extractProjectCode(tarea.subject)
   const isDone = tarea.estado === 'completada'
