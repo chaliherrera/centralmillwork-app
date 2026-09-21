@@ -229,13 +229,22 @@ export async function punchCsvHandler(req: Request, res: Response, next: NextFun
     const proyectoId = parseProyectoId(req)
     const { rows: p } = await pool.query<{ codigo: string }>(`SELECT codigo FROM proyectos WHERE id = $1`, [proyectoId])
     const codigo = p[0]?.codigo ?? String(proyectoId)
-    const items = await listPunch(pool, proyectoId)
+    // URLs PÚBLICAS (permanentes) para el CSV — no firmadas (que vencen en 1h).
+    const { rows: items } = await pool.query<{
+      id: number; estado: string; area: string | null; descripcion: string
+      nota_resuelto: string | null; foto_problema: string | null; foto_resuelto: string | null; created_at: string
+    }>(
+      `SELECT id, estado, area, descripcion, nota_resuelto, foto_problema, foto_resuelto,
+              to_char(created_at,'YYYY-MM-DD') AS created_at
+         FROM schedule_punch_items WHERE proyecto_id = $1 ORDER BY created_at DESC, id DESC`, [proyectoId])
+    const pub = (f: string | null) =>
+      f && supabaseEnabled && supabase ? (supabase.storage.from(SUPABASE_BUCKET).getPublicUrl(f).data.publicUrl ?? '') : ''
 
     const esc = (v: unknown) => `"${String(v ?? '').replace(/"/g, '""')}"`
     const header = ['#', 'Estado', 'Área', 'Descripción', 'Nota de resolución', 'Foto del problema', 'Foto resuelto', 'Creado']
     const lines = [header.map(esc).join(',')]
     for (const it of items) {
-      lines.push([it.id, it.estado, it.area, it.descripcion, it.nota_resuelto, it.foto_problema_url, it.foto_resuelto_url, it.created_at].map(esc).join(','))
+      lines.push([it.id, it.estado, it.area, it.descripcion, it.nota_resuelto, pub(it.foto_problema), pub(it.foto_resuelto), it.created_at].map(esc).join(','))
     }
     // BOM para que Excel abra los acentos bien.
     const csv = '﻿' + lines.join('\r\n')

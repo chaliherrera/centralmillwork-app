@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import toast from 'react-hot-toast'
 import { Bell, Loader2, X } from 'lucide-react'
+import TaskDescription from '@/components/modules/tareas/TaskDescription'
 import { tareasService } from '@/services/tareas'
 import type { Tarea } from '@/types'
 import { usePollNovedades } from '@/hooks/usePollNovedades'
@@ -41,7 +42,7 @@ export default function AvisosPM() {
             <div className="flex items-start gap-2">
               <div className="flex-1 min-w-0">
                 <div className="text-[13px] font-semibold text-stone-800 leading-snug">{t.title}</div>
-                {t.description && <div className="text-[11.5px] text-stone-500 whitespace-pre-line mt-0.5 line-clamp-3">{t.description}</div>}
+                {t.description && <TaskDescription text={t.description} className="text-[11.5px] text-stone-500 whitespace-pre-line mt-0.5 line-clamp-3" />}
               </div>
               <button onClick={() => descartar(t)} disabled={busy === t.id} title="Descartar"
                 className="shrink-0 text-stone-400 hover:text-stone-700 rounded-md p-1 hover:bg-stone-100">
