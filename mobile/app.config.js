@@ -18,7 +18,8 @@ module.exports = ({ config }) => {
       ...config.android,
       package: 'com.centralmillwork.app.staging',
     },
-    // La app de staging es independiente: no comparte OTA updates con producción.
-    updates: { ...(config.updates || {}), enabled: false },
+    // OTA habilitado en el canal 'staging' (ver eas.json) → los cambios de JS se
+    // publican con `eas update --branch staging` sin rebuild. No interfiere con
+    // producción (canal distinto). El primer build con esto ya trae OTA.
   }
 }
