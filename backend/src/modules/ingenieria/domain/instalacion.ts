@@ -95,7 +95,7 @@ export interface InstalacionPM {
   proyecto_ext: string | null
   proyecto_nombre: string | null
   estado: string                 // pendiente | en_curso
-  etapa: 'iniciar' | 'completar'
+  etapa: 'iniciar' | 'en_obra' | 'completar'  // en_obra = Campo trabajando, sin firmar aún
   fecha_fin: string | null       // fecha planeada de la tarea
   items_total: number
   items_instalados: number
@@ -126,8 +126,10 @@ export async function listInstalacionesPM(runner: QueryRunner): Promise<Instalac
              AND NOT EXISTS (SELECT 1 FROM ing_tarea_deps d JOIN ing_tareas pr ON pr.id = d.depende_de_id
                               WHERE d.tarea_id = t.id AND d.ignorada_at IS NULL AND d.tipo = 'FS'
                                 AND pr.estado NOT IN ('hecha','na')))
-          OR (t.estado = 'en_curso' AND i07.fecha_real IS NOT NULL)
+          OR t.estado = 'en_curso'
         )
       ORDER BY t.fecha_fin NULLS LAST, t.proyecto_ext`)
-  return rows.map((r) => ({ ...r, etapa: r.estado === 'pendiente' ? 'iniciar' : 'completar' }))
+  // en_curso sin firma = 'en_obra' (Campo trabajando, el PM lo ve read-only para
+  // seguir la punch); en_curso CON firma = 'completar' (el PM cierra).
+  return rows.map((r) => ({ ...r, etapa: r.estado === 'pendiente' ? 'iniciar' : (r.firmada ? 'completar' : 'en_obra') }))
 }

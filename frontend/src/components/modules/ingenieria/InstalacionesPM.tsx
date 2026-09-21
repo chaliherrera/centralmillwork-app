@@ -122,6 +122,8 @@ export default function InstalacionesPM() {
               <div className="text-[11px] text-stone-400 mt-0.5">
                 {t.etapa === 'iniciar'
                   ? 'Listo para iniciar — al arrancar pasa a Campo para la verificación'
+                  : t.etapa === 'en_obra'
+                  ? <>Campo trabajando: {t.items_instalados}/{t.items_total} ítems · punch {t.punch_abiertos === 0 ? 'cerrado' : `${t.punch_abiertos} abierto(s)`} · sin firmar aún</>
                   : <>Campo verificó: {t.items_instalados}/{t.items_total} ítems · punch {t.punch_abiertos === 0 ? 'cerrado' : `${t.punch_abiertos} abierto(s)`} {t.firmada && '· firma ✓'}</>}
               </div>
             </div>
@@ -146,10 +148,12 @@ export default function InstalacionesPM() {
                     <Download size={14} /> CSV
                   </button>
                 )}
-                <button onClick={() => completar.mutate(t)} disabled={completar.isPending}
-                  className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white text-xs font-semibold px-3 py-1.5">
-                  {completar.isPending ? <Loader2 className="animate-spin" size={14} /> : <ClipboardCheck size={14} />} Completar instalación
-                </button>
+                {t.etapa === 'completar' && (
+                  <button onClick={() => completar.mutate(t)} disabled={completar.isPending}
+                    className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white text-xs font-semibold px-3 py-1.5">
+                    {completar.isPending ? <Loader2 className="animate-spin" size={14} /> : <ClipboardCheck size={14} />} Completar instalación
+                  </button>
+                )}
               </div>
             )}
           </div>

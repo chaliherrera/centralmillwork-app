@@ -55,7 +55,7 @@ export interface InstalacionPM {
   proyecto_ext: string | null
   proyecto_nombre: string | null
   estado: string
-  etapa: 'iniciar' | 'completar'
+  etapa: 'iniciar' | 'en_obra' | 'completar'
   fecha_fin: string | null
   items_total: number
   items_instalados: number
