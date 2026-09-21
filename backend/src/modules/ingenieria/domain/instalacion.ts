@@ -91,6 +91,7 @@ export async function detalleInstalacion(runner: QueryRunner, proyectoExt: strin
 // ─────────────────────────────────────────────────────────────────────────────
 export interface InstalacionPM {
   tarea_id: number
+  proyecto_id: number | null
   proyecto_ext: string | null
   proyecto_nombre: string | null
   estado: string                 // pendiente | en_curso
@@ -104,7 +105,7 @@ export interface InstalacionPM {
 
 export async function listInstalacionesPM(runner: QueryRunner): Promise<InstalacionPM[]> {
   const { rows } = await runner.query<InstalacionPM & { estado: string }>(
-    `SELECT t.id AS tarea_id, t.proyecto_ext, p.nombre AS proyecto_nombre, t.estado,
+    `SELECT t.id AS tarea_id, p.id AS proyecto_id, t.proyecto_ext, p.nombre AS proyecto_nombre, t.estado,
             CASE WHEN t.estado = 'pendiente' THEN 'iniciar' ELSE 'completar' END AS etapa,
             to_char(t.fecha_fin,'YYYY-MM-DD') AS fecha_fin,
             (SELECT COUNT(*) FROM ordenes_produccion op

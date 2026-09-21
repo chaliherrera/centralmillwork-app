@@ -1,4 +1,5 @@
 import { useEffect } from 'react'
+import TaskDescription from '../TaskDescription'
 import {
   X, Mail, Calendar, Circle, CircleDot, Check,
   Trash2, RotateCcw, AtSign, Cpu,
@@ -137,7 +138,7 @@ export default function GlassTaskDrawer({ tarea, onClose, onStatusChange, onDesc
           {tarea.description && (
             <section>
               <h3 className="text-[10px] uppercase tracking-wider font-semibold mb-1.5" style={{ color: TEXT4 }}>Resumen</h3>
-              <p className="text-sm leading-relaxed whitespace-pre-wrap" style={{ color: TEXT2 }}>{tarea.description}</p>
+              <TaskDescription text={tarea.description} className="text-sm leading-relaxed whitespace-pre-wrap" style={{ color: TEXT2 }} />
             </section>
           )}
 

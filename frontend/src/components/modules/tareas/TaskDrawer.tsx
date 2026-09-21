@@ -1,4 +1,5 @@
 import { useEffect } from 'react'
+import TaskDescription from './TaskDescription'
 import {
   X, Mail, Calendar, Circle, CircleDot, Check,
   Trash2, RotateCcw, AtSign, Cpu,
@@ -115,7 +116,7 @@ export default function TaskDrawer({ tarea, onClose, onStatusChange, onDescartar
           {tarea.description && (
             <section>
               <h3 className="text-[10px] uppercase tracking-wider font-semibold text-gray-400 mb-1.5">Resumen</h3>
-              <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap">{tarea.description}</p>
+              <TaskDescription text={tarea.description} className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap" />
             </section>
           )}
 

@@ -1,7 +1,23 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Hammer, Play, Loader2, ClipboardCheck } from 'lucide-react'
+import { Hammer, Play, Loader2, ClipboardCheck, Download } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { ingenieriaService, type InstalacionPM } from '@/services/ingenieria'
+import api from '@/services/api'
+
+// Descarga la punch list del proyecto como CSV (para trabajar/imprimir).
+async function exportarPunch(proyectoId: number, codigo: string) {
+  try {
+    const res = await api.get(`/schedule/proyecto/${proyectoId}/punch/export`, { responseType: 'blob' })
+    const url = URL.createObjectURL(res.data as Blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `punch-${codigo || proyectoId}.csv`
+    document.body.appendChild(a); a.click(); a.remove()
+    URL.revokeObjectURL(url)
+  } catch {
+    toast.error('No se pudo exportar la punch list')
+  }
+}
 
 // Bandeja del PM — Instalaciones (handoff de 3 etapas, Chali 2026-09-08).
 //  · etapa 'iniciar'   → el PM arranca la instalación → pasa a Campo (verificación en móvil).
@@ -63,10 +79,19 @@ export default function InstalacionesPM() {
                 {iniciar.isPending ? <Loader2 className="animate-spin" size={14} /> : <Play size={14} />} Iniciar instalación
               </button>
             ) : (
-              <button onClick={() => completar.mutate(t)} disabled={completar.isPending}
-                className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white text-xs font-semibold px-3 py-1.5 shrink-0">
-                {completar.isPending ? <Loader2 className="animate-spin" size={14} /> : <ClipboardCheck size={14} />} Completar instalación
-              </button>
+              <div className="flex items-center gap-2 shrink-0">
+                {t.proyecto_id != null && (
+                  <button onClick={() => exportarPunch(t.proyecto_id!, t.proyecto_ext ?? '')}
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-stone-300 hover:bg-stone-50 text-stone-600 text-xs font-semibold px-3 py-1.5"
+                    title="Descargar la punch list en CSV">
+                    <Download size={14} /> Punch CSV
+                  </button>
+                )}
+                <button onClick={() => completar.mutate(t)} disabled={completar.isPending}
+                  className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white text-xs font-semibold px-3 py-1.5">
+                  {completar.isPending ? <Loader2 className="animate-spin" size={14} /> : <ClipboardCheck size={14} />} Completar instalación
+                </button>
+              </div>
             )}
           </div>
         ))}

@@ -36,6 +36,7 @@ export interface InstallItem {
   op_status: string
   instalado: boolean
   foto_url: string | null
+  fotos: string[]            // todas las fotos del ítem (portada + adicionales)
   nota: string | null
   instalado_at: string | null
 }
@@ -106,6 +107,11 @@ export const scheduleService = {
     return submitAction(buildAction('instalar', proyectoId,
       `/schedule/proyecto/${proyectoId}/items/${opId}/instalar`, fields, uri ? 'foto' : undefined, uri))
   },
+
+  // Agregar una foto ADICIONAL a un ítem instalado (pasa por la cola offline).
+  agregarFotoItem: (proyectoId: number, opId: number, uri: string): Promise<SubmitResult> =>
+    submitAction(buildAction('instalar_foto', proyectoId,
+      `/schedule/proyecto/${proyectoId}/items/${opId}/foto`, {}, 'foto', uri)),
 
   // Deshacer instalación (no lleva archivo; sin cola — es correctivo y online).
   desmarcarItem: (proyectoId: number, opId: number) =>

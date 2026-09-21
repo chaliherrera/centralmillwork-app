@@ -3,7 +3,7 @@ import { requireRole } from '../../middleware/auth'
 import { createError } from '../../middleware/errorHandler'
 import { getPlan, generarPlanHandler, recalcularHandler, crearPortalTokenHandler, listPortalTokensHandler, revocarPortalTokenHandler, portalPreviewHandler, registrarHitoHandler, cambiarFechaObjetivoHandler, factibilidadHandler, proyectosOverviewHandler } from './controllers/schedulePlan.controller'
 import { uploadSubmittal, uploadSubmittalHandler, listSubmittalsHandler, uploadArchivo, uploadArchivoHitoHandler, listArchivosHitoHandler, uploadPlanoCampoHandler } from './controllers/submittals.controller'
-import { uploadFoto, installQueueHandler, listItemsHandler, marcarItemHandler, desmarcarItemHandler, listPunchHandler, crearPunchHandler, resolverPunchHandler, signoffHandler, reporteObraHandler } from './controllers/field.controller'
+import { uploadFoto, installQueueHandler, listItemsHandler, marcarItemHandler, desmarcarItemHandler, listPunchHandler, crearPunchHandler, resolverPunchHandler, signoffHandler, reporteObraHandler, punchCsvHandler, agregarFotoItemHandler } from './controllers/field.controller'
 import { uploadContrato, intakeHandler } from './controllers/intake.controller'
 
 const router = Router()
@@ -55,7 +55,9 @@ router.get ('/install-queue',             SCHEDULE_READ,  installQueueHandler)
 router.get ('/proyecto/:id/items',        SCHEDULE_READ,  listItemsHandler)
 router.post('/proyecto/:id/items/:opId/instalar',  SCHEDULE_FIELD, uploadFoto.single('foto'), marcarItemHandler)
 router.post('/proyecto/:id/items/:opId/desmarcar', SCHEDULE_FIELD, desmarcarItemHandler)
+router.post('/proyecto/:id/items/:opId/foto',      SCHEDULE_FIELD, uploadFoto.single('foto'), agregarFotoItemHandler)
 router.get ('/proyecto/:id/punch',        SCHEDULE_READ,  listPunchHandler)
+router.get ('/proyecto/:id/punch/export', SCHEDULE_READ,  punchCsvHandler)
 router.post('/proyecto/:id/punch',        SCHEDULE_FIELD, uploadFoto.single('foto'), crearPunchHandler)
 router.post('/punch/:itemId/resolver',    SCHEDULE_FIELD, uploadFoto.single('foto'), resolverPunchHandler)
 router.post('/proyecto/:id/signoff',      SCHEDULE_FIELD, uploadFoto.single('firma'), signoffHandler)

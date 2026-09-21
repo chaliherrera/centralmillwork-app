@@ -51,6 +51,7 @@ export interface PagoPorCobrar {
 // Instalación para la bandeja del PM (handoff 3 etapas: iniciar / completar).
 export interface InstalacionPM {
   tarea_id: number
+  proyecto_id: number | null
   proyecto_ext: string | null
   proyecto_nombre: string | null
   estado: string

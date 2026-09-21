@@ -30,7 +30,8 @@ export interface InstallItem {
   unidad: string | null
   op_status: string
   instalado: boolean
-  foto_url: string | null
+  foto_url: string | null      // foto "portada" (compat)
+  fotos: string[]              // TODAS las fotos del ítem (portada + adicionales)
   nota: string | null
   instalado_at: string | null
 }
@@ -40,21 +41,29 @@ export async function listInstallItems(runner: QueryRunner, proyectoId: number):
   const { rows } = await runner.query<{
     op_id: number; numero_orden: string; numero_item: string; cantidad: number
     unidad: string | null; op_status: string; foto: string | null; nota: string | null
-    instalado_at: string | null
+    instalado_at: string | null; fotos_extra: string[] | null
   }>(
     `SELECT op.id AS op_id, op.numero_orden, op.numero_item, op.cantidad, op.unidad,
             op.status AS op_status, ii.foto, ii.nota,
-            to_char(ii.instalado_at,'YYYY-MM-DD') AS instalado_at
+            to_char(ii.instalado_at,'YYYY-MM-DD') AS instalado_at,
+            (SELECT array_agg(f.filename ORDER BY f.created_at)
+               FROM schedule_install_item_fotos f
+              WHERE f.proyecto_id = op.proyecto_id AND f.op_id = op.id) AS fotos_extra
        FROM ordenes_produccion op
        LEFT JOIN schedule_install_items ii ON ii.op_id = op.id AND ii.proyecto_id = op.proyecto_id
       WHERE op.proyecto_id = $1 AND op.status <> 'Cancelada' AND op.tipo IS DISTINCT FROM 'MUESTRA'
       ORDER BY (ii.id IS NOT NULL), op.numero_item, op.id`, [proyectoId])
-  return Promise.all(rows.map(async (r) => ({
-    op_id: r.op_id, numero_orden: r.numero_orden, numero_item: r.numero_item,
-    cantidad: r.cantidad, unidad: r.unidad, op_status: r.op_status,
-    instalado: r.instalado_at !== null, foto_url: await signed(r.foto), nota: r.nota,
-    instalado_at: r.instalado_at,
-  })))
+  return Promise.all(rows.map(async (r) => {
+    const foto_url = await signed(r.foto)
+    const extras = await Promise.all((r.fotos_extra ?? []).map((f) => signed(f)))
+    const fotos = [foto_url, ...extras].filter((u): u is string => !!u)
+    return {
+      op_id: r.op_id, numero_orden: r.numero_orden, numero_item: r.numero_item,
+      cantidad: r.cantidad, unidad: r.unidad, op_status: r.op_status,
+      instalado: r.instalado_at !== null, foto_url, fotos, nota: r.nota,
+      instalado_at: r.instalado_at,
+    }
+  }))
 }
 
 /** Cuenta total de items y cuántos instalados, para progreso. */
@@ -110,6 +119,22 @@ export async function marcarInstalado(
 
   await sincronizarI05(runner, proyectoId)
   await recomputeScheduleForProyecto(runner, proyectoId, 'op')
+  return { ok: true }
+}
+
+/** Agrega una foto ADICIONAL a un ítem instalado. Idempotente por client_id. */
+export async function agregarFotoInstalada(
+  runner: QueryRunner, proyectoId: number, opId: number,
+  filename: string, clientId: string | null, usuarioId: string | null
+): Promise<{ ok: boolean; error?: string }> {
+  const { rows } = await runner.query<{ id: number }>(
+    `SELECT id FROM ordenes_produccion WHERE id = $1 AND proyecto_id = $2`, [opId, proyectoId])
+  if (!rows[0]) return { ok: false, error: 'el item no pertenece a este proyecto' }
+  await runner.query(
+    `INSERT INTO schedule_install_item_fotos (proyecto_id, op_id, filename, client_id, created_by)
+       VALUES ($1,$2,$3,$4,$5)
+     ON CONFLICT (client_id) WHERE client_id IS NOT NULL DO NOTHING`,
+    [proyectoId, opId, filename, clientId, usuarioId])
   return { ok: true }
 }
 

@@ -127,6 +127,23 @@ export default function InstallDetailScreen({ proyecto, onBack, onChanged }: Pro
     ])
   }
 
+  // Agregar una foto adicional al ítem instalado.
+  const agregarFoto = async (item: InstallItem) => {
+    const uri = await tomarFoto()
+    if (!uri) return
+    setBusy(`foto-${item.op_id}`)
+    try {
+      const r = await scheduleService.agregarFotoItem(proyecto.proyecto_id, item.op_id, uri)
+      onChanged()
+      if (r.queued) Alert.alert('Guardado sin señal', 'La foto se enviará al reconectar.')
+      else await recargar()
+    } catch (err: any) {
+      Alert.alert('Error', err?.response?.data?.message || 'No se pudo agregar la foto')
+    } finally {
+      setBusy(null)
+    }
+  }
+
   const desmarcarItem = (item: InstallItem) => {
     Alert.alert('Deshacer', `¿Marcar "${item.numero_item}" como NO instalado?`, [
       { text: 'Cancelar', style: 'cancel' },
@@ -281,27 +298,37 @@ export default function InstallDetailScreen({ proyecto, onBack, onChanged }: Pro
 
                 {items.map((item) => {
                   const cargando = busy === `item-${item.op_id}`
+                  const subiendoFoto = busy === `foto-${item.op_id}`
                   return (
-                    <View key={item.op_id} style={[styles.itemRow, item.instalado && styles.itemRowDone]}>
-                      {item.foto_url ? <Image source={{ uri: item.foto_url }} style={styles.itemThumb} /> : null}
-                      <View style={{ flex: 1 }}>
-                        <Text style={styles.itemNombre}>{item.numero_item}</Text>
-                        <Text style={styles.itemMeta}>
-                          {item.cantidad} {item.unidad || 'u.'} · {item.numero_orden}
-                        </Text>
-                        {item.instalado && item.instalado_at ? (
-                          <Text style={styles.itemInstaladoAt}>✓ Instalado {item.instalado_at}</Text>
-                        ) : null}
+                    <View key={item.op_id} style={[styles.itemCard, item.instalado && styles.itemRowDone]}>
+                      <View style={styles.itemRow}>
+                        <View style={{ flex: 1 }}>
+                          <Text style={styles.itemNombre}>{item.numero_item}</Text>
+                          <Text style={styles.itemMeta}>
+                            {item.cantidad} {item.unidad || 'u.'} · {item.numero_orden}
+                          </Text>
+                          {item.instalado && item.instalado_at ? (
+                            <Text style={styles.itemInstaladoAt}>✓ Instalado {item.instalado_at}</Text>
+                          ) : null}
+                        </View>
+                        {item.instalado ? (
+                          <TouchableOpacity onPress={() => desmarcarItem(item)} disabled={cargando} style={styles.undoBtn}>
+                            {cargando ? <ActivityIndicator color="#5A5F52" size="small" /> : <Text style={styles.undoText}>Deshacer</Text>}
+                          </TouchableOpacity>
+                        ) : (
+                          <TouchableOpacity onPress={() => instalarItem(item)} disabled={cargando || !done('I-04')}
+                            style={[styles.instalarBtn, !done('I-04') && styles.instalarBtnDisabled]}>
+                            {cargando ? <ActivityIndicator color="#fff" size="small" /> : <Text style={styles.instalarText}>Instalar</Text>}
+                          </TouchableOpacity>
+                        )}
                       </View>
-                      {item.instalado ? (
-                        <TouchableOpacity onPress={() => desmarcarItem(item)} disabled={cargando} style={styles.undoBtn}>
-                          {cargando ? <ActivityIndicator color="#5A5F52" size="small" /> : <Text style={styles.undoText}>Deshacer</Text>}
-                        </TouchableOpacity>
-                      ) : (
-                        <TouchableOpacity onPress={() => instalarItem(item)} disabled={cargando || !done('I-04')}
-                          style={[styles.instalarBtn, !done('I-04') && styles.instalarBtnDisabled]}>
-                          {cargando ? <ActivityIndicator color="#fff" size="small" /> : <Text style={styles.instalarText}>Instalar</Text>}
-                        </TouchableOpacity>
+                      {item.instalado && (
+                        <View style={styles.fotosRow}>
+                          {item.fotos.map((f, i) => <Image key={`${item.op_id}-${i}`} source={{ uri: f }} style={styles.itemThumb} />)}
+                          <TouchableOpacity style={styles.addFoto} onPress={() => agregarFoto(item)} disabled={subiendoFoto}>
+                            {subiendoFoto ? <ActivityIndicator color="#C18A2D" size="small" /> : <Text style={styles.addFotoText}>＋ Foto</Text>}
+                          </TouchableOpacity>
+                        </View>
                       )}
                     </View>
                   )
@@ -498,12 +525,16 @@ const styles = StyleSheet.create({
   progPct: { fontSize: 13, fontWeight: '700', color: '#5A8A2E' },
   progBarBg: { height: 8, borderRadius: 4, backgroundColor: '#E0DFD9', overflow: 'hidden', marginBottom: 12 },
   progBarFill: { height: 8, borderRadius: 4, backgroundColor: '#5A8A2E' },
-  itemRow: {
-    flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: '#fff',
-    borderRadius: 8, padding: 10, marginBottom: 8, borderWidth: 1, borderColor: '#E0DFD9',
+  itemCard: {
+    backgroundColor: '#fff', borderRadius: 8, padding: 10, marginBottom: 8,
+    borderWidth: 1, borderColor: '#E0DFD9',
   },
+  itemRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   itemRowDone: { backgroundColor: '#F0F7E8', borderColor: '#A8C97A' },
   itemThumb: { width: 40, height: 40, borderRadius: 6 },
+  fotosRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 8 },
+  addFoto: { width: 40, height: 40, borderRadius: 6, borderWidth: 1, borderStyle: 'dashed', borderColor: '#C18A2D', alignItems: 'center', justifyContent: 'center' },
+  addFotoText: { color: '#C18A2D', fontSize: 10, fontWeight: '800' },
   itemNombre: { fontSize: 14, fontWeight: '600', color: '#1F2419' },
   itemMeta: { fontSize: 11, color: '#5A5F52', marginTop: 2, fontFamily: 'Courier' },
   itemInstaladoAt: { fontSize: 11, color: '#1B5E20', fontWeight: '700', marginTop: 2 },

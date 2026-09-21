@@ -10,7 +10,7 @@ import { createError } from '../../../middleware/errorHandler'
 import { supabase, supabaseEnabled, SUPABASE_BUCKET } from '../../../utils/supabase'
 import { logger } from '../../../utils/logger'
 import { crearPunchItem, resolverPunchItem, listPunch, registrarSignoff, listInstallQueue, crearReporteObra } from '../domain/field'
-import { listInstallItems, marcarInstalado, desmarcarInstalado } from '../domain/installitems'
+import { listInstallItems, marcarInstalado, desmarcarInstalado, agregarFotoInstalada } from '../domain/installitems'
 
 // UUID válido (idempotency key de la cola offline). Se ignora si no matchea.
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
@@ -99,6 +99,29 @@ export async function marcarItemHandler(req: Request, res: Response, next: NextF
     await client.query('COMMIT')
     if (!r.ok) return next(createError(r.error ?? 'no se pudo marcar', 400))
     res.status(201).json({ data: { ok: true }, message: 'Item instalado' })
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => {})
+    next(err)
+  } finally {
+    client.release()
+  }
+}
+
+// POST /api/schedule/proyecto/:id/items/:opId/foto  (field: 'foto') — foto ADICIONAL del ítem
+export async function agregarFotoItemHandler(req: Request, res: Response, next: NextFunction) {
+  const client = await pool.connect()
+  try {
+    const proyectoId = parseProyectoId(req)
+    const opId = parseInt(String(req.params.opId), 10)
+    if (Number.isNaN(opId)) return next(createError('id de item inválido', 400))
+    const foto = await subirFoto(req.file, 'install')
+    if (!foto) return next(createError('No se recibió la foto', 400))
+
+    await client.query('BEGIN')
+    const r = await agregarFotoInstalada(client, proyectoId, opId, foto, clientId(req), (req as any).user?.id ?? null)
+    await client.query('COMMIT')
+    if (!r.ok) return next(createError(r.error ?? 'no se pudo agregar la foto', 400))
+    res.status(201).json({ data: { ok: true }, message: 'Foto agregada' })
   } catch (err) {
     await client.query('ROLLBACK').catch(() => {})
     next(err)
@@ -198,6 +221,28 @@ export async function signoffHandler(req: Request, res: Response, next: NextFunc
   } finally {
     client.release()
   }
+}
+
+// GET /api/schedule/proyecto/:id/punch/export → CSV de la punch list (para trabajar/imprimir)
+export async function punchCsvHandler(req: Request, res: Response, next: NextFunction) {
+  try {
+    const proyectoId = parseProyectoId(req)
+    const { rows: p } = await pool.query<{ codigo: string }>(`SELECT codigo FROM proyectos WHERE id = $1`, [proyectoId])
+    const codigo = p[0]?.codigo ?? String(proyectoId)
+    const items = await listPunch(pool, proyectoId)
+
+    const esc = (v: unknown) => `"${String(v ?? '').replace(/"/g, '""')}"`
+    const header = ['#', 'Estado', 'Área', 'Descripción', 'Nota de resolución', 'Foto del problema', 'Foto resuelto', 'Creado']
+    const lines = [header.map(esc).join(',')]
+    for (const it of items) {
+      lines.push([it.id, it.estado, it.area, it.descripcion, it.nota_resuelto, it.foto_problema_url, it.foto_resuelto_url, it.created_at].map(esc).join(','))
+    }
+    // BOM para que Excel abra los acentos bien.
+    const csv = '﻿' + lines.join('\r\n')
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8')
+    res.setHeader('Content-Disposition', `attachment; filename="punch-${codigo}.csv"`)
+    res.send(csv)
+  } catch (err) { next(err) }
 }
 
 // POST /api/schedule/proyecto/:id/reporte-obra  (field: 'foto', body: descripcion)
