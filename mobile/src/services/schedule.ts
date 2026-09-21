@@ -98,6 +98,11 @@ export const scheduleService = {
   getPlanos: (proyectoId: number, numeroItem: string) =>
     api.get(`/proyectos/${proyectoId}/items/${encodeURIComponent(numeroItem)}/planos`).then((r) => r.data.data as PlanoItem[]),
 
+  // CSV de la punch list (texto) — para compartir/exportar desde el móvil.
+  getPunchCsv: (proyectoId: number) =>
+    api.get(`/schedule/proyecto/${proyectoId}/punch/export`, { responseType: 'text', transformResponse: (d) => d })
+      .then((r) => r.data as string),
+
   // ── ESCRITURAS DE OBRA (outbox: directo o cola si no hay señal) ─────────────
 
   // Marcar un item como instalado (foto y nota opcionales).

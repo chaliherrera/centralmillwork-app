@@ -6,6 +6,8 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context'
 import * as ImagePicker from 'expo-image-picker'
 import * as Location from 'expo-location'
+import * as FileSystem from 'expo-file-system/legacy'
+import * as Sharing from 'expo-sharing'
 import { useNavigation } from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import { scheduleService, InstallProyecto, PunchItem, InstallItem } from '../services/schedule'
@@ -206,6 +208,28 @@ export default function InstallDetailScreen({ proyecto, onBack, onChanged }: Pro
     }
   }
 
+  // ── Exportar punch list (CSV) → menú de compartir de iOS ────────────────────
+  const exportarPunch = async () => {
+    setBusy('export-punch')
+    try {
+      const csv = await scheduleService.getPunchCsv(proyecto.proyecto_id)
+      const uri = `${FileSystem.documentDirectory}punch-${proyecto.codigo}.csv`
+      await FileSystem.writeAsStringAsync(uri, csv, { encoding: FileSystem.EncodingType.UTF8 })
+      if (await Sharing.isAvailableAsync()) {
+        await Sharing.shareAsync(uri, {
+          mimeType: 'text/csv', UTI: 'public.comma-separated-values-text',
+          dialogTitle: `Punch list ${proyecto.codigo}`,
+        })
+      } else {
+        Alert.alert('No disponible', 'Compartir no está disponible en este dispositivo.')
+      }
+    } catch (err: any) {
+      Alert.alert('Error', err?.response?.data?.message || 'No se pudo exportar la punch list')
+    } finally {
+      setBusy(null)
+    }
+  }
+
   // ── Sign-off (I-07) ────────────────────────────────────────────────────────
   const abiertos = punch.filter((p) => p.estado === 'abierto').length
   const puedeEntregar = !!done('I-04') && abiertos === 0
@@ -341,6 +365,13 @@ export default function InstallDetailScreen({ proyecto, onBack, onChanged }: Pro
           <StepCard n="3" titulo="Punch list" hito="I-06"
             hecho={done('I-06')} sub="Pendientes de obra. Se cierra solo cuando todos están resueltos">
             {punch.length === 0 && <Text style={styles.emptyPunch}>Sin pendientes cargados.</Text>}
+            {punch.length > 0 && (
+              <TouchableOpacity style={styles.exportBtn} onPress={exportarPunch} disabled={busy === 'export-punch'}>
+                {busy === 'export-punch'
+                  ? <ActivityIndicator color="#5A5F52" size="small" />
+                  : <Text style={styles.exportText}>⬇ Exportar punch list (CSV)</Text>}
+              </TouchableOpacity>
+            )}
             {punch.map((item) => (
               <View key={item.id} style={[styles.punchItem, item.estado === 'resuelto' && styles.punchItemDone]}>
                 <View style={{ flex: 1 }}>
@@ -519,6 +550,8 @@ const styles = StyleSheet.create({
   gateHint: { fontSize: 12, color: '#B45309', marginTop: 8, fontStyle: 'italic' },
 
   emptyPunch: { fontSize: 13, color: '#5A5F52', fontStyle: 'italic', marginBottom: 8 },
+  exportBtn: { alignSelf: 'flex-start', backgroundColor: '#fff', borderWidth: 1, borderColor: '#C8C5BC', borderRadius: 8, paddingVertical: 8, paddingHorizontal: 12, marginBottom: 10 },
+  exportText: { color: '#2c3126', fontWeight: '700', fontSize: 12 },
 
   progHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 },
   progText: { fontSize: 13, fontWeight: '700', color: '#2c3126' },
