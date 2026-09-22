@@ -96,36 +96,36 @@ export const glass = {
   // Paneles CLARAMENTE más claros que el fondo (#1E1A16) para que se lean como
   // vidrio flotante aunque el blur rinda poco en un fondo oscuro. El BlurView por
   // detrás agrega el frost cuando pasa contenido.
-  // flotante sobre contenido (tab bar, FAB contextual)
+  // flotante sobre contenido (tab bar, FAB contextual, tiles)
   floating: {
-    intensity: 55,
+    intensity: 75,
     tint: 'light' as const,
-    overlay: 'rgba(64,57,48,0.66)',
-    border: 'rgba(245,240,232,0.24)',
+    overlay: 'rgba(72,64,54,0.58)',
+    border: 'rgba(245,240,232,0.30)',
   },
   // barra anclada a un borde (toolbar superior)
   bar: {
-    intensity: 50,
+    intensity: 68,
     tint: 'light' as const,
-    overlay: 'rgba(56,50,42,0.62)',
-    border: 'rgba(245,240,232,0.20)',
+    overlay: 'rgba(62,55,46,0.55)',
+    border: 'rgba(245,240,232,0.26)',
   },
   // sheet / modal
   sheet: {
-    intensity: 60,
+    intensity: 80,
     tint: 'light' as const,
-    overlay: 'rgba(64,57,48,0.70)',
-    border: 'rgba(245,240,232,0.26)',
+    overlay: 'rgba(72,64,54,0.60)',
+    border: 'rgba(245,240,232,0.32)',
   },
   // FAB dorado
   fab: {
     intensity: 30,
     tint: 'light' as const,
     overlay: 'rgba(217,164,65,0.92)',
-    border: 'rgba(255,255,255,0.30)',
+    border: 'rgba(255,255,255,0.34)',
   },
   // brillo superior interno (la "señal" de vidrio del handoff: inset 0 1px 0 …)
-  highlight: 'rgba(255,255,255,0.22)',
+  highlight: 'rgba(255,255,255,0.34)',
   scrim: 'rgba(10,8,6,0.6)',
   // Sólido equivalente si el device no soporta blur o hay "reducir transparencia".
   solid: '#3A342C',

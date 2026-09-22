@@ -14,6 +14,7 @@ interface Props {
   style?: ViewStyle | ViewStyle[]
   radius?: number
   shadow?: boolean
+  highlight?: boolean
   children?: React.ReactNode
 }
 
@@ -54,7 +55,7 @@ function useReduceTransparency(): boolean {
   return reduce
 }
 
-export default function Glass({ recipe, style, radius = 30, shadow = true, children }: Props) {
+export default function Glass({ recipe, style, radius = 30, shadow = true, highlight, children }: Props) {
   const reduce = useReduceTransparency()
   const r = glass[recipe]
   const border = { borderWidth: StyleSheet.hairlineWidth * 2, borderColor: r.border, borderRadius: radius }
@@ -70,6 +71,7 @@ export default function Glass({ recipe, style, radius = 30, shadow = true, child
             <View style={[StyleSheet.absoluteFill, { backgroundColor: r.overlay }]} />
           </>
         )}
+        {highlight ? <View style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 1, backgroundColor: glass.highlight }} /> : null}
       </View>
       {children}
     </View>
