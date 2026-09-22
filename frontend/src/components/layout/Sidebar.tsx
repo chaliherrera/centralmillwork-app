@@ -32,8 +32,8 @@ interface NavItem {
 const NAV_ITEMS: NavItem[] = [
   { to: '/',               label: 'Dashboard',         icon: LayoutDashboard, roles: ['ADMIN','PROCUREMENT','PROJECT_MANAGEMENT','PRODUCTION','SHOP_MANAGER','VIEWER'] },
   { to: '/schedule',       label: 'Schedule',           icon: RouteIcon,       roles: ['ADMIN','PROJECT_MANAGEMENT','SHOP_MANAGER','ENGINEERING','VIEWER'] },
-  { to: '/proyectos',      label: 'Proyectos',          icon: FolderOpen,      roles: ['ADMIN','PROCUREMENT','PROJECT_MANAGEMENT','SHOP_MANAGER','VIEWER'] },
-  { to: '/estimados',      label: 'Estimados',          icon: FileSignature,   roles: ['ADMIN','PROJECT_MANAGEMENT'] },
+  { to: '/proyectos',      label: 'Proyectos',          icon: FolderOpen,      roles: ['ADMIN','PROCUREMENT','PROJECT_MANAGEMENT','ESTIMADOS','SHOP_MANAGER','VIEWER'] },
+  { to: '/estimados',      label: 'Estimados',          icon: FileSignature,   roles: ['ADMIN','PROJECT_MANAGEMENT','ESTIMADOS'] },
   { to: '/ingenieria',     label: 'Ingeniería',         icon: DraftingCompass, roles: ['ADMIN','ENGINEERING','PROJECT_MANAGEMENT'] },
   { to: '/pm',             label: 'PM',                 icon: ClipboardList,   roles: ['ADMIN','PROJECT_MANAGEMENT'] },
   { to: '/portal-console', label: 'Portal cliente',     icon: MonitorSmartphone, roles: ['ADMIN','PROJECT_MANAGEMENT'] },

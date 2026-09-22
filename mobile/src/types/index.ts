@@ -5,6 +5,7 @@ export type UserRole =
   | 'PROCUREMENT'
   | 'PRODUCTION'
   | 'PROJECT_MANAGEMENT'
+  | 'ESTIMADOS'
   | 'CONTABILIDAD'
   | 'SHOP_MANAGER'
   | 'ENGINEERING'

@@ -15,7 +15,7 @@ async function syncIngeniero(u: { id: string; nombre: string; email: string; rol
 
 // Mantener sincronizado con el ENUM user_rol en la DB (migraciones 015 + 030 + 043)
 // y con `Role` en middleware/auth.ts.
-const VALID_ROLES = ['ADMIN', 'PROCUREMENT', 'PRODUCTION', 'PROJECT_MANAGEMENT', 'CONTABILIDAD', 'SHOP_MANAGER', 'ENGINEERING', 'LOGISTICA', 'FIELD', 'VIEWER']
+const VALID_ROLES = ['ADMIN', 'PROCUREMENT', 'PRODUCTION', 'PROJECT_MANAGEMENT', 'ESTIMADOS', 'CONTABILIDAD', 'SHOP_MANAGER', 'ENGINEERING', 'LOGISTICA', 'FIELD', 'VIEWER']
 
 export async function getUsuarios(req: Request, res: Response, next: NextFunction) {
   try {

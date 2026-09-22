@@ -18,9 +18,12 @@ const router = Router()
 //  · READ  = ver el plan/carga (incluye ENGINEERING y VIEWER).
 //  · PM    = GESTIÓN de recursos = estructura del plan (crear/borrar/asignar/mover/deps).
 //  · EXEC  = REPORTAR AVANCE de la propia tarea (estado/comentario) — lo hace Ingeniería.
-const READ = requireRole('ADMIN', 'PROJECT_MANAGEMENT', 'ENGINEERING', 'VIEWER')
+const READ = requireRole('ADMIN', 'PROJECT_MANAGEMENT', 'ESTIMADOS', 'ENGINEERING', 'VIEWER')
 const PM = requireRole('ADMIN', 'PROJECT_MANAGEMENT')
 const EXEC = requireRole('ADMIN', 'PROJECT_MANAGEMENT', 'ENGINEERING')
+// DEAL: el handoff del deal (Estimados↔PM). Estimados lo comparte con PM, pero NO
+// la gestión de plan/recursos (esa sigue siendo PM). Ver rol ESTIMADOS 2026-09-22.
+const DEAL = requireRole('ADMIN', 'PROJECT_MANAGEMENT', 'ESTIMADOS')
 
 router.get('/resumen', READ, resumenHandler)
 router.get('/tareas', READ, tareasHandler)
@@ -36,7 +39,7 @@ router.get('/instalaciones-pm', READ, instalacionesPMHandler)  // instalaciones 
 router.get('/muestras-estado', READ, muestrasEstadoHandler)  // estado de muestras por proyecto → escritorio ingeniero (#6)
 router.get('/compras-estado', READ, comprasEstadoHandler)  // estado de compras por proyecto → escritorio ingeniero (#9)
 // Escritorio por rol (todos los roles operativos ven el suyo — Compras/Producción incluidos).
-const ESCRITORIO = requireRole('ADMIN', 'PROJECT_MANAGEMENT', 'ENGINEERING', 'PROCUREMENT', 'PRODUCTION', 'SHOP_MANAGER', 'LOGISTICA', 'CONTABILIDAD', 'FIELD')
+const ESCRITORIO = requireRole('ADMIN', 'PROJECT_MANAGEMENT', 'ESTIMADOS', 'ENGINEERING', 'PROCUREMENT', 'PRODUCTION', 'SHOP_MANAGER', 'LOGISTICA', 'CONTABILIDAD', 'FIELD')
 router.get('/escritorio/resumen', ESCRITORIO, escritorioResumenHandler)  // badge "te toca: N" del menú
 router.get('/escritorio/novedades-cliente', ESCRITORIO, novedadesClienteHandler)  // decisiones del cliente en el portal (#8)
 router.get('/escritorio', ESCRITORIO, escritorioHandler)
@@ -61,19 +64,19 @@ router.patch('/tareas/:id/avance', EXEC, avanceTareaHandler)
 router.post('/proyecto/:ext/deposito', PM, overrideDepositoHandler)
 
 // Reserva de capacidad (la dispara Estimados/PM)
-router.post('/proyecto/:id/reservar', PM, reservarHandler)
-router.delete('/proyecto/:id/reserva', PM, liberarReservaHandler)
+router.post('/proyecto/:id/reservar', DEAL, reservarHandler)
+router.delete('/proyecto/:id/reserva', DEAL, liberarReservaHandler)
 router.get('/reservas-pendientes', READ, reservasPendientesHandler)
-router.post('/reserva/:proyectoId/confirmar', PM, confirmarReservaHandler)
+router.post('/reserva/:proyectoId/confirmar', DEAL, confirmarReservaHandler)
 
-// Handoff Estimados → Cliente → PM. Estimados y PM comparten roles (ADMIN/PM);
-// la separación es por ubicación en la UI (tracker de Estimados vs bandeja del PM).
+// Handoff Estimados → Cliente → PM. Estimados y PM comparten estas acciones del
+// deal (grupo DEAL); la gestión de plan/recursos sigue siendo solo PM.
 router.get('/deals', READ, dealsEnCursoHandler)
-router.post('/proyecto/:id/enviar-cliente', PM, enviarClienteHandler)
-router.post('/proyecto/:id/cliente-aprobo', PM, clienteAproboHandler)
-router.post('/proyecto/:id/activar', PM, activarProyectoHandler)
+router.post('/proyecto/:id/enviar-cliente', DEAL, enviarClienteHandler)
+router.post('/proyecto/:id/cliente-aprobo', DEAL, clienteAproboHandler)
+router.post('/proyecto/:id/activar', DEAL, activarProyectoHandler)
 // Estimados da de baja el deal (pausar/cancelar) → libera toda la Ingeniería + avisa al PM.
 // El botón vive sólo en la vista de Estimados (así "sólo Estimados" cierra el deal).
-router.post('/proyecto/:id/cerrar-deal', PM, cerrarDealHandler)
+router.post('/proyecto/:id/cerrar-deal', DEAL, cerrarDealHandler)
 
 export default router

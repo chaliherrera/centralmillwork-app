@@ -11,7 +11,7 @@ type Nav = NativeStackNavigationProp<RootStackParamList>
 
 const ROL_LABEL: Record<string, string> = {
   ADMIN: 'Admin', PROCUREMENT: 'Compras', PRODUCTION: 'Producción',
-  PROJECT_MANAGEMENT: 'Project Manager', CONTABILIDAD: 'Contabilidad',
+  PROJECT_MANAGEMENT: 'Project Manager', ESTIMADOS: 'Estimados', CONTABILIDAD: 'Contabilidad',
   SHOP_MANAGER: 'Jefe de taller', ENGINEERING: 'Ingeniería',
   LOGISTICA: 'Logística', FIELD: 'Campo', VIEWER: 'Consulta',
 }

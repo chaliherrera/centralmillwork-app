@@ -78,7 +78,8 @@ const ADMIN      = requireRole('ADMIN')
 const WRITE      = requireRole('ADMIN', 'PROCUREMENT')
 // Estimados/PM crea y edita proyectos (alta desde el wizard, hoja de intake).
 // PROJECT_MANAGEMENT agregado 2026-08-28 (rediseño Estimados→PM).
-const PROY_WRITE = requireRole('ADMIN', 'PROCUREMENT', 'PROJECT_MANAGEMENT')
+// ESTIMADOS agregado 2026-09-22 (rol propio del departamento de estimación).
+const PROY_WRITE = requireRole('ADMIN', 'PROCUREMENT', 'PROJECT_MANAGEMENT', 'ESTIMADOS')
 // SHOP_MANAGER agregado 2026-06-13: el rol coordina el taller y debe poder
 // registrar recepciones (caso de uso real: operario hace la entrega física
 // y el SHOP_MANAGER la asienta en el sistema).

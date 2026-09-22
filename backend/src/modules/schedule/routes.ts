@@ -9,10 +9,11 @@ import { uploadContrato, intakeHandler } from './controllers/intake.controller'
 const router = Router()
 
 const SCHEDULE_READ = requireRole(
-  'ADMIN', 'PROJECT_MANAGEMENT', 'PROCUREMENT', 'PRODUCTION',
+  'ADMIN', 'PROJECT_MANAGEMENT', 'ESTIMADOS', 'PROCUREMENT', 'PRODUCTION',
   'SHOP_MANAGER', 'ENGINEERING', 'CONTABILIDAD', 'LOGISTICA', 'VIEWER'
 )
-const SCHEDULE_WRITE = requireRole('ADMIN', 'PROJECT_MANAGEMENT')
+// ESTIMADOS: el wizard de Estimados genera plan e ingresa el intake/contrato.
+const SCHEDULE_WRITE = requireRole('ADMIN', 'PROJECT_MANAGEMENT', 'ESTIMADOS')
 // Registrar un hito = el área dueña. Más amplio que WRITE (el ownership fino se
 // formaliza más adelante; por ahora cualquier rol interno con escritura puede).
 const SCHEDULE_REGISTRAR = requireRole(

@@ -220,4 +220,5 @@ export const ROLES_RUTA_POR_APP: Record<string, string[]> = {
   LOGISTICA: ['logistica'],
   ADMIN: ['ingenieria', 'field', 'compras', 'produccion', 'instalacion', 'logistica', 'estimacion'],
   PROJECT_MANAGEMENT: ['ingenieria', 'field', 'compras', 'produccion', 'instalacion', 'logistica', 'estimacion'],
+  ESTIMADOS: ['estimacion'],
 }

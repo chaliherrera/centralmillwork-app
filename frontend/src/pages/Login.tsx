@@ -18,8 +18,10 @@ export default function Login() {
     try {
       const u = await login(email.trim(), password)
       // PM y Producción arrancan en el Schedule (la columna vertebral) en vez del
-      // Dashboard: es lo primero que necesitan ver. El resto entra al Dashboard.
-      const landing = u.rol === 'PROJECT_MANAGEMENT' || u.rol === 'SHOP_MANAGER' ? '/schedule' : '/'
+      // Dashboard: es lo primero que necesitan ver. Estimados arranca en su bandeja.
+      // El resto entra al Dashboard.
+      const landing = u.rol === 'ESTIMADOS' ? '/estimados'
+        : u.rol === 'PROJECT_MANAGEMENT' || u.rol === 'SHOP_MANAGER' ? '/schedule' : '/'
       navigate(landing, { replace: true })
     } catch (err: any) {
       setError(err?.response?.data?.message ?? 'Error al iniciar sesión')

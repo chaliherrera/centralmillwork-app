@@ -68,7 +68,7 @@ function MuestrasRoute({ children }: { children: React.ReactNode }) {
 // Estimación = puerta de entrada del schedule. La usa quien arranca los proyectos.
 function EstimacionRoute({ children }: { children: React.ReactNode }) {
   const { user } = useAuth()
-  const allowed = ['ADMIN', 'PROJECT_MANAGEMENT']
+  const allowed = ['ADMIN', 'PROJECT_MANAGEMENT', 'ESTIMADOS']
   if (!user || !allowed.includes(user.rol)) return <Navigate to="/" replace />
   return <>{children}</>
 }
