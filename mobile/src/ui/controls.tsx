@@ -1,7 +1,7 @@
 // Controles: CTA dorado (uno por pantalla), botón ghost, campo de formulario,
 // segmentado, placeholder de foto. SISTEMA_DE_DISENO.md §4.
 import React, { useState } from 'react'
-import { Pressable, View, Text, TextInput, StyleSheet, ActivityIndicator, TextInputProps, StyleProp, ViewStyle } from 'react-native'
+import { Pressable, View, Text, TextInput, StyleSheet, ActivityIndicator, ScrollView, TextInputProps, StyleProp, ViewStyle } from 'react-native'
 import { color, font, size, radius, space } from '../theme/tokens'
 import Icon, { IconName } from './Icon'
 
@@ -80,6 +80,43 @@ export function Segmented<T extends string>({ options, value, onChange }: {
   )
 }
 
+// ── Buscador en flujo (no flotante): ícono + input, hairline, sin blur.
+export function SearchField({ value, onChangeText, placeholder }: {
+  value: string; onChangeText: (v: string) => void; placeholder?: string
+}) {
+  return (
+    <View style={s.searchWrap}>
+      <Icon name="search" size={18} color={color.mutedStrong} strokeWidth={1.8} />
+      <TextInput
+        value={value} onChangeText={onChangeText} placeholder={placeholder}
+        placeholderTextColor={color.mutedStrong} style={s.searchInput}
+        autoCapitalize="none" autoCorrect={false} returnKeyType="search"
+      />
+      {value ? (
+        <Pressable onPress={() => onChangeText('')} hitSlop={8}><Icon name="x" size={16} color={color.mutedStrong} strokeWidth={2} /></Pressable>
+      ) : null}
+    </View>
+  )
+}
+
+// ── Chips de filtro horizontales (activo = tinte dorado suave).
+export function Chips<T extends string>({ options, value, onChange }: {
+  options: { value: T; label: string }[]; value: T; onChange: (v: T) => void
+}) {
+  return (
+    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.chips}>
+      {options.map((o) => {
+        const on = o.value === value
+        return (
+          <Pressable key={o.value} onPress={() => onChange(o.value)} style={[s.chip, on && s.chipOn]}>
+            <Text style={[s.chipText, on && s.chipTextOn]}>{o.label}</Text>
+          </Pressable>
+        )
+      })}
+    </ScrollView>
+  )
+}
+
 // ── Placeholder de foto (franja). Real photos lo reemplazan.
 export function StripePlaceholder({ height = 150, label = '[ foto ]', style }: { height?: number; label?: string; style?: StyleProp<ViewStyle> }) {
   return (
@@ -114,4 +151,12 @@ const s = StyleSheet.create({
 
   stripe: { borderRadius: radius.image, backgroundColor: color.stripeA, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
   stripeLabel: { fontFamily: font.mono, fontSize: 11, color: color.muted },
+
+  searchWrap: { flexDirection: 'row', alignItems: 'center', gap: 10, height: 52, paddingHorizontal: 16, borderRadius: radius.input, backgroundColor: 'rgba(245,240,232,0.06)', borderWidth: StyleSheet.hairlineWidth * 2, borderColor: 'rgba(245,240,232,0.14)' },
+  searchInput: { flex: 1, minWidth: 0, height: '100%', color: color.ink, fontFamily: font.body, fontSize: 16 },
+  chips: { gap: 8, paddingVertical: 2 },
+  chip: { height: 38, paddingHorizontal: 15, borderRadius: 19, alignItems: 'center', justifyContent: 'center', borderWidth: StyleSheet.hairlineWidth * 2, borderColor: 'rgba(245,240,232,0.14)' },
+  chipOn: { backgroundColor: 'rgba(217,164,65,0.18)', borderColor: 'rgba(217,164,65,0.5)' },
+  chipText: { fontFamily: font.bodyMed, fontSize: size.secondary, color: color.muted },
+  chipTextOn: { color: color.gold, fontFamily: font.bodySemi },
 })

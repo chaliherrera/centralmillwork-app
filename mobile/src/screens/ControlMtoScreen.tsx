@@ -1,132 +1,113 @@
 import React, { useState } from 'react'
-import { View, Text, StyleSheet, FlatList, TextInput, TouchableOpacity, RefreshControl, ScrollView } from 'react-native'
+import { View, Text, FlatList, ScrollView, RefreshControl, StyleSheet } from 'react-native'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useQuery } from '@tanstack/react-query'
+import { useNavigation, useRoute, RouteProp } from '@react-navigation/native'
 import { proyectosService, Proyecto, ReadinessItem } from '../services/proyectos'
-import { Cargando, ErrorBox, Vacio } from '../components/States'
-
-const EST_COLOR: Record<string, string> = {
-  LISTO: '#5A8A2E', PARCIAL: '#C18A2D', ORDENADO: '#25627c', PENDIENTE: '#B4463C',
-}
+import type { RootStackParamList } from '../navigation/types'
+import {
+  Screen, Toolbar, SearchField, ListRow, Progress, StatusDot, LoadingRows, ErrorState, EmptyState,
+  color, font, size, space,
+} from '../ui'
 
 export default function ControlMtoScreen() {
-  const [proyecto, setProyecto] = useState<Proyecto | null>(null)
-  if (!proyecto) return <SelectorProyecto onSelect={setProyecto} />
-  return <Readiness proyecto={proyecto} onBack={() => setProyecto(null)} />
+  const nav = useNavigation<any>()
+  const { params } = useRoute<RouteProp<RootStackParamList, 'ControlMto'>>()
+  const preselected = params?.proyecto
+  const [proyecto, setProyecto] = useState<Proyecto | null>(preselected ?? null)
+
+  const onBack = () => {
+    if (proyecto && !preselected) setProyecto(null) // volver al selector
+    else nav.goBack()
+  }
+
+  if (!proyecto) return <SelectorProyecto onSelect={setProyecto} onBack={() => nav.goBack()} />
+  return <Readiness proyecto={proyecto} onBack={onBack} />
 }
 
-function SelectorProyecto({ onSelect }: { onSelect: (p: Proyecto) => void }) {
+function SelectorProyecto({ onSelect, onBack }: { onSelect: (p: Proyecto) => void; onBack: () => void }) {
+  const insets = useSafeAreaInsets()
   const [search, setSearch] = useState('')
-  const { data, isLoading, isError, refetch } = useQuery({
-    queryKey: ['proyectos'], queryFn: () => proyectosService.getProyectos(),
-  })
+  const { data, isLoading, isError, refetch } = useQuery({ queryKey: ['proyectos'], queryFn: () => proyectosService.getProyectos() })
   const q = search.toLowerCase().trim()
   const filtered = (data ?? []).filter((p) => !q || [p.codigo, p.nombre, p.cliente].some((x) => x?.toLowerCase().includes(q)))
 
   return (
-    <View style={styles.container}>
-      <View style={styles.filters}>
-        <Text style={styles.hint}>Elegí un proyecto para ver el estado de sus materiales</Text>
-        <TextInput value={search} onChangeText={setSearch} placeholder="Buscar proyecto…" placeholderTextColor="#999" style={styles.search} />
+    <Screen edges={['bottom']}>
+      <Toolbar title="Control MTO" subtitle="Elegí un proyecto" onBack={onBack} />
+      <View style={{ flex: 1, paddingTop: insets.top + 62 }}>
+        <View style={styles.filters}><SearchField value={search} onChangeText={setSearch} placeholder="Buscar proyecto…" /></View>
+        {isLoading ? <View style={styles.pad}><LoadingRows /></View>
+          : isError ? <ErrorState message="No se pudieron cargar los proyectos" onRetry={refetch} />
+          : (
+            <FlatList data={filtered} keyExtractor={(p) => String(p.id)} contentContainerStyle={styles.list}
+              renderItem={({ item }) => <ListRow code={item.codigo} title={item.nombre} meta={item.cliente ?? undefined} onPress={() => onSelect(item)} />} />
+          )}
       </View>
-      {isLoading ? <Cargando />
-        : isError ? <ErrorBox mensaje="No se pudieron cargar los proyectos" onRetry={refetch} />
-        : (
-          <FlatList data={filtered} keyExtractor={(p) => String(p.id)} contentContainerStyle={styles.list}
-            renderItem={({ item }) => (
-              <TouchableOpacity style={styles.pick} onPress={() => onSelect(item)} activeOpacity={0.7}>
-                <Text style={styles.pickCod}>{item.codigo}</Text>
-                <Text style={styles.pickNom} numberOfLines={1}>{item.nombre}</Text>
-              </TouchableOpacity>
-            )} />
-        )}
-    </View>
+    </Screen>
   )
 }
 
 function Readiness({ proyecto, onBack }: { proyecto: Proyecto; onBack: () => void }) {
+  const insets = useSafeAreaInsets()
   const { data, isLoading, isError, refetch, isRefetching } = useQuery({
     queryKey: ['readiness', proyecto.id],
     queryFn: () => proyectosService.getItemsReadiness(proyecto.id),
   })
 
   return (
-    <View style={styles.container}>
-      <View style={styles.projBar}>
-        <View style={{ flex: 1 }}>
-          <Text style={styles.projCod}>{proyecto.codigo}</Text>
-          <Text style={styles.projNom} numberOfLines={1}>{proyecto.nombre}</Text>
-        </View>
-        <TouchableOpacity onPress={onBack}><Text style={styles.cambiar}>Cambiar</Text></TouchableOpacity>
-      </View>
-
-      {isLoading ? <Cargando />
-        : isError ? <ErrorBox mensaje="No se pudo cargar el readiness" onRetry={refetch} />
-        : !data || data.items.length === 0 ? <Vacio mensaje="Este proyecto no tiene materiales con ítem cargado" />
+    <Screen edges={['bottom']}>
+      <Toolbar title="Control MTO" subtitle={`${proyecto.codigo} · ${proyecto.nombre}`} onBack={onBack} />
+      {isLoading ? <View style={[styles.pad, { paddingTop: insets.top + 62 }]}><LoadingRows /></View>
+        : isError ? <View style={{ paddingTop: insets.top + 62, flex: 1 }}><ErrorState message="No se pudo cargar el readiness" onRetry={refetch} /></View>
+        : !data || data.items.length === 0 ? <View style={{ paddingTop: insets.top + 62, flex: 1 }}><EmptyState title="Sin materiales" line="Este proyecto no tiene materiales con ítem cargado." /></View>
         : (
-          <ScrollView contentContainerStyle={styles.list}
-            refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={refetch} tintColor="#C18A2D" />}>
+          <ScrollView contentContainerStyle={[styles.list, { paddingTop: insets.top + 62 }]}
+            refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={refetch} tintColor={color.gold} />}>
             <View style={styles.resumen}>
-              <ResumenChip n={data.resumen.listos} label="Listos" color="#5A8A2E" />
-              <ResumenChip n={data.resumen.parciales} label="Parciales" color="#C18A2D" />
-              <ResumenChip n={data.resumen.ordenados} label="Ordenados" color="#25627c" />
-              <ResumenChip n={data.resumen.pendientes} label="Pendientes" color="#B4463C" />
+              <Stat n={data.resumen.listos} label="Listos" c={color.green} />
+              <Stat n={data.resumen.parciales} label="Parciales" c={color.gold} />
+              <Stat n={data.resumen.ordenados} label="Ordenados" c={color.gold} />
+              <Stat n={data.resumen.pendientes} label="Pendientes" c={color.coral} />
             </View>
-            {data.items.map((it) => <ItemCard key={it.item} it={it} />)}
+            {data.items.map((it) => <ItemRow key={it.item} it={it} />)}
           </ScrollView>
         )}
-    </View>
+    </Screen>
   )
 }
 
-function ResumenChip({ n, label, color }: { n: number; label: string; color: string }) {
+function Stat({ n, label, c }: { n: number; label: string; c: string }) {
   return (
-    <View style={styles.rChip}>
-      <Text style={[styles.rN, { color }]}>{n}</Text>
-      <Text style={styles.rL}>{label}</Text>
+    <View style={styles.stat}>
+      <Text style={[styles.statN, { color: c }]}>{n}</Text>
+      <Text style={styles.statL}>{label}</Text>
     </View>
   )
 }
 
-function ItemCard({ it }: { it: ReadinessItem }) {
+function ItemRow({ it }: { it: ReadinessItem }) {
   const pct = it.total > 0 ? Math.round((it.disponibles / it.total) * 100) : 0
-  const color = EST_COLOR[it.estado] ?? '#5A5F52'
   return (
-    <View style={[styles.card, { borderLeftColor: color }]}>
-      <View style={styles.top}>
-        <Text style={styles.itemNom}>Ítem {it.item}</Text>
-        <Text style={[styles.estado, { color }]}>{it.estado}</Text>
+    <View style={styles.item}>
+      <View style={styles.itemHead}>
+        <Text style={styles.itemName}>Ítem {it.item}</Text>
+        <StatusDot estado={it.estado} />
       </View>
-      <View style={styles.progBg}><View style={[styles.progFill, { width: `${pct}%`, backgroundColor: color }]} /></View>
-      <Text style={styles.progText}>
-        {it.disponibles} de {it.total} disponibles · {pct}%
-        {it.pendientes > 0 ? ` · ${it.pendientes} por cotizar` : ''}
-      </Text>
+      <Progress label={`${it.disponibles} de ${it.total} disponibles${it.pendientes > 0 ? ` · ${it.pendientes} por cotizar` : ''}`} pct={pct} />
     </View>
   )
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F4F5F2' },
-  filters: { paddingHorizontal: 16, paddingTop: 12, paddingBottom: 4 },
-  hint: { fontSize: 13, color: '#5A5F52', marginBottom: 10 },
-  search: { backgroundColor: '#fff', borderRadius: 10, paddingHorizontal: 14, paddingVertical: 11, fontSize: 14, borderWidth: 1, borderColor: '#E0DFD9', color: '#1F2419' },
-  list: { paddingHorizontal: 16, paddingBottom: 28, paddingTop: 8 },
-  pick: { backgroundColor: '#fff', borderRadius: 10, padding: 14, marginBottom: 8, borderWidth: 1, borderColor: '#E0DFD9' },
-  pickCod: { fontFamily: 'Courier', fontSize: 13, fontWeight: '700', color: '#2c3126' },
-  pickNom: { fontSize: 13, color: '#1F2419', marginTop: 2 },
-  projBar: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#E0DFD9' },
-  projCod: { fontFamily: 'Courier', fontSize: 13, fontWeight: '700', color: '#2c3126' },
-  projNom: { fontSize: 13, color: '#5A5F52', marginTop: 1 },
-  cambiar: { color: '#C18A2D', fontWeight: '700', fontSize: 13 },
-  resumen: { flexDirection: 'row', gap: 8, marginBottom: 12 },
-  rChip: { flex: 1, backgroundColor: '#fff', borderWidth: 1, borderColor: '#E0DFD9', borderRadius: 9, paddingVertical: 9, alignItems: 'center' },
-  rN: { fontSize: 18, fontWeight: '800' },
-  rL: { fontSize: 9.5, color: '#5A5F52', textTransform: 'uppercase', letterSpacing: 0.4, marginTop: 1 },
-  card: { backgroundColor: '#fff', borderRadius: 10, padding: 14, marginBottom: 9, borderLeftWidth: 4 },
-  top: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
-  itemNom: { fontSize: 14, fontWeight: '700', color: '#1F2419' },
-  estado: { fontSize: 11, fontWeight: '800', letterSpacing: 0.4 },
-  progBg: { height: 8, borderRadius: 4, backgroundColor: '#E0DFD9', overflow: 'hidden' },
-  progFill: { height: 8, borderRadius: 4 },
-  progText: { fontSize: 11.5, color: '#5A5F52', marginTop: 6 },
+  filters: { paddingHorizontal: space.margin, paddingTop: 8, paddingBottom: 8 },
+  pad: { paddingHorizontal: space.margin },
+  list: { paddingHorizontal: space.margin, paddingBottom: 40 },
+  resumen: { flexDirection: 'row', gap: 10, marginTop: 16, marginBottom: 8 },
+  stat: { flex: 1, alignItems: 'center', paddingVertical: 12, borderRadius: 14, borderWidth: StyleSheet.hairlineWidth, borderColor: color.line },
+  statN: { fontFamily: font.titleSemi, fontSize: 22 },
+  statL: { fontFamily: font.kickerMed, fontSize: 10, letterSpacing: 0.5, textTransform: 'uppercase', color: color.mutedStrong, marginTop: 2 },
+  item: { paddingVertical: 16, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: color.line },
+  itemHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 },
+  itemName: { fontFamily: font.bodySemi, fontSize: size.row, color: color.ink },
 })
