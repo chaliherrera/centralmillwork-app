@@ -1,26 +1,29 @@
 import React, { useEffect, useState, useCallback } from 'react'
-import {
-  View, Text, StyleSheet, FlatList, TouchableOpacity,
-  RefreshControl, ActivityIndicator,
-} from 'react-native'
-import { SafeAreaView } from 'react-native-safe-area-context'
+import { View, Text, StyleSheet, FlatList, Pressable, RefreshControl } from 'react-native'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { scheduleService, InstallProyecto } from '../services/schedule'
-import OutboxBanner from '../components/OutboxBanner'
+import OutboxBanner, { useOutbox } from '../components/OutboxBanner'
+import {
+  Screen, Toolbar, Stepper, StatusDot, LoadingRows, ErrorState, EmptyState,
+  color, font, size, space, type Step,
+} from '../ui'
 
 interface Props {
   onSelect: (p: InstallProyecto) => void
   onBack: () => void
 }
 
-// Etapas de instalación en orden, para el mini-progreso de cada tarjeta.
+// Etapas de instalación en orden, para el mini-stepper de cada obra.
 const PASOS: { codigo: string; label: string }[] = [
   { codigo: 'I-04', label: 'Check-in' },
   { codigo: 'I-05', label: 'Avance' },
-  { codigo: 'I-06', label: 'Punch list' },
+  { codigo: 'I-06', label: 'Punch' },
   { codigo: 'I-07', label: 'Entrega' },
 ]
 
 export default function InstallListScreen({ onSelect, onBack }: Props) {
+  const insets = useSafeAreaInsets()
+  const { pendientes } = useOutbox()
   const [items, setItems] = useState<InstallProyecto[]>([])
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
@@ -29,154 +32,77 @@ export default function InstallListScreen({ onSelect, onBack }: Props) {
   const fetchData = useCallback(async () => {
     try {
       setError(null)
-      const data = await scheduleService.getInstallQueue()
-      setItems(data)
+      setItems(await scheduleService.getInstallQueue())
     } catch (err: any) {
       setError(err?.response?.data?.message || 'No se pudo cargar la cola de instalación')
     } finally {
-      setLoading(false)
-      setRefreshing(false)
+      setLoading(false); setRefreshing(false)
     }
   }, [])
 
   useEffect(() => { fetchData() }, [fetchData])
-
   const onRefresh = () => { setRefreshing(true); fetchData() }
 
   return (
-    <SafeAreaView style={styles.safeAreaTop} edges={['top', 'bottom']}>
-      <View style={styles.container}>
-        <View style={styles.header}>
-          <TouchableOpacity onPress={onBack} style={styles.backBtn}>
-            <Text style={styles.backText}>← Volver</Text>
-          </TouchableOpacity>
-          <Text style={styles.headerTitle}>🔧 Instalación</Text>
-          <View style={{ width: 60 }} />
-        </View>
-
+    <Screen edges={['bottom']}>
+      <Toolbar title="Obras por instalar" subtitle={`${items.length} con entrega pendiente`} onBack={onBack} offlineCount={pendientes} />
+      <View style={{ flex: 1, paddingTop: insets.top + 62 }}>
         <OutboxBanner />
-
-        <View style={styles.titleSection}>
-          <Text style={styles.title}>Obras por instalar</Text>
-          <Text style={styles.subtitle}>{items.length} proyecto(s) con entrega pendiente</Text>
-        </View>
-
         {loading ? (
-          <View style={styles.loadingBox}><ActivityIndicator size="large" color="#C18A2D" /></View>
+          <View style={styles.pad}><LoadingRows count={4} /></View>
         ) : error ? (
-          <View style={styles.errorBox}>
-            <Text style={styles.errorText}>{error}</Text>
-            <TouchableOpacity onPress={fetchData} style={styles.retryBtn}>
-              <Text style={styles.retryText}>Reintentar</Text>
-            </TouchableOpacity>
-          </View>
+          <ErrorState message={error} onRetry={fetchData} />
         ) : items.length === 0 ? (
-          <View style={styles.emptyBox}>
-            <Text style={styles.emptyText}>No hay obras en ventana de instalación.</Text>
-          </View>
+          <EmptyState title="Sin obras por instalar" line="Las que entren en ventana de instalación aparecen acá." />
         ) : (
           <FlatList
             data={items}
             keyExtractor={(item) => String(item.proyecto_id)}
-            contentContainerStyle={styles.listContent}
-            refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#C18A2D" />}
-            renderItem={({ item }) => <InstallCard p={item} onPress={() => onSelect(item)} />}
+            contentContainerStyle={styles.list}
+            refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={color.gold} />}
+            renderItem={({ item }) => <InstallRow p={item} onPress={() => onSelect(item)} />}
           />
         )}
       </View>
-    </SafeAreaView>
+    </Screen>
   )
 }
 
-function InstallCard({ p, onPress }: { p: InstallProyecto; onPress: () => void }) {
+function InstallRow({ p, onPress }: { p: InstallProyecto; onPress: () => void }) {
   const done = new Set(p.hitos.filter((h) => h.fecha_real).map((h) => h.codigo))
+  const firstUndone = PASOS.findIndex((s) => !done.has(s.codigo))
+  const steps: Step[] = PASOS.map((paso, i) => ({
+    name: paso.label,
+    state: done.has(paso.codigo) ? 'done' : i === firstUndone ? 'current' : 'todo',
+  }))
+
   return (
-    <TouchableOpacity onPress={onPress} style={styles.card} activeOpacity={0.7}>
-      <View style={styles.cardHeader}>
-        <Text style={styles.cardCodigo}>{p.codigo}</Text>
-        {p.punch_abiertos > 0 && (
-          <View style={styles.punchBadge}>
-            <Text style={styles.punchBadgeText}>{p.punch_abiertos} pendiente(s)</Text>
-          </View>
-        )}
+    <Pressable onPress={onPress} style={({ pressed }) => [styles.row, pressed && { opacity: 0.6 }]}>
+      <View style={styles.rowHead}>
+        <Text style={styles.code}>{p.codigo}</Text>
+        {p.punch_abiertos > 0 ? <StatusDot colorOverride={color.coral} label={`${p.punch_abiertos} punch`} /> : null}
       </View>
-      <Text style={styles.cardNombre} numberOfLines={1}>{p.nombre}</Text>
-      {p.cliente ? <Text style={styles.cardCliente} numberOfLines={1}>{p.cliente}</Text> : null}
+      <Text style={styles.nombre} numberOfLines={1}>{p.nombre}</Text>
+      {p.cliente ? <Text style={styles.meta} numberOfLines={1}>{p.cliente}</Text> : null}
 
-      {/* Mini-progreso de instalación */}
-      <View style={styles.pasosRow}>
-        {PASOS.map((paso, i) => {
-          const ok = done.has(paso.codigo)
-          return (
-            <React.Fragment key={paso.codigo}>
-              {i > 0 && <View style={[styles.pasoConn, ok && styles.pasoConnDone]} />}
-              <View style={styles.pasoNode}>
-                <View style={[styles.pasoDot, ok ? styles.pasoDotDone : styles.pasoDotPending]}>
-                  {ok && <Text style={styles.pasoCheck}>✓</Text>}
-                </View>
-                <Text style={styles.pasoLabel}>{paso.label}</Text>
-              </View>
-            </React.Fragment>
-          )
-        })}
-      </View>
+      <View style={styles.stepper}><Stepper steps={steps} /></View>
 
-      <View style={styles.cardFooter}>
-        {p.items_total > 0 && (
-          <Text style={styles.cardItems}>📦 {p.items_instalados}/{p.items_total} items instalados</Text>
-        )}
-        <Text style={styles.cardObjetivo}>
-          {p.fecha_objetivo ? `🎯 Entrega objetivo: ${p.fecha_objetivo}` : 'Sin fecha objetivo'}
-        </Text>
-      </View>
-    </TouchableOpacity>
+      <Text style={styles.footer}>
+        {p.items_total > 0 ? `${p.items_instalados}/${p.items_total} ítems · ` : ''}
+        {p.fecha_objetivo ? `entrega ${p.fecha_objetivo}` : 'sin fecha objetivo'}
+      </Text>
+    </Pressable>
   )
 }
 
 const styles = StyleSheet.create({
-  safeAreaTop: { flex: 1, backgroundColor: '#2c3126' },
-  container: { flex: 1, backgroundColor: '#F4F5F2' },
-  header: {
-    backgroundColor: '#2c3126', paddingVertical: 14, paddingHorizontal: 14,
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-  },
-  backBtn: { paddingVertical: 4, paddingHorizontal: 8 },
-  backText: { color: '#fff', fontSize: 14 },
-  headerTitle: { color: '#C18A2D', fontSize: 16, fontWeight: '700' },
-  titleSection: { paddingHorizontal: 20, paddingTop: 16, paddingBottom: 4 },
-  title: { fontSize: 22, fontWeight: '700', color: '#2c3126' },
-  subtitle: { fontSize: 13, color: '#5A5F52', marginTop: 2 },
-  listContent: { paddingHorizontal: 20, paddingVertical: 12, paddingBottom: 30 },
-  card: {
-    backgroundColor: '#fff', borderRadius: 10, padding: 16, marginBottom: 10,
-    borderLeftWidth: 4, borderLeftColor: '#C18A2D',
-  },
-  cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 },
-  cardCodigo: { fontSize: 14, fontWeight: '700', color: '#2c3126', fontFamily: 'Courier' },
-  punchBadge: { backgroundColor: '#FEE2E2', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 999 },
-  punchBadgeText: { fontSize: 10, fontWeight: '700', color: '#991B1B' },
-  cardNombre: { fontSize: 15, fontWeight: '600', color: '#1F2419' },
-  cardCliente: { fontSize: 12, color: '#5A5F52', marginTop: 2 },
-  pasosRow: { flexDirection: 'row', alignItems: 'flex-start', marginTop: 14, marginBottom: 4 },
-  pasoNode: { alignItems: 'center', width: 62 },
-  pasoDot: {
-    width: 22, height: 22, borderRadius: 11, borderWidth: 2,
-    alignItems: 'center', justifyContent: 'center', marginBottom: 4,
-  },
-  pasoDotDone: { backgroundColor: '#5A8A2E', borderColor: '#5A8A2E' },
-  pasoDotPending: { backgroundColor: '#fff', borderColor: '#C8C5BC' },
-  pasoCheck: { color: '#fff', fontSize: 12, fontWeight: '700' },
-  pasoConn: { flex: 1, height: 2, backgroundColor: '#E0DFD9', marginTop: 10 },
-  pasoConnDone: { backgroundColor: '#5A8A2E' },
-  pasoLabel: { fontSize: 9, color: '#5A5F52', textAlign: 'center', fontWeight: '600' },
-  cardFooter: { marginTop: 10 },
-  cardItems: { fontSize: 12, color: '#5A8A2E', fontWeight: '600', marginBottom: 2 },
-  cardObjetivo: { fontSize: 12, color: '#5A5F52' },
-  loadingBox: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  errorBox: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 30 },
-  errorText: { color: '#B33', fontSize: 14, textAlign: 'center', marginBottom: 16 },
-  retryBtn: { backgroundColor: '#C18A2D', paddingHorizontal: 24, paddingVertical: 10, borderRadius: 8 },
-  retryText: { color: '#fff', fontWeight: '600' },
-  emptyBox: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 40 },
-  emptyText: { color: '#5A5F52', fontSize: 14, textAlign: 'center' },
+  pad: { paddingHorizontal: space.margin },
+  list: { paddingHorizontal: space.margin, paddingBottom: 40 },
+  row: { paddingVertical: 18, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: color.line },
+  rowHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 5 },
+  code: { fontFamily: font.kickerSemi, fontSize: 12, letterSpacing: 1, color: color.gold },
+  nombre: { fontFamily: font.bodyMed, fontSize: size.row, color: color.ink },
+  meta: { fontFamily: font.body, fontSize: size.secondary, color: color.mutedStrong, marginTop: 3 },
+  stepper: { marginTop: 16, marginBottom: 4 },
+  footer: { fontFamily: font.body, fontSize: size.status, color: color.muted, marginTop: 10 },
 })

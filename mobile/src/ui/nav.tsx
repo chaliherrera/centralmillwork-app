@@ -28,7 +28,7 @@ export function Toolbar({ title, subtitle, onBack, offlineCount }: {
           {offlineCount ? (
             <View style={styles.offlineRow}>
               <View style={[styles.dot, { backgroundColor: color.gold }]} />
-              <Text style={styles.offlineText}>Sin conexión · {offlineCount} en cola</Text>
+              <Text style={styles.offlineText}>{offlineCount} cambio(s) en cola de envío</Text>
             </View>
           ) : subtitle ? (
             <Text style={styles.toolbarSub} numberOfLines={1}>{subtitle}</Text>

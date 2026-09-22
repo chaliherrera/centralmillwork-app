@@ -1,9 +1,6 @@
 import React, { useEffect, useState, useCallback } from 'react'
-import {
-  View, Text, StyleSheet, ScrollView, TouchableOpacity,
-  ActivityIndicator, Alert, TextInput, Image, Modal,
-} from 'react-native'
-import { SafeAreaView } from 'react-native-safe-area-context'
+import { View, Text, StyleSheet, ScrollView, Pressable, Alert, Image } from 'react-native'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import * as ImagePicker from 'expo-image-picker'
 import * as Location from 'expo-location'
 import * as FileSystem from 'expo-file-system/legacy'
@@ -12,8 +9,13 @@ import { useNavigation } from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import { scheduleService, InstallProyecto, PunchItem, InstallItem } from '../services/schedule'
 import SignaturePad from '../components/SignaturePad'
-import OutboxBanner from '../components/OutboxBanner'
+import OutboxBanner, { useOutbox } from '../components/OutboxBanner'
 import type { RootStackParamList } from '../navigation/types'
+import {
+  Screen, Toolbar, Stepper, Progress, SectionHeader, StatusDot, Divider,
+  PrimaryButton, GhostButton, Field, Icon, BottomSheet, Toast, Spinner, ContextualAction,
+  color, font, size, space, type Step,
+} from '../ui'
 
 interface Props {
   proyecto: InstallProyecto
@@ -23,20 +25,14 @@ interface Props {
 
 interface HitoEstado { codigo: string; fecha_real: string | null }
 
-// Abre la cámara y devuelve el uri de la foto, o null si se canceló.
 async function tomarFoto(): Promise<string | null> {
   const perm = await ImagePicker.requestCameraPermissionsAsync()
-  if (!perm.granted) {
-    Alert.alert('Permiso denegado', 'Necesitás permitir el acceso a la cámara.')
-    return null
-  }
+  if (!perm.granted) { Alert.alert('Permiso denegado', 'Necesitás permitir el acceso a la cámara.'); return null }
   const result = await ImagePicker.launchCameraAsync({ quality: 0.7, allowsEditing: false })
   if (!result.canceled && result.assets?.[0]?.uri) return result.assets[0].uri
   return null
 }
 
-// Obtiene la ubicación (para el check-in en obra). Si no hay permiso o falla, null
-// (no bloquea el check-in — la foto sigue siendo la evidencia principal).
 async function obtenerGps(): Promise<{ lat: number; lng: number } | null> {
   try {
     const perm = await Location.requestForegroundPermissionsAsync()
@@ -47,6 +43,8 @@ async function obtenerGps(): Promise<{ lat: number; lng: number } | null> {
 }
 
 export default function InstallDetailScreen({ proyecto, onBack, onChanged }: Props) {
+  const insets = useSafeAreaInsets()
+  const { pendientes } = useOutbox()
   const [hitos, setHitos] = useState<HitoEstado[]>(proyecto.hitos)
   const [items, setItems] = useState<InstallItem[]>([])
   const [punch, setPunch] = useState<PunchItem[]>([])
@@ -56,9 +54,11 @@ export default function InstallDetailScreen({ proyecto, onBack, onChanged }: Pro
   const [nuevoArea, setNuevoArea] = useState('')
   const [firmaCliente, setFirmaCliente] = useState(proyecto.cliente || '')
   const nav = useNavigation<NativeStackNavigationProp<RootStackParamList>>()
-  const [firmando, setFirmando] = useState(false)          // pad de firma abierto
-  const [resolviendo, setResolviendo] = useState<PunchItem | null>(null) // modal resolver punch
+  const [firmando, setFirmando] = useState(false)
+  const [resolviendo, setResolviendo] = useState<PunchItem | null>(null)
+  const [addPunchOpen, setAddPunchOpen] = useState(false)
   const [notaResolver, setNotaResolver] = useState('')
+  const [toast, setToast] = useState('')
 
   const done = (codigo: string) => hitos.find((h) => h.codigo === codigo)?.fecha_real ?? null
 
@@ -69,21 +69,16 @@ export default function InstallDetailScreen({ proyecto, onBack, onChanged }: Pro
         scheduleService.getItems(proyecto.proyecto_id),
         scheduleService.getPunch(proyecto.proyecto_id),
       ])
-      if (plan?.hitos) {
-        setHitos(plan.hitos.map((h: any) => ({ codigo: h.codigo, fecha_real: h.fecha_real })))
-      }
-      setItems(itemList)
-      setPunch(punchList)
+      if (plan?.hitos) setHitos(plan.hitos.map((h: any) => ({ codigo: h.codigo, fecha_real: h.fecha_real })))
+      setItems(itemList); setPunch(punchList)
     } catch (err: any) {
       Alert.alert('Error', err?.response?.data?.message || 'No se pudieron cargar los datos')
-    } finally {
-      setLoading(false)
-    }
+    } finally { setLoading(false) }
   }, [proyecto.proyecto_id])
 
   useEffect(() => { recargar() }, [recargar])
 
-  // ── Check-in (I-04) ────────────────────────────────────────────────────────
+  // ── Check-in (I-04) ─────────────────────────────────────────────────────────
   const hacerCheckIn = async () => {
     const uri = await tomarFoto()
     if (!uri) return
@@ -93,15 +88,13 @@ export default function InstallDetailScreen({ proyecto, onBack, onChanged }: Pro
       const r = await scheduleService.registrarConFoto(proyecto.proyecto_id, 'I-04', uri, gps ? { gps } : undefined)
       onChanged()
       if (r.queued) Alert.alert('Guardado sin señal', 'El check-in se enviará solo al reconectar.')
-      else { await recargar(); Alert.alert('Listo', gps ? 'Check-in registrado con foto y ubicación.' : 'Check-in registrado con foto.') }
+      else { await recargar(); setToast('Check-in registrado') }
     } catch (err: any) {
       Alert.alert('Error', err?.response?.data?.message || 'No se pudo registrar el check-in')
-    } finally {
-      setBusy(null)
-    }
+    } finally { setBusy(null) }
   }
 
-  // ── Items a instalar (I-05 se completa solo al instalar todos) ──────────────
+  // ── Ítems a instalar ──────────────────────────────────────────────────────
   const totalItems = items.length
   const instaladosItems = items.filter((i) => i.instalado).length
 
@@ -111,25 +104,21 @@ export default function InstallDetailScreen({ proyecto, onBack, onChanged }: Pro
       const r = await scheduleService.marcarItem(proyecto.proyecto_id, item.op_id, uri)
       onChanged()
       if (r.queued) Alert.alert('Guardado sin señal', 'El ítem se marcará al reconectar.')
-      else await recargar()
+      else { await recargar(); setToast('Ítem instalado') }
     } catch (err: any) {
-      Alert.alert('Error', err?.response?.data?.message || 'No se pudo marcar el item')
-    } finally {
-      setBusy(null)
-    }
+      Alert.alert('Error', err?.response?.data?.message || 'No se pudo marcar el ítem')
+    } finally { setBusy(null) }
   }
 
   const instalarItem = async (item: InstallItem) => {
     const uri = await tomarFoto()
     if (uri) { await doInstalar(item, uri); return }
-    // Sin foto (canceló la cámara): confirmar que igual quiere marcarlo.
     Alert.alert('Sin foto', `¿Marcar "${item.numero_item}" como instalado sin foto?`, [
       { text: 'Cancelar', style: 'cancel' },
       { text: 'Sí, marcar', onPress: () => doInstalar(item) },
     ])
   }
 
-  // Agregar una foto adicional al ítem instalado.
   const agregarFoto = async (item: InstallItem) => {
     const uri = await tomarFoto()
     if (!uri) return
@@ -141,33 +130,22 @@ export default function InstallDetailScreen({ proyecto, onBack, onChanged }: Pro
       else await recargar()
     } catch (err: any) {
       Alert.alert('Error', err?.response?.data?.message || 'No se pudo agregar la foto')
-    } finally {
-      setBusy(null)
-    }
+    } finally { setBusy(null) }
   }
 
   const desmarcarItem = (item: InstallItem) => {
     Alert.alert('Deshacer', `¿Marcar "${item.numero_item}" como NO instalado?`, [
       { text: 'Cancelar', style: 'cancel' },
-      {
-        text: 'Sí',
-        onPress: async () => {
-          setBusy(`item-${item.op_id}`)
-          try {
-            await scheduleService.desmarcarItem(proyecto.proyecto_id, item.op_id)
-            await recargar()
-            onChanged()
-          } catch (err: any) {
-            Alert.alert('Error', err?.response?.data?.message || 'No se pudo deshacer')
-          } finally {
-            setBusy(null)
-          }
-        },
-      },
+      { text: 'Sí', onPress: async () => {
+        setBusy(`item-${item.op_id}`)
+        try { await scheduleService.desmarcarItem(proyecto.proyecto_id, item.op_id); await recargar(); onChanged() }
+        catch (err: any) { Alert.alert('Error', err?.response?.data?.message || 'No se pudo deshacer') }
+        finally { setBusy(null) }
+      } },
     ])
   }
 
-  // ── Punch list ─────────────────────────────────────────────────────────────
+  // ── Punch list ──────────────────────────────────────────────────────────────
   const agregarPunch = async (conFoto: boolean) => {
     const desc = nuevoPunch.trim()
     if (!desc) { Alert.alert('Falta descripción', 'Describí el pendiente.'); return }
@@ -176,18 +154,15 @@ export default function InstallDetailScreen({ proyecto, onBack, onChanged }: Pro
     setBusy('punch-add')
     try {
       const r = await scheduleService.crearPunch(proyecto.proyecto_id, desc, nuevoArea.trim() || undefined, uri || undefined)
-      setNuevoPunch(''); setNuevoArea('')
+      setNuevoPunch(''); setNuevoArea(''); setAddPunchOpen(false)
       onChanged()
       if (r.queued) Alert.alert('Guardado sin señal', 'El pendiente se enviará al reconectar.')
-      else await recargar()
+      else { await recargar(); setToast('Pendiente agregado') }
     } catch (err: any) {
       Alert.alert('Error', err?.response?.data?.message || 'No se pudo agregar el pendiente')
-    } finally {
-      setBusy(null)
-    }
+    } finally { setBusy(null) }
   }
 
-  // Abre el modal de resolución (nota + foto opcional).
   const abrirResolver = (item: PunchItem) => { setNotaResolver(''); setResolviendo(item) }
   const doResolver = async (conFoto: boolean) => {
     const item = resolviendo
@@ -200,15 +175,12 @@ export default function InstallDetailScreen({ proyecto, onBack, onChanged }: Pro
       const r = await scheduleService.resolverPunch(proyecto.proyecto_id, item.id, uri, notaResolver.trim() || undefined)
       onChanged()
       if (r.queued) Alert.alert('Guardado sin señal', 'Se enviará al reconectar.')
-      else await recargar()
+      else { await recargar(); setToast('Pendiente resuelto') }
     } catch (err: any) {
       Alert.alert('Error', err?.response?.data?.message || 'No se pudo resolver')
-    } finally {
-      setBusy(null)
-    }
+    } finally { setBusy(null) }
   }
 
-  // ── Exportar punch list (CSV) → menú de compartir de iOS ────────────────────
   const exportarPunch = async () => {
     setBusy('export-punch')
     try {
@@ -216,33 +188,22 @@ export default function InstallDetailScreen({ proyecto, onBack, onChanged }: Pro
       const uri = `${FileSystem.documentDirectory}punch-${proyecto.codigo}.csv`
       await FileSystem.writeAsStringAsync(uri, csv, { encoding: FileSystem.EncodingType.UTF8 })
       if (await Sharing.isAvailableAsync()) {
-        await Sharing.shareAsync(uri, {
-          mimeType: 'text/csv', UTI: 'public.comma-separated-values-text',
-          dialogTitle: `Punch list ${proyecto.codigo}`,
-        })
-      } else {
-        Alert.alert('No disponible', 'Compartir no está disponible en este dispositivo.')
-      }
+        await Sharing.shareAsync(uri, { mimeType: 'text/csv', UTI: 'public.comma-separated-values-text', dialogTitle: `Punch list ${proyecto.codigo}` })
+      } else { Alert.alert('No disponible', 'Compartir no está disponible en este dispositivo.') }
     } catch (err: any) {
       Alert.alert('Error', err?.response?.data?.message || 'No se pudo exportar la punch list')
-    } finally {
-      setBusy(null)
-    }
+    } finally { setBusy(null) }
   }
 
-  // ── Sign-off (I-07) ────────────────────────────────────────────────────────
+  // ── Sign-off (I-07) ───────────────────────────────────────────────────────
   const abiertos = punch.filter((p) => p.estado === 'abierto').length
   const puedeEntregar = !!done('I-04') && abiertos === 0
-
-  // Abre el pad de firma (requiere nombre de quien recibe).
   const hacerSignoff = () => {
     if (!firmaCliente.trim()) { Alert.alert('Falta el nombre', 'Ingresá quién recibe la entrega.'); return }
     setFirmando(true)
   }
-  // Se llama cuando el cliente firmó en el pad (firmaUri = PNG de la firma).
   const doSignoff = async (firmaUri: string) => {
-    setFirmando(false)
-    setBusy('signoff')
+    setFirmando(false); setBusy('signoff')
     try {
       const r = await scheduleService.signoff(proyecto.proyecto_id, firmaCliente.trim() || undefined, firmaUri)
       onChanged()
@@ -250,372 +211,237 @@ export default function InstallDetailScreen({ proyecto, onBack, onChanged }: Pro
       else { await recargar(); Alert.alert('¡Entregado!', 'Sign-off del cliente registrado. Proyecto ENTREGADO.') }
     } catch (err: any) {
       Alert.alert('Error', err?.response?.data?.message || 'No se pudo registrar el sign-off')
-    } finally {
-      setBusy(null)
-    }
+    } finally { setBusy(null) }
   }
 
-  if (loading) {
-    return (
-      <SafeAreaView style={styles.safeAreaTop} edges={['top', 'bottom']}>
-        <View style={styles.container}><View style={styles.loadingBox}><ActivityIndicator size="large" color="#C18A2D" /></View></View>
-      </SafeAreaView>
-    )
-  }
+  // ── Derivados para el stepper y la acción contextual ────────────────────────
+  const i04 = !!done('I-04'), i07 = !!done('I-07')
+  const itemsDone = totalItems > 0 ? instaladosItems === totalItems : true
+  const doneFlags = [i04, i04 && itemsDone, i04 && abiertos === 0, i07]
+  const currentIdx = doneFlags.indexOf(false)
+  const NAMES = ['Check-in', 'Instalación', 'Punch', 'Sign-off']
+  const steps: Step[] = NAMES.map((name, i) => ({ name, state: doneFlags[i] ? 'done' : i === currentIdx ? 'current' : 'todo' }))
+  const pct = totalItems > 0 ? (instaladosItems / totalItems) * 100 : (i04 ? 100 : 0)
+
+  if (loading) return <Screen><Toolbar title={proyecto.codigo} subtitle={proyecto.nombre} onBack={onBack} /><View style={{ flex: 1, paddingTop: insets.top + 62 }}><Spinner /></View></Screen>
 
   return (
-    <SafeAreaView style={styles.safeAreaTop} edges={['top', 'bottom']}>
-      <View style={styles.container}>
-        <View style={styles.header}>
-          <TouchableOpacity onPress={onBack} style={styles.backBtn}>
-            <Text style={styles.backText}>← Volver</Text>
-          </TouchableOpacity>
-          <View style={styles.headerCenter}>
-            <Text style={styles.headerTitle}>{proyecto.codigo}</Text>
-            <Text style={styles.headerSub} numberOfLines={1}>{proyecto.nombre}</Text>
-          </View>
-          <View style={{ width: 60 }} />
-        </View>
-
+    <Screen edges={['bottom']}>
+      <Toolbar title={proyecto.codigo} subtitle={proyecto.nombre} onBack={onBack} offlineCount={pendientes} />
+      <ScrollView contentContainerStyle={[styles.content, { paddingTop: insets.top + 62 }]} showsVerticalScrollIndicator={false}>
+        {/* Acciones de obra (planos / reportar daño) */}
         <View style={styles.acciones}>
-          <TouchableOpacity style={styles.accBtn}
-            onPress={() => nav.navigate('PlanosObra', { proyectoId: proyecto.proyecto_id, codigo: proyecto.codigo })}>
-            <Text style={styles.accText}>📐 Planos</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.accBtn}
-            onPress={() => nav.navigate('ReporteObra', { proyectoId: proyecto.proyecto_id, codigo: proyecto.codigo, nombre: proyecto.nombre })}>
-            <Text style={styles.accText}>⚠️ Reportar daño</Text>
-          </TouchableOpacity>
+          <Pressable onPress={() => nav.navigate('PlanosObra', { proyectoId: proyecto.proyecto_id, codigo: proyecto.codigo })} style={({ pressed }) => [styles.accBtn, pressed && { opacity: 0.6 }]}>
+            <Icon name="doc" size={17} color={color.muted} strokeWidth={1.8} />
+            <Text style={styles.accText}>Planos</Text>
+          </Pressable>
+          <Pressable onPress={() => nav.navigate('ReporteObra', { proyectoId: proyecto.proyecto_id, codigo: proyecto.codigo, nombre: proyecto.nombre })} style={({ pressed }) => [styles.accBtn, pressed && { opacity: 0.6 }]}>
+            <Icon name="alert" size={17} color={color.coral} strokeWidth={1.8} />
+            <Text style={styles.accText}>Reportar daño</Text>
+          </Pressable>
         </View>
 
         <OutboxBanner />
 
-        <ScrollView contentContainerStyle={styles.content}>
-          {/* 1. Check-in */}
-          <StepCard n="1" titulo="Check-in en obra" hito="I-04"
-            hecho={done('I-04')} sub="Foto de llegada a la obra">
-            {done('I-04') ? (
-              <DoneRow fecha={done('I-04')!} />
-            ) : (
-              <ActionBtn label="📷 Tomar foto y hacer check-in" loading={busy === 'I-04'}
-                onPress={hacerCheckIn} />
-            )}
-          </StepCard>
+        {/* Overview: progreso + stepper */}
+        <View style={styles.block}>
+          <Progress label="Avance de instalación" pct={pct} />
+          <View style={{ marginTop: 26 }}><Stepper steps={steps} /></View>
+        </View>
 
-          {/* 2. Avance por item */}
-          <StepCard n="2" titulo="Instalación por item" hito="I-05"
-            hecho={done('I-05')} sub="Tildá cada item a medida que lo instalás. Se completa solo al instalar todos">
-            {!done('I-04') && <Text style={styles.gateHint}>Primero hacé el check-in.</Text>}
+        {/* 1. Check-in */}
+        <SectionHeader title="Check-in en obra" style={styles.section} />
+        {i04 ? (
+          <DoneLine text={`Registrado · ${done('I-04')}`} />
+        ) : (
+          <Text style={styles.hint}>Tomá una foto de llegada para arrancar (queda con tu ubicación).</Text>
+        )}
 
-            {totalItems === 0 ? (
-              <Text style={styles.emptyPunch}>Este proyecto no tiene items de producción cargados.</Text>
-            ) : (
-              <>
-                {/* Progreso */}
-                <View style={styles.progHeader}>
-                  <Text style={styles.progText}>{instaladosItems} de {totalItems} instalados</Text>
-                  <Text style={styles.progPct}>{Math.round((instaladosItems / totalItems) * 100)}%</Text>
-                </View>
-                <View style={styles.progBarBg}>
-                  <View style={[styles.progBarFill, { width: `${(instaladosItems / totalItems) * 100}%` }]} />
-                </View>
-
-                {items.map((item) => {
-                  const cargando = busy === `item-${item.op_id}`
-                  const subiendoFoto = busy === `foto-${item.op_id}`
-                  return (
-                    <View key={item.op_id} style={[styles.itemCard, item.instalado && styles.itemRowDone]}>
-                      <View style={styles.itemRow}>
-                        <View style={{ flex: 1 }}>
-                          <Text style={styles.itemNombre}>{item.numero_item}</Text>
-                          <Text style={styles.itemMeta}>
-                            {item.cantidad} {item.unidad || 'u.'} · {item.numero_orden}
-                          </Text>
-                          {item.instalado && item.instalado_at ? (
-                            <Text style={styles.itemInstaladoAt}>✓ Instalado {item.instalado_at}</Text>
-                          ) : null}
-                        </View>
-                        {item.instalado ? (
-                          <TouchableOpacity onPress={() => desmarcarItem(item)} disabled={cargando} style={styles.undoBtn}>
-                            {cargando ? <ActivityIndicator color="#5A5F52" size="small" /> : <Text style={styles.undoText}>Deshacer</Text>}
-                          </TouchableOpacity>
-                        ) : (
-                          <TouchableOpacity onPress={() => instalarItem(item)} disabled={cargando || !done('I-04')}
-                            style={[styles.instalarBtn, !done('I-04') && styles.instalarBtnDisabled]}>
-                            {cargando ? <ActivityIndicator color="#fff" size="small" /> : <Text style={styles.instalarText}>Instalar</Text>}
-                          </TouchableOpacity>
-                        )}
-                      </View>
-                      {item.instalado && (
-                        <View style={styles.fotosRow}>
-                          {item.fotos.map((f, i) => <Image key={`${item.op_id}-${i}`} source={{ uri: f }} style={styles.itemThumb} />)}
-                          <TouchableOpacity style={styles.addFoto} onPress={() => agregarFoto(item)} disabled={subiendoFoto}>
-                            {subiendoFoto ? <ActivityIndicator color="#C18A2D" size="small" /> : <Text style={styles.addFotoText}>＋ Foto</Text>}
-                          </TouchableOpacity>
-                        </View>
-                      )}
+        {/* 2. Instalación por ítem */}
+        <SectionHeader title="Instalación por ítem" count={totalItems > 0 ? `${instaladosItems}/${totalItems}` : undefined} style={styles.section} />
+        {!i04 ? <Text style={styles.hint}>Primero hacé el check-in.</Text> : totalItems === 0 ? (
+          <Text style={styles.hint}>Este proyecto no tiene ítems de producción cargados.</Text>
+        ) : (
+          <View>
+            {items.map((item) => {
+              const cargando = busy === `item-${item.op_id}`
+              const subiendo = busy === `foto-${item.op_id}`
+              return (
+                <View key={item.op_id} style={styles.itemRow}>
+                  <View style={styles.itemMain}>
+                    <View style={{ flex: 1, minWidth: 0 }}>
+                      <Text style={styles.itemName}>{item.numero_item}</Text>
+                      <Text style={styles.itemMeta}>{item.cantidad} {item.unidad || 'u.'} · {item.numero_orden}</Text>
+                      {item.instalado ? <View style={{ marginTop: 6 }}><StatusDot colorOverride={color.green} label={item.instalado_at ? `Instalado ${item.instalado_at}` : 'Instalado'} /></View> : null}
                     </View>
-                  )
-                })}
-              </>
-            )}
-          </StepCard>
-
-          {/* 3. Punch list */}
-          <StepCard n="3" titulo="Punch list" hito="I-06"
-            hecho={done('I-06')} sub="Pendientes de obra. Se cierra solo cuando todos están resueltos">
-            {punch.length === 0 && <Text style={styles.emptyPunch}>Sin pendientes cargados.</Text>}
-            {punch.length > 0 && (
-              <TouchableOpacity style={styles.exportBtn} onPress={exportarPunch} disabled={busy === 'export-punch'}>
-                {busy === 'export-punch'
-                  ? <ActivityIndicator color="#5A5F52" size="small" />
-                  : <Text style={styles.exportText}>⬇ Exportar punch list (CSV)</Text>}
-              </TouchableOpacity>
-            )}
-            {punch.map((item) => (
-              <View key={item.id} style={[styles.punchItem, item.estado === 'resuelto' && styles.punchItemDone]}>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.punchDesc}>{item.descripcion}</Text>
-                  {item.area ? <Text style={styles.punchArea}>{item.area}</Text> : null}
-                  {item.nota_resuelto ? <Text style={styles.punchNota}>Resuelto: {item.nota_resuelto}</Text> : null}
-                  <View style={styles.punchThumbs}>
-                    {item.foto_problema_url ? <Image source={{ uri: item.foto_problema_url }} style={styles.punchThumb} /> : null}
-                    {item.foto_resuelto_url ? <Image source={{ uri: item.foto_resuelto_url }} style={styles.punchThumb} /> : null}
+                    {item.instalado ? (
+                      <SmallBtn label="Deshacer" tone="ghost" loading={cargando} onPress={() => desmarcarItem(item)} />
+                    ) : (
+                      <SmallBtn label="Instalar" tone="gold" loading={cargando} disabled={!i04} onPress={() => instalarItem(item)} />
+                    )}
                   </View>
+                  {item.instalado ? (
+                    <View style={styles.thumbs}>
+                      {item.fotos.map((f, i) => <Image key={`${item.op_id}-${i}`} source={{ uri: f }} style={styles.thumb} />)}
+                      <Pressable style={styles.addThumb} onPress={() => agregarFoto(item)} disabled={subiendo}>
+                        <Icon name={subiendo ? 'refresh' : 'plus'} size={16} color={color.gold} strokeWidth={2} />
+                      </Pressable>
+                    </View>
+                  ) : null}
+                  <Divider style={{ marginTop: 14 }} />
                 </View>
-                {item.estado === 'resuelto' ? (
-                  <Text style={styles.punchResuelto}>✓ Resuelto</Text>
-                ) : (
-                  <TouchableOpacity onPress={() => abrirResolver(item)} disabled={busy === `punch-${item.id}`} style={styles.resolverBtn}>
-                    {busy === `punch-${item.id}` ? <ActivityIndicator color="#fff" size="small" /> : <Text style={styles.resolverText}>Resolver</Text>}
-                  </TouchableOpacity>
-                )}
-              </View>
-            ))}
-
-            {!done('I-06') && (
-              <View style={styles.nuevoPunchBox}>
-                <TextInput value={nuevoPunch} onChangeText={setNuevoPunch}
-                  placeholder="Nuevo pendiente…" placeholderTextColor="#999" style={styles.input} multiline />
-                <TextInput value={nuevoArea} onChangeText={setNuevoArea}
-                  placeholder="Área (opcional)" placeholderTextColor="#999" style={styles.input} />
-                <View style={styles.nuevoPunchBtns}>
-                  <TouchableOpacity onPress={() => agregarPunch(true)} disabled={busy === 'punch-add'} style={[styles.smallBtn, styles.smallBtnGold]}>
-                    <Text style={styles.smallBtnText}>📷 Con foto</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity onPress={() => agregarPunch(false)} disabled={busy === 'punch-add'} style={[styles.smallBtn, styles.smallBtnGhost]}>
-                    <Text style={[styles.smallBtnText, { color: '#2c3126' }]}>Sin foto</Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
-            )}
-          </StepCard>
-
-          {/* 4. Sign-off / entrega */}
-          <StepCard n="4" titulo="Sign-off del cliente" hito="I-07"
-            hecho={done('I-07')} sub="El cliente firma la entrega en obra">
-            {done('I-07') ? (
-              <DoneRow fecha={done('I-07')!} extra="ENTREGADO" />
-            ) : (
-              <>
-                <TextInput value={firmaCliente} onChangeText={setFirmaCliente}
-                  placeholder="Nombre de quien recibe" placeholderTextColor="#999" style={styles.input} />
-                <ActionBtn label="✍️ Firmar y registrar entrega" loading={busy === 'signoff'}
-                  disabled={!puedeEntregar} green onPress={hacerSignoff} />
-                {!puedeEntregar && (
-                  <Text style={styles.gateHint}>
-                    {!done('I-04') ? 'Falta el check-in.' : `Resolvé los ${abiertos} pendiente(s) del punch list primero.`}
-                  </Text>
-                )}
-              </>
-            )}
-          </StepCard>
-        </ScrollView>
-
-        {/* Pad de firma del cliente (sign-off I-07) */}
-        <SignaturePad
-          visible={firmando}
-          titulo={`Firma — ${proyecto.codigo}`}
-          onCancel={() => setFirmando(false)}
-          onSave={doSignoff}
-        />
-
-        {/* Modal para resolver un punch item con nota + foto opcional */}
-        <Modal visible={!!resolviendo} transparent animationType="fade" onRequestClose={() => setResolviendo(null)}>
-          <View style={styles.modalBg}>
-            <View style={styles.modalCard}>
-              <Text style={styles.modalTitle}>Resolver pendiente</Text>
-              {resolviendo ? <Text style={styles.modalDesc} numberOfLines={2}>{resolviendo.descripcion}</Text> : null}
-              <TextInput
-                value={notaResolver} onChangeText={setNotaResolver} multiline
-                placeholder="Nota de cómo se resolvió (opcional)…" placeholderTextColor="#999"
-                style={styles.modalInput}
-              />
-              <TouchableOpacity style={[styles.modalBtn, styles.modalBtnGold]} onPress={() => doResolver(true)}>
-                <Text style={styles.modalBtnText}>📷 Con foto</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={[styles.modalBtn, styles.modalBtnGreen]} onPress={() => doResolver(false)}>
-                <Text style={styles.modalBtnText}>Resolver sin foto</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.modalCancel} onPress={() => setResolviendo(null)}>
-                <Text style={styles.modalCancelText}>Cancelar</Text>
-              </TouchableOpacity>
-            </View>
+              )
+            })}
           </View>
-        </Modal>
-      </View>
-    </SafeAreaView>
+        )}
+
+        {/* 3. Punch list */}
+        <SectionHeader title="Punch list" count={punch.length || undefined} style={styles.section} />
+        <View style={styles.punchTools}>
+          {punch.length > 0 ? (
+            <Pressable onPress={exportarPunch} disabled={busy === 'export-punch'} style={({ pressed }) => [styles.toolBtn, pressed && { opacity: 0.6 }]}>
+              <Icon name="download" size={15} color={color.muted} strokeWidth={1.8} />
+              <Text style={styles.toolText}>Exportar CSV</Text>
+            </Pressable>
+          ) : <View />}
+          {!done('I-06') ? (
+            <Pressable onPress={() => { setNuevoPunch(''); setNuevoArea(''); setAddPunchOpen(true) }} style={({ pressed }) => [styles.toolBtn, pressed && { opacity: 0.6 }]}>
+              <Icon name="plus" size={15} color={color.gold} strokeWidth={2} />
+              <Text style={[styles.toolText, { color: color.gold }]}>Agregar pendiente</Text>
+            </Pressable>
+          ) : null}
+        </View>
+        {punch.length === 0 ? <Text style={styles.hint}>Sin pendientes cargados.</Text> : punch.map((item) => (
+          <Pressable key={item.id} onPress={() => abrirResolver(item)} style={({ pressed }) => [styles.punchRow, pressed && { opacity: 0.6 }]}>
+            {item.foto_problema_url ? <Image source={{ uri: item.foto_problema_url }} style={styles.punchThumb} /> : <View style={[styles.punchThumb, { backgroundColor: color.stripeA }]} />}
+            <View style={{ flex: 1, minWidth: 0 }}>
+              <Text style={styles.punchDesc} numberOfLines={2}>{item.descripcion}</Text>
+              {item.area ? <Text style={styles.itemMeta}>{item.area}</Text> : null}
+              <View style={{ marginTop: 6 }}><StatusDot estado={item.estado} /></View>
+            </View>
+            <Icon name="chevron" size={16} color="#6E665C" strokeWidth={1.8} />
+          </Pressable>
+        ))}
+
+        {/* 4. Sign-off */}
+        <SectionHeader title="Sign-off del cliente" style={styles.section} />
+        {i07 ? (
+          <DoneLine text={`Entregado · ${done('I-07')}`} tone="green" />
+        ) : (
+          <View>
+            <Field label="Quién recibe" value={firmaCliente} onChangeText={setFirmaCliente} placeholder="Nombre de quien recibe la entrega" />
+            {!puedeEntregar ? (
+              <Text style={styles.hint}>{!i04 ? 'Falta el check-in.' : `Resolvé los ${abiertos} pendiente(s) del punch list para poder firmar.`}</Text>
+            ) : null}
+          </View>
+        )}
+      </ScrollView>
+
+      {/* Acción contextual = siguiente hito (una sola capa flotante) */}
+      {!i04 ? (
+        <ContextualAction label="Hacer check-in en obra" kicker="Siguiente paso" onPress={hacerCheckIn} disabled={busy === 'I-04'} />
+      ) : !i07 && puedeEntregar ? (
+        <ContextualAction label="Firmar entrega" kicker="Siguiente paso" onPress={hacerSignoff} disabled={busy === 'signoff'} />
+      ) : null}
+
+      {/* Firma del cliente */}
+      <SignaturePad visible={firmando} titulo={`Firma — ${proyecto.codigo}`} onCancel={() => setFirmando(false)} onSave={doSignoff} />
+
+      {/* Detalle / resolución de un pendiente (bottom sheet) */}
+      <BottomSheet visible={!!resolviendo} onClose={() => setResolviendo(null)}>
+        {resolviendo ? (
+          <View style={{ paddingBottom: 8 }}>
+            <StatusDot estado={resolviendo.estado} />
+            <Text style={[styles.sheetTitle, { marginTop: 10 }]}>{resolviendo.descripcion}</Text>
+            {resolviendo.area ? <Text style={styles.sheetMeta}>{resolviendo.area}</Text> : null}
+            {resolviendo.foto_problema_url ? <Image source={{ uri: resolviendo.foto_problema_url }} style={styles.sheetPhoto} /> : null}
+            {resolviendo.estado === 'resuelto' ? (
+              <View>
+                {resolviendo.nota_resuelto ? <Text style={styles.sheetNota}>Resuelto: {resolviendo.nota_resuelto}</Text> : null}
+                {resolviendo.foto_resuelto_url ? <Image source={{ uri: resolviendo.foto_resuelto_url }} style={styles.sheetPhoto} /> : null}
+                <GhostButton label="Cerrar" onPress={() => setResolviendo(null)} />
+              </View>
+            ) : (
+              <View style={{ gap: 12, marginTop: 14 }}>
+                <Field placeholder="Nota de cómo se resolvió (opcional)…" value={notaResolver} onChangeText={setNotaResolver} multiline />
+                <PrimaryButton label="Marcar como resuelto" icon="check" onPress={() => doResolver(false)} />
+                <GhostButton label="Adjuntar foto y resolver" onPress={() => doResolver(true)} />
+              </View>
+            )}
+          </View>
+        ) : null}
+      </BottomSheet>
+
+      {/* Agregar pendiente (bottom sheet) */}
+      <BottomSheet visible={addPunchOpen} onClose={() => setAddPunchOpen(false)}>
+        <View style={{ gap: 14, paddingBottom: 8 }}>
+          <Text style={styles.sheetTitle}>Nuevo pendiente</Text>
+          <Field label="Descripción" placeholder="Qué falta o qué está mal…" value={nuevoPunch} onChangeText={setNuevoPunch} multiline />
+          <Field label="Área (opcional)" placeholder="Ej. Depto 12B · Living" value={nuevoArea} onChangeText={setNuevoArea} />
+          <PrimaryButton label="Agregar pendiente" icon="plus" onPress={() => agregarPunch(false)} disabled={busy === 'punch-add'} />
+          <GhostButton label="Tomar foto y agregar" onPress={() => agregarPunch(true)} />
+        </View>
+      </BottomSheet>
+
+      {toast ? <Toast message={toast} onDone={() => setToast('')} /> : null}
+    </Screen>
   )
 }
 
-// ── Subcomponentes ───────────────────────────────────────────────────────────
-function StepCard({ n, titulo, hito, sub, hecho, children }: {
-  n: string; titulo: string; hito: string; sub: string; hecho: string | null; children: React.ReactNode
-}) {
+function DoneLine({ text, tone }: { text: string; tone?: 'green' }) {
   return (
-    <View style={[styles.stepCard, hecho && styles.stepCardDone]}>
-      <View style={styles.stepHeader}>
-        <View style={[styles.stepNum, hecho ? styles.stepNumDone : styles.stepNumPending]}>
-          <Text style={styles.stepNumText}>{hecho ? '✓' : n}</Text>
-        </View>
-        <View style={{ flex: 1 }}>
-          <Text style={styles.stepTitulo}>{titulo} <Text style={styles.stepHito}>{hito}</Text></Text>
-          <Text style={styles.stepSub}>{sub}</Text>
-        </View>
-      </View>
-      <View style={styles.stepBody}>{children}</View>
+    <View style={styles.doneLine}>
+      <Icon name="check" size={16} color={color.green} strokeWidth={2.4} />
+      <Text style={[styles.doneText, tone === 'green' && { color: color.green }]}>{text}</Text>
     </View>
   )
 }
 
-function DoneRow({ fecha, extra }: { fecha: string; extra?: string }) {
-  return (
-    <View style={styles.doneRow}>
-      <Text style={styles.doneText}>✓ {extra ? `${extra} · ` : ''}{fecha}</Text>
-    </View>
-  )
-}
-
-function ActionBtn({ label, onPress, loading, disabled, green }: {
-  label: string; onPress: () => void; loading?: boolean; disabled?: boolean; green?: boolean
+function SmallBtn({ label, onPress, tone, loading, disabled }: {
+  label: string; onPress: () => void; tone: 'gold' | 'ghost'; loading?: boolean; disabled?: boolean
 }) {
   return (
-    <TouchableOpacity onPress={onPress} disabled={loading || disabled}
-      style={[styles.actionBtn, green ? styles.actionBtnGreen : styles.actionBtnGold, (loading || disabled) && styles.actionBtnDisabled]}>
-      {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.actionBtnText}>{label}</Text>}
-    </TouchableOpacity>
+    <Pressable onPress={onPress} disabled={loading || disabled}
+      style={({ pressed }) => [styles.smallBtn, tone === 'gold' ? styles.smallGold : styles.smallGhost, (loading || disabled) && { opacity: 0.4 }, pressed && { opacity: 0.7 }]}>
+      <Text style={[styles.smallText, tone === 'gold' ? { color: color.onGold } : { color: color.muted }]}>{loading ? '…' : label}</Text>
+    </Pressable>
   )
 }
 
 const styles = StyleSheet.create({
-  safeAreaTop: { flex: 1, backgroundColor: '#2c3126' },
-  container: { flex: 1, backgroundColor: '#F4F5F2' },
-  header: {
-    backgroundColor: '#2c3126', paddingVertical: 14, paddingHorizontal: 14,
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-  },
-  backBtn: { paddingVertical: 4, paddingHorizontal: 8 },
-  backText: { color: '#fff', fontSize: 14 },
-  headerCenter: { alignItems: 'center', flex: 1 },
-  headerTitle: { color: '#C18A2D', fontSize: 16, fontWeight: '700', fontFamily: 'Courier' },
-  headerSub: { color: '#E8C684', fontSize: 11, marginTop: 2, opacity: 0.85 },
-  content: { padding: 16, paddingBottom: 40 },
-  loadingBox: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  content: { paddingHorizontal: space.margin, paddingBottom: 150 },
+  acciones: { flexDirection: 'row', gap: 20, paddingTop: 14, paddingBottom: 6 },
+  accBtn: { flexDirection: 'row', alignItems: 'center', gap: 7, paddingVertical: 6 },
+  accText: { fontFamily: font.bodyMed, fontSize: size.secondary, color: color.muted },
+  block: { marginTop: 18 },
+  section: { marginTop: space.gapXl, marginBottom: 10 },
+  hint: { fontFamily: font.body, fontSize: size.secondary, color: color.muted, lineHeight: size.secondary * 1.5 },
 
-  stepCard: {
-    backgroundColor: '#fff', borderRadius: 12, padding: 16, marginBottom: 14,
-    borderWidth: 1, borderColor: '#E0DFD9',
-  },
-  stepCardDone: { backgroundColor: '#F5FAEF', borderColor: '#A8C97A' },
-  stepHeader: { flexDirection: 'row', alignItems: 'flex-start', gap: 12 },
-  stepNum: {
-    width: 30, height: 30, borderRadius: 15, alignItems: 'center', justifyContent: 'center',
-  },
-  stepNumPending: { backgroundColor: '#2c3126' },
-  stepNumDone: { backgroundColor: '#5A8A2E' },
-  stepNumText: { color: '#fff', fontWeight: '700', fontSize: 14 },
-  stepTitulo: { fontSize: 16, fontWeight: '700', color: '#2c3126' },
-  stepHito: { fontSize: 11, color: '#8A8F7E', fontFamily: 'Courier' },
-  stepSub: { fontSize: 12, color: '#5A5F52', marginTop: 2 },
-  stepBody: { marginTop: 12 },
+  doneLine: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  doneText: { fontFamily: font.bodyMed, fontSize: size.body, color: color.ink2 },
 
-  doneRow: { backgroundColor: '#E8F5E9', borderRadius: 8, paddingVertical: 10, paddingHorizontal: 12 },
-  doneText: { color: '#1B5E20', fontWeight: '700', fontSize: 13 },
+  itemRow: {},
+  itemMain: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingTop: 14 },
+  itemName: { fontFamily: font.bodyMed, fontSize: size.row, color: color.ink },
+  itemMeta: { fontFamily: font.body, fontSize: size.status, color: color.mutedStrong, marginTop: 3 },
+  thumbs: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 10, paddingLeft: 2 },
+  thumb: { width: 44, height: 44, borderRadius: 8 },
+  addThumb: { width: 44, height: 44, borderRadius: 8, borderWidth: 1, borderStyle: 'dashed', borderColor: color.gold, alignItems: 'center', justifyContent: 'center' },
 
-  actionBtn: { borderRadius: 10, paddingVertical: 14, alignItems: 'center', marginTop: 4 },
-  actionBtnGold: { backgroundColor: '#C18A2D' },
-  actionBtnGreen: { backgroundColor: '#16A34A' },
-  actionBtnDisabled: { opacity: 0.5 },
-  actionBtnText: { color: '#fff', fontWeight: '700', fontSize: 14 },
-  gateHint: { fontSize: 12, color: '#B45309', marginTop: 8, fontStyle: 'italic' },
+  smallBtn: { height: 40, minWidth: 88, paddingHorizontal: 14, borderRadius: 20, alignItems: 'center', justifyContent: 'center' },
+  smallGold: { backgroundColor: color.gold },
+  smallGhost: { borderWidth: StyleSheet.hairlineWidth * 2, borderColor: 'rgba(245,240,232,0.2)' },
+  smallText: { fontFamily: font.bodySemi, fontSize: size.secondary },
 
-  emptyPunch: { fontSize: 13, color: '#5A5F52', fontStyle: 'italic', marginBottom: 8 },
-  exportBtn: { alignSelf: 'flex-start', backgroundColor: '#fff', borderWidth: 1, borderColor: '#C8C5BC', borderRadius: 8, paddingVertical: 8, paddingHorizontal: 12, marginBottom: 10 },
-  exportText: { color: '#2c3126', fontWeight: '700', fontSize: 12 },
+  punchTools: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 },
+  toolBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 6 },
+  toolText: { fontFamily: font.bodyMed, fontSize: size.status, color: color.muted },
+  punchRow: { flexDirection: 'row', alignItems: 'center', gap: 14, paddingVertical: 14, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: color.line },
+  punchThumb: { width: 56, height: 56, borderRadius: 8 },
+  punchDesc: { fontFamily: font.bodyMed, fontSize: size.row, color: color.ink },
 
-  progHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 },
-  progText: { fontSize: 13, fontWeight: '700', color: '#2c3126' },
-  progPct: { fontSize: 13, fontWeight: '700', color: '#5A8A2E' },
-  progBarBg: { height: 8, borderRadius: 4, backgroundColor: '#E0DFD9', overflow: 'hidden', marginBottom: 12 },
-  progBarFill: { height: 8, borderRadius: 4, backgroundColor: '#5A8A2E' },
-  itemCard: {
-    backgroundColor: '#fff', borderRadius: 8, padding: 10, marginBottom: 8,
-    borderWidth: 1, borderColor: '#E0DFD9',
-  },
-  itemRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  itemRowDone: { backgroundColor: '#F0F7E8', borderColor: '#A8C97A' },
-  itemThumb: { width: 40, height: 40, borderRadius: 6 },
-  fotosRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 8 },
-  addFoto: { width: 40, height: 40, borderRadius: 6, borderWidth: 1, borderStyle: 'dashed', borderColor: '#C18A2D', alignItems: 'center', justifyContent: 'center' },
-  addFotoText: { color: '#C18A2D', fontSize: 10, fontWeight: '800' },
-  itemNombre: { fontSize: 14, fontWeight: '600', color: '#1F2419' },
-  itemMeta: { fontSize: 11, color: '#5A5F52', marginTop: 2, fontFamily: 'Courier' },
-  itemInstaladoAt: { fontSize: 11, color: '#1B5E20', fontWeight: '700', marginTop: 2 },
-  instalarBtn: { backgroundColor: '#C18A2D', borderRadius: 8, paddingVertical: 8, paddingHorizontal: 14 },
-  instalarBtnDisabled: { opacity: 0.4 },
-  instalarText: { color: '#fff', fontWeight: '700', fontSize: 13 },
-  undoBtn: { borderRadius: 8, paddingVertical: 8, paddingHorizontal: 12, borderWidth: 1, borderColor: '#C8C5BC' },
-  undoText: { color: '#5A5F52', fontWeight: '600', fontSize: 12 },
-  punchItem: {
-    flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: '#FFF7F7',
-    borderRadius: 8, padding: 12, marginBottom: 8, borderWidth: 1, borderColor: '#FCA5A5',
-  },
-  punchItemDone: { backgroundColor: '#F0F7E8', borderColor: '#A8C97A' },
-  punchDesc: { fontSize: 14, color: '#1F2419', fontWeight: '500' },
-  punchArea: { fontSize: 11, color: '#5A5F52', marginTop: 2 },
-  punchThumbs: { flexDirection: 'row', gap: 6, marginTop: 6 },
-  punchThumb: { width: 44, height: 44, borderRadius: 6 },
-  punchResuelto: { color: '#1B5E20', fontWeight: '700', fontSize: 12 },
-  resolverBtn: { backgroundColor: '#16A34A', borderRadius: 8, paddingVertical: 8, paddingHorizontal: 14 },
-  resolverText: { color: '#fff', fontWeight: '700', fontSize: 13 },
-
-  nuevoPunchBox: { marginTop: 6 },
-  input: {
-    backgroundColor: '#fff', borderRadius: 8, padding: 10, marginBottom: 8,
-    borderWidth: 1, borderColor: '#E0DFD9', fontSize: 14, color: '#1F2419',
-  },
-  nuevoPunchBtns: { flexDirection: 'row', gap: 10 },
-  smallBtn: { flex: 1, borderRadius: 8, paddingVertical: 11, alignItems: 'center' },
-  smallBtnGold: { backgroundColor: '#C18A2D' },
-  smallBtnGhost: { backgroundColor: '#fff', borderWidth: 1, borderColor: '#C8C5BC' },
-  smallBtnText: { color: '#fff', fontWeight: '700', fontSize: 13 },
-
-  // Barra de acciones (planos / reportar daño)
-  acciones: { flexDirection: 'row', gap: 10, backgroundColor: '#2c3126', paddingHorizontal: 16, paddingBottom: 12 },
-  accBtn: { flex: 1, backgroundColor: '#3a4133', borderRadius: 9, paddingVertical: 10, alignItems: 'center' },
-  accText: { color: '#E8C684', fontWeight: '700', fontSize: 13 },
-  punchNota: { fontSize: 11.5, color: '#2f6a12', marginTop: 3, fontStyle: 'italic' },
-
-  // Modal resolver punch
-  modalBg: { flex: 1, backgroundColor: 'rgba(20,25,16,0.55)', justifyContent: 'center', padding: 24 },
-  modalCard: { backgroundColor: '#fff', borderRadius: 14, padding: 18 },
-  modalTitle: { fontSize: 16, fontWeight: '800', color: '#2c3126' },
-  modalDesc: { fontSize: 13, color: '#5A5F52', marginTop: 4, marginBottom: 10 },
-  modalInput: { backgroundColor: '#F4F5F2', borderRadius: 9, borderWidth: 1, borderColor: '#E0DFD9', padding: 11, fontSize: 14, color: '#1F2419', minHeight: 70, textAlignVertical: 'top', marginBottom: 12 },
-  modalBtn: { borderRadius: 9, paddingVertical: 13, alignItems: 'center', marginBottom: 9 },
-  modalBtnGold: { backgroundColor: '#C18A2D' },
-  modalBtnGreen: { backgroundColor: '#16A34A' },
-  modalBtnText: { color: '#fff', fontWeight: '800', fontSize: 14 },
-  modalCancel: { alignItems: 'center', paddingVertical: 6 },
-  modalCancelText: { color: '#5A5F52', fontWeight: '600', fontSize: 13 },
+  sheetTitle: { fontFamily: font.titleSemi, fontSize: size.sheetTitle, color: color.ink },
+  sheetMeta: { fontFamily: font.body, fontSize: 14, color: color.muted, marginTop: 4 },
+  sheetPhoto: { width: '100%', height: 160, borderRadius: 14, marginTop: 14, backgroundColor: color.stripeA },
+  sheetNota: { fontFamily: font.body, fontSize: size.body, color: color.ink2, marginTop: 12, marginBottom: 8, lineHeight: size.body * 1.5 },
 })
