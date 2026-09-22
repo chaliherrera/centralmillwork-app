@@ -93,39 +93,42 @@ export const radius = {
 // En RN el blur lo hace <BlurView> de expo-blur; `overlay` es el tinte por encima,
 // `intensity`/`tint` van al BlurView, y `border`/`shadow` al contenedor.
 export const glass = {
+  // Paneles CLARAMENTE más claros que el fondo (#1E1A16) para que se lean como
+  // vidrio flotante aunque el blur rinda poco en un fondo oscuro. El BlurView por
+  // detrás agrega el frost cuando pasa contenido.
   // flotante sobre contenido (tab bar, FAB contextual)
   floating: {
-    intensity: 60,
-    tint: 'dark' as const,
-    overlay: 'rgba(40,35,29,0.40)',
-    border: 'rgba(245,240,232,0.18)',
+    intensity: 55,
+    tint: 'light' as const,
+    overlay: 'rgba(64,57,48,0.66)',
+    border: 'rgba(245,240,232,0.24)',
   },
   // barra anclada a un borde (toolbar superior)
   bar: {
-    intensity: 55,
-    tint: 'dark' as const,
-    overlay: 'rgba(30,26,22,0.42)',
-    border: 'rgba(245,240,232,0.14)',
+    intensity: 50,
+    tint: 'light' as const,
+    overlay: 'rgba(56,50,42,0.62)',
+    border: 'rgba(245,240,232,0.20)',
   },
   // sheet / modal
   sheet: {
-    intensity: 70,
-    tint: 'dark' as const,
-    overlay: 'rgba(40,35,29,0.48)',
-    border: 'rgba(245,240,232,0.22)',
+    intensity: 60,
+    tint: 'light' as const,
+    overlay: 'rgba(64,57,48,0.70)',
+    border: 'rgba(245,240,232,0.26)',
   },
   // FAB dorado
   fab: {
-    intensity: 40,
-    tint: 'dark' as const,
-    overlay: 'rgba(217,164,65,0.85)',
-    border: 'rgba(255,255,255,0.28)',
+    intensity: 30,
+    tint: 'light' as const,
+    overlay: 'rgba(217,164,65,0.92)',
+    border: 'rgba(255,255,255,0.30)',
   },
   // brillo superior interno (la "señal" de vidrio del handoff: inset 0 1px 0 …)
-  highlight: 'rgba(255,255,255,0.14)',
-  scrim: 'rgba(10,8,6,0.55)',
+  highlight: 'rgba(255,255,255,0.22)',
+  scrim: 'rgba(10,8,6,0.6)',
   // Sólido equivalente si el device no soporta blur o hay "reducir transparencia".
-  solid: '#282320',
+  solid: '#3A342C',
 } as const
 
 // Sombra estándar de elemento flotante (iOS/Android).
