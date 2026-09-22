@@ -34,7 +34,7 @@ export default function BottomSheet({ visible, onClose, children }: {
             { paddingBottom: Math.max(insets.bottom, 20) + 10, transform: [{ translateY: y.interpolate({ inputRange: [0, 1], outputRange: [0, 600] }) }] },
           ]}
         >
-          <GlassFill recipe="sheet" />
+          <GlassFill recipe="sheet" highlight />
           <View style={s.grabber} />
           {children}
         </Animated.View>

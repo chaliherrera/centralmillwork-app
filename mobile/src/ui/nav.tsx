@@ -15,7 +15,7 @@ export function Toolbar({ title, subtitle, onBack, offlineCount }: {
   const insets = useSafeAreaInsets()
   return (
     <View style={[styles.toolbar, { paddingTop: insets.top + 6, minHeight: insets.top + 58 }]}>
-      <GlassFill recipe="bar" />
+      <GlassFill recipe="bar" highlight />
       <View style={styles.barBorder} />
       <View style={styles.toolbarRow}>
         {onBack ? (
@@ -56,7 +56,7 @@ export function TabBar({ items }: { items: TabItem[] }) {
   const insets = useSafeAreaInsets()
   return (
     <View style={[styles.tabbar, { bottom: Math.max(insets.bottom, 16) + 8 }]}>
-      <GlassFill recipe="floating" />
+      <GlassFill recipe="floating" highlight />
       <View style={styles.tabRow}>
         {items.slice(0, 3).map((it) => (
           <Pressable key={it.key} onPress={it.onPress} style={styles.tabItem}>
@@ -90,7 +90,7 @@ export function ContextualAction({ label, onPress, kicker = 'Siguiente paso', di
   const insets = useSafeAreaInsets()
   return (
     <View style={[styles.ctxWrap, { bottom: Math.max(insets.bottom, 16) + 10 }]}>
-      <GlassFill recipe="floating" />
+      <GlassFill recipe="floating" highlight />
       <Text style={styles.ctxKicker}>{kicker}</Text>
       <Pressable onPress={onPress} disabled={disabled} style={({ pressed }) => [styles.ctxBtn, disabled && { opacity: 0.5 }, pressed && styles.pressScale]}>
         <Text style={styles.ctxLabel} numberOfLines={1}>{label}</Text>

@@ -95,32 +95,34 @@ export const radius = {
 export const glass = {
   // flotante sobre contenido (tab bar, FAB contextual)
   floating: {
-    intensity: 40,
+    intensity: 60,
     tint: 'dark' as const,
-    overlay: 'rgba(40,35,29,0.55)',
-    border: 'rgba(245,240,232,0.16)',
+    overlay: 'rgba(40,35,29,0.40)',
+    border: 'rgba(245,240,232,0.18)',
   },
   // barra anclada a un borde (toolbar superior)
   bar: {
-    intensity: 38,
+    intensity: 55,
     tint: 'dark' as const,
-    overlay: 'rgba(30,26,22,0.55)',
-    border: 'rgba(245,240,232,0.12)',
+    overlay: 'rgba(30,26,22,0.42)',
+    border: 'rgba(245,240,232,0.14)',
   },
   // sheet / modal
   sheet: {
-    intensity: 50,
+    intensity: 70,
     tint: 'dark' as const,
-    overlay: 'rgba(40,35,29,0.62)',
-    border: 'rgba(245,240,232,0.20)',
+    overlay: 'rgba(40,35,29,0.48)',
+    border: 'rgba(245,240,232,0.22)',
   },
   // FAB dorado
   fab: {
-    intensity: 30,
+    intensity: 40,
     tint: 'dark' as const,
-    overlay: 'rgba(217,164,65,0.88)',
-    border: 'rgba(255,255,255,0.22)',
+    overlay: 'rgba(217,164,65,0.85)',
+    border: 'rgba(255,255,255,0.28)',
   },
+  // brillo superior interno (la "señal" de vidrio del handoff: inset 0 1px 0 …)
+  highlight: 'rgba(255,255,255,0.14)',
   scrim: 'rgba(10,8,6,0.55)',
   // Sólido equivalente si el device no soporta blur o hay "reducir transparencia".
   solid: '#282320',
