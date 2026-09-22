@@ -1,6 +1,8 @@
 import React, { useEffect } from 'react'
+import { View } from 'react-native'
 import { SafeAreaProvider } from 'react-native-safe-area-context'
 import { StatusBar } from 'expo-status-bar'
+import { useFonts } from 'expo-font'
 import { QueryClient } from '@tanstack/react-query'
 import { PersistQueryClientProvider } from '@tanstack/react-query-persist-client'
 import { createAsyncStoragePersister } from '@tanstack/query-async-storage-persister'
@@ -8,6 +10,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage'
 import { AuthProvider } from './src/context/AuthContext'
 import RootNavigator from './src/navigation/RootNavigator'
 import { startOutboxWorker } from './src/services/outbox'
+import { fontsToLoad, color } from './src/theme'
 
 // networkMode 'offlineFirst': sirve del cache si no hay red (consulta offline).
 const queryClient = new QueryClient({
@@ -29,6 +32,10 @@ const persister = createAsyncStoragePersister({ storage: AsyncStorage })
 export default function App() {
   // Worker de la cola offline: reenvía las escrituras de obra al recuperar señal.
   useEffect(() => { startOutboxWorker() }, [])
+
+  // Fuentes del sistema de diseño (Spectral / Archivo / Archivo Narrow).
+  const [fontsReady] = useFonts(fontsToLoad)
+  if (!fontsReady) return <View style={{ flex: 1, backgroundColor: color.bg }} />
 
   return (
     <SafeAreaProvider>
