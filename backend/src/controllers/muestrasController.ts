@@ -1032,6 +1032,19 @@ export async function registrarEnvio(req: Request, res: Response, next: NextFunc
       ))
     }
 
+    // Flujo sin fabricación (desde SOLICITADA): exigir al menos una foto de la
+    // muestra como evidencia de lo que se recibió del proveedor y se envía.
+    if (muestra.estado === 'SOLICITADA') {
+      const { rows: fotos } = await client.query(
+        `SELECT 1 FROM muestras_archivos WHERE muestra_id = $1 AND tipo = 'foto' LIMIT 1`,
+        [id]
+      )
+      if (fotos.length === 0) {
+        await client.query('ROLLBACK')
+        return next(createError('Para enviar sin fabricación, subí al menos una foto de la muestra.', 400))
+      }
+    }
+
     const body = req.body as z.infer<typeof registrarEnvioSchema>
 
     const { rows: [envio] } = await client.query(
