@@ -1015,6 +1015,23 @@ export async function registrarEnvio(req: Request, res: Response, next: NextFunc
     const muestra = await getMuestraOr404(id, next)
     if (!muestra) { await client.query('ROLLBACK'); return }
 
+    // Estados desde los que se puede registrar un envío:
+    //  · EN_QC      → flujo CON fabricación (QC aprobado).
+    //  · SOLICITADA → flujo SIN fabricación: la muestra se recibe del proveedor,
+    //    se fotografía y se envía directo al cliente, saltando fabricación y QC
+    //    (Chali 2026-09-25, escenario común de muestras de material del proveedor).
+    //  · ENVIADA    → envío adicional / reenvío.
+    // Bloqueado en fabricación en curso y en estados terminales/decididos.
+    const ESTADOS_ENVIABLES = ['SOLICITADA', 'EN_QC', 'ENVIADA']
+    if (!ESTADOS_ENVIABLES.includes(muestra.estado)) {
+      await client.query('ROLLBACK')
+      return next(createError(
+        `No se puede registrar un envío desde ${muestra.estado}. Se envía desde SOLICITADA ` +
+        `(sin fabricación), EN_QC (QC aprobado) o ENVIADA (reenvío).`,
+        400
+      ))
+    }
+
     const body = req.body as z.infer<typeof registrarEnvioSchema>
 
     const { rows: [envio] } = await client.query(
@@ -1031,9 +1048,19 @@ export async function registrarEnvio(req: Request, res: Response, next: NextFunc
       ]
     )
 
-    // Si la muestra no está en ENVIADA todavía, llevarla a ENVIADA
-    if (muestra.estado === 'EN_QC') {
+    // Llevar a ENVIADA si venía de EN_QC (con fabricación) o de SOLICITADA
+    // (sin fabricación). Si ya estaba ENVIADA, es un reenvío y no cambia.
+    if (muestra.estado === 'EN_QC' || muestra.estado === 'SOLICITADA') {
       await client.query(`UPDATE muestras SET estado = 'ENVIADA' WHERE id = $1`, [id])
+    }
+    // Sin fabricación: cerrar la tarea de Compras "verificar materiales" (queda
+    // sin sentido: la muestra vino lista del proveedor y ya se envió).
+    if (muestra.estado === 'SOLICITADA') {
+      await client.query(
+        `UPDATE tareas SET estado = 'completada', completed_at = NOW()
+          WHERE source_ref = $1 AND estado NOT IN ('completada','descartada')`,
+        [`muestra:${id}:request`]
+      )
     }
 
     await client.query(

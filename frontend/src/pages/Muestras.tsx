@@ -682,15 +682,23 @@ function DetalleMuestraDrawer({ id, onClose, onChange }: { id: number; onClose: 
               )}
 
               {/* F5: botón Registrar envío visible para PROCUREMENT/ADMIN,
-                  no para SHOP_MANAGER (cambio de responsabilidad). */}
-              {canEnvio && (m.estado === 'EN_QC' || m.estado === 'ENVIADA') && (
+                  no para SHOP_MANAGER (cambio de responsabilidad).
+                  SOLICITADA (2026-09-25): flujo SIN fabricación — muestra recibida
+                  del proveedor, se fotografía (pestaña Archivos, sin límite) y se
+                  envía directo al cliente, saltando fabricación y QC. */}
+              {canEnvio && (m.estado === 'SOLICITADA' || m.estado === 'EN_QC' || m.estado === 'ENVIADA') && (
                 <div className="mt-3">
                   <button
                     onClick={() => setShowEnvio(true)}
                     className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded bg-blue-50 text-blue-700 hover:bg-blue-100"
                   >
-                    <Truck size={11} /> Registrar envío
+                    <Truck size={11} /> {m.estado === 'SOLICITADA' ? 'Enviar sin fabricar' : 'Registrar envío'}
                   </button>
+                  {m.estado === 'SOLICITADA' && (
+                    <p className="text-[11px] text-gray-400 mt-1 max-w-md">
+                      Muestra recibida del proveedor: subí las fotos en la pestaña <b>Archivos</b> (sin límite) y registrá el envío al cliente. Salta fabricación y QC.
+                    </p>
+                  )}
                 </div>
               )}
             </div>
