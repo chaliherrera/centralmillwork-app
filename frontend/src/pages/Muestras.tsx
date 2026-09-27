@@ -543,6 +543,8 @@ function DetalleMuestraDrawer({ id, onClose, onChange }: { id: number; onClose: 
   // EN_FABRICACION para pre-llenar procesos según tipo. Sólo aplica desde
   // SOLICITADA (RECHAZADA → EN_FABRICACION sigue el flow viejo legacy).
   const [showIniciarFab, setShowIniciarFab] = useState(false)
+  // Sin fabricación: SOLICITADA → EN_QC subiendo primero las fotos del producto.
+  const [showPasarQC, setShowPasarQC] = useState(false)
 
   const m = data?.muestra
   // F8: OP de la versión actual (si existe) — usado para el tab Fotos
@@ -551,6 +553,12 @@ function DetalleMuestraDrawer({ id, onClose, onChange }: { id: number; onClose: 
     const v = data.versiones.find((x) => x.version_numero === m.version_actual)
     return v?.op_id ?? null
   }, [m, data?.versiones])
+  // Fotos de la muestra (archivos tipo 'foto'). En el flujo SIN fabricación se
+  // muestran en la pestaña "Fotos" igual que las de avance de fabricación.
+  const fotosMuestra = useMemo(
+    () => (data?.archivos ?? []).filter((a: { tipo?: string }) => a.tipo === 'foto'),
+    [data?.archivos]
+  )
   // F4.5: QC ya aprobado para la versión actual? Lo detectamos por evento timeline
   const qcAprobado = useMemo(() => {
     if (!m || !data?.eventos) return false
@@ -567,7 +575,9 @@ function DetalleMuestraDrawer({ id, onClose, onChange }: { id: number; onClose: 
   const transicionesDisponibles = useMemo<MuestraEstado[]>(() => {
     if (!m) return []
     const all: Record<MuestraEstado, MuestraEstado[]> = {
-      SOLICITADA:     ['EN_FABRICACION', 'ARCHIVADA'],
+      // EN_QC directo = flujo SIN fabricación (muestra del proveedor): se
+      // fotografía el producto y pasa a QC saltando solo fabricación.
+      SOLICITADA:     ['EN_FABRICACION', 'EN_QC', 'ARCHIVADA'],
       EN_FABRICACION: ['EN_QC', 'ARCHIVADA'],
       EN_QC:          ['ENVIADA', 'EN_FABRICACION', 'ARCHIVADA'],
       ENVIADA:        ['APROBADA', 'RECHAZADA', 'ARCHIVADA'],
@@ -634,6 +644,9 @@ function DetalleMuestraDrawer({ id, onClose, onChange }: { id: number; onClose: 
                             // hace ambas cosas (crea OP con procesos +
                             // transición) en una sola transacción.
                             setShowIniciarFab(true)
+                          } else if (dest === 'EN_QC' && m.estado === 'SOLICITADA') {
+                            // Sin fabricación: subir fotos del producto y pasar a QC.
+                            setShowPasarQC(true)
                           } else {
                             transicion.mutate({ nuevo_estado: dest })
                           }
@@ -651,7 +664,9 @@ function DetalleMuestraDrawer({ id, onClose, onChange }: { id: number; onClose: 
                         )}
                       >
                         <ArrowRight size={11} />
-                        Pasar a {ESTADO_META[dest].label.replace(/s$/, '')}
+                        {dest === 'EN_QC' && m.estado === 'SOLICITADA'
+                          ? 'Sin fabricar: fotos → QC'
+                          : `Pasar a ${ESTADO_META[dest].label.replace(/s$/, '')}`}
                       </button>
                     )
                   })}
@@ -682,23 +697,15 @@ function DetalleMuestraDrawer({ id, onClose, onChange }: { id: number; onClose: 
               )}
 
               {/* F5: botón Registrar envío visible para PROCUREMENT/ADMIN,
-                  no para SHOP_MANAGER (cambio de responsabilidad).
-                  SOLICITADA (2026-09-25): flujo SIN fabricación — muestra recibida
-                  del proveedor, se fotografía (pestaña Archivos, sin límite) y se
-                  envía directo al cliente, saltando fabricación y QC. */}
-              {canEnvio && (m.estado === 'SOLICITADA' || m.estado === 'EN_QC' || m.estado === 'ENVIADA') && (
+                  no para SHOP_MANAGER (cambio de responsabilidad). */}
+              {canEnvio && (m.estado === 'EN_QC' || m.estado === 'ENVIADA') && (
                 <div className="mt-3">
                   <button
                     onClick={() => setShowEnvio(true)}
                     className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded bg-blue-50 text-blue-700 hover:bg-blue-100"
                   >
-                    <Truck size={11} /> {m.estado === 'SOLICITADA' ? 'Enviar sin fabricar' : 'Registrar envío'}
+                    <Truck size={11} /> Registrar envío
                   </button>
-                  {m.estado === 'SOLICITADA' && (
-                    <p className="text-[11px] text-gray-400 mt-1 max-w-md">
-                      Muestra recibida del proveedor: cargá las fotos (mínimo 1, sin límite) y el destinatario en un solo paso. Salta fabricación y QC.
-                    </p>
-                  )}
                 </div>
               )}
             </div>
@@ -709,9 +716,9 @@ function DetalleMuestraDrawer({ id, onClose, onChange }: { id: number; onClose: 
                 ['overview', 'Overview'],
                 ['archivos', `Archivos (${data.archivos?.length ?? 0})`],
                 ['ocs',      `OCs (${data.ocs.length})`],
-                // Tab Fotos solo si la muestra ya tiene una OP asociada (versión
-                // actual con op_id). Aparece después de iniciar fabricación.
-                ...(opIdActual ? [['fotos' as const, 'Fotos']] : []),
+                // Tab Fotos: con fabricación (OP con fotos de avance) o sin
+                // fabricación (fotos del producto subidas al pasar a QC).
+                ...((opIdActual || fotosMuestra.length > 0) ? [['fotos' as const, 'Fotos']] : []),
                 ['envios',   `Envíos (${data.envios.length})`],
                 ['timeline', 'Timeline'],
                 ['calendar', 'Calendar'],
@@ -958,8 +965,18 @@ function DetalleMuestraDrawer({ id, onClose, onChange }: { id: number; onClose: 
                 </div>
               )}
 
-              {tab === 'fotos' && opIdActual && (
-                <FotosAvanceSection ordenId={opIdActual} />
+              {tab === 'fotos' && (
+                opIdActual ? (
+                  <FotosAvanceSection ordenId={opIdActual} />
+                ) : (
+                  <div className="grid grid-cols-3 gap-2">
+                    {fotosMuestra.map((a: { id: number; url: string; nombre?: string }) => (
+                      <a key={a.id} href={a.url} target="_blank" rel="noopener noreferrer" title={a.nombre}>
+                        <img src={a.url} alt={a.nombre ?? 'Foto'} className="h-28 w-full object-cover rounded border border-gray-200 hover:opacity-90 transition-opacity" />
+                      </a>
+                    ))}
+                  </div>
+                )
               )}
 
               {tab === 'envios' && (
@@ -1053,7 +1070,6 @@ function DetalleMuestraDrawer({ id, onClose, onChange }: { id: number; onClose: 
             setShowEnvio(false)
           }}
           muestraId={id}
-          esSinFabricacion={m?.estado === 'SOLICITADA'}
         />
       )}
 
@@ -1082,6 +1098,103 @@ function DetalleMuestraDrawer({ id, onClose, onChange }: { id: number; onClose: 
           muestraTipo={m.tipo}
         />
       )}
+
+      {/* Sin fabricación: subir fotos del producto y pasar a QC */}
+      {showPasarQC && m && (
+        <PasarAQCSinFabModal
+          muestraId={id}
+          fotosExistentes={fotosMuestra.length}
+          onClose={() => setShowPasarQC(false)}
+          onSuccess={() => {
+            qc.invalidateQueries({ queryKey: ['muestra', id] })
+            onChange()
+            setShowPasarQC(false)
+          }}
+        />
+      )}
+    </div>
+  )
+}
+
+// ─── Modal: pasar a QC sin fabricación (muestra del proveedor) ──────────────
+// Sube las fotos del producto (mínimo 1, sin límite) y transiciona SOLICITADA →
+// EN_QC. Las fotos quedan como muestras_archivos tipo 'foto' y se muestran en la
+// pestaña "Fotos", igual que las de fabricación. De ahí sigue el flujo normal
+// (aprobar QC → registrar envío). Chali 2026-09-27.
+function PasarAQCSinFabModal({ muestraId, fotosExistentes = 0, onClose, onSuccess }: { muestraId: number; fotosExistentes?: number; onClose: () => void; onSuccess: () => void }) {
+  const [fotos, setFotos] = useState<File[]>([])
+  const fotosPreview = useMemo(() => fotos.map((f) => URL.createObjectURL(f)), [fotos])
+  const totalFotos = fotos.length + fotosExistentes
+
+  const mut = useMutation({
+    mutationFn: async () => {
+      // Subir las fotos nuevas primero (el backend exige ≥1 foto para pasar a
+      // QC). Si alguna falla, abortamos antes de transicionar.
+      for (const f of fotos) {
+        await muestrasService.uploadArchivo(muestraId, f, 'foto')
+      }
+      return muestrasService.transicion(muestraId, { nuevo_estado: 'EN_QC' })
+    },
+    onSuccess: () => { toast.success('Fotos guardadas · muestra en QC'); onSuccess() },
+    onError: (err: any) => toast.error(err?.response?.data?.message ?? 'Error al pasar a QC'),
+  })
+
+  const submit = (e: React.FormEvent) => {
+    e.preventDefault()
+    if (totalFotos === 0) return toast.error('Subí al menos 1 foto del producto')
+    mut.mutate()
+  }
+
+  return (
+    <div className="fixed inset-0 z-[60] bg-black/40 flex items-center justify-center px-4" onClick={onClose}>
+      <div className="bg-white rounded-2xl max-w-md w-full shadow-2xl max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between p-5 border-b border-gray-100 sticky top-0 bg-white">
+          <h3 className="text-lg font-semibold flex items-center gap-2"><Upload size={18} /> Sin fabricación · fotos → QC</h3>
+          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-gray-100"><X size={18} /></button>
+        </div>
+        <form onSubmit={submit} className="p-5 space-y-3">
+          <p className="text-xs text-gray-500">
+            La muestra vino del proveedor (no se fabrica). Subí las fotos del producto que vas a enviar — se ven en la pestaña <b>Fotos</b>. Después pasa a QC y seguís el flujo normal (aprobar QC → registrar envío).
+          </p>
+          <div className="rounded-lg bg-blue-50 border border-blue-100 p-3">
+            <label className="label flex items-center gap-2 !mb-1">
+              <Upload size={14} /> Fotos del producto * <span className="text-blue-700 font-normal">(mínimo 1, sin límite)</span>
+            </label>
+            <input
+              type="file"
+              accept="image/*"
+              multiple
+              onChange={(e) => { setFotos((prev) => [...prev, ...Array.from(e.target.files ?? [])]); e.currentTarget.value = '' }}
+              className="text-xs"
+            />
+            {fotos.length > 0 && (
+              <div className="mt-2 flex flex-wrap gap-2">
+                {fotosPreview.map((src, i) => (
+                  <div key={i} className="relative">
+                    <img src={src} alt={`Foto ${i + 1}`} className="h-20 w-20 object-cover rounded border border-gray-200" />
+                    <button type="button" onClick={() => setFotos((prev) => prev.filter((_, idx) => idx !== i))}
+                      className="absolute -top-2 -right-2 p-0.5 bg-white border border-gray-300 rounded-full shadow" title="Quitar">
+                      <X size={12} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+            <p className="text-[11px] text-gray-500 mt-1">
+              {fotos.length} nueva(s) seleccionada(s){fotosExistentes > 0 && ` · ${fotosExistentes} ya cargada(s)`}
+            </p>
+            {fotosExistentes > 0 && (
+              <p className="text-[11px] text-blue-700 mt-0.5">Ya hay fotos cargadas: podés pasar a QC directo o agregar más.</p>
+            )}
+          </div>
+          <div className="flex gap-2 pt-3 border-t border-gray-100">
+            <button type="button" onClick={onClose} className="btn-ghost flex-1 justify-center">Cancelar</button>
+            <button type="submit" disabled={mut.isPending || totalFotos === 0} className="btn-primary flex-1 justify-center">
+              {mut.isPending ? 'Guardando…' : 'Pasar a QC'}
+            </button>
+          </div>
+        </form>
+      </div>
     </div>
   )
 }
@@ -1090,47 +1203,40 @@ function DetalleMuestraDrawer({ id, onClose, onChange }: { id: number; onClose: 
 // F5: agrega input opcional de foto del paquete/etiqueta. Tras crear el envío
 // hace una segunda llamada para subir la foto si existe — el endpoint nuevo
 // /envios/:envioId/foto reemplaza la foto anterior si la hay.
-function RegistrarEnvioModal({ muestraId, esSinFabricacion, onClose, onSuccess }: { muestraId: number; esSinFabricacion?: boolean; onClose: () => void; onSuccess: () => void }) {
+function RegistrarEnvioModal({ muestraId, onClose, onSuccess }: { muestraId: number; onClose: () => void; onSuccess: () => void }) {
   const [destinatario, setDestinatario] = useState('')
   const [direccion, setDireccion] = useState('')
   const [carrier, setCarrier] = useState('')
   const [tracking, setTracking] = useState('')
   const [notas, setNotas] = useState('')
-  const [foto, setFoto] = useState<File | null>(null)          // foto del paquete/etiqueta (flujo con fabricación)
-  const [fotos, setFotos] = useState<File[]>([])               // fotos de la muestra (sin fabricación, mínimo 1)
-  const fotoPreview = useMemo(() => foto ? URL.createObjectURL(foto) : null, [foto])
-  const fotosPreview = useMemo(() => fotos.map((f) => URL.createObjectURL(f)), [fotos])
+  const [foto, setFoto] = useState<File | null>(null)
+  const fotoPreview = useMemo(
+    () => foto ? URL.createObjectURL(foto) : null,
+    [foto]
+  )
 
   const mut = useMutation({
     mutationFn: async (body: RegistrarEnvioInput) => {
-      // Sin fabricación: subir primero TODAS las fotos de la muestra (evidencia
-      // de lo recibido del proveedor). El backend exige ≥1 foto para enviar, así
-      // que las cargamos antes de registrar el envío. Si una falla, abortamos.
-      if (esSinFabricacion) {
-        for (const f of fotos) {
-          await muestrasService.uploadArchivo(muestraId, f, 'foto')
-        }
-      }
       const res = await muestrasService.registrarEnvio(muestraId, body)
-      // Foto del paquete (opcional, solo flujo con fabricación). Si falla, no aborta.
+      // Si hay foto, segunda llamada para asociarla. Si falla, NO abortamos
+      // — el envío ya quedó registrado.
       const envio = (res as any)?.data
       if (foto && envio?.id) {
         try {
           await muestrasService.uploadEnvioFoto(muestraId, envio.id, foto)
         } catch (err: any) {
-          toast.error('Envío registrado, pero falló la foto del paquete: ' + (err?.response?.data?.message ?? 'error'))
+          toast.error('Envío registrado, pero falló la subida de la foto: ' + (err?.response?.data?.message ?? 'error'))
         }
       }
       return res
     },
-    onSuccess: () => { toast.success(esSinFabricacion ? 'Muestra enviada (sin fabricación)' : 'Envío registrado'); onSuccess() },
+    onSuccess: () => { toast.success('Envío registrado'); onSuccess() },
     onError: (err: any) => toast.error(err?.response?.data?.message ?? 'Error registrando envío'),
   })
 
   const submit = (e: React.FormEvent) => {
     e.preventDefault()
     if (!destinatario.trim()) return toast.error('Falta el destinatario')
-    if (esSinFabricacion && fotos.length === 0) return toast.error('Subí al menos 1 foto de la muestra')
     mut.mutate({
       destinatario: destinatario.trim(),
       direccion: direccion.trim() || undefined,
@@ -1144,39 +1250,10 @@ function RegistrarEnvioModal({ muestraId, esSinFabricacion, onClose, onSuccess }
     <div className="fixed inset-0 z-[60] bg-black/40 flex items-center justify-center px-4" onClick={onClose}>
       <div className="bg-white rounded-2xl max-w-md w-full shadow-2xl max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between p-5 border-b border-gray-100 sticky top-0 bg-white">
-          <h3 className="text-lg font-semibold flex items-center gap-2"><Truck size={18} /> {esSinFabricacion ? 'Enviar sin fabricar' : 'Registrar envío'}</h3>
+          <h3 className="text-lg font-semibold flex items-center gap-2"><Truck size={18} /> Registrar envío</h3>
           <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-gray-100"><X size={18} /></button>
         </div>
         <form onSubmit={submit} className="p-5 space-y-3">
-          {esSinFabricacion && (
-            <div className="rounded-lg bg-blue-50 border border-blue-100 p-3">
-              <label className="label flex items-center gap-2 !mb-1">
-                <Upload size={14} /> Fotos de la muestra * <span className="text-blue-700 font-normal">(mínimo 1, sin límite)</span>
-              </label>
-              <p className="text-[11px] text-gray-500 mb-2">Subí las fotos de las muestras recibidas del proveedor.</p>
-              <input
-                type="file"
-                accept="image/*"
-                multiple
-                onChange={(e) => { setFotos((prev) => [...prev, ...Array.from(e.target.files ?? [])]); e.currentTarget.value = '' }}
-                className="text-xs"
-              />
-              {fotos.length > 0 && (
-                <div className="mt-2 flex flex-wrap gap-2">
-                  {fotosPreview.map((src, i) => (
-                    <div key={i} className="relative">
-                      <img src={src} alt={`Foto ${i + 1}`} className="h-20 w-20 object-cover rounded border border-gray-200" />
-                      <button type="button" onClick={() => setFotos((prev) => prev.filter((_, idx) => idx !== i))}
-                        className="absolute -top-2 -right-2 p-0.5 bg-white border border-gray-300 rounded-full shadow" title="Quitar">
-                        <X size={12} />
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              )}
-              <p className="text-[11px] text-gray-500 mt-1">{fotos.length} foto(s) seleccionada(s)</p>
-            </div>
-          )}
           <div>
             <label className="label">Destinatario *</label>
             <input type="text" value={destinatario} onChange={(e) => setDestinatario(e.target.value)} required className="input" placeholder="Nombre del cliente o contacto" />
@@ -1199,32 +1276,34 @@ function RegistrarEnvioModal({ muestraId, esSinFabricacion, onClose, onSuccess }
             <label className="label">Notas</label>
             <textarea value={notas} onChange={(e) => setNotas(e.target.value)} rows={2} className="input resize-none" placeholder="Detalles adicionales" />
           </div>
-          {!esSinFabricacion && (
-            <div>
-              <label className="label flex items-center gap-2">
-                <Paperclip size={14} /> Foto del paquete / etiqueta (opcional)
-              </label>
-              <input
-                type="file"
-                accept="image/*,application/pdf"
-                onChange={(e) => setFoto(e.target.files?.[0] ?? null)}
-                className="text-xs"
-              />
-              {fotoPreview && (
-                <div className="mt-2 relative inline-block">
-                  <img src={fotoPreview} alt="Preview" className="max-h-32 rounded border border-gray-200" />
-                  <button type="button" onClick={() => setFoto(null)}
-                    className="absolute -top-2 -right-2 p-0.5 bg-white border border-gray-300 rounded-full shadow" title="Quitar foto">
-                    <X size={12} />
-                  </button>
-                </div>
-              )}
-            </div>
-          )}
+          <div>
+            <label className="label flex items-center gap-2">
+              <Paperclip size={14} /> Foto del paquete / etiqueta (opcional)
+            </label>
+            <input
+              type="file"
+              accept="image/*,application/pdf"
+              onChange={(e) => setFoto(e.target.files?.[0] ?? null)}
+              className="text-xs"
+            />
+            {fotoPreview && (
+              <div className="mt-2 relative inline-block">
+                <img src={fotoPreview} alt="Preview" className="max-h-32 rounded border border-gray-200" />
+                <button
+                  type="button"
+                  onClick={() => setFoto(null)}
+                  className="absolute -top-2 -right-2 p-0.5 bg-white border border-gray-300 rounded-full shadow"
+                  title="Quitar foto"
+                >
+                  <X size={12} />
+                </button>
+              </div>
+            )}
+          </div>
           <div className="flex gap-2 pt-3 border-t border-gray-100">
             <button type="button" onClick={onClose} className="btn-ghost flex-1 justify-center">Cancelar</button>
-            <button type="submit" disabled={mut.isPending || (esSinFabricacion && fotos.length === 0)} className="btn-primary flex-1 justify-center">
-              {mut.isPending ? 'Guardando…' : (esSinFabricacion ? 'Enviar sin fabricar' : 'Registrar envío')}
+            <button type="submit" disabled={mut.isPending} className="btn-primary flex-1 justify-center">
+              {mut.isPending ? 'Guardando…' : 'Registrar envío'}
             </button>
           </div>
         </form>

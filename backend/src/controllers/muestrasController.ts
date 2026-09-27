@@ -24,7 +24,10 @@ export type EstadoMuestra = typeof ESTADOS[number]
 // Transiciones válidas. Forma: { [estado_actual]: [estados destino válidos] }
 // Permitimos volver atrás solo en casos puntuales (admin override).
 export const TRANSICIONES: Record<EstadoMuestra, EstadoMuestra[]> = {
-  SOLICITADA:     ['EN_FABRICACION', 'ARCHIVADA'],
+  // EN_QC directo (sin fabricación): muestra recibida del proveedor. Se
+  // fotografía el producto y se pasa a QC saltando SOLO fabricación (Chali
+  // 2026-09-27). El resto del flujo (QC → envío) queda igual que siempre.
+  SOLICITADA:     ['EN_FABRICACION', 'EN_QC', 'ARCHIVADA'],
   EN_FABRICACION: ['EN_QC', 'SOLICITADA', 'ARCHIVADA'],  // SOLICITADA = "esperar más materiales"
   EN_QC:          ['ENVIADA', 'EN_FABRICACION', 'ARCHIVADA'],  // QC fail vuelve a fabricación
   ENVIADA:        ['APROBADA', 'RECHAZADA', 'ARCHIVADA'],
@@ -602,6 +605,19 @@ export async function transicionarMuestra(req: Request, res: Response, next: Nex
       }
     }
 
+    // ── Sin fabricación (SOLICITADA → EN_QC): la muestra vino del proveedor,
+    // no se fabrica. Se exige al menos una foto del producto antes de pasar a QC
+    // (evidencia de lo que se enviará). Estas fotos se ven en la sección "Fotos",
+    // como si fueran de fabricación (Chali 2026-09-27). ───────────────────────
+    if (muestra.estado === 'SOLICITADA' && nuevo_estado === 'EN_QC') {
+      const { rows: fotos } = await client.query(
+        `SELECT 1 FROM muestras_archivos WHERE muestra_id = $1 AND tipo = 'foto' LIMIT 1`, [id])
+      if (fotos.length === 0) {
+        await client.query('ROLLBACK')
+        return next(createError('Para pasar a QC sin fabricación, subí al menos una foto del producto.', 400))
+      }
+    }
+
     // ── Gating por OP DURO (Q5, 2026-09-07): no se pasa a QC hasta que el
     // operario COMPLETE la OP de la muestra en el kiosko. Antes el taller
     // saltaba a QC a mano; ahora el estado real de la OP manda. Si la muestra
@@ -1015,36 +1031,6 @@ export async function registrarEnvio(req: Request, res: Response, next: NextFunc
     const muestra = await getMuestraOr404(id, next)
     if (!muestra) { await client.query('ROLLBACK'); return }
 
-    // Estados desde los que se puede registrar un envío:
-    //  · EN_QC      → flujo CON fabricación (QC aprobado).
-    //  · SOLICITADA → flujo SIN fabricación: la muestra se recibe del proveedor,
-    //    se fotografía y se envía directo al cliente, saltando fabricación y QC
-    //    (Chali 2026-09-25, escenario común de muestras de material del proveedor).
-    //  · ENVIADA    → envío adicional / reenvío.
-    // Bloqueado en fabricación en curso y en estados terminales/decididos.
-    const ESTADOS_ENVIABLES = ['SOLICITADA', 'EN_QC', 'ENVIADA']
-    if (!ESTADOS_ENVIABLES.includes(muestra.estado)) {
-      await client.query('ROLLBACK')
-      return next(createError(
-        `No se puede registrar un envío desde ${muestra.estado}. Se envía desde SOLICITADA ` +
-        `(sin fabricación), EN_QC (QC aprobado) o ENVIADA (reenvío).`,
-        400
-      ))
-    }
-
-    // Flujo sin fabricación (desde SOLICITADA): exigir al menos una foto de la
-    // muestra como evidencia de lo que se recibió del proveedor y se envía.
-    if (muestra.estado === 'SOLICITADA') {
-      const { rows: fotos } = await client.query(
-        `SELECT 1 FROM muestras_archivos WHERE muestra_id = $1 AND tipo = 'foto' LIMIT 1`,
-        [id]
-      )
-      if (fotos.length === 0) {
-        await client.query('ROLLBACK')
-        return next(createError('Para enviar sin fabricación, subí al menos una foto de la muestra.', 400))
-      }
-    }
-
     const body = req.body as z.infer<typeof registrarEnvioSchema>
 
     const { rows: [envio] } = await client.query(
@@ -1061,19 +1047,9 @@ export async function registrarEnvio(req: Request, res: Response, next: NextFunc
       ]
     )
 
-    // Llevar a ENVIADA si venía de EN_QC (con fabricación) o de SOLICITADA
-    // (sin fabricación). Si ya estaba ENVIADA, es un reenvío y no cambia.
-    if (muestra.estado === 'EN_QC' || muestra.estado === 'SOLICITADA') {
+    // Si la muestra no está en ENVIADA todavía, llevarla a ENVIADA
+    if (muestra.estado === 'EN_QC') {
       await client.query(`UPDATE muestras SET estado = 'ENVIADA' WHERE id = $1`, [id])
-    }
-    // Sin fabricación: cerrar la tarea de Compras "verificar materiales" (queda
-    // sin sentido: la muestra vino lista del proveedor y ya se envió).
-    if (muestra.estado === 'SOLICITADA') {
-      await client.query(
-        `UPDATE tareas SET estado = 'completada', completed_at = NOW()
-          WHERE source_ref = $1 AND estado NOT IN ('completada','descartada')`,
-        [`muestra:${id}:request`]
-      )
     }
 
     await client.query(
