@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import toast from 'react-hot-toast'
-import { Lock, Loader2, Check, CalendarRange, Eye } from 'lucide-react'
+import { Lock, Loader2, Check, CalendarRange, Eye, RotateCcw } from 'lucide-react'
 import { ingenieriaService, type ReservaProyecto } from '@/services/ingenieria'
 import { usePollNovedades } from '@/hooks/usePollNovedades'
 
@@ -25,6 +25,27 @@ export default function ReservasPendientes({ onRevisar }: { onRevisar?: (proyect
     setBusy(p.proyecto_id)
     try { await ingenieriaService.confirmarReserva(p.proyecto_id); await refetch() }
     catch { /* toast */ } finally { setBusy(null) }
+  }
+
+  // Regenerar = correr de nuevo el generador (reservar) sobre el mismo proyecto:
+  // borra el plan SUGERIDO actual y lo reconstruye con los datos vigentes del
+  // proyecto (ítems, montos, stone, instalación, fecha) y la carga actual de
+  // ingenieros. Descarta las ediciones que el PM haya hecho sobre el sugerido.
+  const regenerar = async (p: ReservaProyecto) => {
+    if (!window.confirm(
+      `¿Regenerar el plan de ${p.proyecto_codigo} desde cero?\n\n` +
+      `Se descartan las ediciones actuales del plan sugerido y se reconstruye ` +
+      `con los datos del proyecto (ítems, montos, stone, instalación, fecha) y ` +
+      `la carga de ingenieros vigente.`
+    )) return
+    setBusy(p.proyecto_id)
+    try {
+      await ingenieriaService.reservar(p.proyecto_id)
+      toast.success('Plan regenerado')
+      await refetch()
+    } catch (e: any) {
+      toast.error(e?.response?.data?.message ?? 'No se pudo regenerar el plan')
+    } finally { setBusy(null) }
   }
 
   if (loading) return null
@@ -58,11 +79,16 @@ export default function ReservasPendientes({ onRevisar }: { onRevisar?: (proyect
                     <Eye size={15} /> Revisar plan
                   </button>
                 )}
+                <button onClick={() => regenerar(p)} disabled={busy === p.proyecto_id}
+                  title="Descarta el plan sugerido actual y lo reconstruye con los datos del proyecto y la carga de ingenieros vigente"
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-amber-300 text-amber-800 hover:bg-amber-50 disabled:opacity-50 text-sm font-semibold px-3 py-2">
+                  {busy === p.proyecto_id ? <Loader2 className="animate-spin" size={15} /> : <RotateCcw size={15} />} Regenerar
+                </button>
                 <button onClick={() => aceptar(p)} disabled={busy === p.proyecto_id}
                   className="inline-flex items-center gap-1.5 rounded-lg bg-forest-600 hover:bg-forest-700 disabled:opacity-50 text-white text-sm font-semibold px-3.5 py-2">
                   {busy === p.proyecto_id ? <Loader2 className="animate-spin" size={15} /> : <Check size={15} />} Aceptar plan
                 </button>
-                <span className="text-[11px] text-stone-400">Revisá y podá el plan antes de aceptar.</span>
+                <span className="text-[11px] text-stone-400">Revisá y podá el plan antes de aceptar — o regeneralo desde cero.</span>
               </div>
             </div>
           )
