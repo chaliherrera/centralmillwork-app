@@ -1016,14 +1016,14 @@ function DetalleMuestraDrawer({ id, onClose, onChange }: { id: number; onClose: 
                           <div className="text-xs text-emerald-700 font-medium mt-1">
                             ✓ Cliente confirmó recepción el {new Date(e.fecha_recepcion_confirmada).toLocaleDateString('es-MX')}
                           </div>
-                        ) : canEnvio && (
+                        ) : canApprove && (
                           <button
                             onClick={() => {
                               const today = new Date().toISOString().slice(0, 10)
                               muestrasService.confirmarRecepcion(id, e.id, today).then(() => {
                                 toast.success('Recepción confirmada')
                                 qc.invalidateQueries({ queryKey: ['muestra', id] })
-                              })
+                              }).catch((err: any) => toast.error(err?.response?.data?.message ?? 'No se pudo confirmar'))
                             }}
                             className="mt-2 inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg border border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100 transition-colors"
                           >

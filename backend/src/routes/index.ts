@@ -230,8 +230,10 @@ const MUESTRAS_FLOW  = requireRole('ADMIN', 'SHOP_MANAGER')
 // taller: se deja pasar a ENGINEERING y el handler enforce qué transición hace cada rol.
 const MUESTRAS_TRANSICION = requireRole('ADMIN', 'SHOP_MANAGER', 'ENGINEERING')
 // F5: logística de envío es responsabilidad de procurement (ya no shop_manager).
-// confirmarRecepcion también pasa porque es seguimiento del envío.
 const MUESTRAS_ENVIO = requireRole('ADMIN', 'PROCUREMENT')
+// "Marcar como recibido por el cliente" lo dan los INGENIEROS (Chali 2026-09-28):
+// son quienes gestionan la respuesta del cliente (luego aprueban/rechazan).
+const MUESTRAS_RECEPCION = requireRole('ADMIN', 'ENGINEERING')
 
 router.get   ('/muestras',                                MUESTRAS_READ,  getMuestras)
 router.get   ('/muestras/kpis',                           MUESTRAS_READ,  getMuestrasKpis)
@@ -244,7 +246,7 @@ router.post  ('/muestras/:id/transicion',                 MUESTRAS_TRANSICION, v
 router.post  ('/muestras/:id/aprobar-qc',                 MUESTRAS_FLOW,  aprobarQC)
 router.post  ('/muestras/:id/envios',                     MUESTRAS_ENVIO, validateBody(registrarEnvioSchema), registrarEnvio)
 router.post  ('/muestras/:id/envios/:envioId/foto',       MUESTRAS_ENVIO, uploadEnvioFotoMulter.single('foto'), uploadEnvioFoto)
-router.patch ('/muestras/:id/envios/:envioId/recepcion',  MUESTRAS_ENVIO, confirmarRecepcion)
+router.patch ('/muestras/:id/envios/:envioId/recepcion',  MUESTRAS_RECEPCION, confirmarRecepcion)
 router.get   ('/muestras/:id/archivos',                   MUESTRAS_READ,  getArchivos)
 router.post  ('/muestras/:id/archivos',                   MUESTRAS_WRITE, uploadMuestraArchivo.single('archivo'), uploadArchivo)
 router.delete('/muestras/:id/archivos/:archivoId',        MUESTRAS_WRITE, deleteArchivo)
