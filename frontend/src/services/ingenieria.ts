@@ -198,7 +198,8 @@ export interface Ingeniero { nombre: string; activo: boolean; hace_cnc: boolean;
 export interface IngPlan {
   proyecto_ext: string
   fecha_inicio: string | null
-  fecha_entrega: string | null
+  fecha_entrega: string | null          // solicitada por el cliente
+  fecha_comprometida: string | null     // prometida al cliente (null si aún no se envió)
   status_ext: string | null
   proyecto_estado: string | null
   n_items: number | null

@@ -437,32 +437,45 @@ function VistaProyecto({ proyectos, all, plan, planLoading, sel, setSel, onEdit,
         <button onClick={() => onEdit('new')} className="inline-flex items-center gap-1.5 rounded-lg bg-forest-600 hover:bg-forest-700 text-white text-sm font-semibold px-3 py-1.5"><Plus size={15} /> Nueva tarea</button>
       </div>
 
-      {/* Tarjeta de estado: fecha SOLICITADA (pedida por el cliente, referencia) vs fecha
-          PROPUESTA (fin factible del plan del PM = la fecha real de entrega). No hay "atraso":
-          la propuesta es la fecha que el análisis del PM permite cumplir. */}
-      {plan && plan.fecha_entrega && (
-        <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 flex flex-wrap items-center gap-x-8 gap-y-2">
+      {/* Tarjeta de estado. Dos etapas:
+          · ANTES de enviar al cliente: solicitada (referencia) + PROPUESTA (fin factible) +
+            "Plan factible". No hay "atraso": la propuesta es la fecha que el plan permite cumplir.
+          · DESPUÉS de enviar (hay fecha COMPROMETIDA): solicitada + comprometida + "Termina", y
+            si el plan se pasa de lo prometido, se pone en ROJO (ahí sí hay riesgo real). */}
+      {plan && plan.fecha_entrega && (() => {
+        const comprometida = plan.fecha_comprometida
+        const enRiesgo = !!comprometida && plan.en_riesgo   // riesgo solo contra una promesa
+        return (
+        <div className={`rounded-2xl border px-4 py-3 flex flex-wrap items-center gap-x-8 gap-y-2 ${enRiesgo ? 'border-rose-200 bg-rose-50' : 'border-emerald-200 bg-emerald-50'}`}>
           <div>
             <div className="text-[10px] uppercase tracking-wide text-stone-400 font-semibold">Fecha solicitada</div>
             <div className="text-lg font-bold text-stone-500 tabular-nums">{fmtD(plan.fecha_entrega)}</div>
             <div className="text-[10px] text-stone-400">pedida por el cliente</div>
           </div>
           <div>
-            <div className="text-[10px] uppercase tracking-wide text-emerald-600 font-semibold">Fecha propuesta</div>
-            <div className="text-lg font-bold text-emerald-800 tabular-nums">{fmtD(plan.fin_proyectado)}</div>
-            <div className="text-[10px] text-emerald-600">factible según el plan del PM</div>
+            <div className={`text-[10px] uppercase tracking-wide font-semibold ${enRiesgo ? 'text-rose-600' : 'text-emerald-600'}`}>{comprometida ? 'Fecha comprometida' : 'Fecha propuesta'}</div>
+            <div className={`text-lg font-bold tabular-nums ${enRiesgo ? 'text-rose-700' : 'text-emerald-800'}`}>{fmtD(comprometida ?? plan.fin_proyectado)}</div>
+            <div className={`text-[10px] ${enRiesgo ? 'text-rose-600' : 'text-emerald-600'}`}>{comprometida ? 'prometida al cliente' : 'factible según el plan del PM'}</div>
           </div>
+          {comprometida && (
+            <div>
+              <div className="text-[10px] uppercase tracking-wide text-stone-400 font-semibold">Termina</div>
+              <div className={`text-lg font-bold tabular-nums ${enRiesgo ? 'text-rose-700' : 'text-stone-900'}`}>{fmtD(plan.fin_proyectado)}</div>
+              {enRiesgo && <div className="text-[10px] text-rose-600">atraso {Math.abs(plan.holgura_proyecto)} días</div>}
+            </div>
+          )}
           {valida.total > 0 && (
             <div title="Tareas cuya fecha calculada por la app coincide con la del Excel. Las que no, suelen tener una dependencia faltante.">
               <div className="text-[10px] uppercase tracking-wide text-stone-400 font-semibold">vs Excel</div>
               <div className={`text-lg font-bold tabular-nums ${valida.match === valida.total ? 'text-emerald-700' : 'text-amber-700'}`}>{valida.match}/{valida.total} <span className="text-xs font-medium text-stone-500">coinciden</span></div>
             </div>
           )}
-          <div className="ml-auto inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-sm font-bold bg-emerald-600 text-white">
-            <Check size={15} /> Plan factible
+          <div className={`ml-auto inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-sm font-bold text-white ${enRiesgo ? 'bg-rose-600' : 'bg-emerald-600'}`}>
+            {enRiesgo ? <><AlertTriangle size={15} /> En riesgo</> : <><Check size={15} /> {comprometida ? 'En fecha' : 'Plan factible'}</>}
           </div>
         </div>
-      )}
+        )
+      })()}
 
       {/* Gate del depósito: la confirmación de Finanzas se LEE; el PM puede abrirlo a mano.
           Solo se muestra cuando el proyecto está ACTIVO — en un prospecto/reserva el gate

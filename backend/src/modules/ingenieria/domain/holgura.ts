@@ -76,6 +76,7 @@ export function calcularHolgura(
   fechaInicio: ISODate,
   fechaEntrega: ISODate,
   feriados: Set<ISODate>,
+  fechaComprometida?: ISODate | null,   // meta FIJA prometida al cliente (si el plan ya se envió)
 ): HolguraProyecto {
   const dur = new Map<number, number>()
   for (const t of tareas) dur.set(t.id, Math.max(0, Math.round(t.dur)))
@@ -149,11 +150,15 @@ export function calcularHolgura(
   // Fin proyectado = el EF más tardío (fin FACTIBLE del plan según la pasada hacia adelante).
   let finProyectado: ISODate | null = null
   for (const t of tareas) { const ef = EF.get(t.id)!; if (finProyectado === null || ef > finProyectado) finProyectado = ef }
-  // Ancla de la pasada hacia atrás = la MÁS TARDÍA entre la fecha SOLICITADA (fechaEntrega) y
-  // el fin factible. La holgura y el camino crítico se miden DENTRO del plan factible (contra
-  // la fecha PROPUESTA): si el plan termina después de lo solicitado, la fecha solicitada deja
-  // de ser una "meta" que genera atraso/riesgo — la referencia pasa a ser la propuesta (Chali).
-  const ancla: ISODate = finProyectado && finProyectado > fechaEntrega ? finProyectado : fechaEntrega
+  // Ancla de la pasada hacia atrás:
+  //  · Si hay fecha COMPROMETIDA con el cliente (el plan ya se envió) → esa es la meta FIJA:
+  //    la holgura se mide contra ella y PUEDE ser negativa (riesgo real si el plan se pasa de
+  //    lo prometido). Reactiva el semáforo/atraso una vez que hay una promesa que cumplir.
+  //  · Si NO hay comprometida (todavía se arma/propone el plan) → max(solicitada, fin factible):
+  //    la fecha solicitada no genera "atraso"; se mide dentro del plan factible (la propuesta).
+  const ancla: ISODate = fechaComprometida
+    ? fechaComprometida
+    : (finProyectado && finProyectado > fechaEntrega ? finProyectado : fechaEntrega)
 
   // ── Pasada HACIA ATRÁS: LS/LF desde el ANCLA (fecha propuesta o solicitada) (topo inverso) ──
   //   Todo se resuelve como cota sobre el LATE START del predecesor:

@@ -287,7 +287,8 @@ export interface AristaPlan { tarea_id: number; depende_de_id: number; tipo: str
 export interface PlanProyecto {
   proyecto_ext: string
   fecha_inicio: string | null   // inicio del proyecto (ancla hacia adelante)
-  fecha_entrega: string | null  // entrega FIJA (ancla hacia atrás) — sagrada
+  fecha_entrega: string | null  // fecha SOLICITADA por el cliente (referencia)
+  fecha_comprometida: string | null  // fecha PROMETIDA al cliente (fecha_cliente); null si aún no se envió
   status_ext: string | null
   proyecto_estado: string | null // estado del proyecto (prospecto|activo…): gates de UI solo cuando activo
   n_items: number | null
@@ -305,12 +306,14 @@ export interface PlanProyecto {
 
 /** Devuelve el plan completo de un proyecto con la holgura de cada tarea. */
 export async function getPlanProyecto(runner: QueryRunner, proyectoExt: string): Promise<PlanProyecto> {
-  const { rows: hdr } = await runner.query<{ ini: string | null; entrega: string | null; status: string | null; n_items: number | null; presupuesto: string | null; estado: string | null }>(
+  const { rows: hdr } = await runner.query<{ ini: string | null; entrega: string | null; comprometida: string | null; status: string | null; n_items: number | null; presupuesto: string | null; estado: string | null }>(
     `SELECT to_char(ip.fecha_inicio,'YYYY-MM-DD') AS ini, to_char(ip.fecha_entrega,'YYYY-MM-DD') AS entrega,
+            to_char(sp.fecha_cliente,'YYYY-MM-DD') AS comprometida,
             ip.status_ext AS status, ip.n_items, ip.presupuesto, p.estado
        FROM ing_proyectos ip LEFT JOIN proyectos p ON p.id = ip.proyecto_id
+       LEFT JOIN schedule_planes sp ON sp.proyecto_id = ip.proyecto_id AND sp.scope = 'proyecto'
       WHERE ip.proyecto_ext = $1`, [proyectoExt])
-  const h = hdr[0] ?? { ini: null, entrega: null, status: null, n_items: null, presupuesto: null, estado: null }
+  const h = hdr[0] ?? { ini: null, entrega: null, comprometida: null, status: null, n_items: null, presupuesto: null, estado: null }
 
   const tareas = await listTareas(runner, proyectoExt)
   const ids = tareas.map((t) => t.id)
@@ -332,14 +335,18 @@ export async function getPlanProyecto(runner: QueryRunner, proyectoExt: string):
   let finProyectado: string | null = null, holguraProyecto = 0, enRiesgo = false
   if (h.ini && h.entrega) {
     const feriados = await loadFeriados(runner)
-    const cpmTareas: TareaCPM[] = tareas.map((t) => ({ id: t.id, dur: t.dur_dias, noAntesDe: pisoTarea(depClave.get(t.id) ?? null, deposito, compras, t.no_antes_de) }))
+    // Tareas 'na' (No Aplica) no consumen tiempo: dur 0 para que no inflen el plan ni la
+    // fecha propuesta (siguen en la red como paso de 0 días para no romper dependencias).
+    const cpmTareas: TareaCPM[] = tareas.map((t) => ({ id: t.id, dur: t.estado === 'na' ? 0 : t.dur_dias, noAntesDe: pisoTarea(depClave.get(t.id) ?? null, deposito, compras, t.no_antes_de) }))
     // Las aristas se mantienen SIEMPRE; el candado del PM actúa por el piso "no antes de"
     // de material_deposit (fecha de apertura), no borrando la dependencia. La marca
     // ignorada_at se sigue devolviendo (abajo) para dibujar el gate abierto en la UI.
     const cpmAristas: AristaCPM[] = deps
       .map((d) => ({ tareaId: d.tarea_id, dependeDeId: d.depende_de_id, lag: d.lag_dias, tipo: d.tipo === 'SS' ? 'SS' : 'FS' }))
     try {
-      const r = calcularHolgura(cpmTareas, cpmAristas, h.ini, h.entrega, feriados)
+      // Si el plan ya se envió al cliente, la fecha comprometida (fecha_cliente) ancla el
+      // riesgo: el semáforo vuelve a poder ponerse en rojo si el plan se pasa de lo prometido.
+      const r = calcularHolgura(cpmTareas, cpmAristas, h.ini, h.entrega, feriados, h.comprometida)
       finProyectado = r.finProyectado; holguraProyecto = r.holguraProyecto; enRiesgo = r.enRiesgo
       holgura = tareas.map((t) => {
         const c = r.tareas.get(t.id)
@@ -353,7 +360,7 @@ export async function getPlanProyecto(runner: QueryRunner, proyectoExt: string):
   const instalacion = await estadoInstalacion(runner, proyectoExt)
 
   return {
-    proyecto_ext: proyectoExt, fecha_inicio: h.ini, fecha_entrega: h.entrega, status_ext: h.status,
+    proyecto_ext: proyectoExt, fecha_inicio: h.ini, fecha_entrega: h.entrega, fecha_comprometida: h.comprometida, status_ext: h.status,
     proyecto_estado: h.estado,
     n_items: h.n_items, presupuesto: h.presupuesto != null ? +h.presupuesto : null,
     fin_proyectado: finProyectado, holgura_proyecto: holguraProyecto, en_riesgo: enRiesgo,
@@ -473,9 +480,12 @@ export async function recomputarYGuardar(runner: QueryRunner, proyectoExt: strin
   // Primero reconciliar las tareas auto desde los hechos de módulos (el módulo gana),
   // así el estado de la ruta refleja la realidad antes de recalcular/leer.
   await cerrarTareasAutomaticas(runner, proyectoExt, { deposito, compras })
-  const { rows: hdr } = await runner.query<{ ini: string | null; entrega: string | null }>(
-    `SELECT to_char(fecha_inicio,'YYYY-MM-DD') AS ini, to_char(fecha_entrega,'YYYY-MM-DD') AS entrega
-       FROM ing_proyectos WHERE proyecto_ext = $1`, [proyectoExt])
+  const { rows: hdr } = await runner.query<{ ini: string | null; entrega: string | null; comprometida: string | null }>(
+    `SELECT to_char(ip.fecha_inicio,'YYYY-MM-DD') AS ini, to_char(ip.fecha_entrega,'YYYY-MM-DD') AS entrega,
+            to_char(sp.fecha_cliente,'YYYY-MM-DD') AS comprometida
+       FROM ing_proyectos ip
+       LEFT JOIN schedule_planes sp ON sp.proyecto_id = ip.proyecto_id AND sp.scope = 'proyecto'
+      WHERE ip.proyecto_ext = $1`, [proyectoExt])
   const h = hdr[0]
   if (!h?.ini || !h?.entrega) return
   const tareas = await listTareas(runner, proyectoExt)
@@ -487,10 +497,10 @@ export async function recomputarYGuardar(runner: QueryRunner, proyectoExt: strin
   // deposito/compras ya calculados arriba (reusados por el CPM).
   const clave = new Map(tareas.map((t) => [t.id, t.tipo_clave]))
   const feriados = await loadFeriados(runner)
-  const cpmTareas: TareaCPM[] = tareas.map((t) => ({ id: t.id, dur: t.dur_dias, noAntesDe: pisoTarea(clave.get(t.id) ?? null, deposito, compras, t.no_antes_de) }))
+  const cpmTareas: TareaCPM[] = tareas.map((t) => ({ id: t.id, dur: t.estado === 'na' ? 0 : t.dur_dias, noAntesDe: pisoTarea(clave.get(t.id) ?? null, deposito, compras, t.no_antes_de) }))
   const aristas: AristaCPM[] = deps.map((d) => ({ tareaId: d.tarea_id, dependeDeId: d.depende_de_id, lag: d.lag_dias, tipo: d.tipo === 'SS' ? 'SS' : 'FS' }))
   try {
-    const r = calcularHolgura(cpmTareas, aristas, h.ini, h.entrega, feriados)
+    const r = calcularHolgura(cpmTareas, aristas, h.ini, h.entrega, feriados, h.comprometida)
     for (const t of tareas) {
       const c = r.tareas.get(t.id)
       if (c) await runner.query(
@@ -501,7 +511,10 @@ export async function recomputarYGuardar(runner: QueryRunner, proyectoExt: strin
     // del Gantt al que mapea (schedule_plantilla_hitos.gantt_clave/gantt_ancla). Reemplaza
     // al motor teórico del Life of a Deal. Es un cache derivado, refrescado en cada
     // recompute — nunca se edita solo.
-    await proyectarJourney(runner, proyectoExt, tareas, r, h.entrega, feriados)
+    // El hito de entrega (I-07, es_ancla) del journey/portal usa la fecha COMPROMETIDA con
+    // el cliente cuando existe; si aún no se envió, la solicitada. Así el portal no muestra
+    // dos entregas distintas (header vs hito).
+    await proyectarJourney(runner, proyectoExt, tareas, r, h.comprometida ?? h.entrega, feriados)
   } catch { /* ciclo improbable: se deja como está */ }
 }
 

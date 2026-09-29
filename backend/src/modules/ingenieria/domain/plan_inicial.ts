@@ -150,7 +150,7 @@ export async function enviarAClienteDeal(runner: QueryRunner, proyectoId: number
   await runner.query(
     `UPDATE schedule_planes sp SET fecha_cliente = COALESCE(
         (SELECT max(t.fecha_fin) FROM ing_tareas t JOIN proyectos p ON p.codigo = t.proyecto_ext
-          WHERE p.id = $1 AND t.origen = 'app'),
+          WHERE p.id = $1 AND t.origen = 'app' AND t.estado <> 'na'),
         sp.fecha_objetivo)
       WHERE sp.proyecto_id = $1 AND sp.scope = 'proyecto'`, [proyectoId])
   // Reusa el token activo del proyecto o crea uno (a nombre del cliente).
