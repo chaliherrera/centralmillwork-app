@@ -78,7 +78,9 @@ export async function generarPlanIngenieria(
   // el recompute reproduzca la ubicación y el re-anclaje no la borre). allocation_pct = 1.0.
   const idPorClave = new Map<string, number>()
   for (const fp of u.fechas.values()) {
-    const esIng = ROLES_INGENIERO.has(fp.rol ?? '')
+    // Se asigna ingeniero (y piso de disponibilidad) SOLO a las que consumen su capacidad.
+    // Los gates (review/approval) y derivadas quedan sin ingeniero aunque su rol sea ingeniería.
+    const esIng = ROLES_INGENIERO.has(fp.rol ?? '') && fp.consumeCapacidad
     const { rows } = await runner.query<{ id: number }>(
       `INSERT INTO ing_tareas (proyecto_ext, proyecto_id, tipo_id, nombre, asignado_nombre, allocation_pct, dur_dias, fecha_inicio, fecha_fin, no_antes_de, estado, origen)
          VALUES ($1,$2,$3,$4,$5,1.0,$6,$7,$8,$9,'pendiente',$10) RETURNING id`,

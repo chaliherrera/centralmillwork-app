@@ -24,13 +24,13 @@ type QueryRunner = PoolClient | typeof pool
 export const ROLES_INGENIERO = new Set(['ingenieria', 'field'])
 const STONE_CLAVES = ['stone_measure', 'stone_fab', 'stone_install']
 
-export interface PasoRuta { clave: string; tipoId: number; nombre: string; rol: string | null; dur: number }
+export interface PasoRuta { clave: string; tipoId: number; nombre: string; rol: string | null; consumeCapacidad: boolean; dur: number }
 export interface AristaRuta { clave: string; dependeDe: string; tipo: 'FS' | 'SS'; lag: number }
 export interface PlantillaRuta { pasos: PasoRuta[]; aristas: AristaRuta[] }
 
 export interface ColaIngeniero { nombre: string; hace_cnc: boolean; n_pendientes: number; fin_ultima: ISODate | null }
 
-export interface FechaPaso { clave: string; nombre: string; es: ISODate; ef: ISODate; rol: string | null; tipoId: number; dur: number }
+export interface FechaPaso { clave: string; nombre: string; es: ISODate; ef: ISODate; rol: string | null; consumeCapacidad: boolean; tipoId: number; dur: number }
 export interface RankingIng { nombre: string; hace_cnc: boolean; disponible_desde: ISODate; n_pendientes: number; fin_proyectado: ISODate; entra: boolean }
 export interface Ubicacion {
   ingeniero: string | null            // null si no hay ingenieros activos
@@ -51,8 +51,8 @@ export interface Ubicacion {
 export async function cargarPlantillaRuta(
   runner: QueryRunner, opts: { itemsQty: number | null; hayStone: boolean; incluyeInstalacion: boolean }
 ): Promise<PlantillaRuta> {
-  const { rows: tipos } = await runner.query<{ id: number; clave: string; nombre: string; rol: string | null; dur_dias_tipico: number | null; dias_por_item: number | null }>(
-    `SELECT id, clave, nombre, rol, dur_dias_tipico, dias_por_item FROM ing_tarea_tipos`)
+  const { rows: tipos } = await runner.query<{ id: number; clave: string; nombre: string; rol: string | null; consume_capacidad: boolean; dur_dias_tipico: number | null; dias_por_item: number | null }>(
+    `SELECT id, clave, nombre, rol, consume_capacidad, dur_dias_tipico, dias_por_item FROM ing_tarea_tipos`)
   const incluir = tipos.filter((t) =>
     (opts.hayStone || !STONE_CLAVES.includes(t.clave)) &&
     (opts.incluyeInstalacion || t.clave !== 'installation'))
@@ -61,7 +61,7 @@ export async function cargarPlantillaRuta(
     let dur = Math.max(0, t.dur_dias_tipico ?? 3)
     if (opts.itemsQty != null && opts.itemsQty > 0 && t.dias_por_item != null && Number(t.dias_por_item) > 0)
       dur = Math.max(1, Math.round(opts.itemsQty * Number(t.dias_por_item)))
-    return { clave: t.clave, tipoId: t.id, nombre: t.nombre, rol: t.rol, dur }
+    return { clave: t.clave, tipoId: t.id, nombre: t.nombre, rol: t.rol, consumeCapacidad: !!t.consume_capacidad, dur }
   })
   const { rows: deps } = await runner.query<{ tipo_clave: string; depende_de_clave: string; tipo: string; lag_dias: number }>(
     `SELECT tipo_clave, depende_de_clave, tipo, lag_dias FROM ing_tipo_deps`)
@@ -112,7 +112,7 @@ function fechasDe(pasos: PasoRuta[], res: HolguraProyecto, idPorClave: Map<strin
   const m = new Map<string, FechaPaso>()
   for (const x of pasos) {
     const c = res.tareas.get(idPorClave.get(x.clave)!)
-    if (c) m.set(x.clave, { clave: x.clave, nombre: x.nombre, es: c.earlyStart, ef: c.earlyFinish, rol: x.rol, tipoId: x.tipoId, dur: x.dur })
+    if (c) m.set(x.clave, { clave: x.clave, nombre: x.nombre, es: c.earlyStart, ef: c.earlyFinish, rol: x.rol, consumeCapacidad: x.consumeCapacidad, tipoId: x.tipoId, dur: x.dur })
   }
   return m
 }
@@ -128,7 +128,9 @@ export function ubicarProyecto(
   const cpmAristas: AristaCPM[] = aristas
     .filter((a) => idPorClave.has(a.clave) && idPorClave.has(a.dependeDe))
     .map((a) => ({ tareaId: idPorClave.get(a.clave)!, dependeDeId: idPorClave.get(a.dependeDe)!, lag: a.lag, tipo: a.tipo }))
-  const clavesIng = new Set(pasos.filter((x) => ROLES_INGENIERO.has(x.rol ?? '')).map((x) => x.clave))
+  // Solo las que CONSUMEN capacidad se anclan al piso "no antes de" del ingeniero (los
+  // gates/derivadas no compiten por sus horas, aunque su rol sea 'ingenieria').
+  const clavesIng = new Set(pasos.filter((x) => ROLES_INGENIERO.has(x.rol ?? '') && x.consumeCapacidad).map((x) => x.clave))
 
   // Corre el CPM anclando la INGENIERÍA en un piso "no antes de" (la disponibilidad del ing).
   const correr = (pisoIng: ISODate | null): HolguraProyecto => {

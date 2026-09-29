@@ -14,7 +14,8 @@ export interface IngTarea {
   fase: string | null
   tipo_clave: string | null
   hito_codigo: string | null
-  rol: string | null                // rol que EJECUTA la tarea (ingenieria/compras/cliente/…)
+  rol: string | null                // rol EJECUTOR / escritorio
+  dueno: string | null              // RESPONSABLE que persigue la tarea (lo que se muestra)
   nombre: string
   asignado_nombre: string | null
   allocation_pct: number

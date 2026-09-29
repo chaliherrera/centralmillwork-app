@@ -29,7 +29,8 @@ export interface Tarea {
   fase: string | null
   tipo_clave: string | null
   hito_codigo: string | null
-  rol: string | null                // rol que EJECUTA la tarea (ingenieria/compras/cliente/…)
+  rol: string | null                // rol EJECUTOR / escritorio (ingenieria/compras/…)
+  dueno: string | null              // RESPONSABLE que persigue la tarea (lo que muestra el Gantt)
   nombre: string
   asignado_nombre: string | null
   allocation_pct: number
@@ -88,7 +89,7 @@ export async function listProyectos(runner: QueryRunner): Promise<ProyectoResume
 /** Tareas (todas, o de un proyecto). */
 export async function listTareas(runner: QueryRunner, proyectoExt?: string): Promise<Tarea[]> {
   const { rows } = await runner.query<Tarea & { allocation_pct: string; dur_dias: string }>(
-    `SELECT t.id, t.proyecto_ext, t.fase, tt.clave AS tipo_clave, tt.hito_codigo, tt.rol,
+    `SELECT t.id, t.proyecto_ext, t.fase, tt.clave AS tipo_clave, tt.hito_codigo, tt.rol, tt.dueno,
             t.nombre, t.asignado_nombre, t.allocation_pct, t.dur_dias, t.orden_visual,
             to_char(t.fecha_inicio,'YYYY-MM-DD') AS fecha_inicio,
             to_char(t.fecha_fin,'YYYY-MM-DD') AS fecha_fin,
@@ -944,7 +945,7 @@ export async function reasignarIngeniero(
   const rolesIng = [...ROLES_INGENIERO]
   const { rows: ingRows } = await runner.query<{ id: number; asignado_nombre: string | null; estado: string }>(
     `SELECT t.id, t.asignado_nombre, t.estado FROM ing_tareas t JOIN ing_tarea_tipos tt ON tt.id = t.tipo_id
-      WHERE t.proyecto_ext = $1 AND tt.rol = ANY($2)`, [proyectoExt, rolesIng])
+      WHERE t.proyecto_ext = $1 AND tt.rol = ANY($2) AND tt.consume_capacidad`, [proyectoExt, rolesIng])
   const ingIds = new Set(ingRows.map((r) => r.id))
   if (!ingIds.size) return { ...base, error: 'el proyecto no tiene tareas de ingeniería' }
   // P7: solo se reasignan las tareas que TODAVÍA no se hicieron. Las 'hecha'
@@ -985,7 +986,7 @@ export async function reasignarIngeniero(
   await runner.query(
     `UPDATE ing_tareas t SET asignado_nombre = $2, no_antes_de = $3::date, updated_at = NOW()
        FROM ing_tarea_tipos tt
-      WHERE t.tipo_id = tt.id AND t.proyecto_ext = $1 AND tt.rol = ANY($4)
+      WHERE t.tipo_id = tt.id AND t.proyecto_ext = $1 AND tt.rol = ANY($4) AND tt.consume_capacidad
         AND t.estado NOT IN ('hecha','na')`,
     [proyectoExt, nuevoIng, disponible, rolesIng])
   await recomputarYGuardar(runner, proyectoExt)

@@ -27,10 +27,10 @@ const ROL_LABEL: Record<string, string> = {
   logistica: 'Logística', instalacion: 'Instalación', admin: 'Administración', estimacion: 'Estimados',
   contabilidad: 'Contabilidad', shop_manager: 'Taller', field: 'Campo', externo: 'Externo',
 }
-function rolResponsable(rol: string | null): string {
-  // Tarea de ingeniería sin ingeniero cargado todavía = realmente "sin responsable".
-  if (!rol || rol === 'ingenieria') return 'sin responsable'
-  return ROL_LABEL[rol] ?? rol
+function rolResponsable(dueno: string | null): string {
+  // "dueno" = el responsable que persigue la tarea (aunque el gate lo cierre el cliente).
+  if (!dueno) return 'sin responsable'
+  return ROL_LABEL[dueno] ?? dueno
 }
 // Orden de la FILA en la lista/Gantt: manda orden_visual (persistido por el drag
 // visual); si falta, se cae a la fecha temprana + id. Las FECHAS de las barras no
@@ -625,7 +625,7 @@ function VistaProyecto({ proyectos, all, plan, planLoading, sel, setSel, onEdit,
                         <div className="text-[10.5px] text-stone-400 truncate flex items-center gap-1">
                           {t.asignado_nombre
                             ? <><span className="w-2 h-2 rounded-full shrink-0" style={{ background: engColor.get(t.asignado_nombre) }} /><span className="font-semibold text-stone-600">{t.asignado_nombre}</span></>
-                            : <span className="inline-flex items-center gap-1 text-stone-400"><span className="w-2 h-2 rounded-full shrink-0 bg-stone-300" />{rolResponsable(t.rol)}</span>}
+                            : <span className="inline-flex items-center gap-1 text-stone-400"><span className="w-2 h-2 rounded-full shrink-0 bg-stone-300" />{rolResponsable(t.dueno)}</span>}
                           <span>· <span className={t.allocation_pct > 1 ? 'text-rose-600 font-semibold' : ''}>{Math.round(t.allocation_pct * 100)}%</span> · {t.dur_dias}d</span>
                         </div>
                       </div>
