@@ -177,6 +177,14 @@ function HeatIngenieroPropuesto({ proyectoExt, refreshKey, onChanged }: { proyec
               Fecha propuesta: {fmtDiaPM(finRealista)}
             </span>
           )}
+          {/* M4: dato neutro (ámbar) del tamaño de la diferencia vs lo que pidió el cliente.
+              No es un "atraso" — es info para que el PM decida si propone así o aprieta el plan. */}
+          {(() => {
+            const dias = fechaEstimados && finRealista ? Math.round((new Date(finRealista + 'T00:00:00').getTime() - new Date(fechaEstimados + 'T00:00:00').getTime()) / 86400000) : 0
+            return dias > 0
+              ? <span className="inline-flex items-center gap-1 rounded-md px-2 py-0.5 font-medium text-amber-800 bg-amber-100">+{dias} días vs solicitada</span>
+              : null
+          })()}
         </div>
       )}
       <div className="flex items-center justify-end gap-2">

@@ -63,6 +63,13 @@ export default function ReservasPendientes({ onRevisar }: { onRevisar?: (proyect
                     Propuesta: {fmt(fechaPropuesta)}
                   </span>
                 )}
+                {/* M4: dato neutro (ámbar) de cuántos días más que lo solicitado. */}
+                {(() => {
+                  const dias = p.fecha_objetivo && fechaPropuesta ? Math.round((new Date(fechaPropuesta + 'T00:00:00').getTime() - new Date(p.fecha_objetivo + 'T00:00:00').getTime()) / 86400000) : 0
+                  return dias > 0
+                    ? <span className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 font-medium text-amber-800 bg-amber-100">+{dias} días vs solicitada</span>
+                    : null
+                })()}
               </div>
               <div className="text-sm text-stone-500">
                 <b className="text-stone-700">{p.tareas.length}</b> tarea{p.tareas.length === 1 ? '' : 's'} en el plan · ingenieros propuestos: <span className="text-stone-700">{engs.length ? engs.join(', ') : 'sin asignar'}</span>

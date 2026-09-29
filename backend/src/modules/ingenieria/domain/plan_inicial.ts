@@ -174,6 +174,25 @@ export async function registrarAprobacionCliente(runner: QueryRunner, proyectoId
   return rowCount ? { ok: true } : { ok: false, error: 'el schedule tiene que estar enviado al cliente primero' }
 }
 
+/** M5: el cliente rechazó (o pidió cambios) → volver a proponer. Estimados lo dispara: el deal
+ *  regresa a la bandeja del PM (esperando_pm) y el plan vuelve a SUGERIDO, para que el PM tenga
+ *  todas las herramientas (regenerar / cambiar ingeniero / ajustar). Se limpia la fecha
+ *  comprometida (se re-congela al reenviar). Sin esto, un deal rechazado quedaba trabado. */
+export async function volverAProponerDeal(runner: QueryRunner, proyectoId: number): Promise<{ ok: boolean; error?: string }> {
+  const { rows: pr } = await runner.query<{ codigo: string }>(
+    `UPDATE proyectos SET deal_estado = 'esperando_pm'
+      WHERE id = $1 AND deal_estado IN ('esperando_cliente','plan_propuesto') RETURNING codigo`, [proyectoId])
+  if (!pr[0]) return { ok: false, error: 'el deal no está enviado al cliente / propuesto' }
+  const ext = pr[0].codigo
+  // Reabrir el plan: 'app' → 'sugerencia' (para que el PM pueda regenerar/ajustar). Nunca toca
+  // 'import_excel' ni tareas ya hechas (conservan su historia).
+  await runner.query(`UPDATE ing_tareas SET origen = 'sugerencia', updated_at = NOW() WHERE proyecto_ext = $1 AND origen = 'app' AND estado NOT IN ('hecha','na')`, [ext])
+  await runner.query(`UPDATE ing_proyectos SET origen = 'sugerencia', updated_at = NOW() WHERE proyecto_ext = $1 AND origen = 'app'`, [ext])
+  // Descongelar la fecha comprometida: se vuelve a fijar cuando Estimados reenvíe el nuevo plan.
+  await runner.query(`UPDATE schedule_planes SET fecha_cliente = NULL WHERE proyecto_id = $1 AND scope = 'proyecto'`, [proyectoId])
+  return { ok: true }
+}
+
 /** El PM activa el proyecto: prospecto → activo (todo el plan queda en marcha). */
 export async function activarProyecto(runner: QueryRunner, proyectoId: number): Promise<{ ok: boolean; error?: string }> {
   const { rowCount } = await runner.query(

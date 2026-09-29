@@ -270,6 +270,9 @@ export const ingenieriaService = {
     api.post<ApiResponse<{ ok: boolean }>>(`/ingenieria/proyecto/${proyectoId}/enviar-cliente`).then((r) => r.data),
   clienteAprobo: (proyectoId: number) =>
     api.post<ApiResponse<{ ok: boolean }>>(`/ingenieria/proyecto/${proyectoId}/cliente-aprobo`).then((r) => r.data),
+  // M5: el cliente rechazó/pidió cambios → el deal vuelve a la bandeja del PM para re-proponer.
+  volverAProponer: (proyectoId: number) =>
+    api.post<ApiResponse<{ ok: boolean }>>(`/ingenieria/proyecto/${proyectoId}/volver-a-proponer`).then((r) => r.data),
   activarProyecto: (proyectoId: number) =>
     api.post<ApiResponse<{ ok: boolean }>>(`/ingenieria/proyecto/${proyectoId}/activar`).then((r) => r.data),
   cerrarDeal: (proyectoId: number, accion: 'pausar' | 'cancelar') =>

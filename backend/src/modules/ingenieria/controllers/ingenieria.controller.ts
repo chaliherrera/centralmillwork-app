@@ -18,7 +18,7 @@ import { listReservasPendientes, liberarReserva } from '../domain/reservas'
 import { listIngenieros, actualizarIngeniero } from '../domain/ingenieros'
 import {
   generarPlanIngenieria, aceptarPlanPM,
-  enviarAClienteDeal, registrarAprobacionCliente, activarProyecto, listDealsEnCurso, cerrarDeal,
+  enviarAClienteDeal, registrarAprobacionCliente, volverAProponerDeal, activarProyecto, listDealsEnCurso, cerrarDeal,
 } from '../domain/plan_inicial'
 import { estadoDeposito, overrideGate, listDepositosBloqueando, listPagosPorCobrar } from '../domain/deposito'
 import { listMuestrasPorProyecto } from '../domain/muestras'
@@ -116,6 +116,20 @@ export async function clienteAproboHandler(req: Request, res: Response, next: Ne
     if (!r.ok) return next(createError(r.error ?? 'no se pudo registrar', 400))
     res.json({ data: r })
   } catch (e) { next(e) }
+}
+// POST /api/ingenieria/proyecto/:id/volver-a-proponer — el cliente rechazó/pidió cambios:
+// el deal vuelve a la bandeja del PM y el plan a 'sugerido' para re-trabajarlo (M5).
+export async function volverAProponerHandler(req: Request, res: Response, next: NextFunction) {
+  const client = await pool.connect()
+  try {
+    const id = pid(req)
+    await client.query('BEGIN')
+    await client.query('SELECT id FROM proyectos WHERE id = $1 FOR UPDATE', [id])
+    const r = await volverAProponerDeal(client, id)
+    await client.query('COMMIT')
+    if (!r.ok) return next(createError(r.error ?? 'no se pudo volver a proponer', 400))
+    res.json({ data: r })
+  } catch (e) { await client.query('ROLLBACK').catch(() => {}); next(e) } finally { client.release() }
 }
 // POST /api/ingenieria/proyecto/:id/activar — el PM activa el proyecto (prospecto → activo)
 export async function activarProyectoHandler(req: Request, res: Response, next: NextFunction) {

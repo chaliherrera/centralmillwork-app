@@ -92,6 +92,7 @@ export async function getEscritorio(
   const base = `FROM ing_tareas t JOIN ing_tarea_tipos tt ON tt.id = t.tipo_id
     LEFT JOIN ing_proyectos ip ON ip.proyecto_ext = t.proyecto_ext
     LEFT JOIN proyectos p ON p.id = t.proyecto_id
+    LEFT JOIN schedule_planes sp ON sp.proyecto_id = t.proyecto_id AND sp.scope = 'proyecto'
     WHERE t.estado NOT IN ('hecha','na')
       AND t.origen IN ('app','import_excel')
       AND (t.origen = 'import_excel' OR p.estado = 'activo')
@@ -103,7 +104,7 @@ export async function getEscritorio(
     `SELECT t.id, t.proyecto_ext, t.proyecto_id, t.nombre, tt.clave AS tipo_clave, tt.entregable, tt.cierre, tt.rol, t.asignado_nombre,
             to_char(t.fecha_inicio,'YYYY-MM-DD') AS fecha_inicio,
             to_char(t.fecha_fin,'YYYY-MM-DD')    AS fecha_fin,
-            to_char(ip.fecha_entrega,'YYYY-MM-DD') AS fecha_entrega,
+            to_char(COALESCE(sp.fecha_cliente, ip.fecha_entrega),'YYYY-MM-DD') AS fecha_entrega,  -- M6: comprometida (aceptada por el cliente) si existe; si no, la solicitada
             t.es_critico, t.holgura_dias,
             t.dur_dias, t.estado, t.reprogramacion_pedida, t.reprogramacion_motivo
        ${base} AND NOT ${BLOQUEADA}

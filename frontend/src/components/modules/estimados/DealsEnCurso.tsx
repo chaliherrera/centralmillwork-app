@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
-import { Loader2, Send, Check, Rocket, CalendarRange, UserCheck, Eye, Link2, Copy, CalendarClock, X, Pause, Ban, AlertTriangle } from 'lucide-react'
+import { Loader2, Send, Check, Rocket, CalendarRange, UserCheck, Eye, Link2, Copy, CalendarClock, X, Pause, Ban, AlertTriangle, RotateCcw } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { ingenieriaService, type IngDealEnCurso } from '@/services/ingenieria'
 import { usePollNovedades } from '@/hooks/usePollNovedades'
@@ -173,9 +173,13 @@ export default function DealsEnCurso({ mode, emptyHint }: { mode: 'estimados' | 
               </div>
               {/* 2.6: el cliente rechazó el plan desde el portal → Estimados lo ve para renegociar. */}
               {mode === 'estimados' && d.deal_estado === 'esperando_cliente' && d.cliente_rechazo && (
-                <div className="mt-2 flex items-start gap-2 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-[12.5px] text-rose-800">
-                  <X size={15} className="mt-0.5 shrink-0 text-rose-600" />
-                  <span>El cliente <b>pidió cambios en el plan</b> desde el portal. Revisá el schedule, ajustalo y reenvialo.</span>
+                <div className="mt-2 flex flex-wrap items-center gap-2 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-[12.5px] text-rose-800">
+                  <X size={15} className="shrink-0 text-rose-600" />
+                  <span className="flex-1 min-w-[180px]">El cliente <b>pidió cambios en el plan</b> desde el portal. Volvé a proponer para que el PM lo re-trabaje y reenviálo.</span>
+                  <button onClick={() => accion(d, () => ingenieriaService.volverAProponer(d.proyecto_id), `${d.codigo} volvió al PM para re-proponer`)} disabled={isBusy}
+                    className="inline-flex items-center gap-1.5 rounded-lg bg-rose-600 hover:bg-rose-700 disabled:opacity-50 text-white text-sm font-semibold px-3 py-1.5">
+                    {isBusy ? <Loader2 className="animate-spin" size={14} /> : <RotateCcw size={14} />} Volver a proponer
+                  </button>
                 </div>
               )}
               {/* Estimados: confirmación de que el cliente aprobó (con fecha y hora). Queda
