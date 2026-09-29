@@ -1169,9 +1169,12 @@ export async function moverTareaAFecha(
   // ¿Otra predecesora no dejó llegar a la fecha pedida? (la real quedó más tarde que lo pedido)
   let limitada_por: string | null = null
   if (fecha_resultante && fecha_resultante > fechaInicio) {
-    limitada_por = plan2.aristas
+    // La real quedó más tarde que lo pedido: la limita OTRA dependencia, o un PISO previo
+    // (disponibilidad del ingeniero, gate del depósito/compras — el CPM no la deja arrancar antes).
+    const otroPred = plan2.aristas
       .filter((a) => a.tarea_id === tareaId && a.depende_de_id !== bindingDepId)
-      .map((a) => byId.get(a.depende_de_id)?.nombre).filter(Boolean)[0] ?? null
+      .map((a) => byId.get(a.depende_de_id)?.nombre).filter(Boolean)[0]
+    limitada_por = otroPred ?? 'un piso previo (disponibilidad del ingeniero o un gate)'
   }
   const before = new Map(plan1.tareas.map((t) => [t.id, `${t.early_start}|${t.early_finish}`]))
   const n_afectadas = plan2.tareas.filter((t) => before.get(t.id) !== `${t.early_start}|${t.early_finish}`).length
