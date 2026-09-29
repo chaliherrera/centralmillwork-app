@@ -379,7 +379,8 @@ function VistaProyecto({ proyectos, all, plan, planLoading, sel, setSel, onEdit,
     for (const t of tareas) { if (t.early_start) fechas.push(t.early_start); if (t.late_finish) fechas.push(t.late_finish); if (t.fecha_inicio) fechas.push(t.fecha_inicio); if (t.fecha_fin) fechas.push(t.fecha_fin) }
     if (plan?.fecha_inicio) fechas.push(plan.fecha_inicio)
     if (plan?.fecha_entrega) fechas.push(plan.fecha_entrega)
-    if (!fechas.length) return { fases, rows, totalH, months: [] as any[], pct: () => 0, hoyPct: null as number | null, entregaPct: null as number | null }
+    if (plan?.fin_proyectado) fechas.push(plan.fin_proyectado)
+    if (!fechas.length) return { fases, rows, totalH, months: [] as any[], pct: () => 0, hoyPct: null as number | null, propuestaPct: null as number | null, solicitadaPct: null as number | null }
     let min = d(fechas[0]), max = d(fechas[0])
     for (const f of fechas) { const dd = d(f); if (dd < min) min = dd; if (dd > max) max = dd }
     const week0 = mondayOf(min); const nWeeks = Math.max(1, Math.ceil((max.getTime() - week0.getTime()) / (7 * DAY)) + 2)
@@ -389,8 +390,11 @@ function VistaProyecto({ proyectos, all, plan, planLoading, sel, setSel, onEdit,
     for (let i = 0; i < nWeeks; i++) { const wd = new Date(week0.getTime() + i * 7 * DAY); const label = `${MES[wd.getMonth()]} ${String(wd.getFullYear()).slice(2)}`; const last = months[months.length - 1]; if (!last || last.label !== label) months.push({ label, startPct: (i / nWeeks) * 100 }) }
     const today = new Date(); today.setHours(0, 0, 0, 0)
     const hoyPct = today >= week0 && today <= max ? pct(today.toISOString().slice(0, 10)) : null
-    const entregaPct = plan?.fecha_entrega ? pct(plan.fecha_entrega) : null
-    return { fases, rows, totalH, months, pct, hoyPct, entregaPct, yOf }
+    // Línea PROPUESTA (verde) = fin factible del plan = la fecha de entrega real del PM.
+    // Línea SOLICITADA (gris tenue) = lo pedido por el cliente (referencia).
+    const propuestaPct = plan?.fin_proyectado ? pct(plan.fin_proyectado) : null
+    const solicitadaPct = plan?.fecha_entrega ? pct(plan.fecha_entrega) : null
+    return { fases, rows, totalH, months, pct, hoyPct, propuestaPct, solicitadaPct, yOf }
   }, [tareas, plan])
 
   // barra mínima (para hitos de 0 días): medio % de una semana
@@ -420,14 +424,20 @@ function VistaProyecto({ proyectos, all, plan, planLoading, sel, setSel, onEdit,
         <button onClick={() => onEdit('new')} className="inline-flex items-center gap-1.5 rounded-lg bg-forest-600 hover:bg-forest-700 text-white text-sm font-semibold px-3 py-1.5"><Plus size={15} /> Nueva tarea</button>
       </div>
 
-      {/* tarjeta de estado: entrega fija + holgura/riesgo */}
+      {/* Tarjeta de estado: fecha SOLICITADA (pedida por el cliente, referencia) vs fecha
+          PROPUESTA (fin factible del plan del PM = la fecha real de entrega). No hay "atraso":
+          la propuesta es la fecha que el análisis del PM permite cumplir. */}
       {plan && plan.fecha_entrega && (
-        <div className={`rounded-2xl border px-4 py-3 flex flex-wrap items-center gap-x-8 gap-y-2 ${plan.en_riesgo ? 'border-rose-200 bg-rose-50' : 'border-emerald-200 bg-emerald-50'}`}>
-          <div><div className="text-[10px] uppercase tracking-wide text-stone-400 font-semibold">Entrega (fija)</div><div className="text-lg font-bold text-stone-900 tabular-nums">{fmtD(plan.fecha_entrega)}</div></div>
-          <div><div className="text-[10px] uppercase tracking-wide text-stone-400 font-semibold">Termina</div><div className="text-lg font-bold text-stone-900 tabular-nums">{fmtD(plan.fin_proyectado)}</div></div>
+        <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 flex flex-wrap items-center gap-x-8 gap-y-2">
           <div>
-            <div className="text-[10px] uppercase tracking-wide text-stone-400 font-semibold">{plan.en_riesgo ? 'Atraso' : 'Holgura'}</div>
-            <div className={`text-lg font-bold tabular-nums ${plan.en_riesgo ? 'text-rose-700' : 'text-emerald-700'}`}>{Math.abs(plan.holgura_proyecto)} <span className="text-xs font-medium text-stone-500">días</span></div>
+            <div className="text-[10px] uppercase tracking-wide text-stone-400 font-semibold">Fecha solicitada</div>
+            <div className="text-lg font-bold text-stone-500 tabular-nums">{fmtD(plan.fecha_entrega)}</div>
+            <div className="text-[10px] text-stone-400">pedida por el cliente</div>
+          </div>
+          <div>
+            <div className="text-[10px] uppercase tracking-wide text-emerald-600 font-semibold">Fecha propuesta</div>
+            <div className="text-lg font-bold text-emerald-800 tabular-nums">{fmtD(plan.fin_proyectado)}</div>
+            <div className="text-[10px] text-emerald-600">factible según el plan del PM</div>
           </div>
           {valida.total > 0 && (
             <div title="Tareas cuya fecha calculada por la app coincide con la del Excel. Las que no, suelen tener una dependencia faltante.">
@@ -435,8 +445,8 @@ function VistaProyecto({ proyectos, all, plan, planLoading, sel, setSel, onEdit,
               <div className={`text-lg font-bold tabular-nums ${valida.match === valida.total ? 'text-emerald-700' : 'text-amber-700'}`}>{valida.match}/{valida.total} <span className="text-xs font-medium text-stone-500">coinciden</span></div>
             </div>
           )}
-          <div className={`ml-auto inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-sm font-bold ${plan.en_riesgo ? 'bg-rose-600 text-white' : 'bg-emerald-600 text-white'}`}>
-            {plan.en_riesgo ? <><AlertTriangle size={15} /> En riesgo</> : <><Check size={15} /> En fecha</>}
+          <div className="ml-auto inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-sm font-bold bg-emerald-600 text-white">
+            <Check size={15} /> Plan factible
           </div>
         </div>
       )}
@@ -554,7 +564,9 @@ function VistaProyecto({ proyectos, all, plan, planLoading, sel, setSel, onEdit,
             <div className="relative flex-1 h-7">
               {g.months.map((m, i) => <div key={i} className="absolute top-0 bottom-0 border-l border-stone-200 flex items-center pl-1.5 text-[10.5px] font-semibold text-forest-700" style={{ left: `${m.startPct}%` }}>{m.label}</div>)}
               {g.hoyPct !== null && <div className="absolute top-0 bottom-0 border-l-2 border-rose-400 z-10" style={{ left: `${g.hoyPct}%` }}><span className="absolute -top-0 left-1 text-[9px] font-bold text-rose-500">hoy</span></div>}
-              {g.entregaPct !== null && <div className="absolute top-0 bottom-0 z-10" style={{ left: `${g.entregaPct}%`, borderLeft: '2px dashed #059669' }}><span className="absolute top-0 -left-8 text-[9px] font-bold text-emerald-700">entrega</span></div>}
+              {/* Solicitada = referencia (gris tenue). Propuesta = fecha real del plan (verde). */}
+              {g.solicitadaPct !== null && <div className="absolute top-0 bottom-0 z-10" style={{ left: `${g.solicitadaPct}%`, borderLeft: '1.5px dashed #a8a29e' }}><span className="absolute top-0 -left-9 text-[9px] font-semibold text-stone-400">solicitada</span></div>}
+              {g.propuestaPct !== null && <div className="absolute top-0 bottom-0 z-10" style={{ left: `${g.propuestaPct}%`, borderLeft: '2px dashed #059669' }}><span className="absolute top-0 -left-9 text-[9px] font-bold text-emerald-700">propuesta</span></div>}
             </div>
           </div>
 
@@ -613,7 +625,8 @@ function VistaProyecto({ proyectos, all, plan, planLoading, sel, setSel, onEdit,
               {/* gridlines de meses + hoy + entrega */}
               {g.months.map((m: any, i: number) => <div key={i} className="absolute top-0 bottom-0 border-l border-stone-50" style={{ left: `${m.startPct}%` }} />)}
               {g.hoyPct !== null && <div className="absolute top-0 bottom-0 border-l-2 border-rose-200" style={{ left: `${g.hoyPct}%` }} />}
-              {g.entregaPct !== null && <div className="absolute top-0 bottom-0 z-20" style={{ left: `${g.entregaPct}%`, borderLeft: '2px dashed #059669' }} />}
+              {g.solicitadaPct !== null && <div className="absolute top-0 bottom-0 z-20" style={{ left: `${g.solicitadaPct}%`, borderLeft: '1.5px dashed #d6d3d1' }} />}
+              {g.propuestaPct !== null && <div className="absolute top-0 bottom-0 z-20" style={{ left: `${g.propuestaPct}%`, borderLeft: '2px dashed #059669' }} />}
 
               {/* conectores entre dependencias (predecesor -> sucesor) */}
               {plan && g.yOf && (
@@ -667,7 +680,8 @@ function VistaProyecto({ proyectos, all, plan, planLoading, sel, setSel, onEdit,
         <div className="px-4 py-2 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-stone-500 items-center border-t border-stone-100">
           <span className="inline-flex items-center gap-1"><span className="w-4 h-3 rounded" style={{ boxShadow: 'inset 0 0 0 1.5px #3b4233', background: '#f5f5f4' }} /> camino crítico</span>
           <span className="inline-flex items-center gap-1"><span className="w-4 h-3 rounded" style={{ background: 'repeating-linear-gradient(45deg,#e7e5e4,#e7e5e4 3px,transparent 3px,transparent 6px)' }} /> holgura</span>
-          <span className="inline-flex items-center gap-1"><span className="w-0.5 h-3.5 inline-block" style={{ borderLeft: '2px dashed #059669' }} /> entrega fija</span>
+          <span className="inline-flex items-center gap-1"><span className="w-0.5 h-3.5 inline-block" style={{ borderLeft: '2px dashed #059669' }} /> fecha propuesta</span>
+          <span className="inline-flex items-center gap-1"><span className="w-0.5 h-3.5 inline-block" style={{ borderLeft: '1.5px dashed #a8a29e' }} /> solicitada</span>
           <span className="inline-flex items-center gap-1"><span className="w-0.5 h-3.5 bg-rose-400 inline-block" /> hoy</span>
           <span className="inline-flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-stone-400 inline-block" /> = ingeniero</span>
           <span className="italic text-stone-400">Barras = fechas calculadas (CPM). Editá una tarea y la holgura se recalcula.</span>
@@ -686,7 +700,7 @@ function VistaProyecto({ proyectos, all, plan, planLoading, sel, setSel, onEdit,
               <button onClick={() => setCronoOpen(false)} className="ml-auto text-stone-400 hover:text-stone-700"><X size={18} /></button>
             </div>
             <p className="text-[11px] text-stone-400 mb-3">Es lo que ve el cliente en el portal. Descargalo para adjuntarlo a un email.</p>
-            <CronogramaCliente nombre={shortProj(sel)} fechaObjetivo={plan?.fecha_entrega ?? null} gantt={ganttDesdePlan(plan?.tareas ?? [])} />
+            <CronogramaCliente nombre={shortProj(sel)} fechaObjetivo={plan?.fin_proyectado ?? plan?.fecha_entrega ?? null} gantt={ganttDesdePlan(plan?.tareas ?? [])} />
           </div>
         </div>
       )}

@@ -40,10 +40,9 @@ export default function ReservasPendientes({ onRevisar }: { onRevisar?: (proyect
       <div className="divide-y divide-stone-100">
         {reservas.map((p) => {
           const engs = [...new Set(p.tareas.map((t) => t.asignado_nombre).filter(Boolean))]
-          // Fecha REALISTA del plan (propuesta por el PM) = fin de la última tarea. Se compara
-          // con la comprometida por Estimados: si se pasa, se marca en ámbar (hay atraso vs meta).
-          const fechaRealista = p.tareas.reduce((mx, t) => (t.fecha_fin && t.fecha_fin > mx ? t.fecha_fin : mx), '')
-          const sePasa = !!(p.fecha_objetivo && fechaRealista && fechaRealista > p.fecha_objetivo)
+          // Fecha PROPUESTA por el PM = fin de la última tarea (fin factible del plan). La
+          // SOLICITADA (fecha_objetivo) queda como referencia de lo que pidió el cliente.
+          const fechaPropuesta = p.tareas.reduce((mx, t) => (t.fecha_fin && t.fecha_fin > mx ? t.fecha_fin : mx), '')
           return (
             <div key={p.proyecto_id} className="p-4">
               <div className="flex items-center gap-2 mb-1.5 flex-wrap">
@@ -56,12 +55,12 @@ export default function ReservasPendientes({ onRevisar }: { onRevisar?: (proyect
               <div className="flex items-center gap-3 mb-1.5 flex-wrap text-xs">
                 {p.fecha_objetivo && (
                   <span className="inline-flex items-center gap-1 text-stone-400">
-                    <CalendarRange size={12} /> Estimados: <span className="text-stone-500 font-medium">{fmt(p.fecha_objetivo)}</span>
+                    <CalendarRange size={12} /> Solicitada: <span className="text-stone-500 font-medium">{fmt(p.fecha_objetivo)}</span>
                   </span>
                 )}
-                {fechaRealista && (
-                  <span className={`inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 font-semibold ${sePasa ? 'text-amber-800 bg-amber-100' : 'text-emerald-800 bg-emerald-100'}`}>
-                    Propuesta PM (realista): {fmt(fechaRealista)}
+                {fechaPropuesta && (
+                  <span className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 font-semibold text-emerald-800 bg-emerald-100">
+                    Propuesta: {fmt(fechaPropuesta)}
                   </span>
                 )}
               </div>

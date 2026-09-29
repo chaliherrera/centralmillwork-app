@@ -161,22 +161,20 @@ function HeatIngenieroPropuesto({ proyectoExt, refreshKey, onChanged }: { proyec
   }
 
   if (loading) return <div className="rounded-2xl border border-stone-200 bg-white py-16 text-center text-stone-400"><Loader2 className="animate-spin inline" size={20} /></div>
-  const sePasa = !!(fechaEstimados && finRealista && finRealista > fechaEstimados)
   return (
     <div className="space-y-2">
-      {/* Dos fechas de entrega: la comprometida por Estimados (referencia) y la realista del
-          plan actual = propuesta del PM (marcada). Es la que se le enviará al cliente al aceptar. */}
+      {/* Dos fechas: la SOLICITADA por el cliente (referencia) y la PROPUESTA por el PM (fin
+          factible del plan). La propuesta es la que se le enviará al cliente al aceptar. */}
       {(fechaEstimados || finRealista) && (
         <div className="flex items-center gap-3 flex-wrap text-[12.5px]">
           {fechaEstimados && (
             <span className="inline-flex items-center gap-1 text-stone-400">
-              <CalendarRange size={13} /> Comprometida (Estimados): <span className="text-stone-600 font-medium">{fmtDiaPM(fechaEstimados)}</span>
+              <CalendarRange size={13} /> Fecha solicitada: <span className="text-stone-600 font-medium">{fmtDiaPM(fechaEstimados)}</span>
             </span>
           )}
           {finRealista && (
-            <span className={`inline-flex items-center gap-1 rounded-md px-2 py-0.5 font-semibold ${sePasa ? 'text-amber-800 bg-amber-100' : 'text-emerald-800 bg-emerald-100'}`}>
-              Propuesta PM (realista): {fmtDiaPM(finRealista)}
-              {sePasa && <span className="font-normal text-amber-600">· se pasa de la meta</span>}
+            <span className="inline-flex items-center gap-1 rounded-md px-2 py-0.5 font-semibold text-emerald-800 bg-emerald-100">
+              Fecha propuesta: {fmtDiaPM(finRealista)}
             </span>
           )}
         </div>

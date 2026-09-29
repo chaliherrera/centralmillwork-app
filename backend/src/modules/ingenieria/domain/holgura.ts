@@ -146,7 +146,16 @@ export function calcularHolgura(
     EF.set(n, finDe(es, dur.get(n) ?? 0))
   }
 
-  // ── Pasada HACIA ATRÁS: LS/LF desde la entrega FIJA (topo inverso) ──
+  // Fin proyectado = el EF más tardío (fin FACTIBLE del plan según la pasada hacia adelante).
+  let finProyectado: ISODate | null = null
+  for (const t of tareas) { const ef = EF.get(t.id)!; if (finProyectado === null || ef > finProyectado) finProyectado = ef }
+  // Ancla de la pasada hacia atrás = la MÁS TARDÍA entre la fecha SOLICITADA (fechaEntrega) y
+  // el fin factible. La holgura y el camino crítico se miden DENTRO del plan factible (contra
+  // la fecha PROPUESTA): si el plan termina después de lo solicitado, la fecha solicitada deja
+  // de ser una "meta" que genera atraso/riesgo — la referencia pasa a ser la propuesta (Chali).
+  const ancla: ISODate = finProyectado && finProyectado > fechaEntrega ? finProyectado : fechaEntrega
+
+  // ── Pasada HACIA ATRÁS: LS/LF desde el ANCLA (fecha propuesta o solicitada) (topo inverso) ──
   //   Todo se resuelve como cota sobre el LATE START del predecesor:
   //   · sin sucesores → debe terminar para la entrega: LS ≤ inicioDe(entrega).
   //   · sucesor FS → LF(pred) ≤ LS(succ) − gap − lag  ⇒  LS(pred) ≤ inicioDe(esa LF).
@@ -158,7 +167,7 @@ export function calcularHolgura(
     const n = topo[i]
     const d = dur.get(n) ?? 0
     const succs = succ.get(n)!
-    let ls = inicioDe(fechaEntrega, d)   // cota por defecto: terminar para la entrega
+    let ls = inicioDe(ancla, d)   // cota por defecto: terminar para el ancla (propuesta/solicitada)
     for (const s of succs) {
       const candLs = s.tipo === 'SS'
         ? unshift(LS.get(s.id)!, s.lag)                                       // SS: LS(pred) ≤ LS(succ) − lag
@@ -171,7 +180,6 @@ export function calcularHolgura(
 
   // ── Holgura por tarea + estado del proyecto ──
   const out = new Map<number, HolguraTarea>()
-  let finProyectado: ISODate | null = null
   let minHolgura = Infinity
   for (const t of tareas) {
     const ef = EF.get(t.id)!, lf = LF.get(t.id)!
@@ -181,7 +189,6 @@ export function calcularHolgura(
       lateStart: LS.get(t.id)!, lateFinish: lf,
       holguraDias, critico: false,
     })
-    if (finProyectado === null || ef > finProyectado) finProyectado = ef
     if (holguraDias < minHolgura) minHolgura = holguraDias
   }
   // Camino crítico = las tareas con la MENOR holgura de la red (la cadena que
@@ -189,6 +196,9 @@ export function calcularHolgura(
   // si termina antes, es la holgura del proyecto — pero siguen siendo las críticas.
   if (Number.isFinite(minHolgura)) for (const h of out.values()) h.critico = h.holguraDias === minHolgura
 
-  const holguraProyecto = finProyectado ? businessDaysBetween(finProyectado, fechaEntrega, feriados) : 0
+  // Holgura del proyecto contra el ANCLA (propuesta/solicitada). Con el ancla = máx(...),
+  // nunca es negativa por pasarse de la solicitada: el plan siempre cumple su propia fecha
+  // propuesta. El "riesgo" real (ejecución que se pasa del plan) se refleja al crecer el fin.
+  const holguraProyecto = finProyectado ? businessDaysBetween(finProyectado, ancla, feriados) : 0
   return { tareas: out, finProyectado, holguraProyecto, enRiesgo: holguraProyecto < 0 }
 }
