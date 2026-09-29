@@ -29,6 +29,7 @@ export interface Tarea {
   fase: string | null
   tipo_clave: string | null
   hito_codigo: string | null
+  rol: string | null                // rol que EJECUTA la tarea (ingenieria/compras/cliente/…)
   nombre: string
   asignado_nombre: string | null
   allocation_pct: number
@@ -87,7 +88,7 @@ export async function listProyectos(runner: QueryRunner): Promise<ProyectoResume
 /** Tareas (todas, o de un proyecto). */
 export async function listTareas(runner: QueryRunner, proyectoExt?: string): Promise<Tarea[]> {
   const { rows } = await runner.query<Tarea & { allocation_pct: string; dur_dias: string }>(
-    `SELECT t.id, t.proyecto_ext, t.fase, tt.clave AS tipo_clave, tt.hito_codigo,
+    `SELECT t.id, t.proyecto_ext, t.fase, tt.clave AS tipo_clave, tt.hito_codigo, tt.rol,
             t.nombre, t.asignado_nombre, t.allocation_pct, t.dur_dias, t.orden_visual,
             to_char(t.fecha_inicio,'YYYY-MM-DD') AS fecha_inicio,
             to_char(t.fecha_fin,'YYYY-MM-DD') AS fecha_fin,

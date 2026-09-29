@@ -19,6 +19,19 @@ const mondayOf = (dt: Date) => { const x = new Date(dt); const wd = (x.getDay() 
 const fmtD = (iso: string | null) => iso ? `${d(iso).getDate()} ${MES[d(iso).getMonth()]}` : '—'
 const shortProj = (p: string | null) => (p || '—').replace(/^\s*(\d{2}-\d{3})\s*/, '$1 · ')
 const PAL = ['#2563eb', '#0d9488', '#ea580c', '#7c3aed', '#059669', '#db2777', '#ca8a04', '#4f46e5', '#0891b2', '#dc2626', '#65a30d', '#9333ea']
+// Etiqueta del rol que EJECUTA una tarea sin ingeniero asignado (Compras, Cliente, etc.).
+// El "responsable" que se muestra es el ingeniero; para las tareas de otros roles, en vez
+// de "sin responsable" se muestra el rol que la hace.
+const ROL_LABEL: Record<string, string> = {
+  ingenieria: 'Ingeniería', compras: 'Compras', cliente: 'Cliente', produccion: 'Producción',
+  logistica: 'Logística', instalacion: 'Instalación', admin: 'Administración', estimacion: 'Estimados',
+  contabilidad: 'Contabilidad', shop_manager: 'Taller', field: 'Campo', externo: 'Externo',
+}
+function rolResponsable(rol: string | null): string {
+  // Tarea de ingeniería sin ingeniero cargado todavía = realmente "sin responsable".
+  if (!rol || rol === 'ingenieria') return 'sin responsable'
+  return ROL_LABEL[rol] ?? rol
+}
 // Orden de la FILA en la lista/Gantt: manda orden_visual (persistido por el drag
 // visual); si falta, se cae a la fecha temprana + id. Las FECHAS de las barras no
 // dependen de esto (las decide el CPM) — esto solo ordena las filas.
@@ -612,7 +625,7 @@ function VistaProyecto({ proyectos, all, plan, planLoading, sel, setSel, onEdit,
                         <div className="text-[10.5px] text-stone-400 truncate flex items-center gap-1">
                           {t.asignado_nombre
                             ? <><span className="w-2 h-2 rounded-full shrink-0" style={{ background: engColor.get(t.asignado_nombre) }} /><span className="font-semibold text-stone-600">{t.asignado_nombre}</span></>
-                            : <span className="text-stone-300">sin responsable</span>}
+                            : <span className="inline-flex items-center gap-1 text-stone-400"><span className="w-2 h-2 rounded-full shrink-0 bg-stone-300" />{rolResponsable(t.rol)}</span>}
                           <span>· <span className={t.allocation_pct > 1 ? 'text-rose-600 font-semibold' : ''}>{Math.round(t.allocation_pct * 100)}%</span> · {t.dur_dias}d</span>
                         </div>
                       </div>

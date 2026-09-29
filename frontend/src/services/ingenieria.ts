@@ -14,6 +14,7 @@ export interface IngTarea {
   fase: string | null
   tipo_clave: string | null
   hito_codigo: string | null
+  rol: string | null                // rol que EJECUTA la tarea (ingenieria/compras/cliente/…)
   nombre: string
   asignado_nombre: string | null
   allocation_pct: number
