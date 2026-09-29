@@ -40,13 +40,30 @@ export default function ReservasPendientes({ onRevisar }: { onRevisar?: (proyect
       <div className="divide-y divide-stone-100">
         {reservas.map((p) => {
           const engs = [...new Set(p.tareas.map((t) => t.asignado_nombre).filter(Boolean))]
+          // Fecha REALISTA del plan (propuesta por el PM) = fin de la última tarea. Se compara
+          // con la comprometida por Estimados: si se pasa, se marca en ámbar (hay atraso vs meta).
+          const fechaRealista = p.tareas.reduce((mx, t) => (t.fecha_fin && t.fecha_fin > mx ? t.fecha_fin : mx), '')
+          const sePasa = !!(p.fecha_objetivo && fechaRealista && fechaRealista > p.fecha_objetivo)
           return (
             <div key={p.proyecto_id} className="p-4">
               <div className="flex items-center gap-2 mb-1.5 flex-wrap">
                 <span className="font-mono text-[12px] font-bold text-forest-700">{p.proyecto_codigo}</span>
                 <span className="text-sm text-stone-700 font-medium">{p.proyecto_nombre}</span>
-                {p.fecha_objetivo && <span className="text-xs text-stone-400 inline-flex items-center gap-1"><CalendarRange size={12} /> entrega {fmt(p.fecha_objetivo)}</span>}
                 <span className="text-[10px] font-bold uppercase tracking-wide text-amber-700 bg-amber-100 rounded px-1.5 py-0.5">sugerido</span>
+              </div>
+              {/* Dos fechas: la comprometida por Estimados (referencia) y la realista del plan
+                  (propuesta por el PM, marcada) — la que tiene posibilidades de cumplirse. */}
+              <div className="flex items-center gap-3 mb-1.5 flex-wrap text-xs">
+                {p.fecha_objetivo && (
+                  <span className="inline-flex items-center gap-1 text-stone-400">
+                    <CalendarRange size={12} /> Estimados: <span className="text-stone-500 font-medium">{fmt(p.fecha_objetivo)}</span>
+                  </span>
+                )}
+                {fechaRealista && (
+                  <span className={`inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 font-semibold ${sePasa ? 'text-amber-800 bg-amber-100' : 'text-emerald-800 bg-emerald-100'}`}>
+                    Propuesta PM (realista): {fmt(fechaRealista)}
+                  </span>
+                )}
               </div>
               <div className="text-sm text-stone-500">
                 <b className="text-stone-700">{p.tareas.length}</b> tarea{p.tareas.length === 1 ? '' : 's'} en el plan · ingenieros propuestos: <span className="text-stone-700">{engs.length ? engs.join(', ') : 'sin asignar'}</span>

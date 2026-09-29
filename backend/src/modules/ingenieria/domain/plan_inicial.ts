@@ -140,11 +140,17 @@ export async function enviarAClienteDeal(runner: QueryRunner, proyectoId: number
   const { rowCount } = await runner.query(
     `UPDATE proyectos SET deal_estado = 'esperando_cliente' WHERE id = $1 AND deal_estado = 'plan_propuesto'`, [proyectoId])
   if (!rowCount) return { ok: false, error: 'el plan tiene que estar aceptado por el PM antes de mandarlo al cliente' }
-  // Congelar la fecha que verá el cliente = la fecha interna actual. A partir de acá, si el PM
-  // mueve la fecha interna, el cliente NO lo ve (2.2): sólo cambia si se le re-comunica.
+  // Congelar la fecha que verá el cliente = la fecha REALISTA del plan del PM (fin de la
+  // última tarea), NO la meta original de Estimados. Es la fecha propuesta por el PM: la que
+  // tiene posibilidades de cumplirse tras su análisis (regenerar/cambiar ingeniero/ajustar).
+  // Fallback a fecha_objetivo si el plan no tuviera tareas con fecha. A partir de acá, si el
+  // PM mueve la fecha interna, el cliente NO lo ve (2.2): sólo cambia si se le re-comunica.
   await runner.query(
-    `UPDATE schedule_planes SET fecha_cliente = fecha_objetivo
-      WHERE proyecto_id = $1 AND scope = 'proyecto'`, [proyectoId])
+    `UPDATE schedule_planes sp SET fecha_cliente = COALESCE(
+        (SELECT max(t.fecha_fin) FROM ing_tareas t JOIN proyectos p ON p.codigo = t.proyecto_ext
+          WHERE p.id = $1 AND t.origen = 'app'),
+        sp.fecha_objetivo)
+      WHERE sp.proyecto_id = $1 AND sp.scope = 'proyecto'`, [proyectoId])
   // Reusa el token activo del proyecto o crea uno (a nombre del cliente).
   const ex = await runner.query<{ token: string }>(
     `SELECT token FROM schedule_portal_tokens WHERE proyecto_id = $1 AND activo = true ORDER BY created_at DESC LIMIT 1`, [proyectoId])

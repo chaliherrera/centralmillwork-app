@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import toast from 'react-hot-toast'
-import { ClipboardList, Inbox, Gauge, Users, Loader2, RotateCcw } from 'lucide-react'
+import { ClipboardList, Inbox, Gauge, Users, Loader2, RotateCcw, CalendarRange } from 'lucide-react'
 import ReservasPendientes from '@/components/modules/estimados/ReservasPendientes'
 import DealsEnCurso from '@/components/modules/estimados/DealsEnCurso'
 import ReprogramacionesPendientes from '@/components/modules/ingenieria/ReprogramacionesPendientes'
@@ -13,6 +13,11 @@ import Escritorio from '@/components/escritorio/Escritorio'
 import PagosPorCobrar from '@/components/modules/ingenieria/PagosPorCobrar'
 import InstalacionesPM from '@/components/modules/ingenieria/InstalacionesPM'
 import AvisosPM from '@/components/modules/ingenieria/AvisosPM'
+
+const MES_PM = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic']
+function fmtDiaPM(iso: string | null): string {
+  if (!iso) return '—'; const d = new Date(iso + 'T00:00:00'); return `${d.getDate()} ${MES_PM[d.getMonth()]} ${d.getFullYear()}`
+}
 
 // Escritorio del PM. El PM es el dueño del recurso Ingeniería: acá tiene su bandeja
 // (planes sugeridos a aceptar + lo que le toca) y el Plan de Ingeniería (capacidad,
@@ -98,14 +103,19 @@ function HeatIngenieroPropuesto({ proyectoExt, refreshKey, onChanged }: { proyec
   const [ruta, setRuta] = useState<boolean[] | undefined>()
   const [loading, setLoading] = useState(true)
   const [regenerando, setRegenerando] = useState(false)
+  const [fechaEstimados, setFechaEstimados] = useState<string | null>(null)  // comprometida por Estimados
+  const [finRealista, setFinRealista] = useState<string | undefined>()       // fin real del plan = propuesta del PM
   useEffect(() => {
     let live = true
     setLoading(true)
     ;(async () => {
       try {
-        const [c, t] = await Promise.all([ingenieriaService.getCarga(), ingenieriaService.getTareas(proyectoExt)])
+        const [c, t, pl] = await Promise.all([ingenieriaService.getCarga(), ingenieriaService.getTareas(proyectoExt), ingenieriaService.getPlan(proyectoExt)])
         if (!live) return
         setCarga(c.data)
+        setFechaEstimados(pl.data?.fecha_entrega ?? null)
+        // Fecha propuesta por el PM = fin de la última tarea del plan (la realista).
+        setFinRealista((t.data ?? []).reduce((mx, x) => (x.fecha_fin && x.fecha_fin > mx ? x.fecha_fin : mx), '') || undefined)
         // El propuesto = el más asignado en el plan de este proyecto.
         const freq = new Map<string, number>()
         for (const tarea of t.data ?? []) if (tarea.asignado_nombre) freq.set(tarea.asignado_nombre, (freq.get(tarea.asignado_nombre) ?? 0) + 1)
@@ -151,8 +161,26 @@ function HeatIngenieroPropuesto({ proyectoExt, refreshKey, onChanged }: { proyec
   }
 
   if (loading) return <div className="rounded-2xl border border-stone-200 bg-white py-16 text-center text-stone-400"><Loader2 className="animate-spin inline" size={20} /></div>
+  const sePasa = !!(fechaEstimados && finRealista && finRealista > fechaEstimados)
   return (
     <div className="space-y-2">
+      {/* Dos fechas de entrega: la comprometida por Estimados (referencia) y la realista del
+          plan actual = propuesta del PM (marcada). Es la que se le enviará al cliente al aceptar. */}
+      {(fechaEstimados || finRealista) && (
+        <div className="flex items-center gap-3 flex-wrap text-[12.5px]">
+          {fechaEstimados && (
+            <span className="inline-flex items-center gap-1 text-stone-400">
+              <CalendarRange size={13} /> Comprometida (Estimados): <span className="text-stone-600 font-medium">{fmtDiaPM(fechaEstimados)}</span>
+            </span>
+          )}
+          {finRealista && (
+            <span className={`inline-flex items-center gap-1 rounded-md px-2 py-0.5 font-semibold ${sePasa ? 'text-amber-800 bg-amber-100' : 'text-emerald-800 bg-emerald-100'}`}>
+              Propuesta PM (realista): {fmtDiaPM(finRealista)}
+              {sePasa && <span className="font-normal text-amber-600">· se pasa de la meta</span>}
+            </span>
+          )}
+        </div>
+      )}
       <div className="flex items-center justify-end gap-2">
         <button onClick={regenerar} disabled={regenerando}
           title="Descarta el plan sugerido actual y lo reconstruye con los datos del proyecto y la carga de ingenieros vigente"
