@@ -9,7 +9,7 @@
 
 import type { PoolClient } from 'pg'
 import pool from '../../../db/pool'
-import { loadFeriados, addBusinessDays, businessDaysBetween, type ISODate } from '../../schedule/domain/calendario'
+import { loadFeriados, addBusinessDays, subBusinessDays, businessDaysBetween, type ISODate } from '../../schedule/domain/calendario'
 import { cargarColaIngenieros, ROLES_INGENIERO } from './planificador'
 import { capturarFechasReales } from '../../schedule/domain/captura'
 import { proyectarHitos, esInferida, type HitoPlantilla, type PasoFechas } from '../../schedule/domain/proyeccion'
@@ -1096,4 +1096,86 @@ export async function moverTarea(
   if (!mov.ok) return errDeps(dryRun, mov.error ?? 'no se pudo mover')
   if (mov.noop) return { ok: true, dryRun, noop: true, diffs: [], fin_antes: null, fin_despues: null, holgura: 0, en_riesgo: false, inverso: { remove: [], add: [] }, explicacion: { quita: [], agrega: [] } }
   return aplicarCambiosDeps(runner, ext, mov.remove, mov.add, dryRun, mov.explicacion)
+}
+
+// ── Mover una tarea a una fecha de inicio escrita por el PM (calcula el lag solo) ──────────
+export interface MoverFechaResult {
+  ok: boolean; error?: string; dryRun: boolean
+  fecha_actual: string | null       // inicio actual
+  fecha_pedida: string              // la que escribió el PM
+  fecha_resultante: string | null   // inicio REAL tras recalcular (puede diferir si otra dep manda)
+  lag_calculado: number | null      // lag puesto sobre la dependencia (null si fue por piso)
+  predecesora: string | null        // predecesora sobre la que se ajustó el lag
+  via: 'lag' | 'piso'               // lag sobre dep, o no_antes_de (tarea sin predecesor)
+  solapa_dias: number               // >0 = el lag quedó negativo → se solapa con la predecesora
+  limitada_por: string | null       // otra predecesora que no deja llegar a la fecha pedida
+  fin_antes: string | null; fin_despues: string | null; n_afectadas: number
+}
+
+/** Mueve la tarea a `fechaInicio` ajustando el LAG de la dependencia que hoy manda (la de
+ *  contribución más tardía) para que caiga ahí. Lag negativo = solapa. Es RELATIVO (la tarea
+ *  sigue a su predecesora si algo de arriba cambia). Sin predecesor programado → piso
+ *  `no_antes_de`. Devuelve preview con la fecha REAL resultante. El handler hace COMMIT
+ *  (aplicar) o ROLLBACK (dry_run); esta función SIEMPRE aplica el cambio para poder previsualizar. */
+export async function moverTareaAFecha(
+  runner: QueryRunner, tareaId: number, fechaInicio: ISODate, dryRun: boolean,
+): Promise<MoverFechaResult> {
+  const b0: MoverFechaResult = { ok: false, dryRun, fecha_actual: null, fecha_pedida: fechaInicio, fecha_resultante: null, lag_calculado: null, predecesora: null, via: 'lag', solapa_dias: 0, limitada_por: null, fin_antes: null, fin_despues: null, n_afectadas: 0 }
+  const feriados = await loadFeriados(runner)
+  const { rows: tr } = await runner.query<{ ext: string | null; estado: string }>(`SELECT proyecto_ext AS ext, estado FROM ing_tareas WHERE id = $1`, [tareaId])
+  if (!tr[0]?.ext) return { ...b0, error: 'tarea no encontrada' }
+  if (tr[0].estado === 'hecha' || tr[0].estado === 'na') return { ...b0, error: 'no se puede mover una tarea ya hecha o marcada No Aplica' }
+  const ext = tr[0].ext
+
+  const plan1 = await getPlanProyecto(runner, ext)
+  const T = plan1.tareas.find((t) => t.id === tareaId)
+  if (!T) return { ...b0, error: 'tarea no encontrada en el plan' }
+  const fecha_actual = T.early_start ?? T.fecha_inicio ?? null
+  const fin_antes = plan1.fin_proyectado
+  const byId = new Map(plan1.tareas.map((t) => [t.id, t]))
+  const shift = (d: ISODate, n: number) => (n >= 0 ? addBusinessDays(d, n, feriados) : subBusinessDays(d, -n, feriados))
+  const gap = T.dur_dias > 0 ? 1 : 0   // FS: tarea con duración arranca el día hábil siguiente; hito coincide
+
+  // Predecesores con fecha: su contribución al inicio de T y su base (con lag 0).
+  const preds = plan1.aristas
+    .filter((a) => a.tarea_id === tareaId)
+    .map((a) => {
+      const P = byId.get(a.depende_de_id)
+      if (!P?.early_finish || !P?.early_start) return null
+      const base = a.tipo === 'SS' ? P.early_start : addBusinessDays(P.early_finish, gap, feriados)
+      return { dep: a, pred: P, base, contrib: shift(base, a.lag_dias) }
+    })
+    .filter((x): x is NonNullable<typeof x> => x !== null)
+
+  let via: 'lag' | 'piso' = 'lag'
+  let lag_calculado: number | null = null
+  let predecesora: string | null = null
+  let bindingDepId = -1
+  if (preds.length === 0) {
+    via = 'piso'
+    await runner.query(`UPDATE ing_tareas SET no_antes_de = $2::date, updated_at = NOW() WHERE id = $1`, [tareaId, fechaInicio])
+  } else {
+    const binding = preds.reduce((m, x) => (x.contrib > m.contrib ? x : m), preds[0])
+    bindingDepId = binding.dep.depende_de_id
+    lag_calculado = businessDaysBetween(binding.base, fechaInicio, feriados)
+    predecesora = binding.pred.nombre
+    await runner.query(`UPDATE ing_tarea_deps SET lag_dias = $3 WHERE tarea_id = $1 AND depende_de_id = $2`, [tareaId, bindingDepId, lag_calculado])
+  }
+
+  const plan2 = await getPlanProyecto(runner, ext)
+  const T2 = plan2.tareas.find((t) => t.id === tareaId)
+  const fecha_resultante = T2?.early_start ?? null
+  const solapa_dias = lag_calculado != null && lag_calculado < 0 ? -lag_calculado : 0
+  // ¿Otra predecesora no dejó llegar a la fecha pedida? (la real quedó más tarde que lo pedido)
+  let limitada_por: string | null = null
+  if (fecha_resultante && fecha_resultante > fechaInicio) {
+    limitada_por = plan2.aristas
+      .filter((a) => a.tarea_id === tareaId && a.depende_de_id !== bindingDepId)
+      .map((a) => byId.get(a.depende_de_id)?.nombre).filter(Boolean)[0] ?? null
+  }
+  const before = new Map(plan1.tareas.map((t) => [t.id, `${t.early_start}|${t.early_finish}`]))
+  const n_afectadas = plan2.tareas.filter((t) => before.get(t.id) !== `${t.early_start}|${t.early_finish}`).length
+
+  if (!dryRun) await recomputarYGuardar(runner, ext)
+  return { ok: true, dryRun, fecha_actual, fecha_pedida: fechaInicio, fecha_resultante, lag_calculado, predecesora, via, solapa_dias, limitada_por, fin_antes, fin_despues: plan2.fin_proyectado, n_afectadas }
 }

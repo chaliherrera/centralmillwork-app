@@ -12,7 +12,7 @@ import {
   crearTarea, actualizarTarea, reportarAvance, getPlanProyecto,
   borrarTareaConReconexion, agregarDep, borrarDep, listReprogramaciones, recomputarYGuardar,
   reabrirShopDrawingsPorRechazo, cerrarGatePorAprobacion, cerrarReleasePorSdUpdate,
-  aplicarCambiosDeps, moverTarea, reasignarIngeniero, reordenarVisual,
+  aplicarCambiosDeps, moverTarea, moverTareaAFecha, reasignarIngeniero, reordenarVisual,
 } from '../domain/tareas'
 import { listReservasPendientes, liberarReserva } from '../domain/reservas'
 import { listIngenieros, actualizarIngeniero } from '../domain/ingenieros'
@@ -426,6 +426,26 @@ export async function moverTareaHandler(req: Request, res: Response, next: NextF
   } catch (e) { await client.query('ROLLBACK').catch(() => {}); next(e) } finally { client.release() }
 }
 
+// POST /api/ingenieria/tarea/:id/mover-fecha  { fecha_inicio: 'YYYY-MM-DD', dry_run?: boolean }
+// El PM escribe la fecha de inicio; el sistema calcula el lag solo y recalcula la cascada.
+export async function moverTareaAFechaHandler(req: Request, res: Response, next: NextFunction) {
+  const id = parseInt(String(req.params.id), 10)
+  if (Number.isNaN(id)) return next(createError('id de tarea inválido', 400))
+  const fecha = String(req.body?.fecha_inicio ?? '')
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(fecha)) return next(createError('fecha_inicio inválida (YYYY-MM-DD)', 400))
+  const dryRun = req.body?.dry_run === true
+  const client = await pool.connect()
+  try {
+    await client.query('BEGIN')
+    // Lock del proyecto de la tarea (evita recomputes concurrentes). dry_run hace ROLLBACK.
+    await client.query('SELECT p.id FROM proyectos p JOIN ing_tareas t ON t.proyecto_ext = p.codigo WHERE t.id = $1 FOR UPDATE', [id])
+    const r = await moverTareaAFecha(client, id, fecha, dryRun)
+    if (dryRun || !r.ok) await client.query('ROLLBACK')
+    else await client.query('COMMIT')
+    if (!r.ok) return next(createError(r.error ?? 'no se pudo mover la tarea', 400))
+    res.json({ data: r })
+  } catch (e) { await client.query('ROLLBACK').catch(() => {}); next(e) } finally { client.release() }
+}
 // POST /api/ingenieria/proyecto/:ext/orden-visual  { orden: number[] }
 // Reordena la FILA de la lista (drag visual). NO toca dependencias ni fechas.
 export async function reordenarVisualHandler(req: Request, res: Response, next: NextFunction) {
