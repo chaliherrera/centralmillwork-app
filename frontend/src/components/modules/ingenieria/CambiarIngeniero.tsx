@@ -88,8 +88,8 @@ export default function CambiarIngeniero({ proyectoExt, propuesto, ingenieros, o
               </div>
               <div className={`text-[12px] mt-1 font-semibold ${prev.entra ? 'text-emerald-700' : 'text-rose-700'}`}>
                 {prev.entra
-                  ? `Entra: quedan ${prev.holgura_dias} días de holgura hasta la entrega (${fmtDia(prev.entrega)}).`
-                  : `⚠ No entra: se pasa ${Math.abs(prev.holgura_dias)} días de la entrega (${fmtDia(prev.entrega)}).`}
+                  ? `Cumple la fecha solicitada (${fmtDia(prev.entrega)}) con ${prev.holgura_dias} días de margen.`
+                  : `Termina ${Math.abs(prev.holgura_dias)} días después de la fecha solicitada (${fmtDia(prev.entrega)}).`}
               </div>
             </div>
             <div className="flex justify-end gap-2">

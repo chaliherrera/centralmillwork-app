@@ -26,7 +26,7 @@ export async function listReservasPendientes(runner: QueryRunner): Promise<Reser
        JOIN proyectos p ON p.id = t.proyecto_id
        LEFT JOIN ing_tarea_tipos tt ON tt.id = t.tipo_id
        LEFT JOIN schedule_planes sp ON sp.proyecto_id = t.proyecto_id AND sp.scope = 'proyecto'
-      WHERE t.origen = 'sugerencia'
+      WHERE t.origen = 'sugerencia' AND p.estado = 'prospecto'
       ORDER BY p.codigo, t.fecha_inicio`)
   const byP = new Map<number, ReservaProyecto>()
   for (const r of rows) {

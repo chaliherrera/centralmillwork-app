@@ -27,8 +27,8 @@ export async function generarPlanIngenieria(
   runner: QueryRunner, proyectoId: number, opts?: { origen?: string }
 ): Promise<{ creadas: number; error?: string; ubicacion?: Ubicacion }> {
   const origen = opts?.origen ?? 'app'
-  const { rows: pr } = await runner.query<{ codigo: string; items_qty: number | null; presupuesto: number | null; incluye_stone: boolean; incluye: boolean; fecha_objetivo: string | null }>(
-    `SELECT p.codigo, p.items_qty, p.presupuesto,
+  const { rows: pr } = await runner.query<{ codigo: string; estado: string | null; items_qty: number | null; presupuesto: number | null; incluye_stone: boolean; incluye: boolean; fecha_objetivo: string | null }>(
+    `SELECT p.codigo, p.estado, p.items_qty, p.presupuesto,
             COALESCE(p.incluye_stone, TRUE) AS incluye_stone,
             COALESCE(p.incluye_instalacion, TRUE) AS incluye,
             to_char(sp.fecha_objetivo,'YYYY-MM-DD') AS fecha_objetivo
@@ -36,7 +36,10 @@ export async function generarPlanIngenieria(
        LEFT JOIN schedule_planes sp ON sp.proyecto_id = p.id AND sp.scope = 'proyecto'
       WHERE p.id = $1`, [proyectoId])
   if (!pr[0]) return { creadas: 0, error: 'proyecto no encontrado' }
-  const { codigo, items_qty, presupuesto, incluye_stone, incluye, fecha_objetivo } = pr[0]
+  const { codigo, estado, items_qty, presupuesto, incluye_stone, incluye, fecha_objetivo } = pr[0]
+  // A4: solo se propone/regenera plan para un proyecto en 'prospecto'. Un proyecto en pausa,
+  // cancelado o ya activo no debe recibir un plan sugerido nuevo (quedaría en estado huérfano).
+  if (estado && estado !== 'prospecto') return { creadas: 0, error: `el proyecto está en estado '${estado}', no admite un plan sugerido nuevo` }
   if (!fecha_objetivo) return { creadas: 0, error: 'el proyecto no tiene fecha comprometida' }
   // 2.7: sin ningún ingeniero activo no hay a quién proponer → se bloquea la reserva.
   //      Estimados debe cargar/activar un ingeniero antes de mandar el deal al PM.

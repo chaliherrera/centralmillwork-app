@@ -16,10 +16,11 @@ describe('calcularHolgura (CPM sobre fecha fija)', () => {
   ]
 
   it('camino crítico con holgura 0 y rama paralela con holgura', () => {
-    const r = calcularHolgura(tareas, aristas, '2026-01-05', '2026-01-21', F)
+    // Calendario Lun-Sáb: A(5)→B(5)→C(3) termina el 2026-01-19 (entrega tight).
+    const r = calcularHolgura(tareas, aristas, '2026-01-05', '2026-01-19', F)
     expect(r.holguraProyecto).toBe(0)
     expect(r.enRiesgo).toBe(false)
-    expect(r.finProyectado).toBe('2026-01-21')
+    expect(r.finProyectado).toBe('2026-01-19')
     expect(r.tareas.get(1)!.holguraDias).toBe(0) // A crítico
     expect(r.tareas.get(2)!.holguraDias).toBe(0) // B crítico
     expect(r.tareas.get(3)!.holguraDias).toBe(0) // C crítico
@@ -28,11 +29,22 @@ describe('calcularHolgura (CPM sobre fecha fija)', () => {
     expect(r.tareas.get(4)!.critico).toBe(false)
   })
 
-  it('extender una tarea mete el proyecto en RIESGO sin mover la entrega', () => {
+  // Contrato nuevo (revisión Fable C2): SIN fecha comprometida, la holgura se mide DENTRO
+  // del plan factible (ancla = máx(solicitada, fin)) → extender una tarea NO mete en riesgo.
+  it('sin fecha comprometida, extender una tarea NO mete en riesgo', () => {
     const t2 = [{ id: 1, dur: 5 }, { id: 2, dur: 5 }, { id: 3, dur: 8 }, { id: 4, dur: 2 }]
     const r = calcularHolgura(t2, aristas, '2026-01-05', '2026-01-21', F)
+    expect(r.enRiesgo).toBe(false)
+    expect(r.holguraProyecto).toBe(0)
+  })
+
+  // Con fecha COMPROMETIDA (plan ya enviado al cliente), extender una tarea que pasa la
+  // promesa SÍ mete el proyecto en riesgo (holgura negativa contra la comprometida).
+  it('con fecha comprometida, extender una tarea SÍ mete en riesgo', () => {
+    const t2 = [{ id: 1, dur: 5 }, { id: 2, dur: 5 }, { id: 3, dur: 8 }, { id: 4, dur: 2 }]
+    const r = calcularHolgura(t2, aristas, '2026-01-05', '2026-01-21', F, '2026-01-21')
     expect(r.enRiesgo).toBe(true)
-    expect(r.holguraProyecto).toBe(-5)
+    expect(r.holguraProyecto).toBe(-3)
   })
 
   it('borrar una tarea de la cadena libera holgura (entrega fija)', () => {
@@ -51,10 +63,11 @@ describe('calcularHolgura (CPM sobre fecha fija)', () => {
       [{ tareaId: 2, dependeDeId: 1, lag: 2 }],
       '2026-03-02', '2026-03-31', F,
     )
-    // A(3, inclusive): 02→04 mar. B arranca el día hábil siguiente + lag 2 = 09 mar; fin (dur2) = 10 mar.
+    // Calendario Lun-Sáb. A(3, inclusive): 02→04 mar. B arranca el día hábil siguiente
+    // (05, jue) + lag 2 hábiles = 07 mar (sáb, hábil); fin (dur 2) = 09 mar (lun; 08 dom no).
     expect(r.tareas.get(1)!.earlyFinish).toBe('2026-03-04')
-    expect(r.tareas.get(2)!.earlyStart).toBe('2026-03-09')
-    expect(r.tareas.get(2)!.earlyFinish).toBe('2026-03-10')
+    expect(r.tareas.get(2)!.earlyStart).toBe('2026-03-07')
+    expect(r.tareas.get(2)!.earlyFinish).toBe('2026-03-09')
   })
 
   it('detecta ciclos', () => {

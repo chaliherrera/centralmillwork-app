@@ -10,16 +10,17 @@ const F = new Set<string>() // sin feriados (hábiles = lun-vie)
 // Roles: ingeniería = meeting/shop_drawings/samples/cnc; los demás son de otras áreas.
 function mkPlantilla(): PlantillaRuta {
   return {
+    // consumeCapacidad: solo el trabajo real de ingeniería ancla al "un ingeniero".
     pasos: [
-      { clave: 'po', tipoId: 1, nombre: 'PO', rol: 'estimacion', dur: 0 },
-      { clave: 'meeting', tipoId: 2, nombre: 'Meeting', rol: 'ingenieria', dur: 1 },
-      { clave: 'long_leads', tipoId: 3, nombre: 'Long leads', rol: 'compras', dur: 10 },
-      { clave: 'shop', tipoId: 4, nombre: 'Shop drawings', rol: 'ingenieria', dur: 10 },
-      { clave: 'samples', tipoId: 5, nombre: 'Samples', rol: 'ingenieria', dur: 10 },
-      { clave: 'review', tipoId: 6, nombre: 'Review', rol: 'cliente', dur: 10 },
-      { clave: 'approval', tipoId: 7, nombre: 'Approval', rol: 'cliente', dur: 0 },
-      { clave: 'cnc', tipoId: 8, nombre: 'CNC', rol: 'ingenieria', dur: 10 },
-      { clave: 'fabrication', tipoId: 9, nombre: 'Fabrication', rol: 'produccion', dur: 20 },
+      { clave: 'po', tipoId: 1, nombre: 'PO', rol: 'estimacion', consumeCapacidad: false, dur: 0 },
+      { clave: 'meeting', tipoId: 2, nombre: 'Meeting', rol: 'ingenieria', consumeCapacidad: true, dur: 1 },
+      { clave: 'long_leads', tipoId: 3, nombre: 'Long leads', rol: 'compras', consumeCapacidad: false, dur: 10 },
+      { clave: 'shop', tipoId: 4, nombre: 'Shop drawings', rol: 'ingenieria', consumeCapacidad: true, dur: 10 },
+      { clave: 'samples', tipoId: 5, nombre: 'Samples', rol: 'ingenieria', consumeCapacidad: true, dur: 10 },
+      { clave: 'review', tipoId: 6, nombre: 'Review', rol: 'ingenieria', consumeCapacidad: false, dur: 10 },
+      { clave: 'approval', tipoId: 7, nombre: 'Approval', rol: 'ingenieria', consumeCapacidad: false, dur: 0 },
+      { clave: 'cnc', tipoId: 8, nombre: 'CNC', rol: 'ingenieria', consumeCapacidad: true, dur: 10 },
+      { clave: 'fabrication', tipoId: 9, nombre: 'Fabrication', rol: 'produccion', consumeCapacidad: false, dur: 20 },
     ],
     aristas: [
       { clave: 'meeting', dependeDe: 'po', tipo: 'FS', lag: 0 },
@@ -52,10 +53,10 @@ describe('ubicarProyecto — cola serial por ingeniero', () => {
   it('cola con fin futuro → el proyecto arranca cuando el ingeniero se libera (+1 hábil)', () => {
     const colas: ColaIngeniero[] = [{ nombre: 'Ana', hace_cnc: false, n_pendientes: 3, fin_ultima: '2026-02-20' }] // vie
     const u = ubicarProyecto(P, colas, params('2026-12-31'))
-    expect(u.disponible_desde).toBe('2026-02-23') // lunes siguiente
+    expect(u.disponible_desde).toBe('2026-02-21') // sábado siguiente (calendario Lun-Sáb)
     // las tareas de INGENIERÍA no arrancan antes de esa fecha
-    expect(u.fechas.get('meeting')!.es >= '2026-02-23').toBe(true)
-    expect(u.fechas.get('shop')!.es >= '2026-02-23').toBe(true)
+    expect(u.fechas.get('meeting')!.es >= '2026-02-21').toBe(true)
+    expect(u.fechas.get('shop')!.es >= '2026-02-21').toBe(true)
     // po_execution NO es de ingeniería → sigue en el día cero (la firma), no se empuja
     expect(u.fechas.get('po')!.es).toBe('2026-01-05')
   })

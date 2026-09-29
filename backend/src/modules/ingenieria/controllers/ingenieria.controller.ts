@@ -41,6 +41,8 @@ export async function reservarHandler(req: Request, res: Response, next: NextFun
   try {
     const id = pid(req)
     await client.query('BEGIN')
+    // M1: lock de la fila del proyecto para que dos requests concurrentes no dupliquen el plan.
+    await client.query('SELECT id FROM proyectos WHERE id = $1 FOR UPDATE', [id])
     const r = await generarPlanIngenieria(client, id, { origen: 'sugerencia' })
     if (!r.error) await client.query(`UPDATE proyectos SET deal_estado = 'esperando_pm' WHERE id = $1`, [id])
     await client.query('COMMIT')
@@ -58,7 +60,8 @@ export async function regenerarPlanHandler(req: Request, res: Response, next: Ne
   try {
     const ext = String(req.params.ext)
     await client.query('BEGIN')
-    const { rows } = await client.query<{ id: number }>(`SELECT id FROM proyectos WHERE codigo = $1`, [ext])
+    // M1: lock de la fila (FOR UPDATE) para que dos regenerados concurrentes no dupliquen.
+    const { rows } = await client.query<{ id: number }>(`SELECT id FROM proyectos WHERE codigo = $1 FOR UPDATE`, [ext])
     if (!rows[0]) { await client.query('ROLLBACK'); return next(createError('proyecto no encontrado', 404)) }
     const r = await generarPlanIngenieria(client, rows[0].id, { origen: 'sugerencia' })
     if (!r.error) await client.query(`UPDATE proyectos SET deal_estado = 'esperando_pm' WHERE id = $1`, [rows[0].id])
