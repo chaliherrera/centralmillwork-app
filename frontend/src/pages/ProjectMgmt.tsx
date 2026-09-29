@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
-import { ClipboardList, Inbox, Gauge, Users, Loader2 } from 'lucide-react'
+import toast from 'react-hot-toast'
+import { ClipboardList, Inbox, Gauge, Users, Loader2, RotateCcw } from 'lucide-react'
 import ReservasPendientes from '@/components/modules/estimados/ReservasPendientes'
 import DealsEnCurso from '@/components/modules/estimados/DealsEnCurso'
 import ReprogramacionesPendientes from '@/components/modules/ingenieria/ReprogramacionesPendientes'
@@ -96,6 +97,7 @@ function HeatIngenieroPropuesto({ proyectoExt, refreshKey, onChanged }: { proyec
   const [propuesto, setPropuesto] = useState<string | undefined>()
   const [ruta, setRuta] = useState<boolean[] | undefined>()
   const [loading, setLoading] = useState(true)
+  const [regenerando, setRegenerando] = useState(false)
   useEffect(() => {
     let live = true
     setLoading(true)
@@ -127,10 +129,36 @@ function HeatIngenieroPropuesto({ proyectoExt, refreshKey, onChanged }: { proyec
     return () => { live = false }
   }, [proyectoExt, refreshKey])
 
+  // Regenerar el plan sugerido desde cero: descarta el plan blando actual y lo reconstruye
+  // con los datos del proyecto + la carga de ingenieros vigente. Si el PM no está de acuerdo
+  // con el plan lo regenera acá mismo; si no está de acuerdo con el ingeniero, usa "Cambiar
+  // ingeniero propuesto" al lado. Tras cualquiera de los dos, onChanged() re-monta el heat +
+  // el Gantt para que vea el resultado.
+  const regenerar = async () => {
+    if (!window.confirm(
+      '¿Regenerar el plan sugerido desde cero?\n\n' +
+      'Se descartan los ajustes actuales del plan y se reconstruye con los datos del ' +
+      'proyecto (ítems, montos, stone, instalación, fecha) y la carga de ingenieros vigente.'
+    )) return
+    setRegenerando(true)
+    try {
+      await ingenieriaService.regenerarPlan(proyectoExt)
+      toast.success('Plan regenerado')
+      onChanged?.()
+    } catch (e: any) {
+      toast.error(e?.response?.data?.message ?? 'No se pudo regenerar el plan')
+    } finally { setRegenerando(false) }
+  }
+
   if (loading) return <div className="rounded-2xl border border-stone-200 bg-white py-16 text-center text-stone-400"><Loader2 className="animate-spin inline" size={20} /></div>
   return (
     <div className="space-y-2">
-      <div className="flex items-center justify-end">
+      <div className="flex items-center justify-end gap-2">
+        <button onClick={regenerar} disabled={regenerando}
+          title="Descarta el plan sugerido actual y lo reconstruye con los datos del proyecto y la carga de ingenieros vigente"
+          className="inline-flex items-center gap-1.5 rounded-lg border border-amber-300 hover:bg-amber-50 text-amber-800 disabled:opacity-50 text-[12.5px] font-semibold px-3 py-1.5">
+          {regenerando ? <Loader2 className="animate-spin" size={14} /> : <RotateCcw size={14} />} Regenerar plan
+        </button>
         <CambiarIngeniero proyectoExt={proyectoExt} propuesto={propuesto}
           ingenieros={(carga?.ingenieros ?? []).map((i) => i.nombre)} onDone={() => onChanged?.()} />
       </div>

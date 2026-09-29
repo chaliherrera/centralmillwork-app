@@ -48,6 +48,25 @@ export async function reservarHandler(req: Request, res: Response, next: NextFun
     res.status(201).json({ data: r })
   } catch (e) { await client.query('ROLLBACK').catch(() => {}); next(e) } finally { client.release() }
 }
+// POST /api/ingenieria/proyecto/:ext/regenerar-plan — el PM, revisando el plan sugerido,
+// lo RE-genera desde cero: borra el plan blando (sugerencia) y lo reconstruye con los datos
+// vigentes del proyecto (ítems/montos/stone/instalación/fecha) y la carga de ingenieros
+// actual. Misma lógica que reservar, pero por proyecto_ext (= codigo). No toca planes ya
+// firmes ('app'/'import_excel'): generarPlanIngenieria lo rechaza y deal_estado no cambia.
+export async function regenerarPlanHandler(req: Request, res: Response, next: NextFunction) {
+  const client = await pool.connect()
+  try {
+    const ext = String(req.params.ext)
+    await client.query('BEGIN')
+    const { rows } = await client.query<{ id: number }>(`SELECT id FROM proyectos WHERE codigo = $1`, [ext])
+    if (!rows[0]) { await client.query('ROLLBACK'); return next(createError('proyecto no encontrado', 404)) }
+    const r = await generarPlanIngenieria(client, rows[0].id, { origen: 'sugerencia' })
+    if (!r.error) await client.query(`UPDATE proyectos SET deal_estado = 'esperando_pm' WHERE id = $1`, [rows[0].id])
+    await client.query('COMMIT')
+    if (r.error) return next(createError(r.error, 400))
+    res.json({ data: r })
+  } catch (e) { await client.query('ROLLBACK').catch(() => {}); next(e) } finally { client.release() }
+}
 // GET /api/ingenieria/reservas-pendientes
 export async function reservasPendientesHandler(_req: Request, res: Response, next: NextFunction) {
   try { res.json({ data: await listReservasPendientes(pool) }) } catch (e) { next(e) }

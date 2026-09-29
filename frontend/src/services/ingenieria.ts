@@ -249,6 +249,10 @@ export const ingenieriaService = {
   // ── Reserva de capacidad ──
   reservar: (proyectoId: number) =>
     api.post<ApiResponse<{ creadas: number }>>(`/ingenieria/proyecto/${proyectoId}/reservar`).then((r) => r.data),
+  // Regenerar el plan sugerido desde cero (por proyecto_ext). Reusa el generador; borra el
+  // plan blando y lo reconstruye con datos del proyecto + carga de ingenieros vigente.
+  regenerarPlan: (ext: string) =>
+    api.post<ApiResponse<{ creadas: number }>>(`/ingenieria/proyecto/${encodeURIComponent(ext)}/regenerar-plan`).then((r) => r.data),
   liberarReserva: (proyectoId: number) =>
     api.delete<ApiResponse<{ liberadas: number }>>(`/ingenieria/proyecto/${proyectoId}/reserva`).then((r) => r.data),
   reservasPendientes: () =>

@@ -5,7 +5,7 @@ import {
   cargaEtapasHandler, etapaDetalleHandler, planHandler,
   crearTareaHandler, actualizarTareaHandler, avanceTareaHandler, borrarTareaHandler,
   agregarDepHandler, borrarDepHandler, bulkDepsHandler, moverTareaHandler, reordenarVisualHandler, reasignarIngenieroHandler,
-  reservarHandler, reservasPendientesHandler, confirmarReservaHandler, liberarReservaHandler,
+  reservarHandler, regenerarPlanHandler, reservasPendientesHandler, confirmarReservaHandler, liberarReservaHandler,
   dealsEnCursoHandler, enviarClienteHandler, clienteAproboHandler, activarProyectoHandler, cerrarDealHandler,
   overrideDepositoHandler, reprogramacionesHandler, depositosBloqueandoHandler, pagosPorCobrarHandler, instalacionesPMHandler, muestrasEstadoHandler,
   comprasEstadoHandler, instalacionDetalleHandler, escritorioHandler, escritorioResumenHandler,
@@ -65,6 +65,7 @@ router.post('/proyecto/:ext/deposito', PM, overrideDepositoHandler)
 
 // Reserva de capacidad (la dispara Estimados/PM)
 router.post('/proyecto/:id/reservar', DEAL, reservarHandler)
+router.post('/proyecto/:ext/regenerar-plan', PM, regenerarPlanHandler)  // PM: regenerar el plan sugerido desde el Plan de Ingeniería
 router.delete('/proyecto/:id/reserva', DEAL, liberarReservaHandler)
 router.get('/reservas-pendientes', READ, reservasPendientesHandler)
 router.post('/reserva/:proyectoId/confirmar', DEAL, confirmarReservaHandler)
