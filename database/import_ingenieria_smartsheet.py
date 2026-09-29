@@ -80,6 +80,28 @@ def g(r,name):
 proj_re=re.compile(r'^\s*(\d{2}-\d{3})')
 prefix_re=re.compile(r'^\s*\d{2}-\d{3}\s+')   # para quitar el codigo de tareas prefijadas
 
+# Segunda lectura del MISMO archivo, SIN data_only, solo para leer FORMATO: negrita
+# (font.bold) y NIVEL DE AGRUPACION de Smartsheet (row_dimensions.outline_level). El
+# libro data_only conserva los valores calculados (fechas); este conserva el formato.
+_wbf=openpyxl.load_workbook(SRC)
+_wsf=_wbf["Master.Sched"]
+_pncol=(idx.get('Project Name',1))+1
+def _ol(rn):
+    d=_wsf.row_dimensions.get(rn); return (d.outline_level if d else 0) or 0
+def _bold(rn):
+    c=_wsf.cell(row=rn,column=_pncol); return bool(c.font and c.font.bold)
+# Encabezado de proyecto = fila con CODIGO (25-xxx/26-xxx) que ademas es de NIVEL 0
+# (proyecto suelto; ej. "26-613 Courtyard" viene sin negrita) O esta en NEGRITA (proyecto
+# anidado en un grupo, ej. "Completed" > "26-588 Remington" que queda en nivel 1). Asi se
+# distingue un proyecto de: grupos sin codigo ("Completed"/"SAMPLE PROJECT"), fases
+# ("Phase 2:...") y tareas prefijadas ("26-613 SD update" del typo Nespresso = nivel 1 sin
+# negrita -> TAREA, no proyecto). Reemplaza la vieja heuristica por-codigo, que fusionaba
+# proyectos de igual codigo (Mars 400 vs Mars 400 -CO#1; HWS Phase 1 vs Phase 2) y dejaba
+# entrar filas de la plantilla SAMPLE como proyectos fantasma.
+def _es_proyecto(rn,name):
+    if not proj_re.match(name): return False
+    return _ol(rn)==0 or _bold(rn)
+
 lines=[]
 lines.append("BEGIN;")
 # IMPORTANTE: NO borrar todo. Solo refrescamos lo que vino del Excel (origen='import_excel').
@@ -102,26 +124,20 @@ lines.append("UPDATE ing_tarea_tipos SET dias_por_item = 1.0 WHERE clave IN ('sh
 lines.append("UPDATE ing_tarea_tipos SET dias_por_item = 2.0 WHERE clave = 'fabrication';")
 
 cur_proj=None; cur_code=None; cur_phase=None; ntask=0; nproj=0; deps=[]
-skip=False   # saltear el bloque "SAMPLE PROJECT" (plantilla al tope del Excel)
+skip=False   # dentro del bloque "SAMPLE PROJECT" (plantilla) -> ignorar sus filas
 for rn,r in enumerate(ws.iter_rows(min_row=2,values_only=True),start=2):
     name=(g(r,'Project Name') or '').strip()
     if not name: continue
-    # SAMPLE PROJECT = plantilla (usa tareas reales como ejemplo). Se saltea todo el bloque
-    # hasta el PRIMER encabezado de proyecto real (codigo + nombre que NO es un tipo de tarea).
-    if name.upper().startswith('SAMPLE PROJECT'):
-        skip=True; continue
-    if skip:
-        mm=proj_re.match(name); resto=prefix_re.sub('',name).strip() if mm else name
-        if mm and resolve(resto) is None and not resto.lower().startswith('phase') and not resto.lower().startswith('co#'):
-            skip=False   # primer proyecto real -> dejar de saltear y procesarlo abajo
-        else:
-            continue
-    # El formato nuevo del Excel prefija TODAS las filas con el codigo ("25-562 Field
-    # measurements"). El encabezado de proyecto = primera fila con un codigo NUEVO; las
-    # tareas prefijadas repiten el codigo del proyecto actual, asi que NO son proyectos.
-    m=proj_re.match(name); code=m.group(1) if m else None
-    if code and code != cur_code:
-        cur_code=code; cur_proj=name; cur_phase=None; nproj+=1
+    # Grupos de NIVEL 0 SIN codigo = envoltorios, no proyectos. "SAMPLE PROJECT" es la
+    # plantilla: se saltea todo su subarbol. "Completed" (u otros rotulos de estado) solo
+    # agrupan: se ignora la fila envoltorio, pero SUS HIJOS son proyectos reales (nivel 1).
+    if _ol(rn)==0 and not proj_re.match(name):
+        skip = name.upper().startswith('SAMPLE PROJECT')
+        continue
+    # Encabezado de proyecto (codigo + nivel 0 o negrita). Corta el salteo de SAMPLE.
+    if _es_proyecto(rn,name):
+        skip=False
+        cur_code=proj_re.match(name).group(1); cur_proj=name; cur_phase=None; nproj+=1
         # Encabezado del proyecto: la FECHA FIJA (Finish) + inicio + total + estado.
         lines.append(
           "INSERT INTO ing_proyectos (proyecto_ext,fecha_inicio,fecha_entrega,dur_total_dias,status_ext,origen) VALUES ("
@@ -130,6 +146,7 @@ for rn,r in enumerate(ws.iter_rows(min_row=2,values_only=True),start=2):
           "ON CONFLICT (proyecto_ext) DO UPDATE SET fecha_inicio=EXCLUDED.fecha_inicio,fecha_entrega=EXCLUDED.fecha_entrega,"
           "dur_total_dias=EXCLUDED.dur_total_dias,status_ext=EXCLUDED.status_ext,updated_at=NOW();")
         continue
+    if skip: continue   # fila dentro del bloque SAMPLE -> ignorar
     # Tarea (o fase): quita el prefijo de codigo si lo trae.
     name=prefix_re.sub('',name).strip()
     if name.lower().startswith('phase'):
