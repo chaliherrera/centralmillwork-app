@@ -1,7 +1,7 @@
 import { Fragment, useEffect, useMemo, useState } from 'react'
 import { Users, Layers, ClipboardList, Plus, X, Loader2, Trash2, Gauge, Check, FolderKanban, Activity, AlertTriangle, Wallet, Lock, LockOpen, FlaskConical, Package, Wrench, CalendarClock, ChevronUp, ChevronDown, GripVertical, Split } from 'lucide-react'
 import toast from 'react-hot-toast'
-import { ingenieriaService, type IngProyecto, type IngTarea, type TareaInput, type IngPlan, type IngTareaPlan, type IngArista, type IngCarga, type IngTareaCelda, type InstalacionDetalle } from '@/services/ingenieria'
+import { ingenieriaService, type IngProyecto, type IngTarea, type TareaInput, type IngPlan, type IngTareaPlan, type IngArista, type IngCarga, type IngTareaCelda, type InstalacionDetalle, type MoverFechaResult } from '@/services/ingenieria'
 import MapaEtapas from '@/components/modules/ingenieria/MapaEtapas'
 import CronogramaCliente, { ganttDesdePlan } from '@/components/schedule/CronogramaCliente'
 import CambiarIngeniero from '@/components/modules/ingenieria/CambiarIngeniero'
@@ -941,6 +941,25 @@ function EditModal({ tarea, proyecto, engineers, planTareas, aristas, onClose, o
   const [decComent, setDecComent] = useState(tarea?.decision_comentarios ?? '')
   const set = (k: keyof TareaInput, v: any) => setF((p) => ({ ...p, [k]: v }))
 
+  // Mover a una fecha escrita: el PM elige la fecha, el sistema calcula el lag y previsualiza.
+  const [nuevaFecha, setNuevaFecha] = useState('')
+  const [movePrev, setMovePrev] = useState<MoverFechaResult | null>(null)
+  const [moveBusy, setMoveBusy] = useState(false)
+  const previewMover = async (fch: string) => {
+    setNuevaFecha(fch); setMovePrev(null)
+    if (!fch || !tarea) return
+    setMoveBusy(true)
+    try { const r = await ingenieriaService.moverFecha(tarea.id, fch, true); setMovePrev(r.data) }
+    catch (e: any) { toast.error(e?.response?.data?.message || 'No se pudo calcular') }
+    finally { setMoveBusy(false) }
+  }
+  const aplicarMover = async () => {
+    if (!nuevaFecha || !tarea) return
+    setMoveBusy(true)
+    try { await ingenieriaService.moverFecha(tarea.id, nuevaFecha, false); toast.success('Tarea movida'); onSaved() }
+    catch (e: any) { toast.error(e?.response?.data?.message || 'No se pudo mover'); setMoveBusy(false) }
+  }
+
   // Relaciones (solo en la vista por proyecto, donde tenemos el plan). Tres tipos:
   //  · Predecesores (FS): ESTA empieza después de… → arista (ESTA ← PRED), tipo FS.
   //  · Sucesores (FS): esas empiezan después de ESTA → arista (SUC ← ESTA), tipo FS.
@@ -1071,16 +1090,46 @@ function EditModal({ tarea, proyecto, engineers, planTareas, aristas, onClose, o
             <L t="% de asignación"><input type="number" step="0.1" min="0" value={f.allocation_pct} onChange={(e) => set('allocation_pct', Number(e.target.value))} className="inp" /></L>
             <L t="Duración (días)"><input type="number" step="0.5" min="0" value={f.dur_dias} onChange={(e) => set('dur_dias', Number(e.target.value))} className="inp" /></L>
           </div>
-          {/* Las fechas las calcula el CPM (duración + predecesores + entrega fija). Solo lectura:
-              el PM mueve el schedule ajustando la DURACIÓN y los predecesores, no tipeando fechas. */}
-          <L t="Fechas (calculadas)">
-            <div className="text-sm text-stone-600 bg-stone-50 border border-stone-200 rounded-lg px-3 py-2">
-              {tarea?.fecha_inicio && tarea?.fecha_fin
-                ? <><span className="font-semibold">{fmtD(tarea.fecha_inicio)}</span> → <span className="font-semibold">{fmtD(tarea.fecha_fin)}</span></>
-                : <span className="text-stone-400 italic">se calculan al guardar</span>}
-              <span className="block text-[11px] text-stone-400 mt-0.5">El sistema las recalcula desde la duración y los predecesores.</span>
+          {/* Mover a una fecha escrita: el PM elige la fecha de inicio y el sistema calcula el
+              lag solo (previsualiza el impacto antes de aplicar). La duración se edita arriba. */}
+          {tarea ? (
+          <L t="Fecha de inicio · mover a…">
+            <div className="text-sm bg-stone-50 border border-stone-200 rounded-lg px-3 py-2.5 space-y-2">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-[12px] text-stone-500">actual:</span>
+                <span className="font-semibold text-stone-700">{tarea.fecha_inicio ? fmtD(tarea.fecha_inicio) : '—'} → {tarea.fecha_fin ? fmtD(tarea.fecha_fin) : '—'}</span>
+                <span className="text-stone-300">·</span>
+                <input type="date" value={nuevaFecha} onChange={(e) => previewMover(e.target.value)}
+                  className="border border-stone-300 rounded-lg px-2 py-1 text-[13px] text-stone-800" />
+                {moveBusy && <Loader2 className="animate-spin text-stone-400" size={15} />}
+              </div>
+              {movePrev && movePrev.ok && (
+                <div className="space-y-1.5 border-t border-stone-200 pt-2">
+                  <div className="text-[12.5px] text-stone-600 flex items-center gap-1.5 flex-wrap">
+                    {movePrev.via === 'lag'
+                      ? <><span className={`px-1.5 py-0.5 rounded font-mono text-[11px] ${(movePrev.lag_calculado ?? 0) < 0 ? 'bg-amber-100 text-amber-800' : 'bg-emerald-100 text-emerald-800'}`}>lag {(movePrev.lag_calculado ?? 0) >= 0 ? '+' : ''}{movePrev.lag_calculado}</span> sobre <b>{movePrev.predecesora}</b></>
+                      : <span>se fija al día elegido (sin predecesora)</span>}
+                    <span className="text-stone-400">· queda en <b className="text-stone-700">{movePrev.fecha_resultante ? fmtD(movePrev.fecha_resultante) : '—'}</b></span>
+                  </div>
+                  {movePrev.solapa_dias > 0 && <div className="text-[12px] text-amber-700">Se solapa {movePrev.solapa_dias} días con {movePrev.predecesora}.</div>}
+                  {movePrev.limitada_por && <div className="text-[12px] text-amber-700">No llega a la fecha pedida: la limita {movePrev.limitada_por}.</div>}
+                  <div className="text-[12px] text-stone-500">Fin del plan: {movePrev.fin_antes ? fmtD(movePrev.fin_antes) : '—'} → <b className={movePrev.fin_despues && movePrev.fin_antes && movePrev.fin_despues > movePrev.fin_antes ? 'text-amber-700' : 'text-stone-700'}>{movePrev.fin_despues ? fmtD(movePrev.fin_despues) : '—'}</b> · {movePrev.n_afectadas} tareas se recalculan.</div>
+                  <button type="button" onClick={aplicarMover} disabled={moveBusy}
+                    className="mt-1 inline-flex items-center gap-1.5 rounded-lg bg-forest-600 hover:bg-forest-700 disabled:opacity-50 text-white text-[13px] font-semibold px-3 py-1.5">
+                    {moveBusy ? <Loader2 className="animate-spin" size={14} /> : <Check size={14} />} Mover a {fmtD(nuevaFecha)}
+                  </button>
+                </div>
+              )}
+              <span className="block text-[11px] text-stone-400">El sistema calcula el lag y recalcula la cadena. La duración se edita arriba.</span>
             </div>
           </L>
+          ) : (
+          <L t="Fechas (calculadas)">
+            <div className="text-sm text-stone-600 bg-stone-50 border border-stone-200 rounded-lg px-3 py-2">
+              <span className="text-stone-400 italic">se calculan al guardar</span>
+            </div>
+          </L>
+          )}
 
           {/* Predecesores — esta tarea empieza después de… (recalcula holgura al guardar) */}
           {planTareas && (

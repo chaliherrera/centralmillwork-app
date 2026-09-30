@@ -243,6 +243,9 @@ export const ingenieriaService = {
     api.get<ApiResponse<IngProyectoEtapa[]>>('/ingenieria/carga-etapas/detalle', { params: { etapa, semana } }).then((r) => r.data),
   getPlan: (proyecto: string) =>
     api.get<ApiResponse<IngPlan>>('/ingenieria/plan', { params: { proyecto } }).then((r) => r.data),
+  // Mover una tarea a una fecha de inicio escrita (calcula el lag). dry_run = previsualizar.
+  moverFecha: (tareaId: number, fecha_inicio: string, dry_run = false) =>
+    api.post<ApiResponse<MoverFechaResult>>(`/ingenieria/tarea/${tareaId}/mover-fecha`, { fecha_inicio, dry_run }).then((r) => r.data),
   // Gate del depósito: el PM lo abre/cierra a mano (la confirmación de Finanzas se lee sola)
   overrideDeposito: (proyectoExt: string, abrir: boolean) =>
     api.post<ApiResponse<EstadoDeposito>>(`/ingenieria/proyecto/${encodeURIComponent(proyectoExt)}/deposito`, { abrir }).then((r) => r.data),
@@ -336,6 +339,13 @@ export interface ReasignarPreview {
   ingeniero_actual: string | null; ingeniero_nuevo: string; disponible_desde: string
   fin_actual: string | null; fin_nuevo: string; entrega: string
   holgura_dias: number; entra: boolean; n_tareas: number
+}
+export interface MoverFechaResult {
+  ok: boolean; error?: string; dryRun: boolean
+  fecha_actual: string | null; fecha_pedida: string; fecha_resultante: string | null
+  lag_calculado: number | null; predecesora: string | null; via: 'lag' | 'piso'
+  solapa_dias: number; limitada_por: string | null
+  fin_antes: string | null; fin_despues: string | null; n_afectadas: number
 }
 
 export interface CambioDep { tarea_id: number; depende_de_id: number; tipo?: string; lag_dias?: number }
