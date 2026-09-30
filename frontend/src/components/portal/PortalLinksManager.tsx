@@ -121,10 +121,13 @@ export default function PortalLinksManager({ proyectoId, proyectoCodigo = '', pr
         </div>
         {nuevo && (
           <div className="mt-3 rounded-xl border border-forest-200 bg-forest-50/60 p-2.5">
-            <div className="text-[11px] font-semibold text-forest-700 mb-1.5">Link listo (ya copiado como <b>{etiquetaPortal(proyectoCodigo, proyectoNombre)}</b>):</div>
+            <div className="text-[11px] font-semibold text-forest-700 mb-1.5">Link listo — ya copiado enmascarado. Al pegarlo en el correo aparece así:</div>
             <div className="flex gap-2 items-center">
-              <input readOnly value={nuevo} onFocus={(e) => e.target.select()} className="input w-full text-xs bg-white" />
-              <button onClick={async () => { const ok = await copiarLinkEnmascarado(nuevo, etiquetaPortal(proyectoCodigo, proyectoNombre)); toast.success(ok ? 'Copiado' : 'No se pudo copiar') }}
+              {/* Mostramos la ETIQUETA (lo que ve el cliente), no la URL larga. El title deja ver la URL real. */}
+              <span className="flex-1 min-w-0 truncate text-sm font-semibold text-forest-700 bg-white border border-forest-200 rounded-lg px-2.5 py-2" title={nuevo}>
+                🔗 {etiquetaPortal(proyectoCodigo, proyectoNombre)}
+              </span>
+              <button onClick={async () => { const ok = await copiarLinkEnmascarado(nuevo, etiquetaPortal(proyectoCodigo, proyectoNombre)); toast.success(ok ? 'Copiado (pegalo en el email)' : 'No se pudo copiar') }}
                       className="shrink-0 inline-flex items-center gap-1 rounded-lg bg-forest-600 hover:bg-forest-700 text-white text-xs font-semibold px-2.5 py-2"><Copy size={13} /> Copiar</button>
               <button onClick={() => window.open(nuevo, '_blank', 'noopener')}
                       className="shrink-0 inline-flex items-center gap-1 rounded-lg border border-forest-300 text-forest-700 hover:bg-forest-50 text-xs font-semibold px-2.5 py-2"><ExternalLink size={13} /> Abrir</button>
