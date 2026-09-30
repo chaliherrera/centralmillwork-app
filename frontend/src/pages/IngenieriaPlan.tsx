@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useMemo, useState } from 'react'
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
 import { Users, Layers, ClipboardList, Plus, X, Loader2, Trash2, Gauge, Check, FolderKanban, Activity, AlertTriangle, Wallet, Lock, LockOpen, FlaskConical, Package, Wrench, CalendarClock, ChevronUp, ChevronDown, GripVertical, Split } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { ingenieriaService, type IngProyecto, type IngTarea, type TareaInput, type IngPlan, type IngTareaPlan, type IngArista, type IngCarga, type IngTareaCelda, type InstalacionDetalle, type MoverFechaResult } from '@/services/ingenieria'
@@ -339,6 +339,22 @@ function VistaProyecto({ proyectos, all, plan, planLoading, sel, setSel, onEdit,
   const [dragId, setDragId] = useState<number | null>(null)
   const [dropIdx, setDropIdx] = useState<number | null>(null)   // índice de inserción en taskOrder (0..N)
   const [dndBusy, setDndBusy] = useState(false)
+  // Arrastrar la barra HORIZONTAL (mover a fecha) — atajo del control del modal.
+  const trackRef = useRef<HTMLDivElement>(null)
+  const didDragRef = useRef(false)
+  const [barDrag, setBarDrag] = useState<{ id: number; origXPct: number; deltaPct: number } | null>(null)
+  const [movePop, setMovePop] = useState<{ taskId: number; nombre: string; fecha: string; xPct: number; y: number; prev: MoverFechaResult | null; loading: boolean; busy: boolean } | null>(null)
+  const abrirMovePop = async (taskId: number, nombre: string, fecha: string, xPct: number, y: number) => {
+    setMovePop({ taskId, nombre, fecha, xPct, y, prev: null, loading: true, busy: false })
+    try { const r = await ingenieriaService.moverFecha(taskId, fecha, true); setMovePop((p) => (p && p.taskId === taskId ? { ...p, prev: r.data, loading: false } : p)) }
+    catch (e: any) { toast.error(e?.response?.data?.message || 'No se pudo calcular'); setMovePop(null) }
+  }
+  const aplicarMovePop = async () => {
+    if (!movePop) return
+    setMovePop((p) => (p ? { ...p, busy: true } : p))
+    try { await ingenieriaService.moverFecha(movePop.taskId, movePop.fecha, false); toast.success('Tarea movida'); setMovePop(null); await onRefresh() }
+    catch (e: any) { toast.error(e?.response?.data?.message || 'No se pudo mover'); setMovePop((p) => (p ? { ...p, busy: false } : p)) }
+  }
   const [cronoOpen, setCronoOpen] = useState(false)
 
   // Soltar = reordenar la FILA (visual), SIN tocar fechas ni dependencias. Después
@@ -393,12 +409,13 @@ function VistaProyecto({ proyectos, all, plan, planLoading, sel, setSel, onEdit,
     if (plan?.fecha_inicio) fechas.push(plan.fecha_inicio)
     if (plan?.fecha_entrega) fechas.push(plan.fecha_entrega)
     if (plan?.fin_proyectado) fechas.push(plan.fin_proyectado)
-    if (!fechas.length) return { fases, rows, totalH, months: [] as any[], pct: () => 0, hoyPct: null as number | null, propuestaPct: null as number | null, solicitadaPct: null as number | null }
+    if (!fechas.length) return { fases, rows, totalH, months: [] as any[], pct: () => 0, dateAtPct: () => '', hoyPct: null as number | null, propuestaPct: null as number | null, solicitadaPct: null as number | null }
     let min = d(fechas[0]), max = d(fechas[0])
     for (const f of fechas) { const dd = d(f); if (dd < min) min = dd; if (dd > max) max = dd }
     const week0 = mondayOf(min); const nWeeks = Math.max(1, Math.ceil((max.getTime() - week0.getTime()) / (7 * DAY)) + 2)
     const span = nWeeks * 7 * DAY
     const pct = (iso: string) => ((d(iso).getTime() - week0.getTime()) / span) * 100
+    const dateAtPct = (p: number) => new Date(week0.getTime() + (Math.max(0, p) / 100) * span).toISOString().slice(0, 10)  // inverso: % del track -> fecha
     const months: { label: string; startPct: number }[] = []
     for (let i = 0; i < nWeeks; i++) { const wd = new Date(week0.getTime() + i * 7 * DAY); const label = `${MES[wd.getMonth()]} ${String(wd.getFullYear()).slice(2)}`; const last = months[months.length - 1]; if (!last || last.label !== label) months.push({ label, startPct: (i / nWeeks) * 100 }) }
     const today = new Date(); today.setHours(0, 0, 0, 0)
@@ -407,7 +424,7 @@ function VistaProyecto({ proyectos, all, plan, planLoading, sel, setSel, onEdit,
     // Línea SOLICITADA (gris tenue) = lo pedido por el cliente (referencia).
     const propuestaPct = plan?.fin_proyectado ? pct(plan.fin_proyectado) : null
     const solicitadaPct = plan?.fecha_entrega ? pct(plan.fecha_entrega) : null
-    return { fases, rows, totalH, months, pct, hoyPct, propuestaPct, solicitadaPct, yOf }
+    return { fases, rows, totalH, months, pct, dateAtPct, hoyPct, propuestaPct, solicitadaPct, yOf }
   }, [tareas, plan])
 
   // barra mínima (para hitos de 0 días): medio % de una semana
@@ -647,7 +664,7 @@ function VistaProyecto({ proyectos, all, plan, planLoading, sel, setSel, onEdit,
             </div>
 
             {/* timeline: barras + slack + conectores (SVG) */}
-            <div className="relative flex-1" style={{ height: g.totalH }}>
+            <div ref={trackRef} className="relative flex-1" style={{ height: g.totalH }}>
               {/* gridlines de meses + hoy + entrega */}
               {g.months.map((m: any, i: number) => <div key={i} className="absolute top-0 bottom-0 border-l border-stone-50" style={{ left: `${m.startPct}%` }} />)}
               {g.hoyPct !== null && <div className="absolute top-0 bottom-0 border-l-2 border-rose-200" style={{ left: `${g.hoyPct}%` }} />}
@@ -676,6 +693,9 @@ function VistaProyecto({ proyectos, all, plan, planLoading, sel, setSel, onEdit,
                 const t = r.tarea as IngTareaPlan; const geo = barGeom(t); if (!geo) return null
                 const col = t.asignado_nombre ? engColor.get(t.asignado_nombre)! : '#78716c'
                 const done = t.estado === 'hecha'
+                const arrastrable = t.estado !== 'hecha' && t.estado !== 'na'
+                const dragging = barDrag?.id === t.id
+                const leftPct = dragging ? geo.x + (barDrag?.deltaPct ?? 0) : geo.x
                 return (
                   <div key={i} className="absolute" style={{ top: r.y, height: ROW_H, left: 0, right: 0 }}>
                     {/* holgura sombreada tras la barra */}
@@ -684,10 +704,27 @@ function VistaProyecto({ proyectos, all, plan, planLoading, sel, setSel, onEdit,
                         style={{ top: (ROW_H - BAR_H) / 2 + 4, height: BAR_H - 8, left: `${geo.x + geo.w}%`, width: `${geo.slackW}%`,
                           background: 'repeating-linear-gradient(45deg,#e7e5e4,#e7e5e4 3px,transparent 3px,transparent 6px)' }} />
                     )}
-                    {/* barra de la tarea (crítica: borde fuerte forest; normal: color del ingeniero) */}
-                    <div onClick={() => onEdit(t)} title={`${t.nombre}\n${t.asignado_nombre || 'sin responsable'}\n${geo.hito ? 'hito ' + fmtD(t.early_start) : fmtD(t.early_start) + ' → ' + fmtD(t.early_finish)}\nholgura ${t.holgura_dias ?? '—'}d${t.critico ? ' · CRÍTICO' : ''}`}
-                      className="absolute rounded-md flex items-center px-1.5 gap-1 overflow-hidden cursor-pointer hover:ring-2 hover:ring-stone-400"
-                      style={{ top: (ROW_H - BAR_H) / 2, height: BAR_H, left: `${geo.x}%`, width: `calc(${geo.w}% - 1px)`,
+                    {/* fantasma en la posición original mientras se arrastra */}
+                    {dragging && <div className="absolute rounded-md border-2 border-dashed border-stone-300 pointer-events-none" style={{ top: (ROW_H - BAR_H) / 2, height: BAR_H, left: `${geo.x}%`, width: `calc(${geo.w}% - 1px)` }} />}
+                    {/* barra de la tarea (arrastrable en horizontal = mover a fecha). Crítica: borde forest. */}
+                    <div onClick={() => { if (didDragRef.current) { didDragRef.current = false; return } onEdit(t) }}
+                      onPointerDown={arrastrable ? (e) => {
+                        e.stopPropagation(); didDragRef.current = false
+                        const trackW = trackRef.current?.getBoundingClientRect().width ?? 1
+                        const startX = e.clientX, origXPct = geo.x, id = t.id, nombre = t.nombre, y = r.y
+                        const onMove = (ev: PointerEvent) => { const dx = ev.clientX - startX; if (Math.abs(dx) > 4) didDragRef.current = true; setBarDrag({ id, origXPct, deltaPct: (dx / trackW) * 100 }) }
+                        const onUp = (ev: PointerEvent) => {
+                          window.removeEventListener('pointermove', onMove); window.removeEventListener('pointerup', onUp)
+                          const dx = ev.clientX - startX; setBarDrag(null)
+                          if (Math.abs(dx) <= 4) return   // fue un click → onClick abre el modal
+                          const newX = origXPct + (dx / trackW) * 100
+                          abrirMovePop(id, nombre, g.dateAtPct(newX), Math.max(0, Math.min(100, newX)), y)
+                        }
+                        window.addEventListener('pointermove', onMove); window.addEventListener('pointerup', onUp)
+                      } : undefined}
+                      title={`${t.nombre}\n${t.asignado_nombre || 'sin responsable'}\n${geo.hito ? 'hito ' + fmtD(t.early_start) : fmtD(t.early_start) + ' → ' + fmtD(t.early_finish)}\nholgura ${t.holgura_dias ?? '—'}d${t.critico ? ' · CRÍTICO' : ''}${arrastrable ? '\n(arrastrá para mover a otra fecha)' : ''}`}
+                      className={`absolute rounded-md flex items-center px-1.5 gap-1 overflow-hidden hover:ring-2 hover:ring-stone-400 ${arrastrable ? 'cursor-grab' : 'cursor-pointer'} ${dragging ? '!cursor-grabbing ring-2 ring-forest-400 z-30' : ''}`}
+                      style={{ top: (ROW_H - BAR_H) / 2, height: BAR_H, left: `${leftPct}%`, width: `calc(${geo.w}% - 1px)`, touchAction: 'none',
                         background: done ? '#d1fae5' : col + '26',
                         borderLeft: `3px solid ${done ? '#059669' : col}`,
                         boxShadow: t.critico ? 'inset 0 0 0 1.5px #3b4233' : undefined }}>
@@ -695,9 +732,44 @@ function VistaProyecto({ proyectos, all, plan, planLoading, sel, setSel, onEdit,
                       {!geo.hito && <span className="text-[9.5px] font-semibold text-stone-600 whitespace-nowrap">{fmtD(t.early_start)}→{fmtD(t.early_finish)}</span>}
                       {geo.hito && <span className="text-[9px] font-bold" style={{ color: col }}>◆</span>}
                     </div>
+                    {/* tooltip de fecha en vivo mientras se arrastra */}
+                    {dragging && <div className="absolute z-40 pointer-events-none text-[10px] font-semibold bg-stone-800 text-white px-1.5 py-0.5 rounded whitespace-nowrap" style={{ top: -6, left: `${Math.max(0, Math.min(100, leftPct))}%` }}>{fmtD(g.dateAtPct(leftPct))}</div>}
                   </div>
                 )
               })}
+              {/* Popover de confirmación al soltar la barra (mover a fecha). */}
+              {movePop && (
+                <div className="absolute z-50" style={{ top: movePop.y + ROW_H + 2, left: `${movePop.xPct}%`, transform: 'translateX(-40%)' }}>
+                  <div className="bg-white border border-stone-200 rounded-xl shadow-lg px-3 py-2.5 w-[280px] text-[12.5px]">
+                    <div className="flex items-center gap-1.5 mb-1.5">
+                      <CalendarClock size={14} className="text-forest-600 shrink-0" />
+                      <span className="font-semibold text-stone-800 truncate">{movePop.nombre}</span>
+                      <span className="ml-auto text-stone-400">→ {fmtD(movePop.fecha)}</span>
+                    </div>
+                    {movePop.loading || !movePop.prev ? (
+                      <div className="py-3 text-center text-stone-400"><Loader2 className="animate-spin inline" size={16} /></div>
+                    ) : (
+                      <div className="space-y-1.5">
+                        <div className="flex items-center gap-1.5 flex-wrap text-stone-600">
+                          {movePop.prev.via === 'lag'
+                            ? <><span className={`px-1.5 py-0.5 rounded font-mono text-[11px] ${(movePop.prev.lag_calculado ?? 0) < 0 ? 'bg-amber-100 text-amber-800' : 'bg-emerald-100 text-emerald-800'}`}>lag {(movePop.prev.lag_calculado ?? 0) >= 0 ? '+' : ''}{movePop.prev.lag_calculado}</span> sobre <b>{movePop.prev.predecesora}</b></>
+                            : <span>se fija al día elegido</span>}
+                          <span className="text-stone-400">· queda <b className="text-stone-700">{movePop.prev.fecha_resultante ? fmtD(movePop.prev.fecha_resultante) : '—'}</b></span>
+                        </div>
+                        {movePop.prev.solapa_dias > 0 && <div className="text-[12px] text-amber-700">Se solapa {movePop.prev.solapa_dias} días con {movePop.prev.predecesora}.</div>}
+                        {movePop.prev.limitada_por && <div className="text-[12px] text-amber-700">No llega a la fecha: la limita {movePop.prev.limitada_por}.</div>}
+                        <div className="text-[12px] text-stone-500">Fin del plan: {movePop.prev.fin_antes ? fmtD(movePop.prev.fin_antes) : '—'} → <b className={movePop.prev.fin_despues && movePop.prev.fin_antes && movePop.prev.fin_despues > movePop.prev.fin_antes ? 'text-amber-700' : 'text-stone-700'}>{movePop.prev.fin_despues ? fmtD(movePop.prev.fin_despues) : '—'}</b> · {movePop.prev.n_afectadas} tareas.</div>
+                        <div className="flex justify-end gap-2 pt-1">
+                          <button onClick={() => setMovePop(null)} className="text-stone-500 hover:text-stone-800 px-2 py-1 font-medium">Cancelar</button>
+                          <button onClick={aplicarMovePop} disabled={movePop.busy} className="inline-flex items-center gap-1.5 rounded-lg bg-forest-600 hover:bg-forest-700 disabled:opacity-50 text-white font-semibold px-3 py-1.5">
+                            {movePop.busy ? <Loader2 className="animate-spin" size={13} /> : <Check size={13} />} Mover
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
           </div>
           {tareas.length === 0 && <div className="px-4 py-10 text-center text-stone-400">Sin tareas en este proyecto.</div>}
