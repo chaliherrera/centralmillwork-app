@@ -23,6 +23,9 @@ export interface PortalTokenRow {
   activo: boolean
   created_at: string
   last_access_at: string | null
+  terms_accepted_at: string | null      // fecha/hora en que el cliente aceptó los T&C (null = no aceptó)
+  terms_accepted_ip: string | null      // IP desde donde aceptó
+  terms_accepted_version: string | null // versión del documento aceptado
   expires_at: string | null
   vencido: boolean
   dias_para_vencer: number | null

@@ -245,6 +245,8 @@ export async function listPortalTokensHandler(req: Request, res: Response, next:
       `SELECT id, token, contacto_nombre, contacto_email, activo,
               to_char(created_at,'YYYY-MM-DD') AS created_at,
               to_char(last_access_at,'YYYY-MM-DD"T"HH24:MI') AS last_access_at,
+              to_char(terms_accepted_at,'YYYY-MM-DD"T"HH24:MI') AS terms_accepted_at,
+              terms_accepted_ip, terms_accepted_version,
               to_char(expires_at,'YYYY-MM-DD') AS expires_at,
               (expires_at IS NOT NULL AND expires_at <= NOW()) AS vencido,
               CASE WHEN expires_at IS NULL THEN NULL

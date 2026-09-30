@@ -1,18 +1,24 @@
 import { useEffect, useState } from 'react'
 import clsx from 'clsx'
 import toast from 'react-hot-toast'
-import { Share2, Copy, X, ExternalLink, Plus } from 'lucide-react'
+import { Share2, Copy, X, ExternalLink, Plus, ShieldCheck } from 'lucide-react'
 import { scheduleService, type PortalTokenRow } from '@/services/schedule'
+import { etiquetaPortal, copiarLinkEnmascarado } from '@/utils/portalLink'
 
 const fmt = (d: string | null) => {
   if (!d) return ''
   const [y, m, day] = d.split('-'); return `${day}/${m}/${y.slice(2)}`
 }
+// "2026-09-30T14:05" → "30/09/26 14:05"
+const fmtDT = (d: string | null) => {
+  if (!d) return ''
+  const [date, time] = d.split('T'); return `${fmt(date)}${time ? ' ' + time : ''}`
+}
 
 // Gestión de links del portal para un proyecto: listar, generar (con destinatario
 // + email), copiar, revocar, y ABRIR el portal en vivo (para probar la interacción
 // real). Se usa en la Consola del portal. La misma capacidad existe en el Schedule.
-export default function PortalLinksManager({ proyectoId }: { proyectoId: number }) {
+export default function PortalLinksManager({ proyectoId, proyectoCodigo = '', proyectoNombre = '' }: { proyectoId: number; proyectoCodigo?: string; proyectoNombre?: string }) {
   const [tokens, setTokens] = useState<PortalTokenRow[]>([])
   const [nombre, setNombre] = useState('')
   const [email, setEmail] = useState('')
@@ -30,7 +36,8 @@ export default function PortalLinksManager({ proyectoId }: { proyectoId: number 
       const r = await scheduleService.crearPortalToken(proyectoId, nombre.trim() || undefined, email.trim() || undefined)
       const url = `${window.location.origin}/portal/${r.data.token}`
       setNuevo(url)
-      navigator.clipboard?.writeText(url).then(() => toast.success('Link generado y copiado'), () => toast.success('Link generado'))
+      const ok = await copiarLinkEnmascarado(url, etiquetaPortal(proyectoCodigo, proyectoNombre))
+      toast.success(ok ? 'Link generado y copiado' : 'Link generado')
       setNombre(''); setEmail(''); await load()
     } catch { /* toast */ } finally { setBusy(false) }
   }
@@ -67,11 +74,25 @@ export default function PortalLinksManager({ proyectoId }: { proyectoId: number 
                   {t.contacto_email && <span>{t.contacto_email} · </span>}
                   generado {fmt(t.created_at)} · {t.last_access_at ? 'abierto por el cliente' : 'sin abrir aún'} · {venceTxt}
                 </div>
+                {/* Registro de aceptación de los Términos y Condiciones (quién/cuándo/desde dónde). */}
+                {t.terms_accepted_at ? (
+                  <div className="mt-1.5 inline-flex items-center gap-1.5 text-[11px] text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-md px-2 py-0.5">
+                    <ShieldCheck size={12} className="shrink-0" />
+                    Aceptó los T&C el <b>{fmtDT(t.terms_accepted_at)}</b>
+                    {t.terms_accepted_version && <span className="text-emerald-600">· v{t.terms_accepted_version}</span>}
+                    {t.terms_accepted_ip && <span className="text-emerald-600/80">· IP {t.terms_accepted_ip}</span>}
+                  </div>
+                ) : (
+                  <div className="mt-1.5 text-[11px] text-stone-400">Todavía no aceptó los Términos y Condiciones</div>
+                )}
                 {t.activo && !t.vencido && (
                   <div className="flex items-center gap-3 mt-2">
                     <button onClick={() => window.open(urlDe(t.token), '_blank', 'noopener')}
                             className="inline-flex items-center gap-1 text-xs font-semibold text-forest-700 hover:text-forest-900"><ExternalLink size={13} /> Abrir portal en vivo</button>
-                    <button onClick={() => { navigator.clipboard?.writeText(urlDe(t.token)); toast.success('Link copiado') }}
+                    <button onClick={async () => {
+                              const ok = await copiarLinkEnmascarado(urlDe(t.token), etiquetaPortal(proyectoCodigo, proyectoNombre))
+                              toast.success(ok ? 'Link copiado (pegalo en el email)' : 'No se pudo copiar')
+                            }}
                             className="inline-flex items-center gap-1 text-xs font-medium text-stone-600 hover:text-stone-900"><Copy size={13} /> Copiar link</button>
                     <button onClick={() => revocar(t.id)}
                             className="inline-flex items-center gap-1 text-xs font-medium text-rose-600 hover:text-rose-700"><X size={13} /> Revocar</button>
@@ -100,10 +121,10 @@ export default function PortalLinksManager({ proyectoId }: { proyectoId: number 
         </div>
         {nuevo && (
           <div className="mt-3 rounded-xl border border-forest-200 bg-forest-50/60 p-2.5">
-            <div className="text-[11px] font-semibold text-forest-700 mb-1.5">Link listo (ya copiado):</div>
+            <div className="text-[11px] font-semibold text-forest-700 mb-1.5">Link listo (ya copiado como <b>{etiquetaPortal(proyectoCodigo, proyectoNombre)}</b>):</div>
             <div className="flex gap-2 items-center">
               <input readOnly value={nuevo} onFocus={(e) => e.target.select()} className="input w-full text-xs bg-white" />
-              <button onClick={() => { navigator.clipboard?.writeText(nuevo); toast.success('Copiado') }}
+              <button onClick={async () => { const ok = await copiarLinkEnmascarado(nuevo, etiquetaPortal(proyectoCodigo, proyectoNombre)); toast.success(ok ? 'Copiado' : 'No se pudo copiar') }}
                       className="shrink-0 inline-flex items-center gap-1 rounded-lg bg-forest-600 hover:bg-forest-700 text-white text-xs font-semibold px-2.5 py-2"><Copy size={13} /> Copiar</button>
               <button onClick={() => window.open(nuevo, '_blank', 'noopener')}
                       className="shrink-0 inline-flex items-center gap-1 rounded-lg border border-forest-300 text-forest-700 hover:bg-forest-50 text-xs font-semibold px-2.5 py-2"><ExternalLink size={13} /> Abrir</button>

@@ -503,7 +503,6 @@ function Timeline({ gantt, docs, fotos, planApproved, drawPend, preview, onScrol
               {it.pending && !preview && (
                 <div className="flex gap-2 mt-2">
                   <button onClick={() => onAct('aprobado')} className="text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg px-3 py-1.5">Approve</button>
-                  <button onClick={() => onAct('rechazado')} className="text-xs font-semibold text-stone-600 border border-stone-300 rounded-lg px-3 py-1.5">Request changes</button>
                 </div>
               )}
             </Row>

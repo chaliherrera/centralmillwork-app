@@ -7,6 +7,7 @@ import { ingenieriaService, type IngDealEnCurso } from '@/services/ingenieria'
 import { usePollNovedades } from '@/hooks/usePollNovedades'
 import type { PortalGanttTarea } from '@/services/portal'
 import CronogramaCliente, { ganttDesdePlan } from '@/components/schedule/CronogramaCliente'
+import { etiquetaPortal, copiarLinkEnmascarado } from '@/utils/portalLink'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Handoff Estimados → Cliente → PM. Un mismo tracker, dos vistas:
@@ -193,19 +194,25 @@ export default function DealsEnCurso({ mode, emptyHint }: { mode: 'estimados' | 
                   </span>
                 </div>
               )}
-              {/* Link del portal del cliente: se puede copiar y abrir directo. */}
-              {portalLink && (
-                <div className="mt-2 flex items-center gap-2 flex-wrap rounded-lg border border-stone-200 bg-stone-50 px-3 py-2">
-                  <Link2 size={13} className="text-forest-600 shrink-0" />
-                  <span className="text-[10px] font-bold uppercase tracking-wide text-stone-500 shrink-0">Portal del cliente</span>
-                  <input readOnly value={portalLink} onFocus={(e) => e.currentTarget.select()}
-                    className="flex-1 min-w-[160px] text-[11px] text-stone-600 bg-white border border-stone-200 rounded px-2 py-1" />
-                  <button onClick={() => { navigator.clipboard?.writeText(portalLink); toast.success('Link copiado') }}
-                    className="inline-flex items-center gap-1 text-xs font-semibold text-stone-600 hover:text-stone-900 border border-stone-300 rounded-lg px-2.5 py-1.5">
-                    <Copy size={13} /> Copiar
-                  </button>
-                </div>
-              )}
+              {/* Link del portal del cliente: se copia ENMASCARADO (texto lindo, no la URL cruda)
+                  para pegar en el email. Lo que se muestra acá es la etiqueta que verá el cliente. */}
+              {portalLink && (() => {
+                const etiqueta = etiquetaPortal(d.codigo, d.nombre)
+                return (
+                  <div className="mt-2 flex items-center gap-2 flex-wrap rounded-lg border border-stone-200 bg-stone-50 px-3 py-2">
+                    <Link2 size={13} className="text-forest-600 shrink-0" />
+                    <span className="text-[10px] font-bold uppercase tracking-wide text-stone-500 shrink-0">Portal del cliente</span>
+                    <span className="flex-1 min-w-[160px] text-[12px] font-semibold text-forest-700 truncate" title={portalLink}>{etiqueta}</span>
+                    <button onClick={async () => {
+                        const ok = await copiarLinkEnmascarado(portalLink, etiqueta)
+                        toast.success(ok ? 'Link copiado (pegalo en el email)' : 'No se pudo copiar')
+                      }}
+                      className="inline-flex items-center gap-1 text-xs font-semibold text-stone-600 hover:text-stone-900 border border-stone-300 rounded-lg px-2.5 py-1.5">
+                      <Copy size={13} /> Copiar link
+                    </button>
+                  </div>
+                )
+              })()}
             </div>
           )
         })}

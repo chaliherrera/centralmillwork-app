@@ -54,7 +54,7 @@ export default function PortalConsole() {
 
         {sel && (
           <div className="mt-4 space-y-3">
-            <PortalLinksManager proyectoId={sel.id} />
+            <PortalLinksManager proyectoId={sel.id} proyectoCodigo={sel.codigo} proyectoNombre={sel.nombre} />
             <div className="flex items-start gap-2 text-xs text-stone-500 bg-white border border-card-border rounded-xl px-3 py-2.5">
               <Info size={14} className="text-stone-400 shrink-0 mt-0.5" />
               <span>La vista previa de abajo es <b>de solo lectura</b> — es exactamente lo que ve el cliente. Los links de arriba muestran si el cliente ya abrió su acceso.</span>
