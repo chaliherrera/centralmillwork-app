@@ -22,13 +22,15 @@ export async function copiarLinkEnmascarado(url: string, etiqueta: string): Prom
   try {
     if (navigator.clipboard && (window as any).ClipboardItem) {
       const item = new (window as any).ClipboardItem({
+        // Con formato (Outlook/Gmail): hipervínculo con el nombre lindo.
         'text/html': new Blob([html], { type: 'text/html' }),
-        // El texto plano queda como "Etiqueta — URL" por si lo pegan en un campo sin formato.
-        'text/plain': new Blob([`${etiqueta} — ${url}`], { type: 'text/plain' }),
+        // Sin formato (barra de direcciones, campos planos): la URL REAL, para que
+        // se pueda abrir directo. Si pusiéramos "Etiqueta — URL" no navegaría.
+        'text/plain': new Blob([url], { type: 'text/plain' }),
       })
       await navigator.clipboard.write([item])
       return true
     }
   } catch { /* cae al fallback */ }
-  try { await navigator.clipboard?.writeText(`${etiqueta} — ${url}`); return true } catch { return false }
+  try { await navigator.clipboard?.writeText(url); return true } catch { return false }
 }
