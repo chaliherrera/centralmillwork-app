@@ -246,6 +246,9 @@ export const ingenieriaService = {
   // Mover una tarea a una fecha de inicio escrita (calcula el lag). dry_run = previsualizar.
   moverFecha: (tareaId: number, fecha_inicio: string, dry_run = false) =>
     api.post<ApiResponse<MoverFechaResult>>(`/ingenieria/tarea/${tareaId}/mover-fecha`, { fecha_inicio, dry_run }).then((r) => r.data),
+  // Modo manual: soltar los pisos de disponibilidad del ingeniero para armar el plan a mano.
+  liberarPisos: (ext: string) =>
+    api.post<ApiResponse<{ ok: boolean; liberadas: number; fin_proyectado: string | null }>>(`/ingenieria/proyecto/${encodeURIComponent(ext)}/liberar-pisos`).then((r) => r.data),
   // Gate del depósito: el PM lo abre/cierra a mano (la confirmación de Finanzas se lee sola)
   overrideDeposito: (proyectoExt: string, abrir: boolean) =>
     api.post<ApiResponse<EstadoDeposito>>(`/ingenieria/proyecto/${encodeURIComponent(proyectoExt)}/deposito`, { abrir }).then((r) => r.data),

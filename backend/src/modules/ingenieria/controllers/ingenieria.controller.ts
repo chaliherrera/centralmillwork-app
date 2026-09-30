@@ -12,7 +12,7 @@ import {
   crearTarea, actualizarTarea, reportarAvance, getPlanProyecto,
   borrarTareaConReconexion, agregarDep, borrarDep, listReprogramaciones, recomputarYGuardar,
   reabrirShopDrawingsPorRechazo, cerrarGatePorAprobacion, cerrarReleasePorSdUpdate,
-  aplicarCambiosDeps, moverTarea, moverTareaAFecha, reasignarIngeniero, reordenarVisual,
+  aplicarCambiosDeps, moverTarea, moverTareaAFecha, liberarPisosProyecto, reasignarIngeniero, reordenarVisual,
 } from '../domain/tareas'
 import { listReservasPendientes, liberarReserva } from '../domain/reservas'
 import { listIngenieros, actualizarIngeniero } from '../domain/ingenieros'
@@ -443,6 +443,19 @@ export async function moverTareaAFechaHandler(req: Request, res: Response, next:
     if (dryRun || !r.ok) await client.query('ROLLBACK')
     else await client.query('COMMIT')
     if (!r.ok) return next(createError(r.error ?? 'no se pudo mover la tarea', 400))
+    res.json({ data: r })
+  } catch (e) { await client.query('ROLLBACK').catch(() => {}); next(e) } finally { client.release() }
+}
+// POST /api/ingenieria/proyecto/:ext/liberar-pisos — modo manual: suelta los pisos de
+// disponibilidad del ingeniero del proyecto para armar el schedule a mano.
+export async function liberarPisosHandler(req: Request, res: Response, next: NextFunction) {
+  const client = await pool.connect()
+  try {
+    const ext = String(req.params.ext)
+    await client.query('BEGIN')
+    await client.query('SELECT id FROM proyectos WHERE codigo = $1 FOR UPDATE', [ext])
+    const r = await liberarPisosProyecto(client, ext)
+    await client.query('COMMIT')
     res.json({ data: r })
   } catch (e) { await client.query('ROLLBACK').catch(() => {}); next(e) } finally { client.release() }
 }

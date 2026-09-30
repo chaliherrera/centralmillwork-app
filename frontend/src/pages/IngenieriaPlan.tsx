@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
-import { Users, Layers, ClipboardList, Plus, X, Loader2, Trash2, Gauge, Check, FolderKanban, Activity, AlertTriangle, Wallet, Lock, LockOpen, FlaskConical, Package, Wrench, CalendarClock, ChevronUp, ChevronDown, GripVertical, Split } from 'lucide-react'
+import { Users, Layers, ClipboardList, Plus, X, Loader2, Trash2, Gauge, Check, FolderKanban, Activity, AlertTriangle, Wallet, Lock, LockOpen, FlaskConical, Package, Wrench, CalendarClock, ChevronUp, ChevronDown, GripVertical, Split, Hand } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { ingenieriaService, type IngProyecto, type IngTarea, type TareaInput, type IngPlan, type IngTareaPlan, type IngArista, type IngCarga, type IngTareaCelda, type InstalacionDetalle, type MoverFechaResult } from '@/services/ingenieria'
 import MapaEtapas from '@/components/modules/ingenieria/MapaEtapas'
@@ -307,6 +307,15 @@ export function VistaDisponibilidad({ carga, foco, ruta }: { carga: IngCarga | n
 function VistaProyecto({ proyectos, all, plan, planLoading, sel, setSel, onEdit, onRefresh }: { proyectos: IngProyecto[]; all: IngTarea[]; plan: IngPlan | null; planLoading: boolean; sel: string; setSel: (s: string) => void; onEdit: (t: IngTarea | 'new') => void; onRefresh: () => void }) {
   const loadingPlan = planLoading
   const [depBusy, setDepBusy] = useState(false)
+  const [manualBusy, setManualBusy] = useState(false)
+  // Modo manual: suelta los pisos de disponibilidad del ingeniero para armar el plan a mano.
+  const modoManual = async () => {
+    if (!window.confirm('¿Activar modo manual en este proyecto?\n\nSe sueltan los pisos de disponibilidad del ingeniero (podrás poner las tareas antes de que se libere). Se mantienen las dependencias y los gates reales (depósito/compras). El heatmap puede mostrar al ingeniero sobrecargado — es tu decisión manual. Se revierte al regenerar el plan.')) return
+    setManualBusy(true)
+    try { const r = await ingenieriaService.liberarPisos(sel); toast.success(`Modo manual activado (${r.data.liberadas} tareas liberadas)`); await onRefresh() }
+    catch (e: any) { toast.error(e?.response?.data?.message || 'No se pudo activar el modo manual') }
+    finally { setManualBusy(false) }
+  }
   async function toggleDeposito(abrir: boolean) {
     if (!sel) return
     setDepBusy(true)
@@ -450,6 +459,11 @@ function VistaProyecto({ proyectos, all, plan, planLoading, sel, setSel, onEdit,
         <span className="text-xs text-stone-400 inline-flex items-center gap-1"><Users size={13} /> {ingenieros.length ? ingenieros.join(', ') : 'sin responsables'}</span>
         {/* Cambiar ingeniero en cualquier etapa (reasigna todo + recalcula vs la entrega fija). */}
         <CambiarIngeniero proyectoExt={sel} propuesto={propuesto} onDone={onRefresh} label="Cambiar ingeniero" />
+        <button onClick={modoManual} disabled={manualBusy}
+          title="Suelta los pisos de disponibilidad del ingeniero para armar el schedule a mano (respeta dependencias y gates reales)"
+          className="inline-flex items-center gap-1.5 rounded-lg border border-amber-300 text-amber-800 hover:bg-amber-50 disabled:opacity-50 text-sm font-semibold px-3 py-1.5">
+          {manualBusy ? <Loader2 className="animate-spin" size={15} /> : <Hand size={15} />} Modo manual
+        </button>
         <button onClick={() => setCronoOpen(true)} className="ml-auto inline-flex items-center gap-1.5 rounded-lg border border-forest-200 text-forest-700 hover:bg-forest-50 text-sm font-semibold px-3 py-1.5"><CalendarClock size={15} /> Cronograma cliente</button>
         <button onClick={() => onEdit('new')} className="inline-flex items-center gap-1.5 rounded-lg bg-forest-600 hover:bg-forest-700 text-white text-sm font-semibold px-3 py-1.5"><Plus size={15} /> Nueva tarea</button>
       </div>

@@ -1182,3 +1182,18 @@ export async function moverTareaAFecha(
   if (!dryRun) await recomputarYGuardar(runner, ext)
   return { ok: true, dryRun, fecha_actual, fecha_pedida: fechaInicio, fecha_resultante, lag_calculado, predecesora, via, solapa_dias, limitada_por, fin_antes, fin_despues: plan2.fin_proyectado, n_afectadas }
 }
+
+// ── Modo manual: soltar los pisos de disponibilidad del ingeniero de un proyecto ──────────
+/** Libera el piso `no_antes_de` (la disponibilidad del ingeniero / la cola) de las tareas
+ *  EDITABLES del proyecto, para que el PM arme el schedule a mano sin que la cola del
+ *  ingeniero las tope. Solo afecta a ESTE proyecto. Los gates reales (depósito/compras) NO
+ *  se tocan (se calculan aparte en pisoTarea). Recalcula al terminar. Se revierte al regenerar. */
+export async function liberarPisosProyecto(runner: QueryRunner, proyectoExt: string): Promise<{ ok: boolean; liberadas: number; fin_proyectado: string | null }> {
+  const r = await runner.query(
+    `UPDATE ing_tareas SET no_antes_de = NULL, updated_at = NOW()
+      WHERE proyecto_ext = $1 AND origen IN ('sugerencia','app') AND estado NOT IN ('hecha','na') AND no_antes_de IS NOT NULL`,
+    [proyectoExt])
+  await recomputarYGuardar(runner, proyectoExt)
+  const plan = await getPlanProyecto(runner, proyectoExt)
+  return { ok: true, liberadas: r.rowCount ?? 0, fin_proyectado: plan.fin_proyectado }
+}
