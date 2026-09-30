@@ -7,6 +7,13 @@ import {
   Lock, FileText, RefreshCw, ClipboardList, Minus,
 } from 'lucide-react'
 import { portalService, type PortalVista, type Decision } from '@/services/portal'
+import TermsContent from './TermsContent'
+
+// PRY-2026-618 → 26-618 (año de 2 dígitos + número). Otros códigos (ej. 26-588) se usan tal cual.
+function codigoCliente(codigo: string): string {
+  const m = /^PRY-\d{2}(\d{2})-(\d+)$/.exec(codigo || '')
+  return m ? `${m[1]}-${m[2]}` : (codigo || '')
+}
 
 // The portal is English (US clients). Internal app stays Spanish.
 const DECISION_LABEL: Record<Decision, { t: string; c: string }> = {
@@ -52,6 +59,14 @@ export default function ClientPortal({ previewProyectoId }: { previewProyectoId?
   const [action, setAction] = useState<{ codigo: string; titulo: string; decision: Decision } | null>(null)
   const [comentario, setComentario] = useState('')
   const [busy, setBusy] = useState(false)
+  const [showTerms, setShowTerms] = useState(false)       // modal "View terms"
+  const [aceptando, setAceptando] = useState(false)       // aceptando T&C
+  const aceptarTerminos = async () => {
+    setAceptando(true)
+    try { await portalService.aceptarTerminos(token); await load(true) }
+    catch { toast.error('Could not record your acceptance. Please try again.') }
+    finally { setAceptando(false) }
+  }
 
   async function load(silent = false) {
     if (!silent) setLoading(true)
@@ -78,6 +93,14 @@ export default function ClientPortal({ previewProyectoId }: { previewProyectoId?
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token, previewProyectoId])
 
+  // #1: el título de la pestaña (y lo que se ve al compartir el link) = "26-618 Preston Plaza PROJECT SCHEDULE".
+  useEffect(() => {
+    if (data && !preview) {
+      const cod = codigoCliente(data.proyecto.codigo)
+      document.title = `${cod ? cod + ' ' : ''}${data.proyecto.nombre} PROJECT SCHEDULE`
+    }
+  }, [data, preview])
+
   async function confirmar() {
     if (!action) return
     setBusy(true)
@@ -102,6 +125,39 @@ export default function ClientPortal({ previewProyectoId }: { previewProyectoId?
       </div>
     </Centered>
   )
+
+  // #2: barrera de Términos y Condiciones — antes de ver el plan, el cliente los acepta.
+  //     Una vez aceptado (queda registrado en el token), no vuelve a aparecer. En preview no aplica.
+  if (!preview && !data.terms_accepted_at) {
+    const cod = codigoCliente(data.proyecto.codigo)
+    return (
+      <div className="min-h-screen bg-[#F6F4EE] text-stone-800">
+        <div className="bg-forest-600 text-white">
+          <div className="max-w-[1120px] mx-auto px-5 py-3 flex items-center gap-2.5">
+            <img src="/logo_cm_login.png" alt="" className="h-7 w-auto object-contain" />
+            <span className="font-semibold tracking-tight">Central Millwork</span>
+          </div>
+        </div>
+        <div className="max-w-[680px] mx-auto px-5 py-10">
+          <div className="text-[13px] font-semibold text-forest-700">{cod ? cod + ' · ' : ''}Project Schedule</div>
+          <h1 className="text-2xl font-bold text-stone-900 mt-0.5">{data.proyecto.nombre}</h1>
+          <div className="mt-6 rounded-2xl border border-card-border bg-white shadow-[0_1px_3px_rgba(31,27,20,0.04)] p-6">
+            <div className="flex items-center gap-2 text-forest-700"><FileText size={18} /><h2 className="font-semibold text-[16px]">Terms &amp; Conditions</h2></div>
+            <p className="text-sm text-stone-600 mt-2">Before viewing your proposed project schedule, please review and accept Central Millwork's Terms &amp; Conditions.</p>
+            <button onClick={() => setShowTerms(true)} className="mt-3 inline-flex items-center gap-1.5 text-sm font-semibold text-forest-700 hover:text-forest-800 underline"><FileText size={14} /> View Terms &amp; Conditions</button>
+            <div className="mt-5">
+              <button onClick={aceptarTerminos} disabled={aceptando}
+                className="inline-flex items-center gap-1.5 text-sm font-semibold text-white bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 rounded-lg px-4 py-2.5">
+                {aceptando ? 'Saving…' : <><Check size={15} /> I accept — view my schedule</>}
+              </button>
+            </div>
+            <p className="text-[11px] text-stone-400 mt-3">By accepting, you confirm you have read and agree to the Terms &amp; Conditions. Your acceptance is recorded with the date and time.</p>
+          </div>
+        </div>
+        {showTerms && <TermsModal onClose={() => setShowTerms(false)} />}
+      </div>
+    )
+  }
 
   const N = data.momentos.length
   const idxNow = data.momentos.findIndex((m) => m.estado === 'now')
@@ -128,7 +184,8 @@ export default function ClientPortal({ previewProyectoId }: { previewProyectoId?
         {/* project header */}
         <div>
           {data.contacto && <div className="text-sm text-stone-500">Hello, {data.contacto}</div>}
-          <h1 className="text-2xl font-bold text-stone-900 mt-0.5">{data.proyecto.nombre}</h1>
+          <div className="text-[13px] font-semibold text-forest-700 mt-0.5">{codigoCliente(data.proyecto.codigo)}{codigoCliente(data.proyecto.codigo) ? ' · ' : ''}Project Schedule</div>
+          <h1 className="text-2xl font-bold text-stone-900">{data.proyecto.nombre}</h1>
           <div className="mt-3 flex flex-wrap items-center gap-3">
             <div className="rounded-xl border border-card-border bg-white px-4 py-2.5">
               <div className="text-[11px] uppercase tracking-wider text-stone-400 font-medium flex items-center gap-1"><CalendarClock size={12} /> Estimated delivery</div>
@@ -203,7 +260,7 @@ export default function ClientPortal({ previewProyectoId }: { previewProyectoId?
                 <ClipboardList size={16} /> {planPend ? 'Review & approve your project plan' : 'Your project plan'}
               </h2>
               <p className="text-xs text-stone-400 mt-0.5">
-                {planPend ? 'This is the proposed schedule for your project. Please review it and approve, or request changes.' : 'The agreed schedule for your project.'}
+                {planPend ? 'This is the proposed schedule for your project. Please review it and approve.' : 'The agreed schedule for your project.'}
               </p>
             </div>
             <div className="px-4 pt-3.5 pb-1 flex items-center gap-2 text-sm">
@@ -224,14 +281,10 @@ export default function ClientPortal({ previewProyectoId }: { previewProyectoId?
                         className="inline-flex items-center gap-1.5 text-sm font-medium text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg px-4 py-2">
                   <ThumbsUp size={15} /> Approve the plan
                 </button>
-                <button onClick={() => openAction('PLAN', 'your project plan', 'rechazado')}
-                        className="inline-flex items-center gap-1.5 text-sm font-medium text-rose-600 hover:text-rose-700 border border-rose-200 rounded-lg px-3.5 py-2">
-                  <X size={15} /> Request changes
-                </button>
               </div>
             )}
             {planPend && preview && (
-              <div className="px-4 py-3 border-t border-stone-100 text-[11px] text-stone-400 italic">Preview — the client would approve or request changes to the plan here.</div>
+              <div className="px-4 py-3 border-t border-stone-100 text-[11px] text-stone-400 italic">Preview — the client would approve the plan here.</div>
             )}
           </div>
           {/* YOUR DECISIONS — debajo del plan/Gantt, misma columna */}
@@ -284,8 +337,13 @@ export default function ClientPortal({ previewProyectoId }: { previewProyectoId?
           </div>
         </div>
 
-        <p className="text-center text-xs text-stone-400 pt-6">Central Millwork · This tracker updates automatically.</p>
+        <p className="text-center text-xs text-stone-400 pt-6">
+          Central Millwork · This tracker updates automatically ·{' '}
+          <button onClick={() => setShowTerms(true)} className="underline hover:text-stone-600">Terms &amp; Conditions</button>
+        </p>
       </div>
+
+      {showTerms && <TermsModal onClose={() => setShowTerms(false)} />}
 
       {/* confirm modal */}
       {action && (
@@ -494,4 +552,19 @@ function Row({ status, last, dot, children }: { status: 'done' | 'now' | 'up'; l
 
 function Centered({ children }: { children: React.ReactNode }) {
   return <div className="min-h-screen bg-[#F6F4EE] flex items-center justify-center p-6">{children}</div>
+}
+
+function TermsModal({ onClose }: { onClose: () => void }) {
+  return (
+    <div className="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-[60]" onClick={onClose}>
+      <div className="bg-white rounded-2xl max-w-2xl w-full max-h-[85vh] flex flex-col shadow-xl" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center gap-2 px-5 py-3.5 border-b border-stone-100 shrink-0">
+          <FileText size={18} className="text-forest-600" />
+          <h3 className="font-semibold text-stone-800">Terms &amp; Conditions</h3>
+          <button onClick={onClose} className="ml-auto text-stone-400 hover:text-stone-700"><X size={18} /></button>
+        </div>
+        <div className="overflow-y-auto px-5 py-4"><TermsContent /></div>
+      </div>
+    </div>
+  )
 }

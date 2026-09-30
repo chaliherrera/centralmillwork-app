@@ -27,8 +27,9 @@ export interface PortalFase {
   estado: 'done' | 'now' | 'future'; n_done: number; n_total: number
 }
 export interface PortalVista {
-  proyecto: { nombre: string; cliente: string; fecha_objetivo: string | null; semaforo: string }
+  proyecto: { nombre: string; codigo: string; cliente: string; fecha_objetivo: string | null; semaforo: string }
   contacto: string | null
+  terms_accepted_at: string | null   // null = el cliente no aceptó los T&C todavía
   momentos: PortalMomento[]
   pendientes: Array<{ codigo: string; titulo: string; fecha_planeada: string | null; documento_url?: string | null }>
   gantt: PortalGanttTarea[]
@@ -51,4 +52,8 @@ export const portalService = {
   aprobar: (token: string, codigo: string, decision: Decision, comentario?: string) =>
     api.post<ApiResponse<{ ok: boolean }>>(`/portal/${token}/aprobar`, { codigo, decision, comentario })
       .then((r) => r.data),
+
+  // El cliente acepta los T&C (registra fecha/IP/navegador en el backend).
+  aceptarTerminos: (token: string) =>
+    api.post<ApiResponse<{ ok: boolean; terms_accepted_at: string | null }>>(`/portal/${token}/accept-terms`).then((r) => r.data),
 }

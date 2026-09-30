@@ -77,6 +77,7 @@ export type Decision = 'aprobado' | 'aprobado_con_comentarios' | 'rechazado'
 export interface TokenInfo {
   proyectoId: number
   contactoNombre: string | null
+  termsAcceptedAt: string | null
 }
 
 // Vida por defecto de un link nuevo del portal (días). Cubre proyectos típicos;
@@ -135,18 +136,38 @@ export async function revocarToken(runner: QueryRunner, proyectoId: number, toke
 
 /** Valida un token activo y devuelve a qué proyecto/contacto corresponde. */
 export async function resolverToken(runner: QueryRunner, token: string): Promise<TokenInfo | null> {
-  const { rows } = await runner.query<{ proyecto_id: number; contacto_nombre: string | null }>(
-    `SELECT proyecto_id, contacto_nombre FROM schedule_portal_tokens
+  const { rows } = await runner.query<{ proyecto_id: number; contacto_nombre: string | null; terms_accepted_at: string | null }>(
+    `SELECT proyecto_id, contacto_nombre, to_char(terms_accepted_at,'YYYY-MM-DD"T"HH24:MI:SS') AS terms_accepted_at
+       FROM schedule_portal_tokens
       WHERE token = $1 AND activo = true AND (expires_at IS NULL OR expires_at > NOW())`,
     [token])
   if (!rows[0]) return null
   await runner.query(`UPDATE schedule_portal_tokens SET last_access_at = NOW() WHERE token = $1`, [token])
-  return { proyectoId: rows[0].proyecto_id, contactoNombre: rows[0].contacto_nombre }
+  return { proyectoId: rows[0].proyecto_id, contactoNombre: rows[0].contacto_nombre, termsAcceptedAt: rows[0].terms_accepted_at }
+}
+
+/** Registra la aceptación de los T&C de un token (constancia simple: fecha, IP, navegador,
+ *  versión). COALESCE preserva la PRIMERA aceptación (clicks repetidos no la pisan). */
+export async function registrarAceptacionTerminos(
+  runner: QueryRunner, token: string, ip: string | null, ua: string | null, version: string,
+): Promise<{ ok: boolean; error?: string; terms_accepted_at?: string | null }> {
+  const { rows } = await runner.query<{ ts: string }>(
+    `UPDATE schedule_portal_tokens
+        SET terms_accepted_at      = COALESCE(terms_accepted_at, NOW()),
+            terms_accepted_ip      = COALESCE(terms_accepted_ip, $2),
+            terms_accepted_ua      = COALESCE(terms_accepted_ua, $3),
+            terms_accepted_version = COALESCE(terms_accepted_version, $4)
+      WHERE token = $1 AND activo = true AND (expires_at IS NULL OR expires_at > NOW())
+      RETURNING to_char(terms_accepted_at,'YYYY-MM-DD"T"HH24:MI:SS') AS ts`,
+    [token, ip, ua, version])
+  return rows[0] ? { ok: true, terms_accepted_at: rows[0].ts } : { ok: false, error: 'Invalid or expired link.' }
 }
 
 export interface VistaPublica {
-  proyecto: { nombre: string; cliente: string; fecha_objetivo: string | null; semaforo: string }
+  proyecto: { nombre: string; codigo: string; cliente: string; fecha_objetivo: string | null; semaforo: string }
   contacto: string | null
+  // Aceptación de T&C de ESTE token (null = no aceptó todavía → el portal muestra la barrera).
+  terms_accepted_at: string | null
   // El recorrido del cliente: sus momentos, con estado en el camino.
   // 'na' = no aplica a este proyecto (no bloquea el journey).
   momentos: Array<{ codigo: string; label: string; tipo: 'accion' | 'estado'; estado: 'done' | 'now' | 'future' | 'na'; fecha: string | null }>
@@ -176,7 +197,9 @@ export interface VistaPublica {
 export async function getVistaPublica(runner: QueryRunner, token: string): Promise<VistaPublica | null> {
   const info = await resolverToken(runner, token)
   if (!info) return null
-  return armarVistaPublica(runner, info.proyectoId, info.contactoNombre)
+  const vista = await armarVistaPublica(runner, info.proyectoId, info.contactoNombre)
+  if (vista) vista.terms_accepted_at = info.termsAcceptedAt
+  return vista
 }
 
 /** Arma la vista del portal a partir del proyecto (sin token). La usan el portal
@@ -186,8 +209,8 @@ export async function armarVistaPublica(
 ): Promise<VistaPublica | null> {
   const info = { proyectoId, contactoNombre }
 
-  const { rows: pr } = await runner.query<{ nombre: string; cliente: string; fo: string | null; semaforo: string; deal_estado: string }>(
-    `SELECT p.nombre, p.cliente, p.deal_estado,
+  const { rows: pr } = await runner.query<{ nombre: string; codigo: string; cliente: string; fo: string | null; semaforo: string; deal_estado: string }>(
+    `SELECT p.nombre, p.codigo, p.cliente, p.deal_estado,
             -- El cliente ve la fecha COMUNICADA (fecha_cliente); la interna del PM no filtra.
             to_char(COALESCE(sp.fecha_cliente, sp.fecha_objetivo),'YYYY-MM-DD') AS fo, sp.semaforo
        FROM proyectos p
@@ -364,7 +387,8 @@ export async function armarVistaPublica(
   }
 
   return {
-    proyecto: { nombre: pr[0].nombre, cliente: pr[0].cliente, fecha_objetivo: pr[0].fo, semaforo: pr[0].semaforo },
+    proyecto: { nombre: pr[0].nombre, codigo: pr[0].codigo, cliente: pr[0].cliente, fecha_objetivo: pr[0].fo, semaforo: pr[0].semaforo },
+    terms_accepted_at: null,   // lo completa getVistaPublica desde el token (en preview de admin queda null)
     contacto: info.contactoNombre,
     momentos,
     pendientes: [...planPendiente, ...pendientes],
