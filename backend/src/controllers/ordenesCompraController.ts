@@ -244,9 +244,7 @@ export async function getOrdenCompraMaterialesLote(req: Request, res: Response, 
       [ocId]
     )
 
-    if (batchRows.length > 0) return res.json({ data: batchRows })
-
-    // Fallback: items explicitly added to this OC via items_orden_compra
+    // La lista REAL de ítems de la OC (items_orden_compra) es la fuente autoritativa.
     const { rows: itemRows } = await pool.query(
       `SELECT m.id, m.item, m.codigo, m.vendor_code, m.vendor,
               m.descripcion, m.color, m.manufacturer, m.categoria,
@@ -259,7 +257,14 @@ export async function getOrdenCompraMaterialesLote(req: Request, res: Response, 
       [ocId]
     )
 
-    res.json({ data: itemRows })
+    // Preferimos los ítems explícitos de la OC; solo caemos a la inferencia por lote
+    // si la OC no los tiene (OCs viejas del workflow generarOCs). Antes era al revés:
+    // en una OC con una importación POSTERIOR del mismo proyecto+proveedor, la
+    // inferencia por lote devolvía materiales equivocados — la recepción mostraba un
+    // ítem que no era de la OC (bug detectado en OC-2026-0382).
+    if (itemRows.length > 0) return res.json({ data: itemRows })
+
+    res.json({ data: batchRows })
   } catch (err) { next(err) }
 }
 
