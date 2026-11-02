@@ -586,17 +586,38 @@ export async function getMaterialesTimeline(req: Request, res: Response, next: N
           WHERE rm.recibido = true AND r.fecha_recepcion IS NOT NULL
             AND rm.id_material IN (SELECT id FROM mats)
           GROUP BY rm.id_material
+       ),
+       -- Eventos reales (Paso 2): fechas EXACTAS de cada transición de estado.
+       ev AS (
+         SELECT material_id AS id,
+                MIN(fecha) FILTER (WHERE evento = 'COTIZADO') AS f_precio,
+                MIN(fecha) FILTER (WHERE evento = 'ORDENADO') AS f_ordenado,
+                MIN(fecha) FILTER (WHERE evento = 'RECIBIDO') AS f_recibido
+           FROM materiales_eventos
+          WHERE material_id IN (SELECT id FROM mats)
+          GROUP BY material_id
+       ),
+       -- OC a la que pertenece el material (la más temprana) — para linkear a fotos/recepción.
+       ocinfo AS (
+         SELECT DISTINCT ON (ioc.material_id) ioc.material_id AS id, oc.id AS oc_id, oc.numero AS oc_numero
+           FROM items_orden_compra ioc JOIN ordenes_compra oc ON oc.id = ioc.orden_compra_id
+          WHERE ioc.material_id IN (SELECT id FROM mats)
+          ORDER BY ioc.material_id, oc.fecha_emision ASC NULLS LAST
        )
        SELECT m.id, m.codigo, m.descripcion, m.item, m.vendor, m.estado_cotiz, m.qty,
               (COALESCE(m.unit_price, 0) > 0) AS tiene_precio,
+              ocinfo.oc_id, ocinfo.oc_numero,
               to_char(COALESCE(m.fecha_importacion, m.created_at), 'YYYY-MM-DD') AS importado,
               to_char(cot.fecha, 'YYYY-MM-DD') AS cotizado,
-              to_char(ord.fecha, 'YYYY-MM-DD') AS ordenado,
-              to_char(rec.fecha, 'YYYY-MM-DD') AS recibido
+              to_char(ev.f_precio::date, 'YYYY-MM-DD') AS con_precio,
+              to_char(COALESCE(ev.f_ordenado::date, ord.fecha), 'YYYY-MM-DD') AS ordenado,
+              to_char(COALESCE(ev.f_recibido::date, rec.fecha), 'YYYY-MM-DD') AS recibido
          FROM mats m
          LEFT JOIN cot ON cot.id = m.id
          LEFT JOIN ord ON ord.id = m.id
          LEFT JOIN rec ON rec.id = m.id
+         LEFT JOIN ev  ON ev.id  = m.id
+         LEFT JOIN ocinfo ON ocinfo.id = m.id
         ORDER BY m.item NULLS LAST, m.codigo, m.id`,
       [proyectoId]
     )

@@ -144,8 +144,11 @@ export interface MaterialTimeline {
   estado_cotiz: string | null
   qty: string | number | null
   tiene_precio: boolean
+  oc_id: number | null
+  oc_numero: string | null
   importado: string | null
   cotizado: string | null
+  con_precio: string | null
   ordenado: string | null
   recibido: string | null
 }

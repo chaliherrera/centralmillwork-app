@@ -1774,8 +1774,10 @@ function TimelineTab({ proyectoId }: { proyectoId: number }) {
   }, [rows, search])
 
   // fecha de cada etapa: null = no alcanzada; '' = alcanzada sin fecha (con precio histórico)
-  const dateOf = (r: MaterialTimeline, key: string): string | null =>
-    key === 'precio' ? (r.tiene_precio ? '' : null) : ((r as unknown as Record<string, string | null>)[key] ?? null)
+  const dateOf = (r: MaterialTimeline, key: string): string | null => {
+    if (key === 'precio') return r.con_precio ?? (r.tiene_precio ? '' : null)
+    return (r as unknown as Record<string, string | null>)[key] ?? null
+  }
 
   // Agrupar por vendor (alfabético, 'Sin vendor' al final).
   const vendorGroups = useMemo(() => {
@@ -1811,8 +1813,9 @@ function TimelineTab({ proyectoId }: { proyectoId: number }) {
             const done = date !== null
             const isCur = i === reachedIdx
             const isRec = s.key === 'recibido'
-            return (
-              <div key={s.key} className="relative z-10 text-center">
+            const linkable = done && !!r.oc_id && (s.key === 'ordenado' || s.key === 'recibido')
+            const inner = (
+              <>
                 <div className={clsx(
                   'w-[22px] h-[22px] rounded-full mx-auto flex items-center justify-center text-[11px] font-bold leading-none',
                   done ? (isRec ? 'bg-emerald-500 text-white' : 'bg-forest-600 text-white') : 'bg-white border-[1.5px] border-gray-300',
@@ -1820,9 +1823,19 @@ function TimelineTab({ proyectoId }: { proyectoId: number }) {
                 )}>
                   {done ? '✓' : ''}
                 </div>
-                <div className={clsx('text-[11px] mt-2', done ? (isCur ? 'font-semibold text-gray-700' : 'text-gray-500') : 'text-gray-300')}>
+                <div className={clsx('text-[11px] mt-2', done ? (isCur ? 'font-semibold text-gray-700' : 'text-gray-500') : 'text-gray-300', linkable && 'underline decoration-dotted underline-offset-2')}>
                   {done ? (date ? tlShort(date) : 'listo') : '—'}
                 </div>
+                {linkable && isRec && r.oc_numero && (
+                  <div className="text-[10px] text-forest-600 mt-0.5 truncate px-1">{r.oc_numero}</div>
+                )}
+              </>
+            )
+            return (
+              <div key={s.key} className="relative z-10 text-center">
+                {linkable
+                  ? <Link to={`/ordenes-compra?ocId=${r.oc_id}`} title={`Ver ${r.oc_numero ?? 'la OC'} — fotos y recepción`} className="block hover:opacity-80 transition-opacity">{inner}</Link>
+                  : inner}
               </div>
             )
           })}
