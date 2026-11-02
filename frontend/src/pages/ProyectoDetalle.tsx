@@ -3,7 +3,7 @@ import { useParams, Link } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import {
   ArrowLeft, Package, ShoppingCart, Warehouse, Clock, AlertTriangle,
-  Activity, BarChart3, Calendar, CalendarDays, User, DollarSign,
+  Activity, BarChart3, Calendar, CalendarDays, User,
   CheckCircle2, AlertCircle, MessageSquare, Truck, Layers, FileText,
   ChevronLeft, ChevronRight, ChevronDown, ChevronRight as ChevronRightSm,
   Hammer, Beaker, Download, ExternalLink,
@@ -49,7 +49,7 @@ type TabKey = 'materiales' | 'kanban' | 'timeline' | 'items' | 'ocs' | 'recepcio
 export default function ProyectoDetalle() {
   const { id } = useParams<{ id: string }>()
   const proyectoId = parseInt(id ?? '0')
-  const [tab, setTab] = useState<TabKey>('materiales')
+  const [tab, setTab] = useState<TabKey>('timeline')
 
   const { data: resumenData, isLoading } = useQuery({
     queryKey: ['proyecto-detalle', proyectoId, 'resumen'],
@@ -57,6 +57,16 @@ export default function ProyectoDetalle() {
     enabled: !!proyectoId,
     staleTime: 15_000,
   })
+
+  // Avance del proyecto (reemplaza los KPI): se arma con la MISMA query que la
+  // pestaña Línea de tiempo (React Query la comparte, una sola llamada).
+  const { data: tlData } = useQuery({
+    queryKey: ['proyecto-detalle', proyectoId, 'materiales-timeline'],
+    queryFn: () => proyectosService.getMaterialesTimeline(proyectoId),
+    enabled: !!proyectoId,
+    staleTime: 30_000,
+  })
+  const tlRows: MaterialTimeline[] = tlData?.data ?? []
 
   if (isLoading || !resumenData?.data) {
     return (
@@ -106,20 +116,8 @@ export default function ProyectoDetalle() {
         </div>
       </div>
 
-      {/* ── KPI Strip ── */}
-      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
-        <KpiCard icon={Package}      label="Materiales"   value={mat.total}      tone="forest" />
-        <KpiCard icon={Clock}        label="Pendientes"   value={mat.pendientes} tone="yellow"
-          hint={mat.pendientes > 0 ? `${fmt(Number(mat.monto_total) - Number(mat.monto_comprado))} sin orden` : undefined} />
-        <KpiCard icon={ShoppingCart} label="Ordenados"    value={mat.ordenados}  tone="purple" />
-        <KpiCard icon={Warehouse}    label="Recibidos"    value={mat.recibidos}  tone="emerald"
-          hint={Number(mat.monto_recibido) > 0 ? fmt(mat.monto_recibido) : undefined} />
-        <KpiCard icon={Layers}       label="OCs"          value={oc.total}       tone="cyan"
-          hint={oc.vencidas > 0 ? `${oc.vencidas} vencidas` : undefined}
-          hintTone={oc.vencidas > 0 ? 'red' : undefined} />
-        <KpiCard icon={DollarSign}   label="Gastado"      value={fmt(oc.monto_total) as any} tone="gold"
-          hint={Number(oc.freight_total) > 0 ? `Freight: ${fmt(oc.freight_total)}` : undefined} />
-      </div>
+      {/* ── Avance del proyecto (reemplaza los KPI) ── */}
+      <AvanceStrip rows={tlRows} />
 
       {/* ── Alertas / Sub-resumen ── */}
       {(mat.origen_directa + mat.origen_urgente > 0 || oc.vencidas > 0) && (
@@ -189,49 +187,6 @@ export default function ProyectoDetalle() {
       {tab === 'schedule'    && <ScheduleTab    proyectoId={proyectoId} />}
       {tab === 'calendar'    && <CalendarTab    proyectoId={proyectoId} proyectoNombre={proyecto.nombre} />}
       {tab === 'graficas'    && <GraficasTab    kpis={kpis} presupuesto={Number(proyecto.presupuesto)} />}
-    </div>
-  )
-}
-
-// ──────────────────────────────────────────────────────────────────────────────
-// KPI Card
-// ──────────────────────────────────────────────────────────────────────────────
-function KpiCard({
-  icon: Icon, label, value, tone, hint, hintTone,
-}: {
-  icon: typeof Package
-  label: string
-  value: number | string
-  tone: 'forest' | 'yellow' | 'purple' | 'emerald' | 'cyan' | 'gold' | 'red'
-  hint?: string
-  hintTone?: 'red' | 'green'
-}) {
-  const toneMap = {
-    forest:  'bg-forest-50 text-forest-700',
-    yellow:  'bg-yellow-50 text-yellow-700',
-    purple:  'bg-purple-50 text-purple-700',
-    emerald: 'bg-emerald-50 text-emerald-700',
-    cyan:    'bg-cyan-50 text-cyan-700',
-    gold:    'bg-gold-50 text-gold-700',
-    red:     'bg-red-50 text-red-700',
-  }
-  return (
-    <div className="bg-white rounded-xl border border-gray-200 p-3">
-      <div className="flex items-center gap-2 mb-1.5">
-        <span className={clsx('w-7 h-7 rounded-lg flex items-center justify-center', toneMap[tone])}>
-          <Icon size={14} />
-        </span>
-        <span className="text-xs text-gray-500">{label}</span>
-      </div>
-      <p className="text-xl font-bold text-gray-800 tabular-nums">{value}</p>
-      {hint && (
-        <p className={clsx(
-          'text-[10px] mt-0.5',
-          hintTone === 'red' ? 'text-red-600 font-medium' : 'text-gray-400'
-        )}>
-          {hint}
-        </p>
-      )}
     </div>
   )
 }
@@ -1743,6 +1698,44 @@ function KanbanTab({ proyectoId }: { proyectoId: number }) {
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
+// Avance del proyecto — materiales repartidos en las 5 etapas. Reemplaza las
+// cards de KPI en la cabecera. Usa la misma data de la línea de tiempo.
+// ──────────────────────────────────────────────────────────────────────────────
+const AVANCE_STAGES = [
+  { key: 'importado', label: 'Importados', bar: 'bg-stone-400',   text: 'text-stone-600' },
+  { key: 'cotizado',  label: 'Cotizados',  bar: 'bg-sky-500',     text: 'text-sky-700' },
+  { key: 'precio',    label: 'Con precio', bar: 'bg-blue-600',    text: 'text-blue-700' },
+  { key: 'ordenado',  label: 'Ordenados',  bar: 'bg-purple-500',  text: 'text-purple-700' },
+  { key: 'recibido',  label: 'Recibidos',  bar: 'bg-emerald-500', text: 'text-emerald-700' },
+] as const
+
+function AvanceStrip({ rows }: { rows: MaterialTimeline[] }) {
+  const total = rows.length
+  const reached = (key: string) =>
+    key === 'precio'
+      ? rows.filter((r) => r.tiene_precio).length
+      : rows.filter((r) => !!(r as unknown as Record<string, string | null>)[key]).length
+  return (
+    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+      {AVANCE_STAGES.map((s) => {
+        const n = total ? reached(s.key) : 0
+        const pct = total ? Math.round((n / total) * 100) : 0
+        return (
+          <div key={s.key} className="bg-white rounded-xl border border-gray-100 px-4 py-3">
+            <div className="text-xs text-gray-500">{s.label}</div>
+            <div className={clsx('text-2xl font-bold leading-tight mt-0.5 tabular-nums', s.text)}>{n}</div>
+            <div className="h-1.5 rounded-full bg-gray-100 mt-2 overflow-hidden">
+              <div className={clsx('h-full rounded-full', s.bar)} style={{ width: `${pct}%` }} />
+            </div>
+            <div className="text-[11px] text-gray-400 mt-1">{pct}% de {total}</div>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
 // Tab: Línea de tiempo (parte 1) — reconstruye, de un vistazo, cuándo cada
 // material fue importado / cotizado / con precio / ordenado / recibido.
 // ──────────────────────────────────────────────────────────────────────────────
@@ -1780,11 +1773,9 @@ function TimelineTab({ proyectoId }: { proyectoId: number }) {
       (r.vendor ?? '').toLowerCase().includes(q))
   }, [rows, search])
 
-  const cellFor = (r: MaterialTimeline, key: string): { done: boolean; date: string | null } => {
-    if (key === 'precio') return { done: !!r.tiene_precio, date: null }
-    const d = (r as unknown as Record<string, string | null>)[key] ?? null
-    return { done: !!d, date: d }
-  }
+  // fecha de cada etapa: null = no alcanzada; '' = alcanzada sin fecha (con precio histórico)
+  const dateOf = (r: MaterialTimeline, key: string): string | null =>
+    key === 'precio' ? (r.tiene_precio ? '' : null) : ((r as unknown as Record<string, string | null>)[key] ?? null)
 
   if (isLoading) return <div className="py-16 text-center text-gray-400 text-sm">Cargando línea de tiempo…</div>
   if (!rows.length) return <div className="py-16 text-center text-gray-400 text-sm">Este proyecto no tiene materiales.</div>
@@ -1793,18 +1784,18 @@ function TimelineTab({ proyectoId }: { proyectoId: number }) {
     <div>
       <div className="flex items-center justify-between gap-3 mb-3 flex-wrap">
         <p className="text-sm text-gray-500">
-          {filtered.length} material{filtered.length === 1 ? '' : 'es'} · recorrido reconstruido de cada uno
+          {filtered.length} material{filtered.length === 1 ? '' : 'es'} · recorrido de cada uno
         </p>
         <input
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          placeholder="Buscar código, descripción, vendor…"
-          className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm w-64 max-w-full"
+          placeholder="Buscar por código de material…"
+          className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm w-72 max-w-full focus:outline-none focus:ring-2 focus:ring-forest-200 focus:border-forest-400"
         />
       </div>
 
       <div className="bg-white rounded-xl border border-gray-100 overflow-x-auto">
-        <div className="grid min-w-[760px]" style={{ gridTemplateColumns: '240px 1fr' }}>
+        <div className="grid min-w-[780px]" style={{ gridTemplateColumns: '220px 1fr' }}>
           <div className="px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wide text-gray-400 border-b border-gray-100">Material</div>
           <div className="grid border-b border-gray-100" style={{ gridTemplateColumns: 'repeat(5,1fr)' }}>
             {TL_STAGES.map((s) => (
@@ -1813,30 +1804,46 @@ function TimelineTab({ proyectoId }: { proyectoId: number }) {
           </div>
         </div>
 
-        {filtered.map((r) => (
-          <div key={r.id} className="grid min-w-[760px] items-center hover:bg-gray-50" style={{ gridTemplateColumns: '240px 1fr' }}>
-            <div className="px-4 py-3 border-b border-gray-50 min-w-0">
-              <div className="text-sm font-semibold text-gray-800 leading-tight truncate">
-                {r.item ? <span className="text-gray-400 font-normal mr-1.5">#{r.item}</span> : null}{r.codigo || '—'}
+        {filtered.map((r) => {
+          const cells = TL_STAGES.map((s) => ({ s, date: dateOf(r, s.key) }))
+          const reachedIdx = cells.reduce((acc, c, i) => (c.date !== null ? i : acc), -1)
+          const fillPct = reachedIdx > 0 ? (reachedIdx / (TL_STAGES.length - 1)) * 80 : 0
+          return (
+            <div key={r.id} className="grid min-w-[780px] items-center hover:bg-gray-50/70 transition-colors" style={{ gridTemplateColumns: '220px 1fr' }}>
+              <div className="px-4 py-4 border-t border-gray-50 min-w-0">
+                <div className="text-sm font-semibold text-gray-800 leading-tight truncate">
+                  {r.item ? <span className="text-gray-400 font-normal mr-1.5">#{r.item}</span> : null}{r.codigo || '—'}
+                </div>
+                <div className="text-xs text-gray-400 truncate">{r.descripcion || ''}</div>
               </div>
-              <div className="text-xs text-gray-400 truncate">{r.descripcion || ''}</div>
-            </div>
-            <div className="relative grid py-3 border-b border-gray-50" style={{ gridTemplateColumns: 'repeat(5,1fr)' }}>
-              <div className="absolute top-[13px] left-[10%] right-[10%] h-0.5 bg-gray-100" />
-              {TL_STAGES.map((s) => {
-                const c = cellFor(r, s.key)
-                return (
-                  <div key={s.key} className="relative z-10 text-center">
-                    <div className={clsx('w-3.5 h-3.5 rounded-full mx-auto', c.done ? 'bg-forest-600' : 'bg-white border-[1.5px] border-gray-300')} />
-                    <div className={clsx('text-[11px] mt-1.5', c.done ? 'text-gray-600' : 'text-gray-300')}>
-                      {c.done ? (c.date ? tlShort(c.date) : '✓') : '—'}
+              <div className="relative grid py-4 border-t border-gray-50" style={{ gridTemplateColumns: 'repeat(5,1fr)' }}>
+                <div className="absolute top-[10px] left-[10%] right-[10%] h-[3px] rounded-full bg-gray-100" />
+                {reachedIdx > 0 && (
+                  <div className="absolute top-[10px] left-[10%] h-[3px] rounded-full bg-forest-500" style={{ width: `${fillPct}%` }} />
+                )}
+                {cells.map(({ s, date }, i) => {
+                  const done = date !== null
+                  const isCur = i === reachedIdx
+                  const isRec = s.key === 'recibido'
+                  return (
+                    <div key={s.key} className="relative z-10 text-center">
+                      <div className={clsx(
+                        'w-[22px] h-[22px] rounded-full mx-auto flex items-center justify-center text-[11px] font-bold leading-none',
+                        done ? (isRec ? 'bg-emerald-500 text-white' : 'bg-forest-600 text-white') : 'bg-white border-[1.5px] border-gray-300',
+                        isCur && (isRec ? 'ring-4 ring-emerald-500/20' : 'ring-4 ring-forest-500/20'),
+                      )}>
+                        {done ? '✓' : ''}
+                      </div>
+                      <div className={clsx('text-[11px] mt-2', done ? (isCur ? 'font-semibold text-gray-700' : 'text-gray-500') : 'text-gray-300')}>
+                        {done ? (date ? tlShort(date) : 'listo') : '—'}
+                      </div>
                     </div>
-                  </div>
-                )
-              })}
+                  )
+                })}
+              </div>
             </div>
-          </div>
-        ))}
+          )
+        })}
       </div>
 
       <p className="text-xs text-gray-400 mt-3">
