@@ -1777,6 +1777,60 @@ function TimelineTab({ proyectoId }: { proyectoId: number }) {
   const dateOf = (r: MaterialTimeline, key: string): string | null =>
     key === 'precio' ? (r.tiene_precio ? '' : null) : ((r as unknown as Record<string, string | null>)[key] ?? null)
 
+  // Agrupar por vendor (alfabético, 'Sin vendor' al final).
+  const vendorGroups = useMemo(() => {
+    const m = new Map<string, MaterialTimeline[]>()
+    for (const r of filtered) {
+      const v = (r.vendor ?? '').trim() || 'Sin vendor'
+      if (!m.has(v)) m.set(v, [])
+      m.get(v)!.push(r)
+    }
+    return [...m.entries()]
+      .sort((a, b) => (a[0] === 'Sin vendor' ? 1 : b[0] === 'Sin vendor' ? -1 : a[0].localeCompare(b[0])))
+      .map(([vendor, items]) => ({ vendor, items }))
+  }, [filtered])
+
+  const renderRow = (r: MaterialTimeline) => {
+    const cells = TL_STAGES.map((s) => ({ s, date: dateOf(r, s.key) }))
+    const reachedIdx = cells.reduce((acc, c, i) => (c.date !== null ? i : acc), -1)
+    const fillPct = reachedIdx > 0 ? (reachedIdx / (TL_STAGES.length - 1)) * 80 : 0
+    return (
+      <div key={r.id} className="grid min-w-[780px] items-center hover:bg-gray-50/70 transition-colors" style={{ gridTemplateColumns: '220px 1fr' }}>
+        <div className="px-4 py-4 border-t border-gray-50 min-w-0">
+          <div className="text-sm font-semibold text-gray-800 leading-tight truncate">
+            {r.item ? <span className="text-gray-400 font-normal mr-1.5">#{r.item}</span> : null}{r.codigo || '—'}
+          </div>
+          <div className="text-xs text-gray-400 truncate">{r.descripcion || ''}</div>
+        </div>
+        <div className="relative grid py-4 border-t border-gray-50" style={{ gridTemplateColumns: 'repeat(5,1fr)' }}>
+          <div className="absolute top-[10px] left-[10%] right-[10%] h-[3px] rounded-full bg-gray-100" />
+          {reachedIdx > 0 && (
+            <div className="absolute top-[10px] left-[10%] h-[3px] rounded-full bg-forest-500" style={{ width: `${fillPct}%` }} />
+          )}
+          {cells.map(({ s, date }, i) => {
+            const done = date !== null
+            const isCur = i === reachedIdx
+            const isRec = s.key === 'recibido'
+            return (
+              <div key={s.key} className="relative z-10 text-center">
+                <div className={clsx(
+                  'w-[22px] h-[22px] rounded-full mx-auto flex items-center justify-center text-[11px] font-bold leading-none',
+                  done ? (isRec ? 'bg-emerald-500 text-white' : 'bg-forest-600 text-white') : 'bg-white border-[1.5px] border-gray-300',
+                  isCur && (isRec ? 'ring-4 ring-emerald-500/20' : 'ring-4 ring-forest-500/20'),
+                )}>
+                  {done ? '✓' : ''}
+                </div>
+                <div className={clsx('text-[11px] mt-2', done ? (isCur ? 'font-semibold text-gray-700' : 'text-gray-500') : 'text-gray-300')}>
+                  {done ? (date ? tlShort(date) : 'listo') : '—'}
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      </div>
+    )
+  }
+
   if (isLoading) return <div className="py-16 text-center text-gray-400 text-sm">Cargando línea de tiempo…</div>
   if (!rows.length) return <div className="py-16 text-center text-gray-400 text-sm">Este proyecto no tiene materiales.</div>
 
@@ -1804,46 +1858,15 @@ function TimelineTab({ proyectoId }: { proyectoId: number }) {
           </div>
         </div>
 
-        {filtered.map((r) => {
-          const cells = TL_STAGES.map((s) => ({ s, date: dateOf(r, s.key) }))
-          const reachedIdx = cells.reduce((acc, c, i) => (c.date !== null ? i : acc), -1)
-          const fillPct = reachedIdx > 0 ? (reachedIdx / (TL_STAGES.length - 1)) * 80 : 0
-          return (
-            <div key={r.id} className="grid min-w-[780px] items-center hover:bg-gray-50/70 transition-colors" style={{ gridTemplateColumns: '220px 1fr' }}>
-              <div className="px-4 py-4 border-t border-gray-50 min-w-0">
-                <div className="text-sm font-semibold text-gray-800 leading-tight truncate">
-                  {r.item ? <span className="text-gray-400 font-normal mr-1.5">#{r.item}</span> : null}{r.codigo || '—'}
-                </div>
-                <div className="text-xs text-gray-400 truncate">{r.descripcion || ''}</div>
-              </div>
-              <div className="relative grid py-4 border-t border-gray-50" style={{ gridTemplateColumns: 'repeat(5,1fr)' }}>
-                <div className="absolute top-[10px] left-[10%] right-[10%] h-[3px] rounded-full bg-gray-100" />
-                {reachedIdx > 0 && (
-                  <div className="absolute top-[10px] left-[10%] h-[3px] rounded-full bg-forest-500" style={{ width: `${fillPct}%` }} />
-                )}
-                {cells.map(({ s, date }, i) => {
-                  const done = date !== null
-                  const isCur = i === reachedIdx
-                  const isRec = s.key === 'recibido'
-                  return (
-                    <div key={s.key} className="relative z-10 text-center">
-                      <div className={clsx(
-                        'w-[22px] h-[22px] rounded-full mx-auto flex items-center justify-center text-[11px] font-bold leading-none',
-                        done ? (isRec ? 'bg-emerald-500 text-white' : 'bg-forest-600 text-white') : 'bg-white border-[1.5px] border-gray-300',
-                        isCur && (isRec ? 'ring-4 ring-emerald-500/20' : 'ring-4 ring-forest-500/20'),
-                      )}>
-                        {done ? '✓' : ''}
-                      </div>
-                      <div className={clsx('text-[11px] mt-2', done ? (isCur ? 'font-semibold text-gray-700' : 'text-gray-500') : 'text-gray-300')}>
-                        {done ? (date ? tlShort(date) : 'listo') : '—'}
-                      </div>
-                    </div>
-                  )
-                })}
-              </div>
+        {vendorGroups.map(({ vendor, items }) => (
+          <div key={vendor}>
+            <div className="min-w-[780px] px-4 py-2 bg-gray-50 border-t border-gray-100 flex items-center gap-2">
+              <span className="text-xs font-bold text-gray-600 uppercase tracking-wide truncate">{vendor}</span>
+              <span className="text-[11px] text-gray-400 tabular-nums">· {items.length}</span>
             </div>
-          )
-        })}
+            {items.map(renderRow)}
+          </div>
+        ))}
       </div>
 
       <p className="text-xs text-gray-400 mt-3">
