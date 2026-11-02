@@ -96,7 +96,7 @@ export default function BriefingDrawer({ open, onClose, bucketKey, bucket }: Pro
           ) : bucketKey === 'estancadas' ? (
             <EstancadasTable items={items} onClose={onClose} />
           ) : (
-            <ComingSoonPlaceholder bucketKey={bucketKey} items={items} />
+            <LinkListBucket bucketKey={bucketKey} items={items} onClose={onClose} />
           )}
         </div>
       </div>
@@ -365,45 +365,40 @@ function EstancadasTable({ items, onClose }: { items: DailyBriefingItem[]; onClo
   )
 }
 
-// ─── Placeholder para los buckets que aún no tienen acciones inline ─────────
+// ─── Buckets de lista: cada ítem es un link directo que SÍ funciona ─────────
+// vencePronto = OCs → /ordenes-compra?ocId=; importadosAyer/cotizadosSinOC =
+// materiales → /materiales?material_id= (abre, resalta y hace scroll al material).
 
-function ComingSoonPlaceholder({ bucketKey, items }: { bucketKey: BucketKey; items: DailyBriefingItem[] }) {
-  const fallbackLink: Record<BucketKey, string> = {
-    rezagados:      '/materiales?estado_cotiz=PENDIENTE',
-    vencidas:       '/ordenes-compra?flag=vencidas',
-    estancadas:     '/recepciones?estado=pendiente',
-    vencePronto:    '/ordenes-compra?flag=2dias',
-    importadosAyer: '/materiales?estado_cotiz=PENDIENTE',
-    cotizadosSinOC: '/materiales?estado_cotiz=COTIZADO',
-  }
+function LinkListBucket({ bucketKey, items, onClose }: { bucketKey: BucketKey; items: DailyBriefingItem[]; onClose: () => void }) {
+  const isOC = bucketKey === 'vencePronto'
   return (
-    <div className="px-6 py-6 space-y-3">
-      <ul className="space-y-1.5 text-xs">
-        {items.slice(0, 20).map((it) => (
-          <li key={it.id} className="flex items-center justify-between border-b border-gray-50 pb-1.5">
-            <span className="truncate text-gray-700">
-              {it.numero || it.folio || it.codigo} · {it.proyecto_codigo} · {it.proveedor_nombre || it.vendor}
-            </span>
-            <span className="text-gray-400 whitespace-nowrap">
-              {it.dias_vencida != null && `${it.dias_vencida}d vencida`}
-              {it.dias_estancada != null && `${it.dias_estancada}d estancada`}
-              {it.fecha_entrega_estimada && !it.dias_vencida && `→ ${it.fecha_entrega_estimada}`}
-            </span>
-          </li>
-        ))}
-        {items.length > 20 && (
-          <li className="text-[10px] text-gray-400 italic">y {items.length - 20} más…</li>
-        )}
-      </ul>
-      <Link
-        to={fallbackLink[bucketKey]}
-        className="block text-center text-xs font-medium text-blue-700 hover:underline pt-2"
-      >
-        Abrir vista completa →
-      </Link>
-      <p className="text-[10px] text-gray-400 italic text-center">
-        Acciones inline en este bucket — próximamente (Fase 2)
-      </p>
+    <div className="divide-y divide-gray-50">
+      {items.map((it) => {
+        const to = isOC ? `/ordenes-compra?ocId=${it.id}` : `/materiales?material_id=${it.id}`
+        return (
+          <Link key={it.id} to={to} onClick={onClose}
+            title={isOC ? 'Abrir la OC' : 'Abrir el material en MTO'}
+            className="flex items-center gap-3 px-4 py-2.5 hover:bg-gray-50/60 transition-colors">
+            <div className="min-w-0 flex-1">
+              <p className="text-xs font-semibold text-gray-800 truncate">
+                {isOC
+                  ? <span className="font-mono">{it.numero}</span>
+                  : <>{it.codigo && <span className="font-mono text-gray-500 mr-1.5">{it.codigo}</span>}{it.descripcion ?? '—'}</>}
+              </p>
+              <p className="text-[10px] text-gray-400 truncate">
+                {it.proyecto_codigo} {it.proyecto_nombre}{(it.proveedor_nombre || it.vendor) ? ` · ${it.proveedor_nombre || it.vendor}` : ''}
+              </p>
+            </div>
+            {it.fecha_entrega_estimada && (
+              <span className="text-[10px] text-gray-400 whitespace-nowrap">llega {it.fecha_entrega_estimada}</span>
+            )}
+            {it.dias_cotizado != null && (
+              <span className="text-[10px] text-gray-400 whitespace-nowrap">{it.dias_cotizado}d sin OC</span>
+            )}
+            <ExternalLink size={11} className="text-gray-300 shrink-0" />
+          </Link>
+        )
+      })}
     </div>
   )
 }
