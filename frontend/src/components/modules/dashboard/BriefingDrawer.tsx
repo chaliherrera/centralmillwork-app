@@ -1,10 +1,12 @@
 import { useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
-import { X, ExternalLink, Ban, Loader2 } from 'lucide-react'
+import { X, ExternalLink, Ban, Loader2, CheckCheck, Warehouse } from 'lucide-react'
 import toast from 'react-hot-toast'
 import clsx from 'clsx'
 import { materialesService } from '@/services/materiales'
+import { ordenesCompraService } from '@/services/ordenesCompra'
+import { recepcionesService } from '@/services/recepciones'
 import type { DailyBriefingBucket, DailyBriefingItem } from '@/services/dashboard'
 
 /**
@@ -89,6 +91,10 @@ export default function BriefingDrawer({ open, onClose, bucketKey, bucket }: Pro
             </div>
           ) : bucketKey === 'rezagados' ? (
             <RezagadosTable items={items} onClose={onClose} />
+          ) : bucketKey === 'vencidas' ? (
+            <VencidasTable items={items} onClose={onClose} />
+          ) : bucketKey === 'estancadas' ? (
+            <EstancadasTable items={items} onClose={onClose} />
           ) : (
             <ComingSoonPlaceholder bucketKey={bucketKey} items={items} />
           )}
@@ -192,7 +198,115 @@ function RezagadosTable({ items, onClose }: { items: DailyBriefingItem[]; onClos
   )
 }
 
-// ─── Placeholder para los 4 buckets que aún no tienen acciones inline ───────
+// ─── Botón "Recibir todo" (un clic = recepción total de la OC) ──────────────
+
+function RecibirTodoButton({ ocId }: { ocId: number }) {
+  const qc = useQueryClient()
+  const [loading, setLoading] = useState(false)
+  const recibir = async () => {
+    if (!window.confirm('¿Marcar TODA la OC como recibida? Crea la recepción con todos los ítems recibidos.')) return
+    setLoading(true)
+    try {
+      const r = await ordenesCompraService.getMaterialesLote(ocId)
+      const mats = r.data ?? []
+      if (!mats.length) { toast.error('La OC no tiene materiales cargados'); return }
+      await recepcionesService.createCompleta({
+        orden_compra_id: ocId,
+        fecha_recepcion: new Date().toISOString().slice(0, 10),
+        tipo: 'total',
+        materiales: mats.map((m) => ({ id_material: m.id, cm_code: m.codigo ?? undefined, descripcion: m.descripcion ?? '', recibido: true })),
+      })
+      toast.success('OC marcada como recibida')
+      qc.invalidateQueries({ queryKey: ['dashboard-daily-briefing'] })
+      qc.invalidateQueries({ queryKey: ['ordenes-compra'] })
+      qc.invalidateQueries({ queryKey: ['materiales'] })
+    } catch (e: any) {
+      toast.error(e?.response?.data?.message ?? e?.message ?? 'No se pudo recibir')
+    } finally { setLoading(false) }
+  }
+  return (
+    <button onClick={recibir} disabled={loading}
+      title="Marca todos los ítems de la OC como recibidos (recepción total)"
+      className="inline-flex items-center gap-1 text-[10px] font-medium px-2 py-1 rounded border border-emerald-200 text-emerald-700 hover:bg-emerald-50 disabled:opacity-50 transition-colors">
+      {loading ? <Loader2 size={10} className="animate-spin" /> : <CheckCheck size={10} />}
+      Recibir todo
+    </button>
+  )
+}
+
+// ─── Vencidas — OCs agrupadas por proveedor, con acciones ───────────────────
+
+function VencidasTable({ items, onClose }: { items: DailyBriefingItem[]; onClose: () => void }) {
+  const groups = (() => {
+    const m = new Map<string, DailyBriefingItem[]>()
+    for (const it of items) { const v = it.proveedor_nombre || 'Sin proveedor'; if (!m.has(v)) m.set(v, []); m.get(v)!.push(it) }
+    return [...m.entries()].sort((a, b) => b[1].length - a[1].length)
+  })()
+  return (
+    <div className="divide-y divide-gray-100">
+      {groups.map(([vendor, ocs]) => (
+        <div key={vendor}>
+          <div className="px-4 py-2 bg-gray-50 flex items-center justify-between sticky top-0 z-10">
+            <span className="text-xs font-bold text-gray-700 uppercase tracking-wide truncate">{vendor}</span>
+            <span className="text-[11px] text-gray-400 whitespace-nowrap">{ocs.length} vencida{ocs.length === 1 ? '' : 's'}</span>
+          </div>
+          {ocs.map((o) => (
+            <div key={o.id} className="px-4 py-2.5 flex items-center gap-3 hover:bg-gray-50/60">
+              <div className="min-w-0 flex-1">
+                <p className="text-xs font-semibold text-gray-800 font-mono truncate">{o.numero}</p>
+                <p className="text-[10px] text-gray-400 truncate">
+                  {o.proyecto_codigo} {o.proyecto_nombre}{o.total ? ` · $${Number(o.total).toLocaleString()}` : ''}
+                </p>
+              </div>
+              <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-red-100 text-red-700 whitespace-nowrap">{o.dias_vencida}d tarde</span>
+              <div className="flex items-center gap-1.5 shrink-0">
+                <RecibirTodoButton ocId={o.id} />
+                <Link to={`/ordenes-compra?ocId=${o.id}`} onClick={onClose}
+                  title="Abrir la OC — detalle, fotos y recepción con fotos"
+                  className="inline-flex items-center gap-1 text-[10px] font-medium px-2 py-1 rounded border border-gray-200 text-gray-700 hover:bg-gray-50 transition-colors">
+                  <ExternalLink size={10} /> OC
+                </Link>
+              </div>
+            </div>
+          ))}
+        </div>
+      ))}
+    </div>
+  )
+}
+
+// ─── Estancadas — recepciones sin cerrar, con acciones ──────────────────────
+
+function EstancadasTable({ items, onClose }: { items: DailyBriefingItem[]; onClose: () => void }) {
+  return (
+    <div className="divide-y divide-gray-50">
+      {items.map((r) => (
+        <div key={r.id} className="px-4 py-2.5 flex items-center gap-3 hover:bg-gray-50/60">
+          <Warehouse size={14} className="text-orange-400 shrink-0" />
+          <div className="min-w-0 flex-1">
+            <p className="text-xs font-semibold text-gray-800 truncate">
+              <span className="font-mono">{r.oc_numero ?? r.folio}</span>
+              <span className="text-gray-400 font-normal"> · {r.proveedor_nombre}</span>
+            </p>
+            <p className="text-[10px] text-gray-400 truncate">{r.proyecto_codigo} {r.proyecto_nombre}</p>
+          </div>
+          <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-orange-100 text-orange-700 whitespace-nowrap">{r.dias_estancada}d sin cerrar</span>
+          <div className="flex items-center gap-1.5 shrink-0">
+            {r.oc_id ? <RecibirTodoButton ocId={r.oc_id} /> : null}
+            {r.oc_id ? (
+              <Link to={`/ordenes-compra?ocId=${r.oc_id}`} onClick={onClose}
+                className="inline-flex items-center gap-1 text-[10px] font-medium px-2 py-1 rounded border border-gray-200 text-gray-700 hover:bg-gray-50 transition-colors">
+                <ExternalLink size={10} /> OC
+              </Link>
+            ) : null}
+          </div>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+// ─── Placeholder para los buckets que aún no tienen acciones inline ─────────
 
 function ComingSoonPlaceholder({ bucketKey, items }: { bucketKey: BucketKey; items: DailyBriefingItem[] }) {
   const fallbackLink: Record<BucketKey, string> = {

@@ -23,6 +23,7 @@ export interface DailyBriefingItem {
   updated_at?: string | null
   created_at?: string | null
   oc_numero?: string | null
+  oc_id?: number | null
   proyecto_codigo?: string | null
   proyecto_nombre?: string | null
   proveedor_nombre?: string | null

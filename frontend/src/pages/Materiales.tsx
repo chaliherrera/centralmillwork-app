@@ -1,5 +1,5 @@
-import { useState, useMemo } from 'react'
-import { Link } from 'react-router-dom'
+import { useState, useMemo, useEffect, useRef } from 'react'
+import { Link, useSearchParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Plus, Search, Pencil, Trash2, Package,
@@ -52,6 +52,20 @@ export default function Materiales() {
   })
   const proyectos = proyectosData?.data ?? []
   const selectedProyecto = proyectos.find((p) => p.id === selectedProyectoId)
+
+  // Deep-link desde el dashboard: ?material_id=X → carga su proyecto, filtra por
+  // su código, resalta la fila y hace scroll. (Arregla el botón "MTO" del drawer.)
+  const [searchParams] = useSearchParams()
+  const highlightId = Number(searchParams.get('material_id')) || null
+  const rowRef = useRef<HTMLTableRowElement | null>(null)
+  useEffect(() => {
+    if (!highlightId) return
+    materialesService.getById(highlightId).then((r) => {
+      const mat = r.data
+      if (mat?.proyecto_id) setSelectedProyectoId(mat.proyecto_id)
+      if (mat?.codigo) setSearch(mat.codigo)
+    }).catch(() => {})
+  }, [highlightId])
 
   const { data: kpisData } = useQuery({
     queryKey: ['materiales-kpis', selectedProyectoId],
@@ -151,6 +165,10 @@ export default function Materiales() {
   const hasFilters   = !!(vendorFilter || loteFilter || origenFilter || search)
 
   const materials = data?.data ?? []
+
+  useEffect(() => {
+    if (highlightId && rowRef.current) rowRef.current.scrollIntoView({ block: 'center', behavior: 'smooth' })
+  }, [highlightId, materials])
 
   const LIMIT = 50
   const total = data?.total ?? 0
@@ -469,7 +487,8 @@ export default function Materiales() {
                     </tr>
                   )}
                   {!isLoading && materials.map((m) => (
-                    <tr key={m.id} className="border-b border-gray-50 hover:bg-gray-50 transition-colors group">
+                    <tr key={m.id} ref={m.id === highlightId ? rowRef : undefined}
+                      className={clsx('border-b border-gray-50 transition-colors group', m.id === highlightId ? 'bg-amber-50 ring-2 ring-amber-300' : 'hover:bg-gray-50')}>
                       <td className="px-3 py-3 text-center">
                         <div className="flex flex-col items-center gap-0.5">
                           <span className={clsx(

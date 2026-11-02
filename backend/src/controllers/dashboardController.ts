@@ -432,7 +432,7 @@ export async function getDashboardDailyBriefing(_req: Request, res: Response, ne
       pool.query(
         `SELECT r.id, r.folio, r.created_at,
                 CURRENT_DATE - r.created_at::date AS dias_estancada,
-                o.numero AS oc_numero, o.estado AS oc_estado,
+                o.id AS oc_id, o.numero AS oc_numero, o.estado AS oc_estado,
                 p.codigo AS proyecto_codigo, p.nombre AS proyecto_nombre,
                 v.nombre AS proveedor_nombre
            FROM recepciones r
