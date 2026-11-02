@@ -540,3 +540,66 @@ export async function getProyectoMuestrasAprobadas(req: Request, res: Response, 
     res.json({ data: rows })
   } catch (err) { next(err) }
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Línea de tiempo RECONSTRUIDA de los materiales de un proyecto (parte 1).
+// No hay historial de transiciones guardado todavía, así que reconstruimos las
+// fechas desde las tablas que SÍ las tienen:
+//   · importado  → materiales_mto.fecha_importacion (o created_at)
+//   · cotizado   → fecha de envío de la solicitud de cotización que incluye ese
+//                  código (match por proyecto + código dentro del JSONB), acotado
+//                  a ≥ la fecha de importación del material
+//   · con precio → sabemos SI tiene precio (unit_price > 0); la FECHA no quedó
+//                  registrada en el pasado (se captura hacia adelante en la parte 2)
+//   · ordenado   → ordenes_compra.fecha_emision (OC más temprana del material)
+//   · recibido   → recepciones.fecha_recepcion (recepción con recibido = true)
+// ─────────────────────────────────────────────────────────────────────────────
+export async function getMaterialesTimeline(req: Request, res: Response, next: NextFunction) {
+  try {
+    const proyectoId = parseInt(String(req.params.id), 10)
+    if (!proyectoId) return next(createError('Proyecto inválido', 400))
+    const { rows } = await pool.query(
+      `WITH mats AS (
+         SELECT id, proyecto_id, codigo, descripcion, item, vendor, estado_cotiz,
+                qty, unit_price, fecha_importacion, created_at
+           FROM materiales_mto WHERE proyecto_id = $1
+       ),
+       cot AS (
+         SELECT m.id, MIN(s.fecha_envio) AS fecha
+           FROM mats m
+           JOIN solicitudes_cotizacion s
+             ON s.proyecto_id = m.proyecto_id AND s.fecha_envio IS NOT NULL
+            AND s.fecha_envio >= COALESCE(m.fecha_importacion, m.created_at)
+           JOIN LATERAL jsonb_array_elements(s.materiales_incluidos) e
+             ON NULLIF(e->>'codigo','') = m.codigo
+          GROUP BY m.id
+       ),
+       ord AS (
+         SELECT ioc.material_id AS id, MIN(oc.fecha_emision) AS fecha
+           FROM items_orden_compra ioc JOIN ordenes_compra oc ON oc.id = ioc.orden_compra_id
+          WHERE ioc.material_id IN (SELECT id FROM mats)
+          GROUP BY ioc.material_id
+       ),
+       rec AS (
+         SELECT rm.id_material AS id, MIN(r.fecha_recepcion) AS fecha
+           FROM recepcion_materiales rm JOIN recepciones r ON r.id = rm.id_recepcion
+          WHERE rm.recibido = true AND r.fecha_recepcion IS NOT NULL
+            AND rm.id_material IN (SELECT id FROM mats)
+          GROUP BY rm.id_material
+       )
+       SELECT m.id, m.codigo, m.descripcion, m.item, m.vendor, m.estado_cotiz, m.qty,
+              (COALESCE(m.unit_price, 0) > 0) AS tiene_precio,
+              to_char(COALESCE(m.fecha_importacion, m.created_at), 'YYYY-MM-DD') AS importado,
+              to_char(cot.fecha, 'YYYY-MM-DD') AS cotizado,
+              to_char(ord.fecha, 'YYYY-MM-DD') AS ordenado,
+              to_char(rec.fecha, 'YYYY-MM-DD') AS recibido
+         FROM mats m
+         LEFT JOIN cot ON cot.id = m.id
+         LEFT JOIN ord ON ord.id = m.id
+         LEFT JOIN rec ON rec.id = m.id
+        ORDER BY m.item NULLS LAST, m.codigo, m.id`,
+      [proyectoId]
+    )
+    res.json({ data: rows })
+  } catch (err) { next(err) }
+}

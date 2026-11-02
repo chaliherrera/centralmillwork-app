@@ -135,6 +135,21 @@ export type ActividadEvento =
       vendor: string | null
     }
 
+export interface MaterialTimeline {
+  id: number
+  codigo: string | null
+  descripcion: string | null
+  item: string | null
+  vendor: string | null
+  estado_cotiz: string | null
+  qty: string | number | null
+  tiene_precio: boolean
+  importado: string | null
+  cotizado: string | null
+  ordenado: string | null
+  recibido: string | null
+}
+
 export const proyectosService = {
   getAll: (params?: PaginationParams) =>
     api.get<ApiResponse<Proyecto[]>>('/proyectos', { params }).then((r) => r.data),
@@ -153,6 +168,9 @@ export const proyectosService = {
 
   getMuestrasAprobadas: (id: number) =>
     api.get<ApiResponse<MuestraAprobada[]>>(`/proyectos/${id}/muestras-aprobadas`).then((r) => r.data),
+
+  getMaterialesTimeline: (id: number) =>
+    api.get<ApiResponse<MaterialTimeline[]>>(`/proyectos/${id}/materiales-timeline`).then((r) => r.data),
 
   create: (data: Omit<Proyecto, 'id' | 'created_at' | 'updated_at'>) =>
     api.post<ApiResponse<Proyecto>>('/proyectos', data).then((r) => r.data),

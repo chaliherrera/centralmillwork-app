@@ -15,6 +15,7 @@ import {
   type ItemReadiness,
   type ItemReadinessMaterial,
   type EstadoItemReadiness,
+  type MaterialTimeline,
 } from '@/services/proyectos'
 import { materialesService } from '@/services/materiales'
 import { ordenesCompraService } from '@/services/ordenesCompra'
@@ -43,7 +44,7 @@ const fmtDateTime = (d: string | null | undefined) => {
   return dt.toLocaleString('es-MX', { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
 }
 
-type TabKey = 'materiales' | 'kanban' | 'items' | 'ocs' | 'recepciones' | 'muestras' | 'actividad' | 'schedule' | 'calendar' | 'graficas'
+type TabKey = 'materiales' | 'kanban' | 'timeline' | 'items' | 'ocs' | 'recepciones' | 'muestras' | 'actividad' | 'schedule' | 'calendar' | 'graficas'
 
 export default function ProyectoDetalle() {
   const { id } = useParams<{ id: string }>()
@@ -151,6 +152,7 @@ export default function ProyectoDetalle() {
         {([
           { key: 'materiales',  label: `Materiales (${mat.total})`,      icon: Package },
           { key: 'kanban',      label: 'Vista Kanban',                    icon: Layers },
+          { key: 'timeline',    label: 'Línea de tiempo',                 icon: Clock },
           { key: 'items',       label: 'Items',                           icon: Hammer },
           { key: 'ocs',         label: `Órdenes (${oc.total})`,           icon: ShoppingCart },
           { key: 'recepciones', label: `Recepciones (${kpis.recepciones.total})`, icon: Warehouse },
@@ -178,6 +180,7 @@ export default function ProyectoDetalle() {
       {/* ── Tab content ── */}
       {tab === 'materiales'  && <MaterialesTab  proyectoId={proyectoId} />}
       {tab === 'kanban'      && <KanbanTab      proyectoId={proyectoId} />}
+      {tab === 'timeline'    && <TimelineTab    proyectoId={proyectoId} />}
       {tab === 'items'       && <ItemsTab       proyectoId={proyectoId} />}
       {tab === 'ocs'         && <OcsTab         proyectoId={proyectoId} />}
       {tab === 'recepciones' && <RecepcionesTab proyectoId={proyectoId} />}
@@ -1735,6 +1738,111 @@ function KanbanTab({ proyectoId }: { proyectoId: number }) {
           )
         })}
       </div>
+    </div>
+  )
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Tab: Línea de tiempo (parte 1) — reconstruye, de un vistazo, cuándo cada
+// material fue importado / cotizado / con precio / ordenado / recibido.
+// ──────────────────────────────────────────────────────────────────────────────
+const TL_STAGES = [
+  { key: 'importado', label: 'Importado' },
+  { key: 'cotizado',  label: 'Cotizado' },
+  { key: 'precio',    label: 'Con precio' },
+  { key: 'ordenado',  label: 'Ordenado' },
+  { key: 'recibido',  label: 'Recibido' },
+] as const
+
+const tlShort = (d: string | null) => {
+  if (!d) return null
+  const [, m, day] = d.split('-')
+  const mes = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'][parseInt(m) - 1]
+  return `${parseInt(day)} ${mes}`
+}
+
+function TimelineTab({ proyectoId }: { proyectoId: number }) {
+  const [search, setSearch] = useState('')
+  const { data, isLoading } = useQuery({
+    queryKey: ['proyecto-detalle', proyectoId, 'materiales-timeline'],
+    queryFn: () => proyectosService.getMaterialesTimeline(proyectoId),
+    staleTime: 30_000,
+  })
+  const rows: MaterialTimeline[] = data?.data ?? []
+
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase()
+    if (!q) return rows
+    return rows.filter((r) =>
+      (r.codigo ?? '').toLowerCase().includes(q) ||
+      (r.descripcion ?? '').toLowerCase().includes(q) ||
+      (r.item ?? '').toLowerCase().includes(q) ||
+      (r.vendor ?? '').toLowerCase().includes(q))
+  }, [rows, search])
+
+  const cellFor = (r: MaterialTimeline, key: string): { done: boolean; date: string | null } => {
+    if (key === 'precio') return { done: !!r.tiene_precio, date: null }
+    const d = (r as unknown as Record<string, string | null>)[key] ?? null
+    return { done: !!d, date: d }
+  }
+
+  if (isLoading) return <div className="py-16 text-center text-gray-400 text-sm">Cargando línea de tiempo…</div>
+  if (!rows.length) return <div className="py-16 text-center text-gray-400 text-sm">Este proyecto no tiene materiales.</div>
+
+  return (
+    <div>
+      <div className="flex items-center justify-between gap-3 mb-3 flex-wrap">
+        <p className="text-sm text-gray-500">
+          {filtered.length} material{filtered.length === 1 ? '' : 'es'} · recorrido reconstruido de cada uno
+        </p>
+        <input
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Buscar código, descripción, vendor…"
+          className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm w-64 max-w-full"
+        />
+      </div>
+
+      <div className="bg-white rounded-xl border border-gray-100 overflow-x-auto">
+        <div className="grid min-w-[760px]" style={{ gridTemplateColumns: '240px 1fr' }}>
+          <div className="px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wide text-gray-400 border-b border-gray-100">Material</div>
+          <div className="grid border-b border-gray-100" style={{ gridTemplateColumns: 'repeat(5,1fr)' }}>
+            {TL_STAGES.map((s) => (
+              <div key={s.key} className="px-2 py-2.5 text-[11px] font-semibold uppercase tracking-wide text-gray-400 text-center">{s.label}</div>
+            ))}
+          </div>
+        </div>
+
+        {filtered.map((r) => (
+          <div key={r.id} className="grid min-w-[760px] items-center hover:bg-gray-50" style={{ gridTemplateColumns: '240px 1fr' }}>
+            <div className="px-4 py-3 border-b border-gray-50 min-w-0">
+              <div className="text-sm font-semibold text-gray-800 leading-tight truncate">
+                {r.item ? <span className="text-gray-400 font-normal mr-1.5">#{r.item}</span> : null}{r.codigo || '—'}
+              </div>
+              <div className="text-xs text-gray-400 truncate">{r.descripcion || ''}</div>
+            </div>
+            <div className="relative grid py-3 border-b border-gray-50" style={{ gridTemplateColumns: 'repeat(5,1fr)' }}>
+              <div className="absolute top-[13px] left-[10%] right-[10%] h-0.5 bg-gray-100" />
+              {TL_STAGES.map((s) => {
+                const c = cellFor(r, s.key)
+                return (
+                  <div key={s.key} className="relative z-10 text-center">
+                    <div className={clsx('w-3.5 h-3.5 rounded-full mx-auto', c.done ? 'bg-forest-600' : 'bg-white border-[1.5px] border-gray-300')} />
+                    <div className={clsx('text-[11px] mt-1.5', c.done ? 'text-gray-600' : 'text-gray-300')}>
+                      {c.done ? (c.date ? tlShort(c.date) : '✓') : '—'}
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <p className="text-xs text-gray-400 mt-3">
+        Reconstruido de los datos existentes. "Con precio" muestra ✓ cuando el material ya tiene precio —
+        la fecha exacta no se registró en el pasado (se captura de ahora en más).
+      </p>
     </div>
   )
 }
