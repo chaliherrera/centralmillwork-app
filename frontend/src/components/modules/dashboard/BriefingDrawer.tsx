@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
-import { X, ExternalLink, Ban, Loader2, CheckCheck, Warehouse } from 'lucide-react'
+import { X, ExternalLink, Ban, Loader2, CheckCheck, Warehouse, CalendarClock, MessageSquarePlus } from 'lucide-react'
 import toast from 'react-hot-toast'
 import clsx from 'clsx'
 import { materialesService } from '@/services/materiales'
@@ -250,27 +250,86 @@ function VencidasTable({ items, onClose }: { items: DailyBriefingItem[]; onClose
             <span className="text-xs font-bold text-gray-700 uppercase tracking-wide truncate">{vendor}</span>
             <span className="text-[11px] text-gray-400 whitespace-nowrap">{ocs.length} vencida{ocs.length === 1 ? '' : 's'}</span>
           </div>
-          {ocs.map((o) => (
-            <div key={o.id} className="px-4 py-2.5 flex items-center gap-3 hover:bg-gray-50/60">
-              <div className="min-w-0 flex-1">
-                <p className="text-xs font-semibold text-gray-800 font-mono truncate">{o.numero}</p>
-                <p className="text-[10px] text-gray-400 truncate">
-                  {o.proyecto_codigo} {o.proyecto_nombre}{o.total ? ` · $${Number(o.total).toLocaleString()}` : ''}
-                </p>
-              </div>
-              <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-red-100 text-red-700 whitespace-nowrap">{o.dias_vencida}d tarde</span>
-              <div className="flex items-center gap-1.5 shrink-0">
-                <RecibirTodoButton ocId={o.id} />
-                <Link to={`/ordenes-compra?ocId=${o.id}`} onClick={onClose}
-                  title="Abrir la OC — detalle, fotos y recepción con fotos"
-                  className="inline-flex items-center gap-1 text-[10px] font-medium px-2 py-1 rounded border border-gray-200 text-gray-700 hover:bg-gray-50 transition-colors">
-                  <ExternalLink size={10} /> OC
-                </Link>
-              </div>
-            </div>
-          ))}
+          {ocs.map((o) => <VencidaRow key={o.id} o={o} onClose={onClose} />)}
         </div>
       ))}
+    </div>
+  )
+}
+
+function VencidaRow({ o, onClose }: { o: DailyBriefingItem; onClose: () => void }) {
+  const qc = useQueryClient()
+  const [mode, setMode] = useState<null | 'fecha' | 'nota'>(null)
+  const [fecha, setFecha] = useState('')
+  const [nota, setNota] = useState('')
+  const [saving, setSaving] = useState(false)
+
+  const guardar = async (payload: { tipo: 'nota' | 'reprograma'; nota?: string; fecha_nueva?: string }) => {
+    setSaving(true)
+    try {
+      await ordenesCompraService.seguimiento(o.id, payload)
+      toast.success(payload.tipo === 'reprograma' ? 'Fecha reprogramada' : 'Nota agregada')
+      qc.invalidateQueries({ queryKey: ['dashboard-daily-briefing'] })
+      qc.invalidateQueries({ queryKey: ['ordenes-compra'] })
+      setMode(null); setNota(''); setFecha('')
+    } catch (e: any) {
+      toast.error(e?.response?.data?.message ?? 'No se pudo guardar')
+    } finally { setSaving(false) }
+  }
+
+  return (
+    <div className="hover:bg-gray-50/60">
+      <div className="px-4 py-2.5 flex items-center gap-3">
+        <div className="min-w-0 flex-1">
+          <p className="text-xs font-semibold text-gray-800 font-mono truncate">{o.numero}</p>
+          <p className="text-[10px] text-gray-400 truncate">
+            {o.proyecto_codigo} {o.proyecto_nombre}{o.total ? ` · $${Number(o.total).toLocaleString()}` : ''}
+          </p>
+          {o.ultima_nota && (
+            <p className="text-[10px] text-blue-700 truncate mt-0.5" title={o.ultima_nota}>
+              <MessageSquarePlus size={9} className="inline mr-0.5" />{o.ultima_nota}{o.ultima_nota_fecha ? ` · ${o.ultima_nota_fecha}` : ''}
+            </p>
+          )}
+        </div>
+        <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-red-100 text-red-700 whitespace-nowrap">{o.dias_vencida}d tarde</span>
+        <div className="flex items-center gap-1 shrink-0">
+          <RecibirTodoButton ocId={o.id} />
+          <button onClick={() => setMode(mode === 'fecha' ? null : 'fecha')} title="Reprogramar la fecha de entrega"
+            className="inline-flex items-center gap-1 text-[10px] font-medium px-2 py-1 rounded border border-gray-200 text-gray-700 hover:bg-gray-50">
+            <CalendarClock size={10} /> Fecha
+          </button>
+          <button onClick={() => setMode(mode === 'nota' ? null : 'nota')} title="Agregar nota de seguimiento"
+            className="inline-flex items-center gap-1 text-[10px] font-medium px-2 py-1 rounded border border-gray-200 text-gray-700 hover:bg-gray-50">
+            <MessageSquarePlus size={10} /> Nota
+          </button>
+          <Link to={`/ordenes-compra?ocId=${o.id}`} onClick={onClose} title="Abrir la OC — detalle, fotos y recepción"
+            className="inline-flex items-center gap-1 text-[10px] font-medium px-2 py-1 rounded border border-gray-200 text-gray-700 hover:bg-gray-50">
+            <ExternalLink size={10} /> OC
+          </Link>
+        </div>
+      </div>
+      {mode === 'fecha' && (
+        <div className="px-4 pb-2.5 flex items-center gap-2">
+          <input type="date" value={fecha} onChange={(e) => setFecha(e.target.value)}
+            className="border border-gray-200 rounded px-2 py-1 text-xs" />
+          <button disabled={!fecha || saving} onClick={() => guardar({ tipo: 'reprograma', fecha_nueva: fecha })}
+            className="text-[10px] font-medium px-2.5 py-1 rounded bg-forest-600 text-white disabled:opacity-50">
+            {saving ? '…' : 'Guardar fecha'}
+          </button>
+          <button onClick={() => setMode(null)} className="text-[10px] text-gray-400 hover:text-gray-600">cancelar</button>
+        </div>
+      )}
+      {mode === 'nota' && (
+        <div className="px-4 pb-2.5 flex items-center gap-2">
+          <input value={nota} onChange={(e) => setNota(e.target.value)} placeholder="Ej: llamé a RUGBY, promete el 12"
+            className="border border-gray-200 rounded px-2 py-1 text-xs flex-1" />
+          <button disabled={!nota.trim() || saving} onClick={() => guardar({ tipo: 'nota', nota })}
+            className="text-[10px] font-medium px-2.5 py-1 rounded bg-forest-600 text-white disabled:opacity-50">
+            {saving ? '…' : 'Guardar nota'}
+          </button>
+          <button onClick={() => setMode(null)} className="text-[10px] text-gray-400 hover:text-gray-600">cancelar</button>
+        </div>
+      )}
     </div>
   )
 }

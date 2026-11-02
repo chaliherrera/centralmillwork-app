@@ -73,6 +73,10 @@ export const ordenesCompraService = {
   update: (id: number, data: OrdenCompraPayload) =>
     api.put<ApiResponse<OrdenCompra>>(`/ordenes-compra/${id}`, data).then((r) => r.data),
 
+  // Seguimiento: nota del hilo o reprogramación de la ETA.
+  seguimiento: (id: number, body: { tipo: 'nota' | 'reprograma'; nota?: string; fecha_nueva?: string }) =>
+    api.post<ApiResponse<{ ok: boolean }>>(`/ordenes-compra/${id}/seguimiento`, body).then((r) => r.data),
+
   updateEstado: (
     id: number,
     estado: string,

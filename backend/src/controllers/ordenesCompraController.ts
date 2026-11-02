@@ -819,3 +819,57 @@ export async function crearOCNoMTO(req: Request, res: Response, next: NextFuncti
     next(err)
   } finally { client.release() }
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Seguimiento de una OC (notas con hilo + reprogramación de la ETA).
+//   body: { tipo: 'nota' | 'reprograma', nota?, fecha_nueva? }
+//   · 'nota'       → agrega una nota al hilo.
+//   · 'reprograma' → actualiza fecha_entrega_estimada y registra el cambio.
+// ─────────────────────────────────────────────────────────────────────────────
+export async function registrarSeguimientoOC(req: Request, res: Response, next: NextFunction) {
+  const client = await pool.connect()
+  try {
+    const ocId = parseInt(String(req.params.id), 10)
+    if (!ocId) return next(createError('OC inválida', 400))
+    const tipo = req.body?.tipo === 'reprograma' ? 'reprograma' : 'nota'
+    const nota = typeof req.body?.nota === 'string' ? req.body.nota.trim() : null
+    const fechaNueva = req.body?.fecha_nueva || null
+    const usuario = req.user?.email ?? null
+
+    if (tipo === 'nota' && !nota) return next(createError('La nota no puede estar vacía', 400))
+    if (tipo === 'reprograma' && !fechaNueva) return next(createError('Falta la fecha nueva', 400))
+
+    await client.query('BEGIN')
+    let fechaAnterior: string | null = null
+    if (tipo === 'reprograma') {
+      const { rows } = await client.query(
+        'SELECT to_char(fecha_entrega_estimada,\'YYYY-MM-DD\') AS f FROM ordenes_compra WHERE id = $1', [ocId])
+      fechaAnterior = rows[0]?.f ?? null
+      await client.query(
+        'UPDATE ordenes_compra SET fecha_entrega_estimada = $2, updated_at = NOW() WHERE id = $1', [ocId, fechaNueva])
+    }
+    await client.query(
+      `INSERT INTO oc_seguimiento (orden_compra_id, tipo, nota, fecha_anterior, fecha_nueva, usuario_nombre)
+       VALUES ($1, $2, $3, $4, $5, $6)`,
+      [ocId, tipo, nota, fechaAnterior, tipo === 'reprograma' ? fechaNueva : null, usuario])
+    await client.query('COMMIT')
+    res.json({ data: { ok: true } })
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => {})
+    next(err)
+  } finally { client.release() }
+}
+
+// Lista el hilo de seguimiento de una OC (más reciente primero).
+export async function getSeguimientoOC(req: Request, res: Response, next: NextFunction) {
+  try {
+    const ocId = parseInt(String(req.params.id), 10)
+    if (!ocId) return next(createError('OC inválida', 400))
+    const { rows } = await pool.query(
+      `SELECT id, tipo, nota, to_char(fecha_anterior,'YYYY-MM-DD') AS fecha_anterior,
+              to_char(fecha_nueva,'YYYY-MM-DD') AS fecha_nueva, usuario_nombre,
+              to_char(created_at,'YYYY-MM-DD"T"HH24:MI') AS created_at
+         FROM oc_seguimiento WHERE orden_compra_id = $1 ORDER BY created_at DESC`, [ocId])
+    res.json({ data: rows })
+  } catch (err) { next(err) }
+}

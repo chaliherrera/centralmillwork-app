@@ -411,10 +411,17 @@ export async function getDashboardDailyBriefing(_req: Request, res: Response, ne
                 CURRENT_DATE - o.fecha_entrega_estimada AS dias_vencida,
                 o.total, o.estado,
                 p.codigo AS proyecto_codigo, p.nombre AS proyecto_nombre,
-                v.nombre AS proveedor_nombre
+                v.nombre AS proveedor_nombre,
+                sg.nota AS ultima_nota,
+                to_char(sg.created_at, 'YYYY-MM-DD') AS ultima_nota_fecha
            FROM ordenes_compra o
            LEFT JOIN proyectos p ON p.id = o.proyecto_id
            LEFT JOIN proveedores v ON v.id = o.proveedor_id
+           LEFT JOIN LATERAL (
+             SELECT nota, created_at FROM oc_seguimiento
+              WHERE orden_compra_id = o.id AND nota IS NOT NULL
+              ORDER BY created_at DESC LIMIT 1
+           ) sg ON true
           WHERE o.estado NOT IN ('cancelada', 'recibida')
             AND o.fecha_entrega_estimada IS NOT NULL
             AND o.fecha_entrega_estimada < CURRENT_DATE

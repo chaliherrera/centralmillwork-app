@@ -32,6 +32,7 @@ import {
   getOrdenesCompra, getOrdenesCompraKpis, getOrdenesCompraImportDates,
   getOrdenCompra, getOrdenCompraMaterialesLote,
   createOrdenCompra, updateOrdenCompra, updateEstadoOrden, deleteOrdenCompra,
+  registrarSeguimientoOC, getSeguimientoOC,
   getVendorsCotizados, generarOCs, crearOCNoMTO,
 } from '../controllers/ordenesCompraController'
 import {
@@ -168,6 +169,8 @@ router.post('/ordenes-compra/:id/imagenes',    REC_WRITE, upload.single('imagen'
 router.delete('/imagenes/:imagenId',           REC_WRITE, deleteImagen)
 router.post('/ordenes-compra',           WRITE, createOrdenCompra)
 router.put('/ordenes-compra/:id',        WRITE, updateOrdenCompra)
+router.get('/ordenes-compra/:id/seguimiento',  getSeguimientoOC)
+router.post('/ordenes-compra/:id/seguimiento', WRITE, registrarSeguimientoOC)
 router.patch('/ordenes-compra/:id/estado', WRITE, updateEstadoOrden)
 router.delete('/ordenes-compra/:id',     WRITE, deleteOrdenCompra)
 
