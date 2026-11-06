@@ -1999,10 +1999,18 @@ function PorLoteTab({ proyectoId }: { proyectoId: number }) {
                     {PL_CATS[openCat].l} · {mats.filter((m) => m.cat === openCat).length} material(es)
                   </div>
                   {mats.filter((m) => m.cat === openCat).map((m) => (
-                    <div key={m.id} className="flex gap-2 items-baseline py-1 border-t border-gray-100 text-xs">
-                      <span className="font-mono text-[11px] text-gray-800 shrink-0" style={{ minWidth: 120 }}>{m.codigo}</span>
-                      <span className="text-gray-500 flex-1 min-w-0 truncate">{m.descripcion}</span>
-                      <span className="text-gray-400 text-[11px] whitespace-nowrap">{m.vendor ?? '—'}{m.lleg ? ` · llegó ${plDate(m.lleg)}` : ''}</span>
+                    <div key={m.id} className="py-1 border-t border-gray-100 text-xs">
+                      <div className="flex gap-2 items-baseline">
+                        <span className="font-mono text-[11px] text-gray-800 shrink-0" style={{ minWidth: 120 }}>{m.codigo}</span>
+                        <span className="text-gray-500 flex-1 min-w-0 truncate">{m.descripcion}</span>
+                        <span className="text-gray-400 text-[11px] whitespace-nowrap">{m.vendor ?? '—'}{m.lleg ? ` · llegó ${plDate(m.lleg)}` : ''}</span>
+                      </div>
+                      {m.nota && (
+                        <div className="flex items-start gap-1 text-[11px] text-amber-700 mt-0.5 ml-[120px] pl-2">
+                          <MessageSquare size={11} className="mt-0.5 shrink-0" />
+                          <span>{m.oc_numero ? <span className="font-mono text-amber-600 mr-1">{m.oc_numero}:</span> : null}{m.nota}</span>
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>

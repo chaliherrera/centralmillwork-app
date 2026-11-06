@@ -578,9 +578,20 @@ export async function getComprasPorLote(req: Request, res: Response, next: NextF
                    WHEN m.estado_cotiz = 'EN_STOCK' OR m.cotizar = 'EN_STOCK' THEN 'stock'
                    WHEN m.cotizar = 'NO' THEN 'no_cotizar'
                    ELSE 'falta' END AS cat,
-              to_char(rec.f_rec, 'YYYY-MM-DD') AS lleg
+              to_char(rec.f_rec, 'YYYY-MM-DD') AS lleg,
+              nt.nota,
+              nt.oc_numero
          FROM materiales_mto m
          LEFT JOIN rec ON rec.id = m.id
+         -- última nota de recepción de la OC del material (lo que falta / backorder)
+         LEFT JOIN LATERAL (
+           SELECT r.notas AS nota, o.numero AS oc_numero
+             FROM items_orden_compra ioc
+             JOIN ordenes_compra o ON o.id = ioc.orden_compra_id
+             JOIN recepciones r ON r.orden_compra_id = o.id
+            WHERE ioc.material_id = m.id AND NULLIF(trim(r.notas), '') IS NOT NULL
+            ORDER BY r.created_at DESC LIMIT 1
+         ) nt ON true
         WHERE m.proyecto_id = $1
         ORDER BY m.fecha_importacion NULLS LAST, m.codigo, m.id`,
       [proyectoId]

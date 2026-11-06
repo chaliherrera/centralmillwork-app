@@ -161,6 +161,8 @@ export interface CompraLoteItem {
   vendor: string | null
   cat: 'recibido' | 'transito' | 'con_precio' | 'falta' | 'stock' | 'no_cotizar'
   lleg: string | null
+  nota: string | null
+  oc_numero: string | null
 }
 
 export const proyectosService = {
