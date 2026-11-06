@@ -153,6 +153,16 @@ export interface MaterialTimeline {
   recibido: string | null
 }
 
+export interface CompraLoteItem {
+  id: number
+  lote: string | null
+  codigo: string | null
+  descripcion: string | null
+  vendor: string | null
+  cat: 'recibido' | 'transito' | 'con_precio' | 'falta' | 'stock' | 'no_cotizar'
+  lleg: string | null
+}
+
 export const proyectosService = {
   getAll: (params?: PaginationParams) =>
     api.get<ApiResponse<Proyecto[]>>('/proyectos', { params }).then((r) => r.data),
@@ -174,6 +184,9 @@ export const proyectosService = {
 
   getMaterialesTimeline: (id: number) =>
     api.get<ApiResponse<MaterialTimeline[]>>(`/proyectos/${id}/materiales-timeline`).then((r) => r.data),
+
+  getComprasPorLote: (id: number) =>
+    api.get<ApiResponse<CompraLoteItem[]>>(`/proyectos/${id}/compras-por-lote`).then((r) => r.data),
 
   create: (data: Omit<Proyecto, 'id' | 'created_at' | 'updated_at'>) =>
     api.post<ApiResponse<Proyecto>>('/proyectos', data).then((r) => r.data),

@@ -554,6 +554,41 @@ export async function getProyectoMuestrasAprobadas(req: Request, res: Response, 
 //   · ordenado   → ordenes_compra.fecha_emision (OC más temprana del material)
 //   · recibido   → recepciones.fecha_recepcion (recepción con recibido = true)
 // ─────────────────────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// Compras por LOTE de importación: cada material clasificado en su etapa del
+// recorrido (recibido / en tránsito / con precio) o su motivo de no-cotizado
+// (falta cotizar / en stock / no cotizar), con la fecha de llegada si se recibió.
+// ─────────────────────────────────────────────────────────────────────────────
+export async function getComprasPorLote(req: Request, res: Response, next: NextFunction) {
+  try {
+    const proyectoId = parseInt(String(req.params.id), 10)
+    if (!proyectoId) return next(createError('Proyecto inválido', 400))
+    const { rows } = await pool.query(
+      `WITH rec AS (
+         SELECT rm.id_material AS id, MIN(r.fecha_recepcion) AS f_rec
+           FROM recepcion_materiales rm JOIN recepciones r ON r.id = rm.id_recepcion
+          WHERE rm.recibido = true AND r.fecha_recepcion IS NOT NULL
+          GROUP BY rm.id_material
+       )
+       SELECT m.id, to_char(m.fecha_importacion, 'YYYY-MM-DD') AS lote,
+              m.codigo, m.descripcion, m.vendor,
+              CASE WHEN m.estado_cotiz = 'RECIBIDO' THEN 'recibido'
+                   WHEN m.estado_cotiz = 'ORDENADO' THEN 'transito'
+                   WHEN m.estado_cotiz = 'COTIZADO' THEN 'con_precio'
+                   WHEN m.estado_cotiz = 'EN_STOCK' OR m.cotizar = 'EN_STOCK' THEN 'stock'
+                   WHEN m.cotizar = 'NO' THEN 'no_cotizar'
+                   ELSE 'falta' END AS cat,
+              to_char(rec.f_rec, 'YYYY-MM-DD') AS lleg
+         FROM materiales_mto m
+         LEFT JOIN rec ON rec.id = m.id
+        WHERE m.proyecto_id = $1
+        ORDER BY m.fecha_importacion NULLS LAST, m.codigo, m.id`,
+      [proyectoId]
+    )
+    res.json({ data: rows })
+  } catch (err) { next(err) }
+}
+
 export async function getMaterialesTimeline(req: Request, res: Response, next: NextFunction) {
   try {
     const proyectoId = parseInt(String(req.params.id), 10)

@@ -15,7 +15,7 @@ import { getPlanosItem, uploadPlanoItem, uploadPlano } from '../controllers/plan
 import {
   getProyectos, getProyecto, createProyecto, updateProyecto, deleteProyecto,
   getProyectoResumen, getProyectoActividad, getProyectoItemsReadiness,
-  getProyectoMuestrasAprobadas, getMaterialesTimeline,
+  getProyectoMuestrasAprobadas, getMaterialesTimeline, getComprasPorLote,
   createProyectoSchema, updateProyectoSchema,
 } from '../controllers/proyectosController'
 import {
@@ -127,6 +127,7 @@ router.get('/proyectos/:id/items/:numero/planos',  requireRole('ADMIN', 'SHOP_MA
 router.post('/proyectos/:id/items/:numero/planos', requireRole('ADMIN', 'SHOP_MANAGER', 'PROCUREMENT', 'ENGINEERING'), uploadPlano.single('plano'), uploadPlanoItem)
 router.get('/proyectos/:id/muestras-aprobadas', getProyectoMuestrasAprobadas)
 router.get('/proyectos/:id/materiales-timeline', getMaterialesTimeline)
+router.get('/proyectos/:id/compras-por-lote',    getComprasPorLote)
 router.get('/proyectos/:id',                  getProyecto)
 router.post('/proyectos',                     PROY_WRITE, validateBody(createProyectoSchema), createProyecto)
 router.put('/proyectos/:id',                  PROY_WRITE, validateBody(updateProyectoSchema), updateProyecto)

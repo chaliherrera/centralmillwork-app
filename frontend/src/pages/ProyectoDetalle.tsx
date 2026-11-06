@@ -16,6 +16,7 @@ import {
   type ItemReadinessMaterial,
   type EstadoItemReadiness,
   type MaterialTimeline,
+  type CompraLoteItem,
 } from '@/services/proyectos'
 import { materialesService } from '@/services/materiales'
 import { ordenesCompraService } from '@/services/ordenesCompra'
@@ -44,7 +45,7 @@ const fmtDateTime = (d: string | null | undefined) => {
   return dt.toLocaleString('es-MX', { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
 }
 
-type TabKey = 'materiales' | 'kanban' | 'timeline' | 'items' | 'ocs' | 'recepciones' | 'muestras' | 'actividad' | 'schedule' | 'calendar' | 'graficas'
+type TabKey = 'materiales' | 'kanban' | 'timeline' | 'porlote' | 'items' | 'ocs' | 'recepciones' | 'muestras' | 'actividad' | 'schedule' | 'calendar' | 'graficas'
 
 export default function ProyectoDetalle() {
   const { id } = useParams<{ id: string }>()
@@ -151,6 +152,7 @@ export default function ProyectoDetalle() {
           { key: 'materiales',  label: `Materiales (${mat.total})`,      icon: Package },
           { key: 'kanban',      label: 'Vista Kanban',                    icon: Layers },
           { key: 'timeline',    label: 'Línea de tiempo',                 icon: Clock },
+          { key: 'porlote',     label: 'Por lote',                        icon: Layers },
           { key: 'items',       label: 'Items',                           icon: Hammer },
           { key: 'ocs',         label: `Órdenes (${oc.total})`,           icon: ShoppingCart },
           { key: 'recepciones', label: `Recepciones (${kpis.recepciones.total})`, icon: Warehouse },
@@ -179,6 +181,7 @@ export default function ProyectoDetalle() {
       {tab === 'materiales'  && <MaterialesTab  proyectoId={proyectoId} />}
       {tab === 'kanban'      && <KanbanTab      proyectoId={proyectoId} />}
       {tab === 'timeline'    && <TimelineTab    proyectoId={proyectoId} />}
+      {tab === 'porlote'     && <PorLoteTab     proyectoId={proyectoId} />}
       {tab === 'items'       && <ItemsTab       proyectoId={proyectoId} />}
       {tab === 'ocs'         && <OcsTab         proyectoId={proyectoId} />}
       {tab === 'recepciones' && <RecepcionesTab proyectoId={proyectoId} />}
@@ -1886,6 +1889,128 @@ function TimelineTab({ proyectoId }: { proyectoId: number }) {
         Reconstruido de los datos existentes. "Con precio" muestra ✓ cuando el material ya tiene precio —
         la fecha exacta no se registró en el pasado (se captura de ahora en más).
       </p>
+    </div>
+  )
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Tab: Por lote — recorrido de los materiales de cada lote de importación, con
+// desglose interactivo (clic en una categoría → ver los materiales).
+// ──────────────────────────────────────────────────────────────────────────────
+const PL_CATS: Record<string, { l: string; c: string; t: string }> = {
+  recibido:   { l: 'Recibido',      c: '#1baf7a', t: '#1b7a5a' },
+  transito:   { l: 'En tránsito',   c: '#6250d6', t: '#4a3fb0' },
+  con_precio: { l: 'Con precio',    c: '#2a78d6', t: '#185fa5' },
+  falta:      { l: 'Falta cotizar', c: '#eda100', t: '#9a6a00' },
+  stock:      { l: 'En stock',      c: '#5da9c9', t: '#2a6a85' },
+  no_cotizar: { l: 'No cotizar',    c: '#9a988f', t: '#6b6a62' },
+}
+const PL_ORD = ['recibido', 'transito', 'con_precio', 'falta', 'stock', 'no_cotizar'] as const
+const plDate = (iso: string | null) => {
+  if (!iso) return null
+  const [, m, d] = iso.split('-')
+  const mes = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'][parseInt(m) - 1]
+  return `${parseInt(d)} ${mes}`
+}
+
+function PorLoteTab({ proyectoId }: { proyectoId: number }) {
+  const [open, setOpen] = useState<string | null>(null)
+  const { data, isLoading } = useQuery({
+    queryKey: ['proyecto-detalle', proyectoId, 'compras-por-lote'],
+    queryFn: () => proyectosService.getComprasPorLote(proyectoId),
+    staleTime: 30_000,
+  })
+  const items: CompraLoteItem[] = data?.data ?? []
+
+  const lotes = useMemo(() => {
+    const m = new Map<string, CompraLoteItem[]>()
+    for (const it of items) { const k = it.lote ?? 'sin fecha'; if (!m.has(k)) m.set(k, []); m.get(k)!.push(it) }
+    return [...m.entries()].sort((a, b) => a[0].localeCompare(b[0]))
+  }, [items])
+
+  const tot = useMemo(() => ({
+    sub: items.length,
+    cot: items.filter((i) => ['recibido', 'transito', 'con_precio'].includes(i.cat)).length,
+    ord: items.filter((i) => ['recibido', 'transito'].includes(i.cat)).length,
+    rec: items.filter((i) => i.cat === 'recibido').length,
+  }), [items])
+
+  if (isLoading) return <div className="py-16 text-center text-gray-400 text-sm">Cargando compras por lote…</div>
+  if (!items.length) return <div className="py-16 text-center text-gray-400 text-sm">Este proyecto no tiene materiales.</div>
+
+  return (
+    <div>
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
+        {([['Subidos', String(tot.sub), 'text-gray-800'],
+          ['Cotizados', `${tot.cot} · ${tot.sub ? Math.round(tot.cot / tot.sub * 100) : 0}%`, 'text-emerald-700'],
+          ['Ordenados', String(tot.ord), 'text-purple-700'],
+          ['Recibidos', String(tot.rec), 'text-emerald-600']] as [string, string, string][]).map(([l, v, c]) => (
+          <div key={l} className="bg-white rounded-xl border border-gray-100 px-4 py-3">
+            <div className="text-xs text-gray-500">{l}</div>
+            <div className={clsx('text-2xl font-bold mt-0.5 tabular-nums', c)}>{v}</div>
+          </div>
+        ))}
+      </div>
+
+      <div className="flex flex-wrap gap-x-4 gap-y-1.5 text-xs text-gray-500 mb-3">
+        {PL_ORD.map((c) => (
+          <span key={c} className="inline-flex items-center gap-1.5">
+            <i className="w-2.5 h-2.5 rounded-sm inline-block" style={{ background: PL_CATS[c].c }} />{PL_CATS[c].l}
+          </span>
+        ))}
+      </div>
+      <p className="text-[11px] text-gray-400 mb-2">Clic en una etiqueta de un lote para ver los materiales.</p>
+
+      <div className="bg-white rounded-xl border border-gray-100 divide-y divide-gray-50 overflow-x-auto">
+        {lotes.map(([lote, mats]) => {
+          const cnt: Record<string, number> = {}
+          PL_ORD.forEach((c) => { cnt[c] = mats.filter((m) => m.cat === c).length })
+          const llegs = mats.filter((m) => m.lleg).map((m) => m.lleg as string).sort()
+          const lw = llegs.length
+            ? `${plDate(llegs[0])}${llegs[llegs.length - 1] !== llegs[0] ? '–' + plDate(llegs[llegs.length - 1]) : ''}`
+            : (cnt.transito ? 'en tránsito' : '—')
+          const openCat = open && open.startsWith(lote + '|') ? open.split('|')[1] : null
+          return (
+            <div key={lote} className="px-4 py-3 min-w-[620px]">
+              <div className="grid items-center gap-3" style={{ gridTemplateColumns: '90px 1fr 110px' }}>
+                <div>
+                  <div className="text-sm font-semibold text-gray-800">{plDate(lote) ?? lote}</div>
+                  <div className="text-[11px] text-gray-400">{mats.length} subidos</div>
+                </div>
+                <div>
+                  <div className="flex h-4 rounded overflow-hidden bg-gray-50">
+                    {PL_ORD.map((c) => cnt[c] > 0 ? <div key={c} style={{ width: `${cnt[c] / mats.length * 100}%`, background: PL_CATS[c].c }} /> : null)}
+                  </div>
+                  <div className="flex flex-wrap gap-1.5 mt-1.5">
+                    {PL_ORD.filter((c) => cnt[c] > 0).map((c) => (
+                      <button key={c} onClick={() => setOpen(open === `${lote}|${c}` ? null : `${lote}|${c}`)}
+                        className={clsx('text-[10.5px] font-medium px-1.5 py-0.5 rounded border transition-colors', openCat === c ? 'border-gray-400 bg-gray-50' : 'border-gray-200 hover:bg-gray-50')}
+                        style={{ color: PL_CATS[c].t }}>
+                        {cnt[c]} {PL_CATS[c].l.toLowerCase()}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div className="text-right text-[11.5px]" style={{ color: lw === 'en tránsito' ? '#9a6a00' : '#6b7280' }}>{lw}</div>
+              </div>
+              {openCat && (
+                <div className="mt-2 bg-gray-50 rounded-lg px-3 py-2">
+                  <div className="text-[11px] font-medium mb-1.5" style={{ color: PL_CATS[openCat].t }}>
+                    {PL_CATS[openCat].l} · {mats.filter((m) => m.cat === openCat).length} material(es)
+                  </div>
+                  {mats.filter((m) => m.cat === openCat).map((m) => (
+                    <div key={m.id} className="flex gap-2 items-baseline py-1 border-t border-gray-100 text-xs">
+                      <span className="font-mono text-[11px] text-gray-800 shrink-0" style={{ minWidth: 120 }}>{m.codigo}</span>
+                      <span className="text-gray-500 flex-1 min-w-0 truncate">{m.descripcion}</span>
+                      <span className="text-gray-400 text-[11px] whitespace-nowrap">{m.vendor ?? '—'}{m.lleg ? ` · llegó ${plDate(m.lleg)}` : ''}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )
+        })}
+      </div>
     </div>
   )
 }
