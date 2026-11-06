@@ -1965,6 +1965,8 @@ function PorLoteTab({ proyectoId }: { proyectoId: number }) {
         {lotes.map(([lote, mats]) => {
           const cnt: Record<string, number> = {}
           PL_ORD.forEach((c) => { cnt[c] = mats.filter((m) => m.cat === c).length })
+          // Notas únicas por OC (la nota vive en la OC; no repetir por material).
+          const notes = [...new Map(mats.filter((m) => m.nota).map((m) => [`${m.oc_numero}|${m.nota}`, { oc: m.oc_numero, nota: m.nota as string }])).values()]
           const llegs = mats.filter((m) => m.lleg).map((m) => m.lleg as string).sort()
           const lw = llegs.length
             ? `${plDate(llegs[0])}${llegs[llegs.length - 1] !== llegs[0] ? '–' + plDate(llegs[llegs.length - 1]) : ''}`
@@ -1989,28 +1991,36 @@ function PorLoteTab({ proyectoId }: { proyectoId: number }) {
                         {cnt[c]} {PL_CATS[c].l.toLowerCase()}
                       </button>
                     ))}
+                    {notes.length > 0 && (
+                      <button onClick={() => setOpen(open === `${lote}|notas` ? null : `${lote}|notas`)}
+                        className={clsx('inline-flex items-center gap-1 text-[10.5px] font-medium px-1.5 py-0.5 rounded border transition-colors text-amber-700', openCat === 'notas' ? 'border-amber-300 bg-amber-50' : 'border-amber-200 hover:bg-amber-50')}>
+                        <MessageSquare size={10} />{notes.length} nota{notes.length === 1 ? '' : 's'}
+                      </button>
+                    )}
                   </div>
                 </div>
                 <div className="text-right text-[11.5px]" style={{ color: lw === 'en tránsito' ? '#9a6a00' : '#6b7280' }}>{lw}</div>
               </div>
-              {openCat && (
+              {openCat === 'notas' ? (
+                <div className="mt-2 bg-amber-50/60 rounded-lg px-3 py-2">
+                  <div className="text-[11px] font-medium mb-1.5 text-amber-700">Notas de recepción · {notes.length}</div>
+                  {notes.map((n, i) => (
+                    <div key={i} className="flex items-start gap-1.5 py-1 border-t border-amber-100 text-xs">
+                      <MessageSquare size={11} className="mt-0.5 shrink-0 text-amber-600" />
+                      <span>{n.oc ? <span className="font-mono text-amber-600 mr-1">{n.oc}:</span> : null}<span className="text-gray-700">{n.nota}</span></span>
+                    </div>
+                  ))}
+                </div>
+              ) : openCat && (
                 <div className="mt-2 bg-gray-50 rounded-lg px-3 py-2">
-                  <div className="text-[11px] font-medium mb-1.5" style={{ color: PL_CATS[openCat].t }}>
-                    {PL_CATS[openCat].l} · {mats.filter((m) => m.cat === openCat).length} material(es)
+                  <div className="text-[11px] font-medium mb-1.5" style={{ color: PL_CATS[openCat]?.t }}>
+                    {PL_CATS[openCat]?.l} · {mats.filter((m) => m.cat === openCat).length} material(es)
                   </div>
                   {mats.filter((m) => m.cat === openCat).map((m) => (
-                    <div key={m.id} className="py-1 border-t border-gray-100 text-xs">
-                      <div className="flex gap-2 items-baseline">
-                        <span className="font-mono text-[11px] text-gray-800 shrink-0" style={{ minWidth: 120 }}>{m.codigo}</span>
-                        <span className="text-gray-500 flex-1 min-w-0 truncate">{m.descripcion}</span>
-                        <span className="text-gray-400 text-[11px] whitespace-nowrap">{m.vendor ?? '—'}{m.lleg ? ` · llegó ${plDate(m.lleg)}` : ''}</span>
-                      </div>
-                      {m.nota && (
-                        <div className="flex items-start gap-1 text-[11px] text-amber-700 mt-0.5 ml-[120px] pl-2">
-                          <MessageSquare size={11} className="mt-0.5 shrink-0" />
-                          <span>{m.oc_numero ? <span className="font-mono text-amber-600 mr-1">{m.oc_numero}:</span> : null}{m.nota}</span>
-                        </div>
-                      )}
+                    <div key={m.id} className="flex gap-2 items-baseline py-1 border-t border-gray-100 text-xs">
+                      <span className="font-mono text-[11px] text-gray-800 shrink-0" style={{ minWidth: 120 }}>{m.codigo}</span>
+                      <span className="text-gray-500 flex-1 min-w-0 truncate">{m.descripcion}</span>
+                      <span className="text-gray-400 text-[11px] whitespace-nowrap">{m.vendor ?? '—'}{m.lleg ? ` · llegó ${plDate(m.lleg)}` : ''}</span>
                     </div>
                   ))}
                 </div>
