@@ -389,13 +389,32 @@ export async function getProyectoItemsReadiness(req: Request, res: Response, nex
     if (!proyecto_id) return next(createError('id inválido', 400))
 
     const { rows } = await pool.query(
-      `WITH items_expanded AS (
+      `WITH rec AS (
+         -- Materiales con recepción FÍSICA registrada (llegaron al taller),
+         -- aunque su OC siga abierta por una recepción parcial.
+         SELECT rm.id_material AS id
+           FROM recepcion_materiales rm
+           JOIN recepciones r ON r.id = rm.id_recepcion
+          WHERE rm.recibido = true AND r.fecha_recepcion IS NOT NULL
+          GROUP BY rm.id_material
+       ),
+       items_expanded AS (
          SELECT
            TRIM(item_num) AS item,
            m.id, m.codigo, m.descripcion, m.vendor, m.qty, m.unit_price,
-           m.estado_cotiz, m.cotizar,
+           -- Estado "efectivo" para esta vista (¿tengo el material en el taller?):
+           -- si ya tiene recepción, cuenta como RECIBIDO aunque la OC no esté cerrada.
+           -- EN_STOCK se mantiene como su propio estado (también es "disponible").
+           CASE
+             WHEN m.estado_cotiz = 'EN_STOCK' THEN 'EN_STOCK'
+             WHEN m.estado_cotiz = 'RECIBIDO' OR rec.id IS NOT NULL THEN 'RECIBIDO'
+             ELSE m.estado_cotiz
+           END AS estado_cotiz,
+           (rec.id IS NOT NULL) AS recibido_fisico,
+           m.cotizar,
            oc_link.oc_id, oc_link.oc_numero, oc_link.oc_fecha_entrega
          FROM materiales_mto m
+         LEFT JOIN rec ON rec.id = m.id
          CROSS JOIN UNNEST(REGEXP_SPLIT_TO_ARRAY(m.item, '[-,]')) AS item_num
          LEFT JOIN LATERAL (
            SELECT oc.id AS oc_id, oc.numero AS oc_numero,
@@ -427,6 +446,7 @@ export async function getProyectoItemsReadiness(req: Request, res: Response, nex
              'qty',         qty,
              'unit_price',  unit_price,
              'estado_cotiz', estado_cotiz,
+             'recibido_fisico', recibido_fisico,
              'oc_id',       oc_id,
              'oc_numero',   oc_numero,
              'oc_fecha_entrega', oc_fecha_entrega
