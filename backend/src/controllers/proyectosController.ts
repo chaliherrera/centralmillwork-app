@@ -412,6 +412,7 @@ export async function getProyectoItemsReadiness(req: Request, res: Response, nex
            END AS estado_cotiz,
            (rec.id IS NOT NULL) AS recibido_fisico,
            m.cotizar,
+           m.notas AS nota,
            oc_link.oc_id, oc_link.oc_numero, oc_link.oc_fecha_entrega
          FROM materiales_mto m
          LEFT JOIN rec ON rec.id = m.id
@@ -432,11 +433,15 @@ export async function getProyectoItemsReadiness(req: Request, res: Response, nex
        )
        SELECT
          item,
-         COUNT(*)::int                                                       AS total,
-         COUNT(*) FILTER (WHERE estado_cotiz = 'RECIBIDO')::int              AS recibidos,
-         COUNT(*) FILTER (WHERE estado_cotiz = 'ORDENADO')::int              AS ordenados,
-         COUNT(*) FILTER (WHERE estado_cotiz IN ('PENDIENTE','COTIZADO'))::int AS pendientes,
-         COUNT(*) FILTER (WHERE estado_cotiz = 'EN_STOCK')::int              AS en_stock,
+         -- Los materiales marcados NO ('propios': los fabricamos nosotros o no
+         -- se compran) NO cuentan para saber si el ítem está completo. Solo los
+         -- COMPRABLES (cotizar <> 'NO') entran en total/disponibles/estado.
+         COUNT(*) FILTER (WHERE cotizar IS DISTINCT FROM 'NO')::int           AS total,
+         COUNT(*) FILTER (WHERE cotizar IS DISTINCT FROM 'NO' AND estado_cotiz = 'RECIBIDO')::int              AS recibidos,
+         COUNT(*) FILTER (WHERE cotizar IS DISTINCT FROM 'NO' AND estado_cotiz = 'ORDENADO')::int              AS ordenados,
+         COUNT(*) FILTER (WHERE cotizar IS DISTINCT FROM 'NO' AND estado_cotiz IN ('PENDIENTE','COTIZADO'))::int AS pendientes,
+         COUNT(*) FILTER (WHERE cotizar IS DISTINCT FROM 'NO' AND estado_cotiz = 'EN_STOCK')::int              AS en_stock,
+         COUNT(*) FILTER (WHERE cotizar = 'NO')::int                          AS propios,
          json_agg(
            json_build_object(
              'id',          id,
@@ -447,6 +452,8 @@ export async function getProyectoItemsReadiness(req: Request, res: Response, nex
              'unit_price',  unit_price,
              'estado_cotiz', estado_cotiz,
              'recibido_fisico', recibido_fisico,
+             'cotizar',     cotizar,
+             'nota',        nota,
              'oc_id',       oc_id,
              'oc_numero',   oc_numero,
              'oc_fecha_entrega', oc_fecha_entrega

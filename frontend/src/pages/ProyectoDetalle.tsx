@@ -1426,7 +1426,8 @@ function FiltroEstadoChip({ label, count, active, onClick, color }: {
 
 function ItemRow({ item, expanded, onToggle }: { item: ItemReadiness; expanded: boolean; onToggle: () => void }) {
   const estadoMeta = getEstadoMeta(item.estado)
-  const pctDisponible = item.total > 0 ? Math.round((item.disponibles / item.total) * 100) : 0
+  // total ya excluye los materiales 'propios' (NO). Si no hay nada que comprar, 100%.
+  const pctDisponible = item.total > 0 ? Math.round((item.disponibles / item.total) * 100) : 100
 
   return (
     <div className={clsx(
@@ -1496,6 +1497,11 @@ function ItemRow({ item, expanded, onToggle }: { item: ItemReadiness; expanded: 
               <Clock size={9} /> {item.pendientes} pend
             </span>
           )}
+          {item.propios > 0 && (
+            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-amber-50 text-amber-700 font-medium" title="Materiales propios (los fabricamos nosotros / no se compran)">
+              <Hammer size={9} /> {item.propios} propio
+            </span>
+          )}
         </div>
       </button>
 
@@ -1515,27 +1521,54 @@ function ItemRow({ item, expanded, onToggle }: { item: ItemReadiness; expanded: 
 }
 
 function MaterialDetailRow({ m }: { m: ItemReadinessMaterial }) {
+  const esPropio = m.cotizar === 'NO'
+  const tieneNota = !!(m.nota && m.nota.trim())
+
   return (
-    <div className="bg-white rounded-lg border border-gray-100 px-3 py-2 flex items-center gap-3 text-xs">
-      <span className="font-mono text-[11px] bg-gray-100 px-1.5 py-0.5 rounded text-gray-700 flex-shrink-0">{m.codigo}</span>
-      <div className="flex-1 min-w-0">
-        <p className="text-gray-800 truncate">{m.descripcion}</p>
-        {m.vendor && <p className="text-[10px] text-gray-400 truncate">{m.vendor}</p>}
+    <div className={clsx(
+      'rounded-lg border px-3 py-2 text-xs',
+      esPropio ? 'bg-amber-50/60 border-amber-200' : 'bg-white border-gray-100'
+    )}>
+      <div className="flex items-center gap-3">
+        <span className="font-mono text-[11px] bg-gray-100 px-1.5 py-0.5 rounded text-gray-700 flex-shrink-0">{m.codigo}</span>
+        <div className="flex-1 min-w-0">
+          <p className="text-gray-800 truncate">{m.descripcion}</p>
+          {m.vendor && !esPropio && <p className="text-[10px] text-gray-400 truncate">{m.vendor}</p>}
+        </div>
+        <span className="text-gray-500 tabular-nums flex-shrink-0">{Number(m.qty)} u.</span>
+        {esPropio ? (
+          <span className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full font-bold flex-shrink-0 bg-amber-100 text-amber-800" title="No se compra: lo fabricamos nosotros o hay un impedimento">
+            <Hammer size={10} /> PROPIO
+          </span>
+        ) : (
+          <span className={clsx(
+            'inline-block text-[10px] px-2 py-0.5 rounded-full font-bold flex-shrink-0',
+            m.estado_cotiz === 'RECIBIDO'  && 'bg-emerald-100 text-emerald-700',
+            m.estado_cotiz === 'EN_STOCK'  && 'bg-blue-100 text-blue-700',
+            m.estado_cotiz === 'ORDENADO'  && 'bg-purple-100 text-purple-700',
+            m.estado_cotiz === 'COTIZADO'  && 'bg-green-100 text-green-700',
+            m.estado_cotiz === 'PENDIENTE' && 'bg-yellow-100 text-yellow-700',
+          )}>
+            {m.estado_cotiz === 'EN_STOCK' ? 'EN STOCK' : m.estado_cotiz}
+          </span>
+        )}
+        {esPropio
+          ? <span className="flex-shrink-0 w-20" />
+          : (m.oc_numero
+              ? <Link to={`/ordenes-compra?ocId=${m.oc_id}`} className="font-mono text-[10px] text-forest-700 hover:underline flex-shrink-0">{m.oc_numero}</Link>
+              : <span className="text-[10px] text-gray-300 flex-shrink-0 w-20">—</span>)}
       </div>
-      <span className="text-gray-500 tabular-nums flex-shrink-0">{Number(m.qty)} u.</span>
-      <span className={clsx(
-        'inline-block text-[10px] px-2 py-0.5 rounded-full font-bold flex-shrink-0',
-        m.estado_cotiz === 'RECIBIDO'  && 'bg-emerald-100 text-emerald-700',
-        m.estado_cotiz === 'EN_STOCK'  && 'bg-blue-100 text-blue-700',
-        m.estado_cotiz === 'ORDENADO'  && 'bg-purple-100 text-purple-700',
-        m.estado_cotiz === 'COTIZADO'  && 'bg-green-100 text-green-700',
-        m.estado_cotiz === 'PENDIENTE' && 'bg-yellow-100 text-yellow-700',
-      )}>
-        {m.estado_cotiz === 'EN_STOCK' ? 'EN STOCK' : m.estado_cotiz}
-      </span>
-      {m.oc_numero
-        ? <Link to={`/ordenes-compra?ocId=${m.oc_id}`} className="font-mono text-[10px] text-forest-700 hover:underline flex-shrink-0">{m.oc_numero}</Link>
-        : <span className="text-[10px] text-gray-300 flex-shrink-0 w-20">—</span>}
+
+      {/* Nota del material propio — debe verse (por qué lo fabricamos o qué impedimento tiene) */}
+      {esPropio && (
+        <div className={clsx(
+          'mt-1.5 flex items-start gap-1.5 rounded px-2 py-1 text-[11px]',
+          tieneNota ? 'bg-amber-100/70 text-amber-900' : 'bg-gray-50 text-gray-400 italic'
+        )}>
+          <MessageSquare size={11} className="mt-0.5 flex-shrink-0" />
+          <span className="min-w-0">{tieneNota ? m.nota : 'Sin nota — indicá por qué es propio o si hay un impedimento.'}</span>
+        </div>
+      )}
     </div>
   )
 }

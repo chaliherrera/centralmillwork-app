@@ -52,6 +52,8 @@ export interface ItemReadinessMaterial {
   unit_price: string
   estado_cotiz: 'PENDIENTE' | 'COTIZADO' | 'ORDENADO' | 'RECIBIDO' | 'EN_STOCK'
   recibido_fisico?: boolean  // llegó al taller aunque su OC siga abierta (recepción parcial)
+  cotizar?: string | null    // 'SI' | 'NO' | 'EN_STOCK'. NO = propio (no se compra)
+  nota?: string | null       // nota del material (por qué es propio / impedimento)
   oc_id: number | null
   oc_numero: string | null
   oc_fecha_entrega: string | null  // ETA: fecha_entrega_estimada de la OC
@@ -59,11 +61,12 @@ export interface ItemReadinessMaterial {
 
 export interface ItemReadiness {
   item: string
-  total: number
+  total: number        // solo materiales COMPRABLES (excluye los marcados NO)
   recibidos: number
   ordenados: number
   pendientes: number
   en_stock: number
+  propios: number      // materiales marcados NO (fabricados por nosotros / no se compran)
   disponibles: number  // recibidos + en_stock
   estado: EstadoItemReadiness
   materiales: ItemReadinessMaterial[]
