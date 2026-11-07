@@ -1,12 +1,12 @@
 import { useState, useMemo } from 'react'
 import { useParams, Link } from 'react-router-dom'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   ArrowLeft, Package, ShoppingCart, Warehouse, Clock, AlertTriangle,
   Activity, BarChart3, Calendar, CalendarDays, User,
   CheckCircle2, AlertCircle, MessageSquare, Truck, Layers, FileText,
   ChevronLeft, ChevronRight, ChevronDown, ChevronRight as ChevronRightSm,
-  Hammer, Beaker, Download, ExternalLink,
+  Hammer, Beaker, Download, ExternalLink, Pencil, Check, X,
 } from 'lucide-react'
 import clsx from 'clsx'
 import {
@@ -1391,7 +1391,7 @@ function ItemsTab({ proyectoId }: { proyectoId: number }) {
       {/* Grid de items */}
       <div className="space-y-2">
         {itemsFiltrados.map((item) => (
-          <ItemRow key={item.item} item={item} expanded={expanded.has(item.item)} onToggle={() => toggle(item.item)} />
+          <ItemRow key={item.item} item={item} proyectoId={proyectoId} expanded={expanded.has(item.item)} onToggle={() => toggle(item.item)} />
         ))}
         {itemsFiltrados.length === 0 && (
           <div className="bg-white rounded-xl border border-dashed border-gray-200 py-10 text-center">
@@ -1424,7 +1424,7 @@ function FiltroEstadoChip({ label, count, active, onClick, color }: {
   )
 }
 
-function ItemRow({ item, expanded, onToggle }: { item: ItemReadiness; expanded: boolean; onToggle: () => void }) {
+function ItemRow({ item, proyectoId, expanded, onToggle }: { item: ItemReadiness; proyectoId: number; expanded: boolean; onToggle: () => void }) {
   const estadoMeta = getEstadoMeta(item.estado)
   // total ya excluye los materiales 'propios' (NO). Si no hay nada que comprar, 100%.
   const pctDisponible = item.total > 0 ? Math.round((item.disponibles / item.total) * 100) : 100
@@ -1512,7 +1512,7 @@ function ItemRow({ item, expanded, onToggle }: { item: ItemReadiness; expanded: 
             Materiales necesarios ({item.materiales.length})
           </p>
           <div className="space-y-1.5">
-            {item.materiales.map((m) => <MaterialDetailRow key={m.id} m={m} />)}
+            {item.materiales.map((m) => <MaterialDetailRow key={m.id} m={m} proyectoId={proyectoId} />)}
           </div>
         </div>
       )}
@@ -1520,9 +1520,21 @@ function ItemRow({ item, expanded, onToggle }: { item: ItemReadiness; expanded: 
   )
 }
 
-function MaterialDetailRow({ m }: { m: ItemReadinessMaterial }) {
+function MaterialDetailRow({ m, proyectoId }: { m: ItemReadinessMaterial; proyectoId: number }) {
   const esPropio = m.cotizar === 'NO'
   const tieneNota = !!(m.nota && m.nota.trim())
+
+  const queryClient = useQueryClient()
+  const [editando, setEditando] = useState(false)
+  const [valor, setValor] = useState(m.nota ?? '')
+
+  const guardarNota = useMutation({
+    mutationFn: (texto: string) => materialesService.update(m.id, { notas: texto.trim() || null }),
+    onSuccess: () => {
+      setEditando(false)
+      queryClient.invalidateQueries({ queryKey: ['proyecto-detalle', proyectoId, 'items-readiness'] })
+    },
+  })
 
   return (
     <div className={clsx(
@@ -1559,14 +1571,53 @@ function MaterialDetailRow({ m }: { m: ItemReadinessMaterial }) {
               : <span className="text-[10px] text-gray-300 flex-shrink-0 w-20">—</span>)}
       </div>
 
-      {/* Nota del material propio — debe verse (por qué lo fabricamos o qué impedimento tiene) */}
-      {esPropio && (
+      {/* Nota del material propio — debe verse (por qué lo fabricamos o qué impedimento tiene).
+          Editable inline, sin salir de la pestaña. */}
+      {esPropio && !editando && (
         <div className={clsx(
-          'mt-1.5 flex items-start gap-1.5 rounded px-2 py-1 text-[11px]',
+          'mt-1.5 flex items-start gap-1.5 rounded px-2 py-1 text-[11px] group',
           tieneNota ? 'bg-amber-100/70 text-amber-900' : 'bg-gray-50 text-gray-400 italic'
         )}>
           <MessageSquare size={11} className="mt-0.5 flex-shrink-0" />
-          <span className="min-w-0">{tieneNota ? m.nota : 'Sin nota — indicá por qué es propio o si hay un impedimento.'}</span>
+          <span className="min-w-0 flex-1">{tieneNota ? m.nota : 'Sin nota — indicá por qué es propio o si hay un impedimento.'}</span>
+          <button
+            onClick={() => { setValor(m.nota ?? ''); setEditando(true) }}
+            className="flex-shrink-0 inline-flex items-center gap-1 text-[10px] text-amber-700 hover:text-amber-900 font-medium not-italic"
+          >
+            <Pencil size={10} /> {tieneNota ? 'Editar' : 'Agregar nota'}
+          </button>
+        </div>
+      )}
+
+      {esPropio && editando && (
+        <div className="mt-1.5 rounded bg-white border border-amber-200 p-2">
+          <textarea
+            autoFocus
+            value={valor}
+            onChange={(e) => setValor(e.target.value)}
+            rows={2}
+            placeholder="¿Lo fabricamos nosotros? ¿Hay algún impedimento?"
+            className="w-full text-[11px] text-gray-800 border border-gray-200 rounded px-2 py-1 resize-none focus:outline-none focus:ring-1 focus:ring-amber-300"
+          />
+          <div className="flex items-center justify-end gap-2 mt-1.5">
+            <button
+              onClick={() => { setEditando(false); setValor(m.nota ?? '') }}
+              disabled={guardarNota.isPending}
+              className="inline-flex items-center gap-1 text-[10px] text-gray-500 hover:text-gray-700 font-medium px-2 py-1"
+            >
+              <X size={11} /> Cancelar
+            </button>
+            <button
+              onClick={() => guardarNota.mutate(valor)}
+              disabled={guardarNota.isPending}
+              className="inline-flex items-center gap-1 text-[10px] bg-amber-600 hover:bg-amber-700 text-white font-semibold px-2.5 py-1 rounded disabled:opacity-50"
+            >
+              <Check size={11} /> {guardarNota.isPending ? 'Guardando…' : 'Guardar'}
+            </button>
+          </div>
+          {guardarNota.isError && (
+            <p className="text-[10px] text-red-600 mt-1">No se pudo guardar. Intentá de nuevo.</p>
+          )}
         </div>
       )}
     </div>
