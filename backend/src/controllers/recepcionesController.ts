@@ -328,7 +328,9 @@ export async function getRecepcionesHistorial(req: Request, res: Response, next:
                'cm_code',     rm.cm_code,
                'descripcion', rm.descripcion,
                'recibido',    rm.recibido,
-               'nota',        rm.nota
+               'nota',        rm.nota,
+               'cantidad_recibida', rm.cantidad_recibida,
+               'cantidad_ordenada', rm.cantidad_ordenada
              ) ORDER BY rm.id
            ) FILTER (WHERE rm.id IS NOT NULL),
            '[]'::json

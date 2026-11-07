@@ -14,6 +14,17 @@ import { recepcionesService } from '@/services/recepciones'
 import ReporteModal from '@/components/ui/ReporteModal'
 import type { OrdenCompra, Material } from '@/types'
 
+// Feature flag F2: recepción por CANTIDADES. Apagado => checkbox de siempre (sin cambios).
+// Se prende en local con VITE_RECEPCION_CANTIDADES=true (frontend/.env.local); en prod,
+// con la env var del servicio frontend en Railway.
+const RECEPCION_CANTIDADES = import.meta.env.VITE_RECEPCION_CANTIDADES === 'true'
+
+// Formatea una cantidad numérica sin decimales inútiles (3 vs 3.000).
+const fmtQty = (n: number) => {
+  const r = Math.round(n * 1000) / 1000
+  return Number.isInteger(r) ? String(r) : String(r)
+}
+
 const fmt = (n: number) =>
   new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(n)
 
@@ -54,11 +65,13 @@ function RecepcionPanel({
   oc: OrdenCompra; onClose: () => void; onSuccess: () => void
 }) {
   const [matChecks, setMatChecks]     = useState<Record<number, boolean>>({})
+  const [matQty, setMatQty]           = useState<Record<number, string>>({})  // F2: cantidad recibida por material
   const [matNotes, setMatNotes]       = useState<Record<number, string>>({})
   const [expandNotes, setExpandNotes] = useState<Record<number, boolean>>({})
   const [recibio, setRecibio]         = useState('')
   const [notasOc, setNotasOc]         = useState('')
   const [tipo, setTipo]               = useState<'total' | 'parcial'>('total')
+  const [forzarTotal, setForzarTotal] = useState(false)  // F2: cerrar la OC aunque falte material
   const initialized                   = useRef(false)
 
   // Fire-and-forget: ensure recepcion_materiales are pre-populated for this OC
@@ -92,37 +105,110 @@ function RecepcionPanel({
     return s
   }, [historial])
 
-  // Initialize checkboxes once both mats and historial have loaded
+  // F2: cuánto se recibió ya de cada material (suma de cantidad_recibida de entregas previas).
+  const recibidoAcum = useMemo(() => {
+    const map = new Map<number, number>()
+    for (const rec of historial) {
+      for (const rm of rec.materiales) {
+        if (rm.id_material != null && rm.cantidad_recibida != null) {
+          map.set(rm.id_material, (map.get(rm.id_material) ?? 0) + Number(rm.cantidad_recibida))
+        }
+      }
+    }
+    return map
+  }, [historial])
+
+  // Helpers de cantidad (F2). El "ordenado" es m.qty (= items_orden_compra.cantidad).
+  const orderedOf  = (m: Material) => Number(m.qty) || 0
+  const acumOf     = (m: Material) => recibidoAcum.get(m.id) ?? 0
+  const faltanteOf = (m: Material) => Math.max(0, orderedOf(m) - acumOf(m))
+  const qtyNum     = (id: number) => { const n = Number(matQty[id]); return Number.isFinite(n) && n >= 0 ? n : 0 }
+
+  // Initialize checkboxes (y cantidades en F2) once both mats and historial have loaded
   useEffect(() => {
     if (!initialized.current && !matsLoading && !historialLoading && mats.length > 0) {
       initialized.current = true
       const init: Record<number, boolean> = {}
-      mats.forEach((m) => { init[m.id] = receivedIds.has(m.id) })
+      const initQty: Record<number, string> = {}
+      mats.forEach((m) => {
+        init[m.id] = receivedIds.has(m.id)
+        initQty[m.id] = fmtQty(faltanteOf(m))  // precargado con lo que falta
+      })
       setMatChecks(init)
+      if (RECEPCION_CANTIDADES) setMatQty(initQty)
     }
   }, [mats, matsLoading, historialLoading, receivedIds])
+
+  const activeMats  = mats.filter((m) => !receivedIds.has(m.id))
+  const checkedCount = activeMats.filter((m) => matChecks[m.id]).length
+  const allChecked   = activeMats.length > 0 && checkedCount === activeMats.length
+  const isEnTransito = oc.estado === 'en_transito'
+
+  // ── Derivados F2 (recepción por cantidades) ──
+  // Materiales que efectivamente se reciben en esta entrega (cantidad > 0).
+  const activeConQty = activeMats.filter((m) => qtyNum(m.id) > 0)
+  // ¿Alguna cantidad se pasa de lo ordenado? (bloquea el submit)
+  const hayExceso = activeMats.some((m) => acumOf(m) + qtyNum(m.id) > orderedOf(m))
+  // ¿Esta entrega deja TODO completo? (todos los activos llegan a lo ordenado)
+  const todoCubierto = activeMats.length > 0 && activeMats.every((m) => acumOf(m) + qtyNum(m.id) >= orderedOf(m))
+  // Tipo efectivo: en F2 lo dictan las cantidades (o el "forzar total"); si no, el toggle manual.
+  const tipoEfectivo: 'total' | 'parcial' = RECEPCION_CANTIDADES
+    ? ((todoCubierto || forzarTotal) ? 'total' : 'parcial')
+    : tipo
+  // ¿Quedan faltantes aunque se cierre total? (para avisar en el "forzar total")
+  const quedanFaltantes = activeMats.some((m) => acumOf(m) + qtyNum(m.id) < orderedOf(m))
+
+  const toggleAll = () => {
+    const newVal = !allChecked
+    setMatChecks((prev) => {
+      const next = { ...prev }
+      activeMats.forEach((m) => { next[m.id] = newVal })
+      return next
+    })
+  }
+  // F2: llenar/vaciar el faltante en todos los materiales de una.
+  const fillAll = (fill: boolean) => {
+    setMatQty((prev) => {
+      const next = { ...prev }
+      activeMats.forEach((m) => { next[m.id] = fill ? fmtQty(faltanteOf(m)) : '0' })
+      return next
+    })
+  }
 
   const qc = useQueryClient()
   const submitMutation = useMutation({
     mutationFn: () => recepcionesService.createCompleta({
       orden_compra_id: oc.id,
       fecha_recepcion: new Date().toISOString().slice(0, 10),
-      tipo,
+      tipo: tipoEfectivo,
       recibio: recibio || undefined,
       notas:   notasOc || undefined,
       // Only send active (not previously received) materials
-      materiales: mats
-        .filter((m) => !receivedIds.has(m.id))
-        .map((m) => ({
-          id_material: m.id,
-          cm_code:     m.codigo ?? undefined,
-          descripcion: m.descripcion,
-          recibido:    matChecks[m.id] ?? false,
-          nota:        matNotes[m.id]  || undefined,
-        })),
+      materiales: RECEPCION_CANTIDADES
+        ? activeConQty.map((m) => ({
+            id_material: m.id,
+            cm_code:     m.codigo ?? undefined,
+            descripcion: m.descripcion,
+            recibido:    acumOf(m) + qtyNum(m.id) >= orderedOf(m),
+            nota:        matNotes[m.id] || undefined,
+            cantidad_recibida: qtyNum(m.id),
+            cantidad_ordenada: orderedOf(m),
+          }))
+        : mats
+            .filter((m) => !receivedIds.has(m.id))
+            .map((m) => ({
+              id_material: m.id,
+              cm_code:     m.codigo ?? undefined,
+              descripcion: m.descripcion,
+              recibido:    matChecks[m.id] ?? false,
+              nota:        matNotes[m.id]  || undefined,
+            })),
     }),
     onSuccess: (res) => {
       toast.success(res.message ?? 'Recepción registrada')
+      if (res.advertencias?.length) {
+        toast(res.advertencias.join('\n'), { icon: '⚠️', duration: 6000 })
+      }
       // refetchType: 'all' fuerza refetch incluso de queries inactivas (ej. la
       // página Materiales cuando no está montada). Sin esto, el badge ORDENADO
       // queda visible hasta refrescar manualmente al volver a la página.
@@ -140,20 +226,6 @@ function RecepcionPanel({
     },
     onError: () => toast.error('Error al registrar recepción'),
   })
-
-  const activeMats  = mats.filter((m) => !receivedIds.has(m.id))
-  const checkedCount = activeMats.filter((m) => matChecks[m.id]).length
-  const allChecked   = activeMats.length > 0 && checkedCount === activeMats.length
-  const isEnTransito = oc.estado === 'en_transito'
-
-  const toggleAll = () => {
-    const newVal = !allChecked
-    setMatChecks((prev) => {
-      const next = { ...prev }
-      activeMats.forEach((m) => { next[m.id] = newVal })
-      return next
-    })
-  }
 
   return (
     <div className="flex flex-col h-full">
@@ -253,46 +325,82 @@ function RecepcionPanel({
         {/* ── Tipo de recepción ── */}
         <div>
           <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Tipo de recepción</p>
-          <div className="grid grid-cols-2 gap-2">
-            {(['total', 'parcial'] as const).map((t) => (
-              <button key={t} onClick={() => setTipo(t)}
-                className={clsx(
-                  'px-3 py-2.5 rounded-xl border-2 text-sm font-semibold transition-all',
-                  tipo === t
-                    ? t === 'total'
-                      ? 'border-green-500 bg-green-50 text-green-700'
-                      : 'border-blue-400 bg-blue-50 text-blue-700'
-                    : 'border-gray-200 text-gray-400 hover:border-gray-300'
-                )}>
-                {t === 'total' ? '✓ TOTAL' : '⟳ PARCIAL'}
-              </button>
-            ))}
-          </div>
-          <p className="text-xs text-gray-400 mt-1.5">
-            {tipo === 'total'
-              ? 'OC pasa a EN EL TALLER — recepción completa.'
-              : 'OC pasa a EN TRÁNSITO — quedan materiales pendientes.'}
-          </p>
+
+          {!RECEPCION_CANTIDADES ? (
+            <>
+              <div className="grid grid-cols-2 gap-2">
+                {(['total', 'parcial'] as const).map((t) => (
+                  <button key={t} onClick={() => setTipo(t)}
+                    className={clsx(
+                      'px-3 py-2.5 rounded-xl border-2 text-sm font-semibold transition-all',
+                      tipo === t
+                        ? t === 'total'
+                          ? 'border-green-500 bg-green-50 text-green-700'
+                          : 'border-blue-400 bg-blue-50 text-blue-700'
+                        : 'border-gray-200 text-gray-400 hover:border-gray-300'
+                    )}>
+                    {t === 'total' ? '✓ TOTAL' : '⟳ PARCIAL'}
+                  </button>
+                ))}
+              </div>
+              <p className="text-xs text-gray-400 mt-1.5">
+                {tipo === 'total'
+                  ? 'OC pasa a EN EL TALLER — recepción completa.'
+                  : 'OC pasa a EN TRÁNSITO — quedan materiales pendientes.'}
+              </p>
+            </>
+          ) : (
+            <>
+              {/* F2: el tipo lo dictan las cantidades cargadas. */}
+              <div className={clsx(
+                'rounded-xl border-2 px-3 py-2.5 text-sm font-semibold flex items-center gap-2',
+                tipoEfectivo === 'total'
+                  ? 'border-green-500 bg-green-50 text-green-700'
+                  : 'border-blue-400 bg-blue-50 text-blue-700'
+              )}>
+                {tipoEfectivo === 'total'
+                  ? <><CheckCircle2 size={14} /> TOTAL — la OC se cierra (pasa a EN EL TALLER)</>
+                  : <><Truck size={14} /> PARCIAL — quedan faltantes (OC sigue EN TRÁNSITO)</>}
+              </div>
+              {/* Forzar total con faltantes (caso "llegó incompleto pero cerramos igual"). */}
+              {quedanFaltantes && (
+                <label className="flex items-start gap-2 mt-2 text-xs text-gray-600 cursor-pointer">
+                  <input type="checkbox" checked={forzarTotal}
+                    onChange={(e) => setForzarTotal(e.target.checked)}
+                    className="mt-0.5 w-3.5 h-3.5 rounded accent-amber-600" />
+                  <span>Cerrar igual como <b>TOTAL</b> aunque falte material (quedará registrado el faltante).</span>
+                </label>
+              )}
+            </>
+          )}
         </div>
 
         {/* ── Material checklist ── */}
         <div>
           <div className="flex items-center justify-between mb-2">
             <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">
-              Materiales del lote
+              {RECEPCION_CANTIDADES ? 'Cantidades recibidas' : 'Materiales del lote'}
               {mats.length > 0 && (
                 <span className="ml-1 text-forest-600">
-                  {checkedCount}/{mats.length}
+                  {RECEPCION_CANTIDADES ? activeConQty.length : checkedCount}/{activeMats.length}
                   {receivedIds.size > 0 && (
-                    <span className="text-green-600 ml-1">({receivedIds.size} ya recibidos)</span>
+                    <span className="text-green-600 ml-1">({receivedIds.size} ya completos)</span>
                   )}
                 </span>
               )}
             </p>
             {activeMats.length > 0 && (
-              <button onClick={toggleAll} className="text-xs text-forest-600 hover:underline">
-                {allChecked ? 'Desmarcar todos' : 'Marcar todos'}
-              </button>
+              RECEPCION_CANTIDADES ? (
+                <div className="flex items-center gap-2 text-xs">
+                  <button onClick={() => fillAll(true)} className="text-forest-600 hover:underline">Llenar faltante</button>
+                  <span className="text-gray-300">·</span>
+                  <button onClick={() => fillAll(false)} className="text-gray-400 hover:underline">Vaciar</button>
+                </div>
+              ) : (
+                <button onClick={toggleAll} className="text-xs text-forest-600 hover:underline">
+                  {allChecked ? 'Desmarcar todos' : 'Marcar todos'}
+                </button>
+              )
             )}
           </div>
 
@@ -320,13 +428,28 @@ function RecepcionPanel({
                         : 'hover:bg-gray-50/60'
                   )}>
                     <div className="flex items-start gap-2.5">
-                      <input
-                        type="checkbox"
-                        checked={matChecks[m.id] ?? false}
-                        disabled={alreadyReceived}
-                        onChange={(e) => setMatChecks((prev) => ({ ...prev, [m.id]: e.target.checked }))}
-                        className="mt-0.5 w-4 h-4 rounded flex-shrink-0 disabled:opacity-50 disabled:cursor-not-allowed accent-forest-600"
-                      />
+                      {RECEPCION_CANTIDADES ? (
+                        <input
+                          type="number" min={0} step="any" inputMode="decimal"
+                          value={alreadyReceived ? '' : (matQty[m.id] ?? '')}
+                          disabled={alreadyReceived}
+                          onChange={(e) => setMatQty((prev) => ({ ...prev, [m.id]: e.target.value }))}
+                          className={clsx(
+                            'mt-0.5 w-16 text-sm text-center border rounded px-1 py-1 flex-shrink-0 focus:outline-none disabled:opacity-40 disabled:bg-gray-50',
+                            acumOf(m) + qtyNum(m.id) > orderedOf(m)
+                              ? 'border-red-400 text-red-600'
+                              : 'border-gray-200 focus:border-forest-400'
+                          )}
+                        />
+                      ) : (
+                        <input
+                          type="checkbox"
+                          checked={matChecks[m.id] ?? false}
+                          disabled={alreadyReceived}
+                          onChange={(e) => setMatChecks((prev) => ({ ...prev, [m.id]: e.target.checked }))}
+                          className="mt-0.5 w-4 h-4 rounded flex-shrink-0 disabled:opacity-50 disabled:cursor-not-allowed accent-forest-600"
+                        />
+                      )}
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-1.5 flex-wrap">
                           {m.codigo && (
@@ -338,13 +461,27 @@ function RecepcionPanel({
                             'text-xs font-medium',
                             alreadyReceived ? 'text-green-700' : 'text-gray-700'
                           )}>{m.descripcion}</span>
-                          <span className="text-xs text-gray-400 flex-shrink-0">{Number(m.qty)} {m.unidad}</span>
+                          {RECEPCION_CANTIDADES ? (
+                            <span className="text-xs text-gray-400 flex-shrink-0">
+                              de {fmtQty(orderedOf(m))} {m.unidad}
+                              {acumOf(m) > 0 && <span className="text-green-600"> · ya {fmtQty(acumOf(m))}</span>}
+                            </span>
+                          ) : (
+                            <span className="text-xs text-gray-400 flex-shrink-0">{Number(m.qty)} {m.unidad}</span>
+                          )}
                           {alreadyReceived && (
                             <span className="flex items-center gap-0.5 text-xs text-green-600 font-semibold flex-shrink-0">
-                              <CheckCircle2 size={10} /> Ya recibido
+                              <CheckCircle2 size={10} /> {RECEPCION_CANTIDADES ? 'Completo' : 'Ya recibido'}
                             </span>
                           )}
                         </div>
+                        {!alreadyReceived && RECEPCION_CANTIDADES && (
+                          acumOf(m) + qtyNum(m.id) > orderedOf(m)
+                            ? <p className="text-[11px] text-red-600 mt-0.5">Se pasa de lo ordenado (máximo {fmtQty(faltanteOf(m))}).</p>
+                            : <p className="text-[11px] text-gray-400 mt-0.5">
+                                Faltaban {fmtQty(faltanteOf(m))} · con esto quedan {fmtQty(Math.max(0, orderedOf(m) - acumOf(m) - qtyNum(m.id)))}
+                              </p>
+                        )}
                         {!alreadyReceived && (
                           <>
                             <button
@@ -398,18 +535,26 @@ function RecepcionPanel({
         </div>
 
         {/* ── Submit ── */}
+        {RECEPCION_CANTIDADES && hayExceso && (
+          <p className="text-xs text-red-600 text-center -mb-2">
+            Hay cantidades que superan lo ordenado. Corregilas para registrar.
+          </p>
+        )}
         <button
           onClick={() => submitMutation.mutate()}
-          disabled={submitMutation.isPending}
+          disabled={
+            submitMutation.isPending ||
+            (RECEPCION_CANTIDADES && (hayExceso || activeConQty.length === 0))
+          }
           className={clsx(
-            'w-full justify-center py-3 flex items-center gap-2 rounded-xl font-semibold text-sm transition-colors',
-            tipo === 'total'
+            'w-full justify-center py-3 flex items-center gap-2 rounded-xl font-semibold text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed',
+            tipoEfectivo === 'total'
               ? 'bg-green-600 hover:bg-green-700 text-white'
               : 'bg-blue-600 hover:bg-blue-700 text-white'
           )}>
           {submitMutation.isPending
             ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-            : tipo === 'total'
+            : tipoEfectivo === 'total'
               ? <><CheckCircle2 size={16} /> Registrar Recepción TOTAL</>
               : <><Truck size={16} /> Registrar Recepción PARCIAL</>}
         </button>

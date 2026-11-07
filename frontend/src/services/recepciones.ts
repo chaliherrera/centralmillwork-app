@@ -8,6 +8,9 @@ export interface RecepcionMaterial {
   descripcion: string | null
   recibido: boolean
   nota: string | null
+  // Recepción por cantidades (NULL = fila legada, se lee por `recibido`)
+  cantidad_recibida?: number | string | null
+  cantidad_ordenada?: number | string | null
 }
 
 export interface RecepcionConMateriales extends Recepcion {
@@ -39,7 +42,16 @@ export interface RecepcionCompletaPayload {
     descripcion?: string
     recibido: boolean
     nota?: string
+    // Recepción por cantidades (opcional; si no viene, el backend se comporta como siempre)
+    cantidad_recibida?: number
+    cantidad_ordenada?: number
   }[]
+}
+
+export interface RecepcionCompletaResponse {
+  data: Recepcion
+  message?: string
+  advertencias?: string[]
 }
 
 export const recepcionesService = {
@@ -53,7 +65,7 @@ export const recepcionesService = {
     api.post<ApiResponse<Recepcion>>('/recepciones', data).then((r) => r.data),
 
   createCompleta: (data: RecepcionCompletaPayload) =>
-    api.post<ApiResponse<Recepcion>>('/recepciones/completa', data).then((r) => r.data),
+    api.post<RecepcionCompletaResponse>('/recepciones/completa', data).then((r) => r.data),
 
   update: (id: number, data: Partial<Pick<Recepcion, 'estado' | 'fecha_recepcion' | 'recibio' | 'notas'>>) =>
     api.put<ApiResponse<Recepcion>>(`/recepciones/${id}`, data).then((r) => r.data),
