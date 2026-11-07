@@ -7,6 +7,7 @@ import { recomputeMaterialesEstadoForOC } from '../utils/materialesEstado'
 import { recomputeScheduleForOCSafe } from '../modules/schedule'
 import { nextRecepcionFolio } from '../utils/numeradorAtomico'
 import { onOCRecibidaParaMuestras } from '../modules/muestras'
+import { puenteRecibido, validarAcumulado, parseCantidad } from '../utils/recepcionCantidades'
 
 const REC_SORT_WHITELIST = [
   'r.fecha_recepcion', 'r.folio', 'r.estado', 'r.created_at',
@@ -180,14 +181,96 @@ export async function createRecepcionCompleta(req: Request, res: Response, next:
       [folio, orden_compra_id, fecha_recepcion ?? new Date(), recibio ?? null, notas ?? null]
     )
 
-    const mats = materiales as { id_material?: number; cm_code?: string; descripcion?: string; recibido: boolean; nota?: string }[]
+    // F1 (recepción por CANTIDADES, INERTE): cada material puede traer OPCIONALMENTE
+    // cantidad_recibida. Si NINGUNO la trae, el comportamiento es byte-a-byte el de
+    // siempre (recibido del payload, columnas de cantidad en NULL) — así el móvil y
+    // "Recibir todo" siguen igual mientras no haya UI que mande cantidades.
+    const mats = materiales as {
+      id_material?: number; cm_code?: string; descripcion?: string;
+      recibido: boolean; nota?: string;
+      cantidad_recibida?: number | string | null; cantidad_ordenada?: number | string | null;
+    }[]
+    const usaCantidades = mats.some((m) => parseCantidad(m.cantidad_recibida) !== null)
+
+    // Lock de la OC: serializa recepciones parciales concurrentes que calculan acumulado.
+    // Solo cuando se usan cantidades, para no alterar el camino común.
+    if (usaCantidades) {
+      await client.query(`SELECT id FROM ordenes_compra WHERE id = $1 FOR UPDATE`, [orden_compra_id])
+    }
+
+    const advertencias: string[] = []
+    // Acumulado dentro de ESTE request (por si un material aparece más de una vez).
+    const acumEnRequest = new Map<number, number>()
+
     for (const mat of mats) {
+      const cant = parseCantidad(mat.cantidad_recibida)
+      if (cant === null) {
+        // Sin cantidad -> fila legada (cantidades NULL), exactamente como hoy.
+        await client.query(
+          `INSERT INTO recepcion_materiales (id_recepcion, id_material, cm_code, descripcion, recibido, nota)
+           VALUES ($1,$2,$3,$4,$5,$6)`,
+          [recepcion.id, mat.id_material ?? null, mat.cm_code ?? null,
+           mat.descripcion ?? null, mat.recibido, mat.nota ?? null]
+        )
+        continue
+      }
+
+      // Resolver cantidad_ordenada: primero lo que mande el front; si no, items_orden_compra.
+      let cantOrdenada = parseCantidad(mat.cantidad_ordenada)
+      if (cantOrdenada === null && mat.id_material != null) {
+        const { rows: [ioc] } = await client.query(
+          `SELECT cantidad FROM items_orden_compra WHERE orden_compra_id = $1 AND material_id = $2 LIMIT 1`,
+          [orden_compra_id, mat.id_material]
+        )
+        if (ioc) cantOrdenada = Number(ioc.cantidad)
+      }
+
+      // Acumulado previo (entregas anteriores con cantidad) + lo ya sumado en este request.
+      let acumPrevio = 0
+      if (mat.id_material != null) {
+        const { rows: [acc] } = await client.query(
+          `SELECT COALESCE(SUM(rm.cantidad_recibida), 0) AS acum
+             FROM recepcion_materiales rm
+             JOIN recepciones r ON r.id = rm.id_recepcion
+            WHERE r.orden_compra_id = $1 AND rm.id_material = $2 AND rm.cantidad_recibida IS NOT NULL`,
+          [orden_compra_id, mat.id_material]
+        )
+        acumPrevio = Number(acc?.acum ?? 0) + (acumEnRequest.get(mat.id_material) ?? 0)
+      }
+
+      // Validación: no se puede recibir más de lo ordenado (si conocemos lo ordenado).
+      if (cantOrdenada !== null) {
+        const { ok, acumulado } = validarAcumulado(acumPrevio, cant, cantOrdenada)
+        if (!ok) {
+          await client.query('ROLLBACK')
+          return next(createError(
+            `La cantidad recibida del material ${mat.id_material ?? mat.cm_code ?? ''} supera lo ordenado ` +
+            `(acumulado ${acumulado} > ordenado ${cantOrdenada}).`, 400))
+        }
+      }
+
+      // Puente booleano: si conocemos lo ordenado, el booleano sale de las cantidades;
+      // si no, respetamos el booleano explícito del cliente (legado).
+      const recibidoFila = cantOrdenada !== null
+        ? puenteRecibido(acumPrevio, cant, cantOrdenada)
+        : mat.recibido
+
+      if (cantOrdenada !== null && !recibidoFila) {
+        advertencias.push(
+          `Material ${mat.id_material ?? mat.cm_code ?? ''}: recibido ${acumPrevio + cant} de ${cantOrdenada} (queda faltante).`)
+      }
+
       await client.query(
-        `INSERT INTO recepcion_materiales (id_recepcion, id_material, cm_code, descripcion, recibido, nota)
-         VALUES ($1,$2,$3,$4,$5,$6)`,
+        `INSERT INTO recepcion_materiales
+           (id_recepcion, id_material, cm_code, descripcion, recibido, nota, cantidad_recibida, cantidad_ordenada)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
         [recepcion.id, mat.id_material ?? null, mat.cm_code ?? null,
-         mat.descripcion ?? null, mat.recibido, mat.nota ?? null]
+         mat.descripcion ?? null, recibidoFila, mat.nota ?? null, cant, cantOrdenada]
       )
+
+      if (mat.id_material != null) {
+        acumEnRequest.set(mat.id_material, (acumEnRequest.get(mat.id_material) ?? 0) + cant)
+      }
     }
 
     await client.query(
@@ -212,7 +295,11 @@ export async function createRecepcionCompleta(req: Request, res: Response, next:
     await client.query('COMMIT')
     // Life of a Deal: recalcular el schedule del proyecto (post-commit, best-effort)
     void recomputeScheduleForOCSafe(orden_compra_id, 'recepcion')
-    res.status(201).json({ data: { ...recepcion, folio }, message: `Recepción ${folio} registrada` })
+    res.status(201).json({
+      data: { ...recepcion, folio },
+      message: `Recepción ${folio} registrada`,
+      ...(advertencias.length ? { advertencias } : {}),
+    })
   } catch (err: any) {
     await client.query('ROLLBACK')
     logger.error('createRecepcionCompleta error', {
