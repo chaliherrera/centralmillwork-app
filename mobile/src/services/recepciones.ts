@@ -15,6 +15,9 @@ export interface MaterialRecepcion {
   descripcion?: string
   recibido: boolean
   nota?: string
+  // Recepción por cantidades (opcional; si no viene, el backend se comporta como siempre)
+  cantidad_recibida?: number
+  cantidad_ordenada?: number
 }
 
 export interface CrearRecepcionPayload {
@@ -33,6 +36,9 @@ export interface RecepcionMaterialHist {
   descripcion: string | null
   recibido: boolean
   nota: string | null
+  // Recepción por cantidades (NULL = fila legada, se lee por `recibido`)
+  cantidad_recibida?: number | string | null
+  cantidad_ordenada?: number | string | null
 }
 
 export interface RecepcionHistorial {
