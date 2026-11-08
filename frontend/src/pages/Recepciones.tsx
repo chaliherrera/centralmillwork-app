@@ -25,6 +25,38 @@ const fmtQty = (n: number) => {
   return Number.isInteger(r) ? String(r) : String(r)
 }
 
+// Resumen de lo recibido en UNA recepción. En modo cantidades muestra cuánto llegó de
+// cada material ("+N de M u."); si no hay cantidades (legado o flag off), el conteo de siempre.
+function RecepcionMaterialesResumen({ materiales }: {
+  materiales: {
+    id: number; cm_code: string | null; descripcion: string | null; recibido: boolean
+    cantidad_recibida?: number | string | null; cantidad_ordenada?: number | string | null
+  }[]
+}) {
+  if (materiales.length === 0) return null
+  const conCant = RECEPCION_CANTIDADES && materiales.some((m) => m.cantidad_recibida != null)
+  if (!conCant) {
+    return (
+      <p className="text-xs text-gray-400 mt-1">
+        {materiales.filter((m) => m.recibido).length}/{materiales.length} materiales recibidos
+      </p>
+    )
+  }
+  return (
+    <div className="mt-1.5 space-y-0.5">
+      {materiales.filter((m) => m.cantidad_recibida != null).map((m) => (
+        <div key={m.id} className="flex items-center justify-between gap-2 text-xs">
+          <span className="text-gray-600 truncate">{m.cm_code || m.descripcion}</span>
+          <span className="font-medium text-gray-700 tabular-nums flex-shrink-0">
+            +{fmtQty(Number(m.cantidad_recibida))}
+            {m.cantidad_ordenada != null && <span className="text-gray-400"> de {fmtQty(Number(m.cantidad_ordenada))} u.</span>}
+          </span>
+        </div>
+      ))}
+    </div>
+  )
+}
+
 const fmt = (n: number) =>
   new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(n)
 
@@ -310,11 +342,7 @@ function RecepcionPanel({
                     {rec.notas && (
                       <p className="text-xs text-gray-500 italic mt-0.5">"{rec.notas}"</p>
                     )}
-                    {rec.materiales.length > 0 && (
-                      <p className="text-xs text-gray-400 mt-1">
-                        {rec.materiales.filter((m) => m.recibido).length}/{rec.materiales.length} materiales recibidos
-                      </p>
-                    )}
+                    <RecepcionMaterialesResumen materiales={rec.materiales} />
                   </div>
                 )
               })}
@@ -613,7 +641,14 @@ function HistorialPanel({ oc, onClose }: { oc: OrdenCompra; onClose: () => void 
 
         {/* Recepcion historial */}
         <div>
-          <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Historial de recepciones</p>
+          <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">
+            Historial de recepciones
+            {!isLoading && historial.length > 0 && (
+              <span className="ml-1 text-forest-600 normal-case">
+                · {historial.length} {historial.length === 1 ? 'entrega' : 'entregas'}
+              </span>
+            )}
+          </p>
           {isLoading && (
             <div className="space-y-2">
               {[1, 2].map((i) => <div key={i} className="h-16 bg-gray-100 rounded-xl animate-pulse" />)}
@@ -645,11 +680,7 @@ function HistorialPanel({ oc, onClose }: { oc: OrdenCompra; onClose: () => void 
                 {rec.notas && (
                   <p className="text-xs text-gray-500 italic mt-1 bg-white/70 rounded px-2 py-1">"{rec.notas}"</p>
                 )}
-                {rec.materiales.length > 0 && (
-                  <p className="text-xs text-gray-400 mt-1">
-                    {rec.materiales.filter((m) => m.recibido).length}/{rec.materiales.length} materiales recibidos
-                  </p>
-                )}
+                <RecepcionMaterialesResumen materiales={rec.materiales} />
               </div>
             )
           })}
