@@ -1,4 +1,4 @@
-import { useState, useMemo, useRef, useEffect } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Search, ShoppingCart, DollarSign, Clock,
@@ -11,6 +11,7 @@ import clsx from 'clsx'
 import { ordenesCompraService } from '@/services/ordenesCompra'
 import DynamicImageGrid from '@/components/ui/DynamicImageGrid'
 import { recepcionesService } from '@/services/recepciones'
+import type { RecepcionConMateriales } from '@/services/recepciones'
 import ReporteModal from '@/components/ui/ReporteModal'
 import type { OrdenCompra, Material } from '@/types'
 
@@ -25,14 +26,59 @@ const fmtQty = (n: number) => {
   return Number.isInteger(r) ? String(r) : String(r)
 }
 
+// Contexto de cada entrega: cuánto faltaba ANTES de esa entrega (saldo corriente), para
+// mostrar "+10 de 15" (llegaron 10 de los 15 que faltaban) y marcar cuándo se completó.
+type EntregaCtx = { llegaron: number; pendienteAntes: number; ordenado: number; completo: boolean }
+function computeEntregasContexto(historial: RecepcionConMateriales[]): Map<string, EntregaCtx> {
+  // El historial viene nuevo→viejo; procesamos viejo→nuevo para acumular.
+  const asc = [...historial].reverse()
+  const acum = new Map<number, number>()  // material -> acumulado ANTES de la entrega en curso
+  const out = new Map<string, EntregaCtx>()
+  for (const rec of asc) {
+    for (const m of rec.materiales) {
+      if (m.id_material == null || m.cantidad_recibida == null) continue
+      const ordenado = m.cantidad_ordenada != null ? Number(m.cantidad_ordenada) : NaN
+      const antes = acum.get(m.id_material) ?? 0
+      const llegaron = Number(m.cantidad_recibida)
+      const despues = antes + llegaron
+      acum.set(m.id_material, despues)
+      out.set(`${rec.id}:${m.id}`, {
+        llegaron,
+        pendienteAntes: Number.isFinite(ordenado) ? Math.max(0, ordenado - antes) : NaN,
+        ordenado,
+        completo: Number.isFinite(ordenado) && despues >= ordenado,
+      })
+    }
+  }
+  return out
+}
+
+// Resumen total por material a lo largo de TODAS las entregas (ordenado vs recibido).
+type ResumenMat = { id: number; etiqueta: string; ordenado: number; recibido: number }
+function computeResumenPorMaterial(historial: RecepcionConMateriales[]): ResumenMat[] {
+  const map = new Map<number, ResumenMat>()
+  for (const rec of historial) {
+    for (const m of rec.materiales) {
+      if (m.id_material == null || m.cantidad_recibida == null) continue
+      const cur = map.get(m.id_material) ?? {
+        id: m.id_material,
+        etiqueta: m.cm_code || m.descripcion || `#${m.id_material}`,
+        ordenado: m.cantidad_ordenada != null ? Number(m.cantidad_ordenada) : NaN,
+        recibido: 0,
+      }
+      cur.recibido += Number(m.cantidad_recibida)
+      if (m.cm_code) cur.etiqueta = m.cm_code
+      if (m.cantidad_ordenada != null) cur.ordenado = Number(m.cantidad_ordenada)
+      map.set(m.id_material, cur)
+    }
+  }
+  return [...map.values()]
+}
+
 // Resumen de lo recibido en UNA recepción. En modo cantidades muestra cuánto llegó de
-// cada material ("+N de M u."); si no hay cantidades (legado o flag off), el conteo de siempre.
-function RecepcionMaterialesResumen({ materiales }: {
-  materiales: {
-    id: number; cm_code: string | null; descripcion: string | null; recibido: boolean
-    cantidad_recibida?: number | string | null; cantidad_ordenada?: number | string | null
-  }[]
-}) {
+// cada material contra lo que faltaba ("+N de M u."); si no, el conteo de siempre.
+function RecepcionMaterialesResumen({ rec, ctx }: { rec: RecepcionConMateriales; ctx: Map<string, EntregaCtx> }) {
+  const materiales = rec.materiales
   if (materiales.length === 0) return null
   const conCant = RECEPCION_CANTIDADES && materiales.some((m) => m.cantidad_recibida != null)
   if (!conCant) {
@@ -44,15 +90,57 @@ function RecepcionMaterialesResumen({ materiales }: {
   }
   return (
     <div className="mt-1.5 space-y-0.5">
-      {materiales.filter((m) => m.cantidad_recibida != null).map((m) => (
-        <div key={m.id} className="flex items-center justify-between gap-2 text-xs">
-          <span className="text-gray-600 truncate">{m.cm_code || m.descripcion}</span>
-          <span className="font-medium text-gray-700 tabular-nums flex-shrink-0">
-            +{fmtQty(Number(m.cantidad_recibida))}
-            {m.cantidad_ordenada != null && <span className="text-gray-400"> de {fmtQty(Number(m.cantidad_ordenada))} u.</span>}
-          </span>
-        </div>
-      ))}
+      {materiales.filter((m) => m.cantidad_recibida != null).map((m) => {
+        const c = ctx.get(`${rec.id}:${m.id}`)
+        return (
+          <div key={m.id} className="flex items-center justify-between gap-2 text-xs">
+            <span className="text-gray-600 truncate">{m.cm_code || m.descripcion}</span>
+            <span className="font-medium text-gray-700 tabular-nums flex-shrink-0">
+              +{fmtQty(Number(m.cantidad_recibida))}
+              {c && Number.isFinite(c.pendienteAntes) && <span className="text-gray-400"> de {fmtQty(c.pendienteAntes)} u.</span>}
+              {c?.completo && <span className="text-green-600 font-semibold"> ✓ completo</span>}
+            </span>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+// Bloque "Resumen por material" (ordenado vs recibido total) con barrita de progreso.
+function ResumenRecepcionOC({ historial }: { historial: RecepcionConMateriales[] }) {
+  const resumen = useMemo(() => computeResumenPorMaterial(historial), [historial])
+  if (!RECEPCION_CANTIDADES || resumen.length === 0) return null
+  return (
+    <div className="rounded-xl border border-gray-100 bg-gray-50/60 px-3 py-2.5 mb-3 space-y-2">
+      <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wide">Avance del pedido</p>
+      {resumen.map((r) => {
+        const ordenadoOk = Number.isFinite(r.ordenado) && r.ordenado > 0
+        const pct = ordenadoOk ? Math.min(100, Math.round((r.recibido / r.ordenado) * 100)) : 0
+        const completo = ordenadoOk && r.recibido >= r.ordenado
+        const faltan = ordenadoOk ? Math.max(0, r.ordenado - r.recibido) : 0
+        return (
+          <div key={r.id}>
+            <div className="flex items-center justify-between gap-2 text-xs mb-0.5">
+              <span className="text-gray-700 truncate">{r.etiqueta}</span>
+              <span className="tabular-nums flex-shrink-0">
+                <span className={clsx('font-semibold', completo ? 'text-green-700' : 'text-gray-700')}>
+                  {fmtQty(r.recibido)}
+                </span>
+                {ordenadoOk && <span className="text-gray-400"> de {fmtQty(r.ordenado)} u.</span>}
+                {completo
+                  ? <span className="text-green-600 font-semibold"> · completo ✓</span>
+                  : ordenadoOk && <span className="text-amber-600"> · faltan {fmtQty(faltan)}</span>}
+              </span>
+            </div>
+            {ordenadoOk && (
+              <div className="h-1.5 w-full rounded-full bg-gray-200 overflow-hidden">
+                <div className={clsx('h-full rounded-full', completo ? 'bg-green-500' : 'bg-blue-400')} style={{ width: `${pct}%` }} />
+              </div>
+            )}
+          </div>
+        )
+      })}
     </div>
   )
 }
@@ -104,7 +192,6 @@ function RecepcionPanel({
   const [notasOc, setNotasOc]         = useState('')
   const [tipo, setTipo]               = useState<'total' | 'parcial'>('total')
   const [forzarTotal, setForzarTotal] = useState(false)  // F2: cerrar la OC aunque falte material
-  const initialized                   = useRef(false)
 
   // Fire-and-forget: ensure recepcion_materiales are pre-populated for this OC
   const initMutation = useMutation({
@@ -125,6 +212,7 @@ function RecepcionPanel({
     staleTime: 10_000,
   })
   const historial = historialData?.data ?? []
+  const histCtx = useMemo(() => computeEntregasContexto(historial), [historial])
 
   // IDs of materials already received in a previous (partial) reception
   const receivedIds = useMemo(() => {
@@ -156,20 +244,27 @@ function RecepcionPanel({
   const faltanteOf = (m: Material) => Math.max(0, orderedOf(m) - acumOf(m))
   const qtyNum     = (id: number) => { const n = Number(matQty[id]); return Number.isFinite(n) && n >= 0 ? n : 0 }
 
-  // Initialize checkboxes (y cantidades en F2) once both mats and historial have loaded
+  // Firma de lo ya recibido por material: cambia cuando se registra una entrega.
+  const acumSig = useMemo(
+    () => mats.map((m) => `${m.id}:${acumOf(m)}:${receivedIds.has(m.id) ? 1 : 0}`).join('|'),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [mats, recibidoAcum, receivedIds]
+  )
+
+  // (Re)inicializa checks y cantidades cada vez que cambia lo recibido (primera carga o
+  // tras registrar una entrega) → el casillero siempre muestra el FALTANTE actualizado.
   useEffect(() => {
-    if (!initialized.current && !matsLoading && !historialLoading && mats.length > 0) {
-      initialized.current = true
-      const init: Record<number, boolean> = {}
-      const initQty: Record<number, string> = {}
-      mats.forEach((m) => {
-        init[m.id] = receivedIds.has(m.id)
-        initQty[m.id] = fmtQty(faltanteOf(m))  // precargado con lo que falta
-      })
-      setMatChecks(init)
-      if (RECEPCION_CANTIDADES) setMatQty(initQty)
-    }
-  }, [mats, matsLoading, historialLoading, receivedIds])
+    if (matsLoading || historialLoading || mats.length === 0) return
+    const init: Record<number, boolean> = {}
+    const initQty: Record<number, string> = {}
+    mats.forEach((m) => {
+      init[m.id] = receivedIds.has(m.id)
+      initQty[m.id] = fmtQty(faltanteOf(m))
+    })
+    setMatChecks(init)
+    if (RECEPCION_CANTIDADES) setMatQty(initQty)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [acumSig, matsLoading, historialLoading])
 
   const activeMats  = mats.filter((m) => !receivedIds.has(m.id))
   const checkedCount = activeMats.filter((m) => matChecks[m.id]).length
@@ -254,6 +349,7 @@ function RecepcionPanel({
       qc.invalidateQueries({ queryKey: ['materiales-all'],           refetchType: 'all' })
       qc.invalidateQueries({ queryKey: ['materiales-kpis'],          refetchType: 'all' })
       qc.invalidateQueries({ queryKey: ['oc-materiales-lote'],       refetchType: 'all' })
+      qc.invalidateQueries({ queryKey: ['recepcion-historial'],      refetchType: 'all' })
       onSuccess()
     },
     onError: () => toast.error('Error al registrar recepción'),
@@ -342,7 +438,7 @@ function RecepcionPanel({
                     {rec.notas && (
                       <p className="text-xs text-gray-500 italic mt-0.5">"{rec.notas}"</p>
                     )}
-                    <RecepcionMaterialesResumen materiales={rec.materiales} />
+                    <RecepcionMaterialesResumen rec={rec} ctx={histCtx} />
                   </div>
                 )
               })}
@@ -599,6 +695,7 @@ function HistorialPanel({ oc, onClose }: { oc: OrdenCompra; onClose: () => void 
     staleTime: 10_000,
   })
   const historial = historialData?.data ?? []
+  const ctx = useMemo(() => computeEntregasContexto(historial), [historial])
 
   return (
     <div className="flex flex-col h-full overflow-hidden bg-white">
@@ -641,6 +738,7 @@ function HistorialPanel({ oc, onClose }: { oc: OrdenCompra; onClose: () => void 
 
         {/* Recepcion historial */}
         <div>
+          {!isLoading && <ResumenRecepcionOC historial={historial} />}
           <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">
             Historial de recepciones
             {!isLoading && historial.length > 0 && (
@@ -680,7 +778,7 @@ function HistorialPanel({ oc, onClose }: { oc: OrdenCompra; onClose: () => void 
                 {rec.notas && (
                   <p className="text-xs text-gray-500 italic mt-1 bg-white/70 rounded px-2 py-1">"{rec.notas}"</p>
                 )}
-                <RecepcionMaterialesResumen materiales={rec.materiales} />
+                <RecepcionMaterialesResumen rec={rec} ctx={ctx} />
               </div>
             )
           })}
