@@ -159,15 +159,18 @@ export async function createRecepcionCompleta(req: Request, res: Response, next:
       materiales_count: Array.isArray(materiales) ? materiales.length : null,
     })
 
-    if (!orden_compra_id) return next(createError('orden_compra_id es requerido', 400))
-    if (!tipo || !['total', 'parcial'].includes(tipo))
-      return next(createError('tipo debe ser "total" o "parcial"', 400))
+    if (!orden_compra_id) { await client.query('ROLLBACK'); return next(createError('orden_compra_id es requerido', 400)) }
+    if (!tipo || !['total', 'parcial'].includes(tipo)) {
+      await client.query('ROLLBACK'); return next(createError('tipo debe ser "total" o "parcial"', 400))
+    }
 
-    // Verify the OC exists
+    // Verificamos y BLOQUEAMOS la OC (FOR UPDATE) ANTES de insertar nada: serializa
+    // recepciones concurrentes de la misma OC (el acumulado se calcula bajo el lock) y
+    // evita el deadlock con el FK de recepciones si el lock se tomara después del INSERT.
     const { rows: [ocRow] } = await client.query(
-      `SELECT id, estado FROM ordenes_compra WHERE id = $1`, [orden_compra_id]
+      `SELECT id, estado FROM ordenes_compra WHERE id = $1 FOR UPDATE`, [orden_compra_id]
     )
-    if (!ocRow) return next(createError(`OC ${orden_compra_id} no encontrada`, 404))
+    if (!ocRow) { await client.query('ROLLBACK'); return next(createError(`OC ${orden_compra_id} no encontrada`, 404)) }
 
     // Audit A2: numeración atómica via sequence Postgres en vez de SELECT MAX
     const folio = await nextRecepcionFolio(client)
@@ -190,20 +193,21 @@ export async function createRecepcionCompleta(req: Request, res: Response, next:
       recibido: boolean; nota?: string;
       cantidad_recibida?: number | string | null; cantidad_ordenada?: number | string | null;
     }[]
-    const usaCantidades = mats.some((m) => parseCantidad(m.cantidad_recibida) !== null)
-
-    // Lock de la OC: serializa recepciones parciales concurrentes que calculan acumulado.
-    // Solo cuando se usan cantidades, para no alterar el camino común.
-    if (usaCantidades) {
-      await client.query(`SELECT id FROM ordenes_compra WHERE id = $1 FOR UPDATE`, [orden_compra_id])
-    }
 
     const advertencias: string[] = []
     // Acumulado dentro de ESTE request (por si un material aparece más de una vez).
     const acumEnRequest = new Map<number, number>()
 
     for (const mat of mats) {
-      const cant = parseCantidad(mat.cantidad_recibida)
+      const rawCant = mat.cantidad_recibida
+      const cant = parseCantidad(rawCant)
+      // Valor provisto pero inválido (negativo / no numérico): error explícito en vez de
+      // caer silenciosamente al camino legado.
+      if (cant === null && rawCant != null && rawCant !== '') {
+        await client.query('ROLLBACK')
+        return next(createError(
+          `Cantidad recibida inválida para el material ${mat.id_material ?? mat.cm_code ?? ''}.`, 400))
+      }
       if (cant === null) {
         // Sin cantidad -> fila legada (cantidades NULL), exactamente como hoy.
         await client.query(
@@ -215,15 +219,19 @@ export async function createRecepcionCompleta(req: Request, res: Response, next:
         continue
       }
 
-      // Resolver cantidad_ordenada: primero lo que mande el front; si no, items_orden_compra.
-      let cantOrdenada = parseCantidad(mat.cantidad_ordenada)
-      if (cantOrdenada === null && mat.id_material != null) {
+      // Resolver cantidad_ordenada: lo que le pedimos al proveedor (items_orden_compra) es la
+      // FUENTE DE VERDAD; solo si no está, caemos a lo que mande el front. Ordenado <= 0 o
+      // desconocido => tratamos como desconocido (el booleano se respeta del cliente).
+      let cantOrdenada: number | null = null
+      if (mat.id_material != null) {
         const { rows: [ioc] } = await client.query(
           `SELECT cantidad FROM items_orden_compra WHERE orden_compra_id = $1 AND material_id = $2 LIMIT 1`,
           [orden_compra_id, mat.id_material]
         )
         if (ioc) cantOrdenada = Number(ioc.cantidad)
       }
+      if (cantOrdenada === null) cantOrdenada = parseCantidad(mat.cantidad_ordenada)
+      if (cantOrdenada !== null && cantOrdenada <= 0) cantOrdenada = null
 
       // Acumulado previo (entregas anteriores con cantidad) + lo ya sumado en este request.
       let acumPrevio = 0
@@ -271,6 +279,18 @@ export async function createRecepcionCompleta(req: Request, res: Response, next:
       if (mat.id_material != null) {
         acumEnRequest.set(mat.id_material, (acumEnRequest.get(mat.id_material) ?? 0) + cant)
       }
+    }
+
+    // Si se cierra como TOTAL pero quedó faltante (forzado), dejamos rastro PERMANENTE en la
+    // nota de la recepción (no solo el toast de 6s), para auditar "cerrada con faltante".
+    if (tipo === 'total' && advertencias.length) {
+      const extra = 'Cerrada con faltante: ' + advertencias.join(' ')
+      await client.query(
+        `UPDATE recepciones
+            SET notas = CASE WHEN notas IS NULL OR notas = '' THEN $2 ELSE notas || E'\n' || $2 END
+          WHERE id = $1`,
+        [recepcion.id, extra]
+      )
     }
 
     await client.query(

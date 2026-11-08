@@ -12,6 +12,10 @@
 
 export type EstadoRecepcionItem = 'PENDIENTE' | 'PARCIAL' | 'RECIBIDO'
 
+// Redondeo a 3 decimales (la columna es numeric(12,3)). Evita que 0.1+0.2 > 0.3 dé
+// "exceso" falso o que un épsilon impida cerrar una OC.
+const r3 = (x: number) => Math.round(x * 1000) / 1000
+
 /**
  * El "puente booleano": una entrega deja el material COMPLETO cuando lo acumulado
  * (entregas previas + esta entrega) alcanza o supera lo ordenado.
@@ -27,7 +31,7 @@ export function puenteRecibido(
   cantidadEstaEntrega: number,
   cantidadOrdenada: number
 ): boolean {
-  return acumuladoPrevio + cantidadEstaEntrega >= cantidadOrdenada
+  return r3(acumuladoPrevio + cantidadEstaEntrega) >= r3(cantidadOrdenada)
 }
 
 /**
@@ -39,8 +43,8 @@ export function validarAcumulado(
   cantidadEstaEntrega: number,
   cantidadOrdenada: number
 ): { ok: boolean; acumulado: number } {
-  const acumulado = acumuladoPrevio + cantidadEstaEntrega
-  return { ok: acumulado <= cantidadOrdenada, acumulado }
+  const acumulado = r3(acumuladoPrevio + cantidadEstaEntrega)
+  return { ok: acumulado <= r3(cantidadOrdenada), acumulado }
 }
 
 /**
@@ -72,5 +76,5 @@ export function parseCantidad(valor: unknown): number | null {
   if (valor === null || valor === undefined || valor === '') return null
   const n = typeof valor === 'number' ? valor : Number(valor)
   if (!Number.isFinite(n) || n < 0) return null
-  return n
+  return r3(n)
 }

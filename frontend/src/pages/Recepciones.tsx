@@ -112,10 +112,13 @@ function RecepcionPanel({
   }, [historial])
 
   // Helpers de cantidad (F2). El "ordenado" es m.qty (= items_orden_compra.cantidad).
-  const orderedOf  = (m: Material) => Number(m.qty) || 0
-  const acumOf     = (m: Material) => recibidoAcum.get(m.id) ?? 0
-  const faltanteOf = (m: Material) => Math.max(0, orderedOf(m) - acumOf(m))
-  const qtyNum     = (id: number) => { const n = Number(matQty[id]); return Number.isFinite(n) && n >= 0 ? n : 0 }
+  // Redondeo a 3 decimales (numeric(12,3)) para que coincida con el backend y no haya
+  // falsos "excesos" por coma flotante.
+  const r3         = (x: number) => Math.round(x * 1000) / 1000
+  const orderedOf  = (m: Material) => r3(Number(m.qty) || 0)
+  const acumOf     = (m: Material) => r3(recibidoAcum.get(m.id) ?? 0)
+  const faltanteOf = (m: Material) => Math.max(0, r3(orderedOf(m) - acumOf(m)))
+  const qtyNum     = (id: number) => { const n = Number(matQty[id]); return Number.isFinite(n) && n >= 0 ? r3(n) : 0 }
 
   // Firma de lo ya recibido por material: cambia cuando se registra una entrega.
   const acumSig = useMemo(
@@ -148,15 +151,15 @@ function RecepcionPanel({
   // Materiales que efectivamente se reciben en esta entrega (cantidad > 0).
   const activeConQty = activeMats.filter((m) => qtyNum(m.id) > 0)
   // ¿Alguna cantidad se pasa de lo ordenado? (bloquea el submit)
-  const hayExceso = activeMats.some((m) => acumOf(m) + qtyNum(m.id) > orderedOf(m))
+  const hayExceso = activeMats.some((m) => r3(acumOf(m) + qtyNum(m.id)) > orderedOf(m))
   // ¿Esta entrega deja TODO completo? (todos los activos llegan a lo ordenado)
-  const todoCubierto = activeMats.length > 0 && activeMats.every((m) => acumOf(m) + qtyNum(m.id) >= orderedOf(m))
+  const todoCubierto = activeMats.length > 0 && activeMats.every((m) => r3(acumOf(m) + qtyNum(m.id)) >= orderedOf(m))
   // Tipo efectivo: en F2 lo dictan las cantidades (o el "forzar total"); si no, el toggle manual.
   const tipoEfectivo: 'total' | 'parcial' = RECEPCION_CANTIDADES
     ? ((todoCubierto || forzarTotal) ? 'total' : 'parcial')
     : tipo
   // ¿Quedan faltantes aunque se cierre total? (para avisar en el "forzar total")
-  const quedanFaltantes = activeMats.some((m) => acumOf(m) + qtyNum(m.id) < orderedOf(m))
+  const quedanFaltantes = activeMats.some((m) => r3(acumOf(m) + qtyNum(m.id)) < orderedOf(m))
 
   const toggleAll = () => {
     const newVal = !allChecked
