@@ -67,6 +67,28 @@ export function estadoItemPorCantidad(
   return { estado: 'PARCIAL', sin_cantidad: false }
 }
 
+export type EstadoItemReadiness = 'LISTO' | 'PARCIAL' | 'EN_TRANSITO' | 'ORDENADO' | 'PENDIENTE'
+
+/**
+ * Estado de readiness de un ÍTEM a partir de los conteos de sus materiales COMPRABLES.
+ * Refleja la realidad para PM/Shop:
+ *  - LISTO: todos los materiales están en el taller (disponibles = total). Incluye el
+ *    caso de ítem 100% propio (total = 0 => disponibles 0 = total => LISTO).
+ *  - PARCIAL: algunos materiales ya llegaron completos, faltan otros.
+ *  - EN_TRANSITO: nada completo todavía, pero ya llegó PARTE de algún material.
+ *  - ORDENADO: todo pedido, nada llegó aún.
+ *  - PENDIENTE: hay materiales sin ordenar.
+ */
+export function estadoItemReadiness(c: {
+  total: number; disponibles: number; en_transito: number; pendientes: number
+}): EstadoItemReadiness {
+  if (c.disponibles === c.total) return 'LISTO'
+  if (c.disponibles > 0) return 'PARCIAL'
+  if (c.en_transito > 0) return 'EN_TRANSITO'
+  if (c.pendientes === 0) return 'ORDENADO'
+  return 'PENDIENTE'
+}
+
 /**
  * Convierte un valor entrante (del body) a número de cantidad válido, o null si no vino.
  * Acepta number o string numérico; rechaza NaN y negativos devolviendo null

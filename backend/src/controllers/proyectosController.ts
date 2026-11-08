@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from 'express'
 import { z } from 'zod'
 import pool from '../db/pool'
 import { parsePagination, paginatedResponse } from '../utils/pagination'
+import { estadoItemReadiness } from '../utils/recepcionCantidades'
 import { createError } from '../middleware/errorHandler'
 import { supabase, supabaseEnabled, SUPABASE_BUCKET } from '../utils/supabase'
 
@@ -492,18 +493,7 @@ export async function getProyectoItemsReadiness(req: Request, res: Response, nex
       // "Disponibles" = recibidos + en_stock (ambos están físicamente en el taller)
       const disponibles = recibidos + en_stock
 
-      let estado: 'LISTO' | 'PARCIAL' | 'EN_TRANSITO' | 'ORDENADO' | 'PENDIENTE'
-      if (disponibles === total) {
-        estado = 'LISTO'
-      } else if (disponibles > 0) {
-        estado = 'PARCIAL'            // algunos materiales ya están en el taller
-      } else if (en_transito > 0) {
-        estado = 'EN_TRANSITO'        // nada completo aún, pero ya llegó parte de algún material
-      } else if (pendientes === 0) {
-        estado = 'ORDENADO'           // todo ordenado, nada llegó todavía
-      } else {
-        estado = 'PENDIENTE'
-      }
+      const estado = estadoItemReadiness({ total, disponibles, en_transito, pendientes })
 
       return { ...r, disponibles, estado }
     })
