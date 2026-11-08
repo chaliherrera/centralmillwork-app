@@ -52,8 +52,9 @@ export interface ItemReadinessMaterial {
   unit_price: string
   estado_cotiz: 'PENDIENTE' | 'COTIZADO' | 'ORDENADO' | 'RECIBIDO' | 'EN_STOCK'
   recibido_fisico?: boolean  // llegó al taller aunque su OC siga abierta (recepción parcial)
+  cantidad_recibida?: number | string | null  // suma recibida por cantidades (NULL = sin cantidades). Ordenado = qty
   cotizar?: string | null    // 'SI' | 'NO' | 'EN_STOCK'. NO = propio (no se compra)
-  nota?: string | null       // nota del material (por qué es propio / impedimento)
+  nota?: string | null       // nota del material (por qué es propio / impedimento, o nota general)
   oc_id: number | null
   oc_numero: string | null
   oc_fecha_entrega: string | null  // ETA: fecha_entrega_estimada de la OC

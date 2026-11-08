@@ -33,6 +33,9 @@ import {
 const fmt = (n: number | string) =>
   new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(Number(n))
 
+// Cantidad sin decimales inútiles (3 vs 3.000)
+const fmtQty = (n: number) => String(Math.round(n * 1000) / 1000)
+
 const fmtDate = (d: string | null | undefined) => {
   if (!d) return '—'
   const [y, m, day] = d.slice(0, 10).split('-')
@@ -1523,6 +1526,8 @@ function ItemRow({ item, proyectoId, expanded, onToggle }: { item: ItemReadiness
 function MaterialDetailRow({ m, proyectoId }: { m: ItemReadinessMaterial; proyectoId: number }) {
   const esPropio = m.cotizar === 'NO'
   const tieneNota = !!(m.nota && m.nota.trim())
+  // La nota se muestra siempre en propios (con prompt) y en cualquier material que ya tenga una.
+  const mostrarNota = esPropio || tieneNota
 
   const queryClient = useQueryClient()
   const [editando, setEditando] = useState(false)
@@ -1571,25 +1576,52 @@ function MaterialDetailRow({ m, proyectoId }: { m: ItemReadinessMaterial; proyec
               : <span className="text-[10px] text-gray-300 flex-shrink-0 w-20">—</span>)}
       </div>
 
-      {/* Nota del material propio — debe verse (por qué lo fabricamos o qué impedimento tiene).
+      {/* Cantidad recibida (recepción por cantidades): cuánto llegó de lo ordenado.
+          Se ve en TODOS los ítems que tengan este material. */}
+      {!esPropio && m.cantidad_recibida != null && (() => {
+        const recibido = Number(m.cantidad_recibida)
+        const ordenado = Number(m.qty) || 0
+        const completo = ordenado > 0 && recibido >= ordenado
+        const faltan = Math.max(0, ordenado - recibido)
+        return (
+          <div className={clsx(
+            'mt-1.5 flex items-center gap-1.5 text-[11px]',
+            completo ? 'text-emerald-700' : 'text-amber-700'
+          )}>
+            {completo ? <CheckCircle2 size={11} className="flex-shrink-0" /> : <Truck size={11} className="flex-shrink-0" />}
+            <span>
+              Recibido <b className="tabular-nums">{fmtQty(recibido)}</b> de <span className="tabular-nums">{fmtQty(ordenado)}</span> u.
+              {completo ? ' · completo' : ` · faltan ${fmtQty(faltan)}`}
+            </span>
+          </div>
+        )
+      })()}
+
+      {/* Nota del material — para propios "debe verse" (por qué lo fabricamos / impedimento);
+          para el resto, se muestra la nota que cargaste en Materiales si existe.
           Editable inline, sin salir de la pestaña. */}
-      {esPropio && !editando && (
+      {mostrarNota && !editando && (
         <div className={clsx(
           'mt-1.5 flex items-start gap-1.5 rounded px-2 py-1 text-[11px] group',
-          tieneNota ? 'bg-amber-100/70 text-amber-900' : 'bg-gray-50 text-gray-400 italic'
+          esPropio
+            ? (tieneNota ? 'bg-amber-100/70 text-amber-900' : 'bg-gray-50 text-gray-400 italic')
+            : 'bg-slate-50 text-slate-600'
         )}>
           <MessageSquare size={11} className="mt-0.5 flex-shrink-0" />
           <span className="min-w-0 flex-1">{tieneNota ? m.nota : 'Sin nota — indicá por qué es propio o si hay un impedimento.'}</span>
           <button
             onClick={() => { setValor(m.nota ?? ''); setEditando(true) }}
-            className="flex-shrink-0 inline-flex items-center gap-1 text-[10px] text-amber-700 hover:text-amber-900 font-medium not-italic"
+            className={clsx(
+              'flex-shrink-0 inline-flex items-center gap-1 text-[10px] font-medium not-italic',
+              esPropio ? 'text-amber-700 hover:text-amber-900' : 'text-forest-600 hover:text-forest-800'
+            )}
           >
             <Pencil size={10} /> {tieneNota ? 'Editar' : 'Agregar nota'}
           </button>
         </div>
       )}
 
-      {esPropio && editando && (
+      {mostrarNota && editando && (
         <div className="mt-1.5 rounded bg-white border border-amber-200 p-2">
           <textarea
             autoFocus

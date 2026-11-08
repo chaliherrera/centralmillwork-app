@@ -398,6 +398,14 @@ export async function getProyectoItemsReadiness(req: Request, res: Response, nex
           WHERE rm.recibido = true AND r.fecha_recepcion IS NOT NULL
           GROUP BY rm.id_material
        ),
+       recq AS (
+         -- Suma de lo recibido por cantidad (recepción por CANTIDADES). NULL = sin cantidades.
+         SELECT rm.id_material AS id, SUM(rm.cantidad_recibida) AS recibido_qty
+           FROM recepcion_materiales rm
+           JOIN recepciones r ON r.id = rm.id_recepcion
+          WHERE rm.cantidad_recibida IS NOT NULL
+          GROUP BY rm.id_material
+       ),
        items_expanded AS (
          SELECT
            TRIM(item_num) AS item,
@@ -411,11 +419,13 @@ export async function getProyectoItemsReadiness(req: Request, res: Response, nex
              ELSE m.estado_cotiz
            END AS estado_cotiz,
            (rec.id IS NOT NULL) AS recibido_fisico,
+           recq.recibido_qty AS cantidad_recibida,
            m.cotizar,
            m.notas AS nota,
            oc_link.oc_id, oc_link.oc_numero, oc_link.oc_fecha_entrega
          FROM materiales_mto m
          LEFT JOIN rec ON rec.id = m.id
+         LEFT JOIN recq ON recq.id = m.id
          CROSS JOIN UNNEST(REGEXP_SPLIT_TO_ARRAY(m.item, '[-,]')) AS item_num
          LEFT JOIN LATERAL (
            SELECT oc.id AS oc_id, oc.numero AS oc_numero,
@@ -452,6 +462,7 @@ export async function getProyectoItemsReadiness(req: Request, res: Response, nex
              'unit_price',  unit_price,
              'estado_cotiz', estado_cotiz,
              'recibido_fisico', recibido_fisico,
+             'cantidad_recibida', cantidad_recibida,
              'cotizar',     cotizar,
              'nota',        nota,
              'oc_id',       oc_id,
