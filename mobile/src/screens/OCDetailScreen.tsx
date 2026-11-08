@@ -11,6 +11,13 @@ import { imagenesService } from '../services/imagenes'
 import { useAuth } from '../context/AuthContext'
 import { EtaBadge } from '../components/EtaBadge'
 
+// Recepción por CANTIDADES en el móvil. Apagado => checkbox de siempre (sin cambios).
+// Se libera junto con la activación en producción (es un build aparte vía EAS).
+const RECEPCION_CANTIDADES = true
+
+const r3 = (x: number) => Math.round(x * 1000) / 1000
+const fmtQty = (n: number) => String(r3(n))
+
 interface Props {
   oc: OrdenCompra
   onBack: () => void
@@ -21,6 +28,7 @@ interface MaterialState extends MaterialLote {
   recibido: boolean
   nota: string
   alreadyReceived: boolean
+  cantidad: string   // cantidad recibida en esta entrega (F2)
 }
 
 export default function OCDetailScreen({ oc, onBack, onSaved }: Props) {
@@ -37,6 +45,7 @@ export default function OCDetailScreen({ oc, onBack, onSaved }: Props) {
   const [previewPhoto, setPreviewPhoto] = useState<string | null>(null)
   const [notas, setNotas] = useState('')
   const [tipo, setTipo] = useState<'total' | 'parcial'>('total')
+  const [forzarTotal, setForzarTotal] = useState(false)  // F2: cerrar la OC aunque falte material
 
   useEffect(() => {
     (async () => {
@@ -46,16 +55,22 @@ export default function OCDetailScreen({ oc, onBack, onSaved }: Props) {
           recepcionesService.getHistorial(oc.id),
         ])
         setHistorial(histData)
-        // Set de id_material que ya se marcaron como recibidos en alguna recepción previa.
+        // Set de id_material ya recibidos (completos) + acumulado por cantidad por material.
         const receivedIds = new Set<number>()
+        const acum = new Map<number, number>()
         for (const rec of histData) {
           for (const rm of rec.materiales) {
             if (rm.recibido && rm.id_material != null) receivedIds.add(rm.id_material)
+            if (rm.id_material != null && rm.cantidad_recibida != null) {
+              acum.set(rm.id_material, (acum.get(rm.id_material) ?? 0) + Number(rm.cantidad_recibida))
+            }
           }
         }
         setMateriales(matsData.map((m) => {
           const ya = receivedIds.has(m.id)
-          return { ...m, recibido: ya, nota: '', alreadyReceived: ya }
+          const ordenado = Number(m.qty) || 0
+          const faltante = Math.max(0, r3(ordenado - (acum.get(m.id) ?? 0)))
+          return { ...m, recibido: ya, nota: '', alreadyReceived: ya, cantidad: fmtQty(faltante) }
         }))
       } catch (err: any) {
         Alert.alert('Error', err?.response?.data?.message || 'No se pudieron cargar los datos')
@@ -82,6 +97,80 @@ export default function OCDetailScreen({ oc, onBack, onSaved }: Props) {
       prev.map((m) => (m.alreadyReceived ? m : { ...m, recibido: newVal }))
     )
   }
+
+  // ── F2: recepción por cantidades ──
+  const recibidoAcum = React.useMemo(() => {
+    const map = new Map<number, number>()
+    for (const rec of historial) {
+      for (const rm of rec.materiales) {
+        if (rm.id_material != null && rm.cantidad_recibida != null) {
+          map.set(rm.id_material, (map.get(rm.id_material) ?? 0) + Number(rm.cantidad_recibida))
+        }
+      }
+    }
+    return map
+  }, [historial])
+  // Avance total por material (ordenado vs recibido) a lo largo de todas las entregas.
+  const avanceResumen = React.useMemo(() => {
+    const map = new Map<number, { etiqueta: string; ordenado: number; recibido: number }>()
+    for (const rec of historial) {
+      for (const rm of rec.materiales) {
+        if (rm.id_material == null || rm.cantidad_recibida == null) continue
+        const cur = map.get(rm.id_material) ?? {
+          etiqueta: rm.cm_code || rm.descripcion || `#${rm.id_material}`,
+          ordenado: rm.cantidad_ordenada != null ? Number(rm.cantidad_ordenada) : NaN,
+          recibido: 0,
+        }
+        cur.recibido += Number(rm.cantidad_recibida)
+        if (rm.cm_code) cur.etiqueta = rm.cm_code
+        if (rm.cantidad_ordenada != null) cur.ordenado = Number(rm.cantidad_ordenada)
+        map.set(rm.id_material, cur)
+      }
+    }
+    return [...map.values()]
+  }, [historial])
+
+  // Contexto por entrega: cuánto faltaba ANTES de esa entrega (saldo corriente).
+  const entregaCtx = React.useMemo(() => {
+    const asc = [...historial].reverse()
+    const acc = new Map<number, number>()
+    const out = new Map<string, { llegaron: number; pendienteAntes: number; completo: boolean }>()
+    for (const rec of asc) {
+      for (const rm of rec.materiales) {
+        if (rm.id_material == null || rm.cantidad_recibida == null) continue
+        const ordenado = rm.cantidad_ordenada != null ? Number(rm.cantidad_ordenada) : NaN
+        const antes = acc.get(rm.id_material) ?? 0
+        const llegaron = Number(rm.cantidad_recibida)
+        acc.set(rm.id_material, antes + llegaron)
+        out.set(`${rec.id}:${rm.id}`, {
+          llegaron,
+          pendienteAntes: Number.isFinite(ordenado) ? Math.max(0, ordenado - antes) : NaN,
+          completo: Number.isFinite(ordenado) && (antes + llegaron) >= ordenado,
+        })
+      }
+    }
+    return out
+  }, [historial])
+
+  const orderedOf = (m: MaterialState) => r3(Number(m.qty) || 0)
+  const acumOf    = (m: MaterialState) => r3(recibidoAcum.get(m.id) ?? 0)
+  const cantNum   = (m: MaterialState) => { const n = Number(m.cantidad); return Number.isFinite(n) && n >= 0 ? r3(n) : 0 }
+  const updateCantidad = (idx: number, val: string) => {
+    setMateriales((prev) => prev.map((m, i) => (i === idx ? { ...m, cantidad: val } : m)))
+  }
+  const fillAllQty = (fill: boolean) => {
+    setMateriales((prev) => prev.map((m) =>
+      m.alreadyReceived ? m : { ...m, cantidad: fill ? fmtQty(Math.max(0, r3((Number(m.qty) || 0) - (recibidoAcum.get(m.id) ?? 0)))) : '0' }
+    ))
+  }
+
+  const activeConQty = activeMats.filter((m) => cantNum(m) > 0)
+  const hayExceso    = activeMats.some((m) => r3(acumOf(m) + cantNum(m)) > orderedOf(m))
+  const todoCubierto = activeMats.length > 0 && activeMats.every((m) => r3(acumOf(m) + cantNum(m)) >= orderedOf(m))
+  const quedanFaltantes = activeMats.some((m) => r3(acumOf(m) + cantNum(m)) < orderedOf(m))
+  const tipoEfectivo: 'total' | 'parcial' = RECEPCION_CANTIDADES
+    ? ((todoCubierto || forzarTotal) ? 'total' : 'parcial')
+    : tipo
 
   // ETA vencida: la OC pasó la fecha de entrega y no está recibida ni cancelada.
   const isVencida = (() => {
@@ -133,15 +222,23 @@ export default function OCDetailScreen({ oc, onBack, onSaved }: Props) {
   }
 
   const handleGuardar = () => {
+    if (RECEPCION_CANTIDADES && hayExceso) {
+      Alert.alert('Revisá las cantidades', 'Hay cantidades que superan lo ordenado. Corregilas para registrar.')
+      return
+    }
+    if (RECEPCION_CANTIDADES && activeConQty.length === 0) {
+      Alert.alert('Sin cantidades', 'Cargá al menos una cantidad recibida (> 0) para registrar.')
+      return
+    }
     Alert.alert(
       'Confirmar recepción',
-      `Vas a registrar una recepción ${tipo === 'total' ? 'TOTAL' : 'PARCIAL'} con ${photos.length} foto(s).\n\n¿Continuar?`,
+      `Vas a registrar una recepción ${tipoEfectivo === 'total' ? 'TOTAL' : 'PARCIAL'} con ${photos.length} foto(s).\n\n¿Continuar?`,
       [
         { text: 'Cancelar', style: 'cancel' },
         {
           text: 'Confirmar',
           style: 'default',
-          onPress: () => guardarRecepcion(tipo),
+          onPress: () => guardarRecepcion(tipoEfectivo),
         },
       ]
     )
@@ -152,15 +249,25 @@ export default function OCDetailScreen({ oc, onBack, onSaved }: Props) {
     try {
       // Solo enviamos los materiales que NO se recibieron en una recepción anterior.
       // Los ya recibidos no se duplican; el backend confía en el historial.
-      const materialesPayload: MaterialRecepcion[] = materiales
-        .filter((m) => !m.alreadyReceived)
-        .map((m) => ({
-          id_material: m.id,
-          cm_code: m.codigo,
-          descripcion: m.descripcion,
-          recibido: m.recibido,
-          nota: m.nota || undefined,
-        }))
+      const materialesPayload: MaterialRecepcion[] = RECEPCION_CANTIDADES
+        ? activeConQty.map((m) => ({
+            id_material: m.id,
+            cm_code: m.codigo,
+            descripcion: m.descripcion,
+            recibido: r3(acumOf(m) + cantNum(m)) >= orderedOf(m),
+            nota: m.nota || undefined,
+            cantidad_recibida: cantNum(m),
+            cantidad_ordenada: orderedOf(m),
+          }))
+        : materiales
+            .filter((m) => !m.alreadyReceived)
+            .map((m) => ({
+              id_material: m.id,
+              cm_code: m.codigo,
+              descripcion: m.descripcion,
+              recibido: m.recibido,
+              nota: m.nota || undefined,
+            }))
 
       // 1. Crear la recepción
       await recepcionesService.crear({
@@ -288,6 +395,25 @@ export default function OCDetailScreen({ oc, onBack, onSaved }: Props) {
           </View>
         )}
 
+        {/* Avance del pedido (F2) */}
+        {RECEPCION_CANTIDADES && avanceResumen.length > 0 && (
+          <View style={styles.avanceCard}>
+            <Text style={styles.avanceTitle}>AVANCE DEL PEDIDO</Text>
+            {avanceResumen.map((r, i) => {
+              const ok = Number.isFinite(r.ordenado) && r.ordenado > 0
+              const completo = ok && r.recibido >= r.ordenado
+              const faltan = ok ? Math.max(0, r3(r.ordenado - r.recibido)) : 0
+              return (
+                <Text key={i} style={styles.avanceRow}>
+                  {r.etiqueta}: <Text style={{ fontWeight: '700', color: completo ? '#1B5E20' : '#1F2419' }}>{fmtQty(r.recibido)}</Text>
+                  {ok ? ` de ${fmtQty(r.ordenado)} u.` : ''}
+                  {completo ? ' · completo ✓' : ok ? ` · faltan ${fmtQty(faltan)}` : ''}
+                </Text>
+              )
+            })}
+          </View>
+        )}
+
         {/* Historial de recepciones previas */}
         {historial.length > 0 && (
           <>
@@ -296,6 +422,7 @@ export default function OCDetailScreen({ oc, onBack, onSaved }: Props) {
               const esTotal = rec.estado === 'completa'
               const recibidos = rec.materiales.filter((m) => m.recibido).length
               const totalMats = rec.materiales.length
+              const matsConCant = rec.materiales.filter((m) => m.cantidad_recibida != null)
               const fecha = rec.fecha_recepcion ? rec.fecha_recepcion.slice(0, 10) : '—'
               return (
                 <View key={rec.id} style={[
@@ -322,10 +449,23 @@ export default function OCDetailScreen({ oc, onBack, onSaved }: Props) {
                   {rec.notas && (
                     <Text style={styles.histNotes}>"{rec.notas}"</Text>
                   )}
-                  {totalMats > 0 && (
-                    <Text style={styles.histStats}>
-                      {recibidos}/{totalMats} materiales recibidos
-                    </Text>
+                  {RECEPCION_CANTIDADES && matsConCant.length > 0 ? (
+                    matsConCant.map((rm) => {
+                      const c = entregaCtx.get(`${rec.id}:${rm.id}`)
+                      return (
+                        <Text key={rm.id} style={styles.histQtyRow}>
+                          {rm.cm_code || rm.descripcion}: +{fmtQty(Number(rm.cantidad_recibida))}
+                          {c && Number.isFinite(c.pendienteAntes) ? ` de ${fmtQty(c.pendienteAntes)} u.` : ''}
+                          {c?.completo ? ' ✓ completo' : ''}
+                        </Text>
+                      )
+                    })
+                  ) : (
+                    totalMats > 0 && (
+                      <Text style={styles.histStats}>
+                        {recibidos}/{totalMats} materiales recibidos
+                      </Text>
+                    )
                   )}
                 </View>
               )
@@ -335,18 +475,91 @@ export default function OCDetailScreen({ oc, onBack, onSaved }: Props) {
 
         {/* Materiales */}
         <View style={styles.matsHeaderRow}>
-          <Text style={styles.sectionTitle}>Materiales del lote ({materiales.length})</Text>
+          <Text style={styles.sectionTitle}>
+            {RECEPCION_CANTIDADES ? 'Cantidades recibidas' : 'Materiales del lote'} ({materiales.length})
+          </Text>
           {activeMats.length > 0 && (
-            <TouchableOpacity onPress={toggleAll}>
-              <Text style={styles.markAllBtn}>{allActiveChecked ? 'Desmarcar todos' : 'Marcar todos'}</Text>
-            </TouchableOpacity>
+            RECEPCION_CANTIDADES ? (
+              <View style={{ flexDirection: 'row', gap: 12 }}>
+                <TouchableOpacity onPress={() => fillAllQty(true)}>
+                  <Text style={styles.markAllBtn}>Llenar faltante</Text>
+                </TouchableOpacity>
+                <TouchableOpacity onPress={() => fillAllQty(false)}>
+                  <Text style={styles.markAllBtn}>Vaciar</Text>
+                </TouchableOpacity>
+              </View>
+            ) : (
+              <TouchableOpacity onPress={toggleAll}>
+                <Text style={styles.markAllBtn}>{allActiveChecked ? 'Desmarcar todos' : 'Marcar todos'}</Text>
+              </TouchableOpacity>
+            )
           )}
         </View>
-        <Text style={styles.sectionHelp}>Tocá un material para marcar/desmarcar como recibido</Text>
+        <Text style={styles.sectionHelp}>
+          {RECEPCION_CANTIDADES
+            ? 'Cargá cuántas unidades llegaron de cada material (precargado con lo que falta)'
+            : 'Tocá un material para marcar/desmarcar como recibido'}
+        </Text>
 
         {materiales.map((m, idx) => {
           const isYa = m.alreadyReceived
           const isCheck = m.recibido || isYa
+
+          // ── Modo cantidades (F2) ──
+          if (RECEPCION_CANTIDADES) {
+            const ordenado = orderedOf(m)
+            const acum = acumOf(m)
+            const cant = cantNum(m)
+            const faltanteBase = Math.max(0, r3(ordenado - acum))
+            const exceso = r3(acum + cant) > ordenado
+            const completo = ordenado > 0 && r3(acum + cant) >= ordenado
+            return (
+              <View
+                key={`${m.id}-${idx}`}
+                style={[styles.matCard, isYa ? styles.matCardYaRecibido : (cant > 0 && styles.matCardRecibido)]}
+              >
+                <View style={styles.matRow}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.matCode}>{m.codigo || 'Sin código'}</Text>
+                    <Text style={styles.matDesc} numberOfLines={2}>{m.descripcion || 'Sin descripción'}</Text>
+                    <Text style={styles.matMeta}>
+                      de {fmtQty(ordenado)} {m.unidad || ''}{acum > 0 ? ` · ya ${fmtQty(acum)}` : ''} · {m.vendor || '—'}
+                    </Text>
+                    {isYa && <Text style={styles.yaRecibidoBadge}>✓ Completo (recepción anterior)</Text>}
+                  </View>
+                  {!isYa && (
+                    <TextInput
+                      value={m.cantidad}
+                      onChangeText={(t) => updateCantidad(idx, t)}
+                      keyboardType="numeric"
+                      style={[styles.qtyInput, exceso && styles.qtyInputError]}
+                    />
+                  )}
+                </View>
+                {!isYa && (
+                  <Text style={[styles.qtyHint, exceso && styles.qtyHintError]}>
+                    {exceso
+                      ? `Se pasa de lo ordenado (máximo ${fmtQty(faltanteBase)})`
+                      : completo
+                        ? 'Con esto queda completo ✓'
+                        : `Faltaban ${fmtQty(faltanteBase)} · con esto quedan ${fmtQty(Math.max(0, r3(ordenado - acum - cant)))}`}
+                  </Text>
+                )}
+                {!isYa && (
+                  <TextInput
+                    value={m.nota}
+                    onChangeText={(t) => updateNota(idx, t)}
+                    placeholder="Nota (opcional)..."
+                    placeholderTextColor="#999"
+                    style={styles.matNotaInput}
+                    multiline
+                  />
+                )}
+              </View>
+            )
+          }
+
+          // ── Modo clásico (checkbox) ──
           return (
             <TouchableOpacity
               key={`${m.id}-${idx}`}
@@ -424,50 +637,61 @@ export default function OCDetailScreen({ oc, onBack, onSaved }: Props) {
         {!isReadOnly && (
           <>
             <Text style={styles.sectionTitle}>Tipo de recepción</Text>
-            <View style={styles.tipoRow}>
-              <TouchableOpacity
-                onPress={() => setTipo('total')}
-                style={[
+            {RECEPCION_CANTIDADES ? (
+              <>
+                {/* El tipo lo dictan las cantidades cargadas */}
+                <View style={[
                   styles.tipoBtn,
-                  tipo === 'total' ? styles.tipoBtnActiveTotal : styles.tipoBtnInactive,
-                ]}
-                activeOpacity={0.7}
-              >
-                <Text style={[
-                  styles.tipoBtnText,
-                  { color: tipo === 'total' ? '#1B5E20' : '#9A9A9A' },
+                  tipoEfectivo === 'total' ? styles.tipoBtnActiveTotal : styles.tipoBtnActiveParcial,
+                  { marginBottom: 6 },
                 ]}>
-                  ✓ TOTAL
+                  <Text style={[styles.tipoBtnText, { color: tipoEfectivo === 'total' ? '#1B5E20' : '#1E40AF' }]}>
+                    {tipoEfectivo === 'total' ? '✓ TOTAL — cierra la OC' : '⟳ PARCIAL — quedan faltantes'}
+                  </Text>
+                </View>
+                {quedanFaltantes && (
+                  <TouchableOpacity style={styles.forzarRow} onPress={() => setForzarTotal(!forzarTotal)} activeOpacity={0.7}>
+                    <View style={[styles.checkbox, forzarTotal && styles.checkboxOn]}>
+                      {forzarTotal && <Text style={styles.checkmark}>✓</Text>}
+                    </View>
+                    <Text style={{ flex: 1, fontSize: 12, color: '#5A5F52' }}>
+                      Cerrar igual como TOTAL aunque falte material
+                    </Text>
+                  </TouchableOpacity>
+                )}
+              </>
+            ) : (
+              <>
+                <View style={styles.tipoRow}>
+                  <TouchableOpacity
+                    onPress={() => setTipo('total')}
+                    style={[styles.tipoBtn, tipo === 'total' ? styles.tipoBtnActiveTotal : styles.tipoBtnInactive]}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={[styles.tipoBtnText, { color: tipo === 'total' ? '#1B5E20' : '#9A9A9A' }]}>✓ TOTAL</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    onPress={() => setTipo('parcial')}
+                    style={[styles.tipoBtn, tipo === 'parcial' ? styles.tipoBtnActiveParcial : styles.tipoBtnInactive]}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={[styles.tipoBtnText, { color: tipo === 'parcial' ? '#1E40AF' : '#9A9A9A' }]}>⟳ PARCIAL</Text>
+                  </TouchableOpacity>
+                </View>
+                <Text style={styles.tipoHelp}>
+                  {tipo === 'total'
+                    ? 'OC pasa a EN EL TALLER — recepción completa.'
+                    : 'OC pasa a EN TRÁNSITO — quedan materiales pendientes.'}
                 </Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                onPress={() => setTipo('parcial')}
-                style={[
-                  styles.tipoBtn,
-                  tipo === 'parcial' ? styles.tipoBtnActiveParcial : styles.tipoBtnInactive,
-                ]}
-                activeOpacity={0.7}
-              >
-                <Text style={[
-                  styles.tipoBtnText,
-                  { color: tipo === 'parcial' ? '#1E40AF' : '#9A9A9A' },
-                ]}>
-                  ⟳ PARCIAL
-                </Text>
-              </TouchableOpacity>
-            </View>
-            <Text style={styles.tipoHelp}>
-              {tipo === 'total'
-                ? 'OC pasa a EN EL TALLER — recepción completa.'
-                : 'OC pasa a EN TRÁNSITO — quedan materiales pendientes.'}
-            </Text>
+              </>
+            )}
 
             <TouchableOpacity
               onPress={handleGuardar}
               disabled={saving}
               style={[
                 styles.saveBtn,
-                tipo === 'total' ? styles.saveBtnTotal : styles.saveBtnParcial,
+                tipoEfectivo === 'total' ? styles.saveBtnTotal : styles.saveBtnParcial,
                 saving && styles.saveBtnDisabled,
               ]}
             >
@@ -475,7 +699,7 @@ export default function OCDetailScreen({ oc, onBack, onSaved }: Props) {
                 <ActivityIndicator color="#fff" />
               ) : (
                 <Text style={styles.saveBtnText}>
-                  {tipo === 'total' ? '✓ Registrar Recepción TOTAL' : '⟳ Registrar Recepción PARCIAL'}
+                  {tipoEfectivo === 'total' ? '✓ Registrar Recepción TOTAL' : '⟳ Registrar Recepción PARCIAL'}
                 </Text>
               )}
             </TouchableOpacity>
@@ -607,6 +831,23 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff', borderRadius: 6, padding: 8, marginTop: 8,
     borderWidth: 1, borderColor: '#E0DFD9', fontSize: 13, color: '#1F2419', minHeight: 40,
   },
+  // F2: input de cantidad por material
+  qtyInput: {
+    width: 64, textAlign: 'center', backgroundColor: '#fff', borderRadius: 8,
+    borderWidth: 1, borderColor: '#C7CBBB', fontSize: 16, fontWeight: '700',
+    color: '#1F2419', paddingVertical: 8, paddingHorizontal: 4,
+  },
+  qtyInputError: { borderColor: '#DC2626', color: '#DC2626' },
+  qtyHint: { fontSize: 12, color: '#7A7E70', marginTop: 6 },
+  qtyHintError: { color: '#DC2626' },
+  avanceCard: {
+    backgroundColor: '#F4F6EF', borderRadius: 10, padding: 12, marginBottom: 8,
+    borderWidth: 1, borderColor: '#E0DFD9',
+  },
+  avanceTitle: { fontSize: 11, fontWeight: '700', color: '#7A7E70', letterSpacing: 0.4, marginBottom: 6 },
+  avanceRow: { fontSize: 13, color: '#1F2419', marginBottom: 2 },
+  histQtyRow: { fontSize: 12, color: '#3A3F32', marginTop: 4 },
+  forzarRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 8 },
 
   histCard: {
     borderRadius: 10, padding: 12, marginBottom: 8, borderWidth: 1,
