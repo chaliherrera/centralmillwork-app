@@ -448,7 +448,10 @@ export async function getProyectoItemsReadiness(req: Request, res: Response, nex
          -- COMPRABLES (cotizar <> 'NO') entran en total/disponibles/estado.
          COUNT(*) FILTER (WHERE cotizar IS DISTINCT FROM 'NO')::int           AS total,
          COUNT(*) FILTER (WHERE cotizar IS DISTINCT FROM 'NO' AND estado_cotiz = 'RECIBIDO')::int              AS recibidos,
-         COUNT(*) FILTER (WHERE cotizar IS DISTINCT FROM 'NO' AND estado_cotiz = 'ORDENADO')::int              AS ordenados,
+         -- EN TRÁNSITO: material ordenado que YA recibió una parte (recepción parcial).
+         COUNT(*) FILTER (WHERE cotizar IS DISTINCT FROM 'NO' AND estado_cotiz = 'ORDENADO' AND cantidad_recibida IS NOT NULL AND cantidad_recibida > 0)::int AS en_transito,
+         -- ORDENADO "puro": ordenado y nada llegó todavía.
+         COUNT(*) FILTER (WHERE cotizar IS DISTINCT FROM 'NO' AND estado_cotiz = 'ORDENADO' AND NOT (cantidad_recibida IS NOT NULL AND cantidad_recibida > 0))::int AS ordenados,
          COUNT(*) FILTER (WHERE cotizar IS DISTINCT FROM 'NO' AND estado_cotiz IN ('PENDIENTE','COTIZADO'))::int AS pendientes,
          COUNT(*) FILTER (WHERE cotizar IS DISTINCT FROM 'NO' AND estado_cotiz = 'EN_STOCK')::int              AS en_stock,
          COUNT(*) FILTER (WHERE cotizar = 'NO')::int                          AS propios,
@@ -483,18 +486,21 @@ export async function getProyectoItemsReadiness(req: Request, res: Response, nex
       const total = r.total
       const recibidos = r.recibidos
       const en_stock = r.en_stock
+      const en_transito = r.en_transito
       const pendientes = r.pendientes
 
       // "Disponibles" = recibidos + en_stock (ambos están físicamente en el taller)
       const disponibles = recibidos + en_stock
 
-      let estado: 'LISTO' | 'PARCIAL' | 'ORDENADO' | 'PENDIENTE'
+      let estado: 'LISTO' | 'PARCIAL' | 'EN_TRANSITO' | 'ORDENADO' | 'PENDIENTE'
       if (disponibles === total) {
         estado = 'LISTO'
       } else if (disponibles > 0) {
-        estado = 'PARCIAL'
+        estado = 'PARCIAL'            // algunos materiales ya están en el taller
+      } else if (en_transito > 0) {
+        estado = 'EN_TRANSITO'        // nada completo aún, pero ya llegó parte de algún material
       } else if (pendientes === 0) {
-        estado = 'ORDENADO'  // ninguno recibido pero todos en OC activa
+        estado = 'ORDENADO'           // todo ordenado, nada llegó todavía
       } else {
         estado = 'PENDIENTE'
       }
@@ -507,6 +513,7 @@ export async function getProyectoItemsReadiness(req: Request, res: Response, nex
       total_items:    items.length,
       listos:         items.filter((i: any) => i.estado === 'LISTO').length,
       parciales:      items.filter((i: any) => i.estado === 'PARCIAL').length,
+      en_transito:    items.filter((i: any) => i.estado === 'EN_TRANSITO').length,
       ordenados:      items.filter((i: any) => i.estado === 'ORDENADO').length,
       pendientes:     items.filter((i: any) => i.estado === 'PENDIENTE').length,
     }

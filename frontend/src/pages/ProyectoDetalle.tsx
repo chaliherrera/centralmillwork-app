@@ -1386,6 +1386,7 @@ function ItemsTab({ proyectoId }: { proyectoId: number }) {
           <FiltroEstadoChip label="Todos"     count={resumen.total_items} active={filtroEstado === ''}          onClick={() => setFiltroEstado('')}          color="forest" />
           <FiltroEstadoChip label="Listos"    count={resumen.listos}      active={filtroEstado === 'LISTO'}     onClick={() => setFiltroEstado('LISTO')}     color="emerald" />
           <FiltroEstadoChip label="Parciales" count={resumen.parciales}   active={filtroEstado === 'PARCIAL'}   onClick={() => setFiltroEstado('PARCIAL')}   color="yellow" />
+          <FiltroEstadoChip label="En tránsito" count={resumen.en_transito} active={filtroEstado === 'EN_TRANSITO'} onClick={() => setFiltroEstado('EN_TRANSITO')} color="blue" />
           <FiltroEstadoChip label="Ordenados" count={resumen.ordenados}   active={filtroEstado === 'ORDENADO'}  onClick={() => setFiltroEstado('ORDENADO')}  color="purple" />
           <FiltroEstadoChip label="Pendientes" count={resumen.pendientes}  active={filtroEstado === 'PENDIENTE'} onClick={() => setFiltroEstado('PENDIENTE')} color="red" />
         </div>
@@ -1408,12 +1409,13 @@ function ItemsTab({ proyectoId }: { proyectoId: number }) {
 
 function FiltroEstadoChip({ label, count, active, onClick, color }: {
   label: string; count: number; active: boolean; onClick: () => void
-  color: 'forest' | 'emerald' | 'yellow' | 'purple' | 'red'
+  color: 'forest' | 'emerald' | 'yellow' | 'blue' | 'purple' | 'red'
 }) {
   const colors = {
     forest:  active ? 'bg-forest-100 text-forest-700 border-forest-300'   : 'bg-white text-gray-600 border-gray-200 hover:border-forest-200',
     emerald: active ? 'bg-emerald-100 text-emerald-700 border-emerald-300' : 'bg-white text-gray-600 border-gray-200 hover:border-emerald-200',
     yellow:  active ? 'bg-yellow-100 text-yellow-700 border-yellow-300'   : 'bg-white text-gray-600 border-gray-200 hover:border-yellow-200',
+    blue:    active ? 'bg-blue-100 text-blue-700 border-blue-300'         : 'bg-white text-gray-600 border-gray-200 hover:border-blue-200',
     purple:  active ? 'bg-purple-100 text-purple-700 border-purple-300'   : 'bg-white text-gray-600 border-gray-200 hover:border-purple-200',
     red:     active ? 'bg-red-100 text-red-700 border-red-300'             : 'bg-white text-gray-600 border-gray-200 hover:border-red-200',
   }
@@ -1456,7 +1458,7 @@ function ItemRow({ item, proyectoId, expanded, onToggle }: { item: ItemReadiness
           estadoMeta.badgeColor
         )}>
           <estadoMeta.icon size={12} />
-          {item.estado}
+          {item.estado === 'EN_TRANSITO' ? 'EN TRÁNSITO' : item.estado}
         </span>
 
         {/* Progress bar */}
@@ -1490,9 +1492,14 @@ function ItemRow({ item, proyectoId, expanded, onToggle }: { item: ItemReadiness
               <Warehouse size={9} /> {item.en_stock} stock
             </span>
           )}
+          {item.en_transito > 0 && (
+            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 font-medium" title="Materiales con una parte ya recibida (en tránsito)">
+              <Truck size={9} /> {item.en_transito} tránsito
+            </span>
+          )}
           {item.ordenados > 0 && (
             <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-purple-50 text-purple-700 font-medium">
-              <Truck size={9} /> {item.ordenados} ord
+              <ShoppingCart size={9} /> {item.ordenados} ord
             </span>
           )}
           {item.pendientes > 0 && (
@@ -1528,6 +1535,10 @@ function MaterialDetailRow({ m, proyectoId }: { m: ItemReadinessMaterial; proyec
   const tieneNota = !!(m.nota && m.nota.trim())
   // La nota se muestra siempre en propios (con prompt) y en cualquier material que ya tenga una.
   const mostrarNota = esPropio || tieneNota
+  // Parcialmente recibido = en tránsito: ya llegó una parte pero falta el resto.
+  const recibidoQty = m.cantidad_recibida != null ? Number(m.cantidad_recibida) : null
+  const ordenadoQty = Number(m.qty) || 0
+  const esParcial = !esPropio && recibidoQty != null && recibidoQty > 0 && recibidoQty < ordenadoQty
 
   const queryClient = useQueryClient()
   const [editando, setEditando] = useState(false)
@@ -1556,6 +1567,10 @@ function MaterialDetailRow({ m, proyectoId }: { m: ItemReadinessMaterial; proyec
         {esPropio ? (
           <span className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full font-bold flex-shrink-0 bg-amber-100 text-amber-800" title="No se compra: lo fabricamos nosotros o hay un impedimento">
             <Hammer size={10} /> PROPIO
+          </span>
+        ) : esParcial ? (
+          <span className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full font-bold flex-shrink-0 bg-blue-100 text-blue-700" title="Llegó una parte; el resto está en tránsito">
+            <Truck size={10} /> EN TRÁNSITO
           </span>
         ) : (
           <span className={clsx(
@@ -1662,7 +1677,9 @@ function getEstadoMeta(estado: EstadoItemReadiness) {
                               borderColor: 'border-emerald-200', progressColor: 'bg-emerald-500' }
     case 'PARCIAL':   return { icon: AlertCircle,  badgeColor: 'bg-yellow-100 text-yellow-700',
                               borderColor: 'border-yellow-200', progressColor: 'bg-yellow-400' }
-    case 'ORDENADO':  return { icon: Truck,        badgeColor: 'bg-purple-100 text-purple-700',
+    case 'EN_TRANSITO': return { icon: Truck,      badgeColor: 'bg-blue-100 text-blue-700',
+                              borderColor: 'border-blue-200',   progressColor: 'bg-blue-400' }
+    case 'ORDENADO':  return { icon: ShoppingCart, badgeColor: 'bg-purple-100 text-purple-700',
                               borderColor: 'border-purple-200', progressColor: 'bg-purple-400' }
     case 'PENDIENTE': return { icon: Clock,        badgeColor: 'bg-red-100 text-red-700',
                               borderColor: 'border-red-200',    progressColor: 'bg-red-400' }

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { Loader2, Package, CheckCircle2, Clock, ShoppingCart, AlertTriangle, X, ChevronRight } from 'lucide-react'
+import { Loader2, Package, CheckCircle2, Clock, ShoppingCart, AlertTriangle, Truck, X, ChevronRight } from 'lucide-react'
 import clsx from 'clsx'
 import { proyectosService } from '@/services/proyectos'
 import type { EstadoItemReadiness, ItemReadinessMaterial } from '@/services/proyectos'
@@ -14,7 +14,8 @@ import { useAuth } from '@/context/AuthContext'
 const ESTADO_ITEM: Record<EstadoItemReadiness, { label: string; chip: string; badge: string; bar: string; icon: typeof Package; desc: string }> = {
   LISTO:     { label: 'LISTO',     chip: 'bg-emerald-100 text-emerald-800 border-emerald-300', badge: 'bg-emerald-100 text-emerald-800 border-emerald-300', bar: 'bg-emerald-500', icon: CheckCircle2,  desc: 'Todos los materiales están en el taller' },
   PARCIAL:   { label: 'PARCIAL',   chip: 'bg-amber-100 text-amber-800 border-amber-300',       badge: 'bg-amber-100 text-amber-800 border-amber-300',       bar: 'bg-amber-500',   icon: AlertTriangle, desc: 'Algunos materiales llegaron, faltan otros' },
-  ORDENADO:  { label: 'ORDENADO',  chip: 'bg-blue-100 text-blue-800 border-blue-300',          badge: 'bg-blue-100 text-blue-800 border-blue-300',          bar: 'bg-blue-500',    icon: ShoppingCart,  desc: 'Todo comprado, esperando recepción' },
+  EN_TRANSITO: { label: 'EN TRÁNSITO', chip: 'bg-blue-100 text-blue-800 border-blue-300',       badge: 'bg-blue-100 text-blue-800 border-blue-300',          bar: 'bg-blue-500',    icon: Truck,         desc: 'Llegó parte del material, el resto está en tránsito' },
+  ORDENADO:  { label: 'ORDENADO',  chip: 'bg-purple-100 text-purple-800 border-purple-300',    badge: 'bg-purple-100 text-purple-800 border-purple-300',    bar: 'bg-purple-500',  icon: ShoppingCart,  desc: 'Todo comprado, esperando recepción' },
   PENDIENTE: { label: 'PENDIENTE', chip: 'bg-red-100 text-red-700 border-red-300',             badge: 'bg-red-100 text-red-700 border-red-300',             bar: 'bg-red-400',     icon: Clock,         desc: 'Hay materiales sin ordenar' },
 }
 

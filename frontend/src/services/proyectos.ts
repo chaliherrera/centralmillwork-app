@@ -41,7 +41,7 @@ export interface ProyectoResumen {
 }
 
 // ─── Tipos del endpoint /items-readiness ────────────────────────────────────
-export type EstadoItemReadiness = 'LISTO' | 'PARCIAL' | 'ORDENADO' | 'PENDIENTE'
+export type EstadoItemReadiness = 'LISTO' | 'PARCIAL' | 'EN_TRANSITO' | 'ORDENADO' | 'PENDIENTE'
 
 export interface ItemReadinessMaterial {
   id: number
@@ -64,7 +64,8 @@ export interface ItemReadiness {
   item: string
   total: number        // solo materiales COMPRABLES (excluye los marcados NO)
   recibidos: number
-  ordenados: number
+  en_transito: number  // materiales ordenados que ya recibieron una parte (recepción parcial)
+  ordenados: number    // ordenados sin nada recibido aún
   pendientes: number
   en_stock: number
   propios: number      // materiales marcados NO (fabricados por nosotros / no se compran)
@@ -79,6 +80,7 @@ export interface ProyectoItemsReadiness {
     total_items: number
     listos: number
     parciales: number
+    en_transito: number
     ordenados: number
     pendientes: number
   }
