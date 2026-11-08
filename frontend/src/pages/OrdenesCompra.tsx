@@ -14,6 +14,7 @@ import Modal from '@/components/ui/Modal'
 import ReporteModal from '@/components/ui/ReporteModal'
 import { ordenesCompraService } from '@/services/ordenesCompra'
 import { recepcionesService } from '@/services/recepciones'
+import { computeEntregasContexto, RecepcionMaterialesResumen, ResumenRecepcionOC } from '@/components/modules/recepciones/historialCantidades'
 import DynamicImageGrid from '@/components/ui/DynamicImageGrid'
 import CancelarOCModal from '@/components/modules/ordenes_compra/CancelarOCModal'
 import type { OrdenCompra, Material } from '@/types'
@@ -111,10 +112,13 @@ function RecepcionHistorialSection({ ocId }: { ocId: number }) {
     staleTime: 10_000,
   })
   const historial = data?.data ?? []
+  const ctx = computeEntregasContexto(historial)
   if (!historial.length) return null
   return (
     <div>
       <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Recepciones</p>
+      {/* Avance del pedido (recepción por cantidades): mismo bloque que en la pantalla de Recepciones */}
+      <ResumenRecepcionOC historial={historial} />
       <div className="space-y-2">
         {historial.map((rec) => (
           <div key={rec.id} className="rounded-lg border border-green-100 bg-green-50 px-3 py-2">
@@ -137,6 +141,8 @@ function RecepcionHistorialSection({ ocId }: { ocId: number }) {
                 "{rec.notas}"
               </p>
             )}
+            {/* Cuánto llegó de cada material en esta entrega (saldo corriente) */}
+            <RecepcionMaterialesResumen rec={rec} ctx={ctx} />
           </div>
         ))}
       </div>
