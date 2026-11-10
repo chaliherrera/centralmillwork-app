@@ -393,7 +393,7 @@ export async function getProyectoItemsReadiness(req: Request, res: Response, nex
       `WITH rec AS (
          -- Materiales con recepción FÍSICA registrada (llegaron al taller),
          -- aunque su OC siga abierta por una recepción parcial.
-         SELECT rm.id_material AS id
+         SELECT rm.id_material AS id, MIN(r.fecha_recepcion) AS f_rec
            FROM recepcion_materiales rm
            JOIN recepciones r ON r.id = rm.id_recepcion
           WHERE rm.recibido = true AND r.fecha_recepcion IS NOT NULL
@@ -423,14 +423,16 @@ export async function getProyectoItemsReadiness(req: Request, res: Response, nex
            recq.recibido_qty AS cantidad_recibida,
            m.cotizar,
            m.notas AS nota,
-           oc_link.oc_id, oc_link.oc_numero, oc_link.oc_fecha_entrega
+           oc_link.oc_id, oc_link.oc_numero, oc_link.oc_fecha_entrega,
+           oc_link.oc_fecha_emision, rec.f_rec AS llegada_real
          FROM materiales_mto m
          LEFT JOIN rec ON rec.id = m.id
          LEFT JOIN recq ON recq.id = m.id
          CROSS JOIN UNNEST(REGEXP_SPLIT_TO_ARRAY(m.item, '[-,]')) AS item_num
          LEFT JOIN LATERAL (
            SELECT oc.id AS oc_id, oc.numero AS oc_numero,
-                  oc.fecha_entrega_estimada AS oc_fecha_entrega
+                  oc.fecha_entrega_estimada AS oc_fecha_entrega,
+                  oc.fecha_emision AS oc_fecha_emision
            FROM items_orden_compra ioc
            JOIN ordenes_compra oc ON oc.id = ioc.orden_compra_id
            WHERE ioc.material_id = m.id
@@ -471,7 +473,9 @@ export async function getProyectoItemsReadiness(req: Request, res: Response, nex
              'nota',        nota,
              'oc_id',       oc_id,
              'oc_numero',   oc_numero,
-             'oc_fecha_entrega', oc_fecha_entrega
+             'oc_fecha_entrega', oc_fecha_entrega,
+             'oc_fecha_emision', oc_fecha_emision,
+             'llegada_real', llegada_real
            ) ORDER BY codigo
          ) AS materiales
        FROM items_expanded

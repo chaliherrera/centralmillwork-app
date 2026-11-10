@@ -18,6 +18,7 @@ import {
   getProyectoMuestrasAprobadas, getMaterialesTimeline, getComprasPorLote,
   createProyectoSchema, updateProyectoSchema,
 } from '../controllers/proyectosController'
+import { getInformeNotas, upsertInformeNota } from '../controllers/informeNotasController'
 import {
   getProveedores, getProveedor, createProveedor, updateProveedor, deleteProveedor,
   createProveedorSchema, updateProveedorSchema,
@@ -121,6 +122,10 @@ router.get('/proyectos',                      getProyectos)
 router.get('/proyectos/:id/resumen',          getProyectoResumen)
 router.get('/proyectos/:id/actividad',        getProyectoActividad)
 router.get('/proyectos/:id/items-readiness',  getProyectoItemsReadiness)
+// Notas del INFORME de materiales (tabla informe_notas, separadas de la app).
+// Lectura: cualquier usuario del proyecto. Escritura: ADMIN ("solo yo").
+router.get('/proyectos/:id/informe-notas',    getInformeNotas)
+router.put('/proyectos/:id/informe-notas',    ADMIN, upsertInformeNota)
 // Planos por (proyecto, item) — solicitud shop manager 2026-07-17. Ver
 // planos PDF ANTES de definir la ruta de la OP. Compartidos entre OPs.
 router.get('/proyectos/:id/items/:numero/planos',  requireRole('ADMIN', 'SHOP_MANAGER', 'PROCUREMENT', 'ENGINEERING'), getPlanosItem)

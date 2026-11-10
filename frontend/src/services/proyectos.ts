@@ -58,6 +58,18 @@ export interface ItemReadinessMaterial {
   oc_id: number | null
   oc_numero: string | null
   oc_fecha_entrega: string | null  // ETA: fecha_entrega_estimada de la OC
+  oc_fecha_emision?: string | null // fecha en que se ordenó (emisión de la OC)
+  llegada_real?: string | null     // fecha de la primera recepción física (si llegó)
+}
+
+// Nota del INFORME de materiales (tabla informe_notas, separada de la app).
+// Alcance: proyecto (item/material null), ítem (item set), material+ítem (ambos).
+export interface InformeNota {
+  id: number
+  item: string | null
+  material_id: number | null
+  texto: string
+  updated_at: string
 }
 
 export interface ItemReadiness {
@@ -196,6 +208,14 @@ export const proyectosService = {
 
   getComprasPorLote: (id: number) =>
     api.get<ApiResponse<CompraLoteItem[]>>(`/proyectos/${id}/compras-por-lote`).then((r) => r.data),
+
+  // Notas del INFORME de materiales (separadas de materiales_mto.notas)
+  getInformeNotas: (id: number) =>
+    api.get<ApiResponse<InformeNota[]>>(`/proyectos/${id}/informe-notas`).then((r) => r.data),
+
+  // Upsert (texto con contenido) o borrar (texto vacío). Solo ADMIN.
+  putInformeNota: (id: number, body: { item: string | null; material_id: number | null; texto: string }) =>
+    api.put<{ data: InformeNota | null; deleted?: boolean }>(`/proyectos/${id}/informe-notas`, body).then((r) => r.data),
 
   create: (data: Omit<Proyecto, 'id' | 'created_at' | 'updated_at'>) =>
     api.post<ApiResponse<Proyecto>>('/proyectos', data).then((r) => r.data),
