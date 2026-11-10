@@ -58,6 +58,8 @@ export interface ItemReadinessMaterial {
   oc_id: number | null
   oc_numero: string | null
   oc_fecha_entrega: string | null  // ETA: fecha_entrega_estimada de la OC
+  oc_fecha_emision?: string | null // fecha en que se ordenó (emisión de la OC)
+  llegada_real?: string | null     // fecha de la primera recepción física (si llegó)
 }
 
 export interface ItemReadiness {
