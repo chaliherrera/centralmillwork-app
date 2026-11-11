@@ -19,6 +19,7 @@ import {
   createProyectoSchema, updateProyectoSchema,
 } from '../controllers/proyectosController'
 import { getInformeNotas, upsertInformeNota } from '../controllers/informeNotasController'
+import { getInformes, getInforme, createInforme, updateInforme, deleteInforme } from '../controllers/informesController'
 import {
   getProveedores, getProveedor, createProveedor, updateProveedor, deleteProveedor,
   createProveedorSchema, updateProveedorSchema,
@@ -137,6 +138,16 @@ router.get('/proyectos/:id',                  getProyecto)
 router.post('/proyectos',                     PROY_WRITE, validateBody(createProyectoSchema), createProyecto)
 router.put('/proyectos/:id',                  PROY_WRITE, validateBody(updateProyectoSchema), updateProyecto)
 router.delete('/proyectos/:id',               WRITE, deleteProyecto)
+
+// ─── Informes guardados (armador transversal "Materiales por ítem") ───────────
+// Lectura: cualquier usuario. Escritura: roles operativos; editar/borrar solo
+// creador o ADMIN (se chequea en el controlador).
+const INFORMES_WRITE = requireRole('ADMIN', 'PROCUREMENT', 'PROJECT_MANAGEMENT', 'SHOP_MANAGER')
+router.get('/informes',        getInformes)
+router.get('/informes/:id',    getInforme)
+router.post('/informes',       INFORMES_WRITE, createInforme)
+router.put('/informes/:id',    INFORMES_WRITE, updateInforme)
+router.delete('/informes/:id', INFORMES_WRITE, deleteInforme)
 
 // ─── Proveedores ──────────────────────────────────────────────────────────────
 router.get('/proveedores',        getProveedores)
