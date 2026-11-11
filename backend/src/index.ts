@@ -18,6 +18,7 @@ import authRouter from './routes/auth'
 import kioskRouter from './routes/kiosk'
 import webhooksRouter from './routes/webhooks'
 import teamsBotRouter from './routes/teamsBot'
+import publicInformeRouter from './routes/publicInforme'
 import { authenticate } from './middleware/auth'
 import { errorHandler, notFound } from './middleware/errorHandler'
 import { globalLimiter, loginLimiter, initRateLimitStore } from './middleware/rateLimit'
@@ -108,6 +109,9 @@ app.use('/api/teams-bot', teamsBotRouter)
 // Portal de cliente (público, autorizado por token en la URL — sin JWT de usuario).
 // Debe ir ANTES del authenticate global. La validación del token está adentro.
 app.use('/api/portal', portalPublicRouter)
+
+// Informe compartido por token (público, sin JWT). También ANTES del authenticate.
+app.use('/api/public', publicInformeRouter)
 
 // All other API routes require a valid JWT
 app.use('/api', authenticate, router)
