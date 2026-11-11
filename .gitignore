@@ -24,3 +24,10 @@ GUIA_MODULO_PRODUCCION.pdf
 database/seed_prodtest.sql
 database/import_ing.sql
 import_ing.sql
+
+# Datos de costo del catálogo de estimados — NUNCA al repo (es público).
+# El catálogo real vive fuera del repo; ver tools/estimados/README.md
+tools/estimados/datos/
+*.catalogo.json
+catalogo.json
+estimado_*.json

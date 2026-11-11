@@ -30,10 +30,16 @@ const POOL_CONFIG = {
   connectionTimeoutMillis: 3_000,
 }
 
+// Railway (y cualquier Postgres administrado) exige SSL, así que es el default.
+// La excepción es explícita: si la URL dice `sslmode=disable` se respeta, que es
+// lo que permite correr los tests contra un Postgres local. Ninguna URL de
+// producción lleva ese parámetro, así que esto no puede afectar a prod.
+const sslDeshabilitado = /[?&]sslmode=disable\b/.test(connectionString ?? '')
+
 const pool = connectionString
   ? new Pool({
       connectionString,
-      ssl: { rejectUnauthorized: false },
+      ssl: sslDeshabilitado ? false : { rejectUnauthorized: false },
       ...POOL_CONFIG,
     })
   : new Pool({

@@ -1,23 +1,26 @@
 import { useState } from 'react'
-import { FileSignature, Inbox, Plus } from 'lucide-react'
+import { Calculator, FileSignature, Inbox, Plus } from 'lucide-react'
 import EstimadosWizard from '@/components/modules/estimados/EstimadosWizard'
 import DealsEnCurso from '@/components/modules/estimados/DealsEnCurso'
 import Escritorio from '@/components/escritorio/Escritorio'
+import ListaEstimados from '@/components/modules/estimados/ListaEstimados'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Escritorio de Estimación — dos pestañas, como el del PM:
 //   · Bandeja: los deals que esperan tu acción (mandar el schedule al cliente,
 //     registrar la aprobación) después de que el PM aceptó el plan.
 //   · Crear proyecto: el wizard guiado (intake → factibilidad → PM → firma).
+//   · Costeo: el motor que reemplaza al Excel — armar el estimado y emitir la
+//     propuesta que recibe el GC.
 // ─────────────────────────────────────────────────────────────────────────────
 
 export default function Estimacion() {
-  const [tab, setTab] = useState<'bandeja' | 'crear'>('bandeja')
+  const [tab, setTab] = useState<'bandeja' | 'crear' | 'costeo'>('bandeja')
   const tabCls = (t: string) =>
     `inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 font-semibold ${tab === t ? 'bg-forest-600 text-white' : 'text-stone-500 hover:text-stone-800'}`
 
   return (
-    <div className="max-w-3xl mx-auto py-6 px-1 space-y-5">
+    <div className={`${tab === 'costeo' ? 'max-w-[1500px]' : 'max-w-3xl'} mx-auto py-6 px-1 space-y-5`}>
       <div className="flex items-center gap-3">
         <div className="w-11 h-11 rounded-2xl bg-forest-50 flex items-center justify-center">
           <FileSignature className="text-forest-600" size={22} />
@@ -31,6 +34,7 @@ export default function Estimacion() {
       <div className="inline-flex rounded-xl border border-stone-200 bg-white p-1 text-sm">
         <button onClick={() => setTab('bandeja')} className={tabCls('bandeja')}><Inbox size={15} /> Bandeja</button>
         <button onClick={() => setTab('crear')} className={tabCls('crear')}><Plus size={15} /> Crear proyecto</button>
+        <button onClick={() => setTab('costeo')} className={tabCls('costeo')}><Calculator size={15} /> Costeo</button>
       </div>
 
       {tab === 'bandeja' ? (
@@ -41,8 +45,10 @@ export default function Estimacion() {
             subtitulo="Tu próxima tarea de cada proyecto — completala y aparece la siguiente." />
           <DealsEnCurso mode="estimados" emptyHint="Cuando el PM acepte un plan, el deal aparece acá para que le mandes el schedule al cliente." />
         </div>
-      ) : (
+      ) : tab === 'crear' ? (
         <EstimadosWizard />
+      ) : (
+        <ListaEstimados />
       )}
     </div>
   )
