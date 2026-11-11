@@ -140,9 +140,9 @@ router.put('/proyectos/:id',                  PROY_WRITE, validateBody(updatePro
 router.delete('/proyectos/:id',               WRITE, deleteProyecto)
 
 // ─── Informes guardados (armador transversal "Materiales por ítem") ───────────
-// Lectura: cualquier usuario. Escritura: roles operativos; editar/borrar solo
+// Lectura: cualquier usuario. Crear: solo ADMIN y PM; editar/borrar solo el
 // creador o ADMIN (se chequea en el controlador).
-const INFORMES_WRITE = requireRole('ADMIN', 'PROCUREMENT', 'PROJECT_MANAGEMENT', 'SHOP_MANAGER')
+const INFORMES_WRITE = requireRole('ADMIN', 'PROJECT_MANAGEMENT')
 router.get('/informes',        getInformes)
 router.get('/informes/:id',    getInforme)
 router.post('/informes',       INFORMES_WRITE, createInforme)

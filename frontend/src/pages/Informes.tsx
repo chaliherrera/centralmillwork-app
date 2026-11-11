@@ -16,6 +16,9 @@ type Vista =
   | { modo: 'armar'; base: Informe | null }
   | { modo: 'ver'; informe: Informe }
 
+// Crear informes: solo ADMIN y PM. Editar/borrar: creador o ADMIN.
+const puedeCrear = (user: User | null) =>
+  !!user && (user.rol === 'ADMIN' || user.rol === 'PROJECT_MANAGEMENT')
 const puedeEditar = (user: User | null, inf: Informe) =>
   !!user && (user.rol === 'ADMIN' || user.id === inf.created_by)
 
@@ -58,10 +61,12 @@ function Lista({ user, onNuevo, onVer, onEditar }: {
           </h1>
           <p className="text-sm text-gray-500 mt-0.5">Armá informes de materiales cruzando varios proyectos e ítems.</p>
         </div>
-        <button onClick={onNuevo}
-          className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-forest-700 text-white text-sm font-medium hover:bg-forest-800">
-          <Plus size={16} /> Nuevo informe
-        </button>
+        {puedeCrear(user) && (
+          <button onClick={onNuevo}
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-forest-700 text-white text-sm font-medium hover:bg-forest-800">
+            <Plus size={16} /> Nuevo informe
+          </button>
+        )}
       </div>
 
       {isLoading ? (
@@ -70,7 +75,9 @@ function Lista({ user, onNuevo, onVer, onEditar }: {
         <div className="bg-white rounded-2xl border border-dashed border-gray-200 py-16 text-center">
           <FileText size={32} className="mx-auto text-gray-300 mb-3" />
           <p className="text-sm text-gray-500">Todavía no hay informes guardados.</p>
-          <button onClick={onNuevo} className="mt-3 text-sm text-forest-700 font-medium hover:underline">Armá el primero →</button>
+          {puedeCrear(user) && (
+            <button onClick={onNuevo} className="mt-3 text-sm text-forest-700 font-medium hover:underline">Armá el primero →</button>
+          )}
         </div>
       ) : (
         <div className="grid gap-3 sm:grid-cols-2">
