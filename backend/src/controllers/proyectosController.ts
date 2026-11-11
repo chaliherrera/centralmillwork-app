@@ -384,11 +384,9 @@ export async function getProyectoActividad(req: Request, res: Response, next: Ne
 // Cada material incluye `oc_fecha_entrega` (ETA estimada de la OC activa) — lo
 // usa el módulo de Producción para mostrar cuándo llegan los materiales faltantes
 // y resaltar ETAs vencidas.
-export async function getProyectoItemsReadiness(req: Request, res: Response, next: NextFunction) {
-  try {
-    const proyecto_id = parseInt(String(req.params.id))
-    if (!proyecto_id) return next(createError('id inválido', 400))
-
+// Reusable: calcula {items, resumen} de un proyecto. Lo usan el endpoint
+// autenticado /items-readiness y el informe público por token (Fase 4).
+export async function computeItemsReadiness(proyecto_id: number) {
     const { rows } = await pool.query(
       `WITH rec AS (
          -- Materiales con recepción FÍSICA registrada (llegaron al taller),
@@ -512,7 +510,14 @@ export async function getProyectoItemsReadiness(req: Request, res: Response, nex
       pendientes:     items.filter((i: any) => i.estado === 'PENDIENTE').length,
     }
 
-    res.json({ data: { items, resumen } })
+    return { items, resumen }
+}
+
+export async function getProyectoItemsReadiness(req: Request, res: Response, next: NextFunction) {
+  try {
+    const proyecto_id = parseInt(String(req.params.id))
+    if (!proyecto_id) return next(createError('id inválido', 400))
+    res.json({ data: await computeItemsReadiness(proyecto_id) })
   } catch (err) { next(err) }
 }
 

@@ -19,7 +19,7 @@ import {
   createProyectoSchema, updateProyectoSchema,
 } from '../controllers/proyectosController'
 import { getInformeNotas, upsertInformeNota } from '../controllers/informeNotasController'
-import { getInformes, getInforme, createInforme, updateInforme, deleteInforme } from '../controllers/informesController'
+import { getInformes, getInforme, createInforme, updateInforme, deleteInforme, setCompartir } from '../controllers/informesController'
 import {
   getProveedores, getProveedor, createProveedor, updateProveedor, deleteProveedor,
   createProveedorSchema, updateProveedorSchema,
@@ -147,6 +147,7 @@ router.get('/informes',        getInformes)
 router.get('/informes/:id',    getInforme)
 router.post('/informes',       INFORMES_WRITE, createInforme)
 router.put('/informes/:id',    INFORMES_WRITE, updateInforme)
+router.put('/informes/:id/compartir', INFORMES_WRITE, setCompartir)
 router.delete('/informes/:id', INFORMES_WRITE, deleteInforme)
 
 // ─── Proveedores ──────────────────────────────────────────────────────────────

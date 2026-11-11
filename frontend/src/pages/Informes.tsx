@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import clsx from 'clsx'
 import {
   FileText, Plus, Trash2, Pencil, ArrowLeft, Check, Search, Loader2,
+  Link2, Copy, RefreshCw, Power,
 } from 'lucide-react'
 import { informesService } from '@/services/informes'
 import type { Informe, SeleccionProyecto } from '@/services/informes'
@@ -253,6 +254,59 @@ function ItemPicker({ proyectoId, seleccionados, onChange }: {
   )
 }
 
+// ─── Compartir: link público de solo lectura ─────────────────────────────────
+function ShareControls({ informe }: { informe: Informe }) {
+  const [token, setToken] = useState(informe.token)
+  const [activo, setActivo] = useState(informe.compartir_activo)
+  const [copiado, setCopiado] = useState(false)
+  const mut = useMutation({
+    mutationFn: (body: { activo: boolean; regenerar?: boolean }) => informesService.setCompartir(informe.id, body),
+    onSuccess: (r) => { setToken(r.data.token); setActivo(r.data.compartir_activo) },
+  })
+  const url = token ? `${window.location.origin}/informe/${token}` : ''
+  const copiar = () => {
+    if (!url) return
+    navigator.clipboard.writeText(url)
+      .then(() => { setCopiado(true); setTimeout(() => setCopiado(false), 1500) })
+      .catch(() => {})
+  }
+
+  if (!activo) {
+    return (
+      <div className="bg-white rounded-xl border border-gray-200 shadow-sm px-4 py-3 flex items-center gap-3 flex-wrap">
+        <Link2 size={15} className="text-gray-400" />
+        <span className="text-sm text-gray-500 flex-1">Compartí este informe con un link público de solo lectura (sin login, sin precios).</span>
+        <button disabled={mut.isPending} onClick={() => mut.mutate({ activo: true })}
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-forest-700 text-white text-sm font-medium hover:bg-forest-800 disabled:opacity-60">
+          {mut.isPending ? <Loader2 size={14} className="animate-spin" /> : <Link2 size={14} />} Crear link público
+        </button>
+      </div>
+    )
+  }
+  return (
+    <div className="bg-cyan-50/60 rounded-xl border border-cyan-200 px-4 py-3 space-y-2">
+      <div className="flex items-center gap-2 text-sm font-medium text-cyan-800">
+        <Link2 size={15} /> Link público activo <span className="text-[11px] font-normal text-cyan-600">· cualquiera con el link puede verlo (solo lectura)</span>
+      </div>
+      <div className="flex items-center gap-2 flex-wrap">
+        <input readOnly value={url} onFocus={(e) => e.currentTarget.select()}
+          className="flex-1 min-w-[220px] text-xs font-mono px-2.5 py-1.5 rounded-lg border border-cyan-200 bg-white text-gray-700" />
+        <button onClick={copiar} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-cyan-600 text-white text-xs font-medium hover:bg-cyan-700">
+          {copiado ? <><Check size={13} /> Copiado</> : <><Copy size={13} /> Copiar</>}
+        </button>
+        <button onClick={() => { if (confirm('¿Generar un link nuevo? El link anterior dejará de funcionar.')) mut.mutate({ activo: true, regenerar: true }) }}
+          className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-gray-200 text-xs text-gray-500 hover:text-forest-700">
+          <RefreshCw size={13} /> Regenerar
+        </button>
+        <button onClick={() => mut.mutate({ activo: false })}
+          className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-gray-200 text-xs text-gray-500 hover:text-red-600">
+          <Power size={13} /> Desactivar
+        </button>
+      </div>
+    </div>
+  )
+}
+
 // ─── Vista consolidada (en vivo) ─────────────────────────────────────────────
 function Consolidado({ informe, onVolver, onEditar }: {
   informe: Informe; onVolver: () => void; onEditar: () => void
@@ -279,6 +333,8 @@ function Consolidado({ informe, onVolver, onEditar }: {
           </button>
         )}
       </div>
+
+      {puedeEditar(user, informe) && <ShareControls informe={informe} />}
 
       {informe.seleccion.length === 0 && (
         <div className="bg-white rounded-xl border border-dashed border-gray-200 py-10 text-center text-sm text-gray-400">

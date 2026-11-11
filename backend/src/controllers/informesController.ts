@@ -1,7 +1,10 @@
 import { Request, Response, NextFunction } from 'express'
+import crypto from 'crypto'
 import pool from '../db/pool'
 import { createError } from '../middleware/errorHandler'
 import { normalizeSeleccion } from '../utils/informes'
+import { computeItemsReadiness } from './proyectosController'
+import { fetchInformeNotas } from './informeNotasController'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Informes guardados del armador transversal (tabla informes, migr. 114).
@@ -10,7 +13,7 @@ import { normalizeSeleccion } from '../utils/informes'
 // ─────────────────────────────────────────────────────────────────────────────
 
 const SELECT_COLS =
-  `i.id, i.nombre, i.seleccion, i.created_by,
+  `i.id, i.nombre, i.seleccion, i.created_by, i.token, i.compartir_activo,
    u.nombre AS creado_por_nombre,
    to_char(i.created_at, 'YYYY-MM-DD"T"HH24:MI:SSOF') AS created_at,
    to_char(i.updated_at, 'YYYY-MM-DD"T"HH24:MI:SSOF') AS updated_at`
@@ -113,5 +116,65 @@ export async function deleteInforme(req: Request, res: Response, next: NextFunct
     if (!puedeEditar(req, actual.created_by)) return next(createError('Solo el creador o un ADMIN pueden borrar este informe', 403))
     await pool.query(`DELETE FROM informes WHERE id = $1`, [id])
     res.json({ message: 'Informe eliminado' })
+  } catch (err) { next(err) }
+}
+
+// PUT /api/informes/:id/compartir  { activo: boolean, regenerar?: boolean }
+// Enciende/apaga el link público. Genera token la primera vez (o si regenerar).
+// Creador o ADMIN.
+export async function setCompartir(req: Request, res: Response, next: NextFunction) {
+  try {
+    const id = parseInt(String(req.params.id))
+    if (!id) return next(createError('id inválido', 400))
+    const { rows: [actual] } = await pool.query(`SELECT created_by, token FROM informes WHERE id = $1`, [id])
+    if (!actual) return next(createError('Informe no encontrado', 404))
+    if (!puedeEditar(req, actual.created_by)) return next(createError('Solo el creador o un ADMIN pueden compartir este informe', 403))
+
+    const activo = !!req.body?.activo
+    const regenerar = !!req.body?.regenerar
+    let token: string | null = actual.token
+    if (activo && (!token || regenerar)) token = crypto.randomBytes(16).toString('hex')
+
+    await pool.query(
+      `UPDATE informes SET token = $2, compartir_activo = $3, updated_at = now() WHERE id = $1`,
+      [id, token, activo]
+    )
+    res.json({ data: { token, compartir_activo: activo } })
+  } catch (err) { next(err) }
+}
+
+// GET /api/public/informe/:token  (SIN login) — informe consolidado de SOLO
+// LECTURA. Solo funciona si el token existe y compartir_activo = true.
+// IMPORTANTE: quita unit_price de cada material (no exponer costos afuera).
+export async function getInformePublico(req: Request, res: Response, next: NextFunction) {
+  try {
+    const token = String(req.params.token || '')
+    if (!token) return next(createError('Token requerido', 400))
+    const { rows: [inf] } = await pool.query(
+      `SELECT id, nombre, seleccion FROM informes WHERE token = $1 AND compartir_activo = true`, [token]
+    )
+    if (!inf) return next(createError('Informe no disponible', 404))
+
+    const seleccion = (inf.seleccion ?? []) as Array<{ proyecto_id: number; items: string[] }>
+    const proyectos: unknown[] = []
+    for (const s of seleccion) {
+      const { rows: [p] } = await pool.query(`SELECT codigo, nombre FROM proyectos WHERE id = $1`, [s.proyecto_id])
+      if (!p) continue
+      const readiness = await computeItemsReadiness(s.proyecto_id)
+      const notas = await fetchInformeNotas(s.proyecto_id)
+      const sel = Array.isArray(s.items) && s.items.length ? new Set(s.items) : null
+      const items = (sel ? readiness.items.filter((it: { item: string }) => sel.has(it.item)) : readiness.items)
+        .map((it: Record<string, unknown>) => ({
+          ...it,
+          // Sacar costos: unit_price nunca sale al público.
+          materiales: (it.materiales as Array<Record<string, unknown>>).map((m) => {
+            const { unit_price, ...rest } = m
+            void unit_price
+            return rest
+          }),
+        }))
+      proyectos.push({ proyecto_id: s.proyecto_id, codigo: p.codigo, nombre: p.nombre, items, notas })
+    }
+    res.json({ data: { nombre: inf.nombre, proyectos } })
   } catch (err) { next(err) }
 }

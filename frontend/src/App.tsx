@@ -6,6 +6,7 @@ import Dashboard from '@/pages/Dashboard'
 import Proyectos from '@/pages/Proyectos'
 import ProyectoDetalle from '@/pages/ProyectoDetalle'
 import Informes from '@/pages/Informes'
+import InformePublico from '@/pages/InformePublico'
 import OrdenesCompra from '@/pages/OrdenesCompra'
 import Materiales from '@/pages/Materiales'
 import Mtos from '@/pages/Mtos'
@@ -138,6 +139,9 @@ export default function App() {
       {/* Portal de cliente — público, autorizado por token en la URL.
           Sin ProtectedRoute ni sidebar. */}
       <Route path="/portal/:token" element={<ClientPortal />} />
+
+      {/* Informe compartido por token — público, solo lectura, sin login */}
+      <Route path="/informe/:token" element={<InformePublico />} />
 
       <Route element={<ProtectedRoute><MainLayout /></ProtectedRoute>}>
         <Route index element={<Dashboard />} />

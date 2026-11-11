@@ -13,17 +13,22 @@ const SELECT_COLS =
   `id, item, material_id, texto,
    to_char(updated_at, 'YYYY-MM-DD"T"HH24:MI:SSOF') AS updated_at`
 
+// Reusable: notas de un proyecto (lo usa el endpoint autenticado y el público).
+export async function fetchInformeNotas(proyecto_id: number) {
+  const { rows } = await pool.query(
+    `SELECT ${SELECT_COLS} FROM informe_notas WHERE proyecto_id = $1
+      ORDER BY item NULLS FIRST, material_id NULLS FIRST`,
+    [proyecto_id]
+  )
+  return rows
+}
+
 // GET /api/proyectos/:id/informe-notas → todas las notas del proyecto
 export async function getInformeNotas(req: Request, res: Response, next: NextFunction) {
   try {
     const proyecto_id = parseInt(String(req.params.id))
     if (!proyecto_id) return next(createError('id inválido', 400))
-    const { rows } = await pool.query(
-      `SELECT ${SELECT_COLS} FROM informe_notas WHERE proyecto_id = $1
-        ORDER BY item NULLS FIRST, material_id NULLS FIRST`,
-      [proyecto_id]
-    )
-    res.json({ data: rows })
+    res.json({ data: await fetchInformeNotas(proyecto_id) })
   } catch (err) { next(err) }
 }
 
