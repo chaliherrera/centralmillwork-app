@@ -5,6 +5,7 @@ import Login from '@/pages/Login'
 import Dashboard from '@/pages/Dashboard'
 import Proyectos from '@/pages/Proyectos'
 import ProyectoDetalle from '@/pages/ProyectoDetalle'
+import Informes from '@/pages/Informes'
 import OrdenesCompra from '@/pages/OrdenesCompra'
 import Materiales from '@/pages/Materiales'
 import Mtos from '@/pages/Mtos'
@@ -144,6 +145,7 @@ export default function App() {
         <Route path="schedule/:id"     element={<ScheduleRoute><ScheduleProyecto /></ScheduleRoute>} />
         <Route path="proyectos"        element={<Proyectos />} />
         <Route path="proyectos/:id"    element={<ProyectoDetalle />} />
+        <Route path="informes"         element={<Informes />} />
         <Route path="ordenes-compra/*" element={<OrdenesCompra />} />
         <Route path="materiales/*"     element={<Materiales />} />
         <Route path="mtos"             element={<Mtos />} />
