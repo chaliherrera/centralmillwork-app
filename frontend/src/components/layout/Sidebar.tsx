@@ -3,7 +3,7 @@ import {
   LayoutDashboard, FolderOpen, ShoppingCart,
   Package, Truck, Users, ChevronLeft, ChevronRight, ShieldCheck,
   Factory, Inbox, Beaker, Layers, FileSignature, DraftingCompass, ClipboardList, Wallet, Send, Ruler,
-  Route as RouteIcon,
+  Route as RouteIcon, FileText,
 } from 'lucide-react'
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
@@ -33,6 +33,7 @@ const NAV_ITEMS: NavItem[] = [
   { to: '/',               label: 'Dashboard',         icon: LayoutDashboard, roles: ['ADMIN','PROCUREMENT','PROJECT_MANAGEMENT','PRODUCTION','SHOP_MANAGER','VIEWER'] },
   { to: '/schedule',       label: 'Schedule',           icon: RouteIcon,       roles: ['ADMIN','PROJECT_MANAGEMENT','SHOP_MANAGER','ENGINEERING','VIEWER'] },
   { to: '/proyectos',      label: 'Proyectos',          icon: FolderOpen,      roles: ['ADMIN','PROCUREMENT','PROJECT_MANAGEMENT','SHOP_MANAGER','VIEWER'] },
+  { to: '/informes',       label: 'Informes',           icon: FileText,        roles: ['ADMIN','PROCUREMENT','PROJECT_MANAGEMENT','SHOP_MANAGER','VIEWER'] },
   { to: '/estimados',      label: 'Estimados',          icon: FileSignature,   roles: ['ADMIN','PROJECT_MANAGEMENT'] },
   { to: '/ingenieria',     label: 'Ingeniería',         icon: DraftingCompass, roles: ['ADMIN','ENGINEERING','PROJECT_MANAGEMENT'] },
   { to: '/pm',             label: 'PM',                 icon: ClipboardList,   roles: ['ADMIN','PROJECT_MANAGEMENT'] },

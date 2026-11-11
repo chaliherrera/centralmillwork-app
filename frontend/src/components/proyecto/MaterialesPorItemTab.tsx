@@ -275,7 +275,12 @@ function Chip({ label, count, active, onClick, color }: {
 // ─── Tab principal ───────────────────────────────────────────────────────────
 type FiltroLt = '' | 'vencida' | 'en_camino' | 'por_ordenar' | 'listo'
 
-export default function MaterialesPorItemTab({ proyectoId }: { proyectoId: number }) {
+export default function MaterialesPorItemTab({ proyectoId, selectedItems, compact, titulo }: {
+  proyectoId: number
+  selectedItems?: string[]            // si viene (del armador): solo estos ítems
+  compact?: boolean                   // header chico con título de proyecto (vista consolidada)
+  titulo?: { codigo: string; nombre: string }
+}) {
   const { user } = useAuth()
   const isAdmin = user?.rol === 'ADMIN'
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
@@ -322,11 +327,15 @@ export default function MaterialesPorItemTab({ proyectoId }: { proyectoId: numbe
     )
   }
 
-  const totV = enriched.reduce((s, it) => s + it.counts.vencida, 0)
-  const totC = enriched.reduce((s, it) => s + it.counts.en_camino, 0)
-  const totP = enriched.reduce((s, it) => s + it.counts.por_ordenar, 0)
+  const sel = selectedItems && selectedItems.length ? new Set(selectedItems) : null
+  const scoped = sel ? enriched.filter((it) => sel.has(it.item)) : enriched
 
-  const shown = enriched.filter((it) => {
+  const totV = scoped.reduce((s, it) => s + it.counts.vencida, 0)
+  const totC = scoped.reduce((s, it) => s + it.counts.en_camino, 0)
+  const totP = scoped.reduce((s, it) => s + it.counts.por_ordenar, 0)
+  const listos = scoped.filter((it) => it.estado === 'LISTO').length
+
+  const shown = scoped.filter((it) => {
     if (filtro === '') return true
     if (filtro === 'listo') return it.estado === 'LISTO'
     return it.counts[filtro] > 0
@@ -342,39 +351,51 @@ export default function MaterialesPorItemTab({ proyectoId }: { proyectoId: numbe
 
   return (
     <div className="space-y-4">
-      {/* Header */}
-      <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
-        <div className="bg-gradient-to-r from-forest-700 to-forest-600 text-white px-6 py-4">
-          <div className="flex items-center justify-between flex-wrap gap-3">
-            <div>
-              <div className="flex items-center gap-2 mb-0.5">
-                <Package size={16} className="text-gold-300" />
-                <h3 className="text-base font-bold">Materiales por ítem</h3>
-              </div>
-              <p className="text-xs text-white/70">
-                Estado, llegada y lead time de cada material — <span className="text-gold-300 font-semibold">{resumen.total_items} ítems</span>
-              </p>
-            </div>
-            <div className="text-right">
-              <p className="text-xs text-white/70 uppercase tracking-wide">Ítems listos</p>
-              <p className="text-2xl font-bold text-emerald-300 tabular-nums">
-                {resumen.listos} <span className="text-base text-white/50 font-normal">/ {resumen.total_items}</span>
-              </p>
-            </div>
-          </div>
-        </div>
-        <div className="px-6 py-3 border-t border-gray-100 flex flex-wrap gap-2 items-center">
-          <span className="text-gray-500 font-medium text-xs mr-1">Filtrar:</span>
-          <Chip label="Todos"       count={enriched.length} active={filtro === ''}            onClick={() => setFiltro('')}            color="gray" />
-          <Chip label="Vencidas"    count={totV}            active={filtro === 'vencida'}     onClick={() => setFiltro('vencida')}     color="red" />
-          <Chip label="En camino"   count={totC}            active={filtro === 'en_camino'}   onClick={() => setFiltro('en_camino')}   color="blue" />
-          <Chip label="Por ordenar" count={totP}            active={filtro === 'por_ordenar'} onClick={() => setFiltro('por_ordenar')} color="amber" />
-          <Chip label="Listos"      count={resumen.listos}  active={filtro === 'listo'}       onClick={() => setFiltro('listo')}       color="emerald" />
+      {/* Header — compacto (dentro del armador) o completo (pestaña del proyecto) */}
+      {compact ? (
+        <div className="flex items-center gap-3 flex-wrap pt-1">
+          {titulo && <span className="font-mono text-xs font-semibold bg-gray-800 text-white px-2 py-0.5 rounded">{titulo.codigo}</span>}
+          {titulo && <span className="font-semibold text-sm text-gray-800">{titulo.nombre}</span>}
+          <span className="text-xs text-gray-400">{scoped.length} ítems · {listos} listos</span>
+          {totV > 0 && <span className="text-xs text-red-600 font-medium">· {totV} vencidas</span>}
           <button onClick={toggleAll} className="ml-auto inline-flex items-center gap-1.5 text-xs text-forest-700 font-medium hover:text-forest-800">
-            {allExpanded ? <><ChevronsDownUp size={14} /> Colapsar</> : <><ChevronsUpDown size={14} /> Expandir</>} todo
+            {allExpanded ? <><ChevronsDownUp size={14} /> Colapsar</> : <><ChevronsUpDown size={14} /> Expandir</>}
           </button>
         </div>
-      </div>
+      ) : (
+        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+          <div className="bg-gradient-to-r from-forest-700 to-forest-600 text-white px-6 py-4">
+            <div className="flex items-center justify-between flex-wrap gap-3">
+              <div>
+                <div className="flex items-center gap-2 mb-0.5">
+                  <Package size={16} className="text-gold-300" />
+                  <h3 className="text-base font-bold">Materiales por ítem</h3>
+                </div>
+                <p className="text-xs text-white/70">
+                  Estado, llegada y lead time de cada material — <span className="text-gold-300 font-semibold">{resumen.total_items} ítems</span>
+                </p>
+              </div>
+              <div className="text-right">
+                <p className="text-xs text-white/70 uppercase tracking-wide">Ítems listos</p>
+                <p className="text-2xl font-bold text-emerald-300 tabular-nums">
+                  {resumen.listos} <span className="text-base text-white/50 font-normal">/ {resumen.total_items}</span>
+                </p>
+              </div>
+            </div>
+          </div>
+          <div className="px-6 py-3 border-t border-gray-100 flex flex-wrap gap-2 items-center">
+            <span className="text-gray-500 font-medium text-xs mr-1">Filtrar:</span>
+            <Chip label="Todos"       count={enriched.length} active={filtro === ''}            onClick={() => setFiltro('')}            color="gray" />
+            <Chip label="Vencidas"    count={totV}            active={filtro === 'vencida'}     onClick={() => setFiltro('vencida')}     color="red" />
+            <Chip label="En camino"   count={totC}            active={filtro === 'en_camino'}   onClick={() => setFiltro('en_camino')}   color="blue" />
+            <Chip label="Por ordenar" count={totP}            active={filtro === 'por_ordenar'} onClick={() => setFiltro('por_ordenar')} color="amber" />
+            <Chip label="Listos"      count={resumen.listos}  active={filtro === 'listo'}       onClick={() => setFiltro('listo')}       color="emerald" />
+            <button onClick={toggleAll} className="ml-auto inline-flex items-center gap-1.5 text-xs text-forest-700 font-medium hover:text-forest-800">
+              {allExpanded ? <><ChevronsDownUp size={14} /> Colapsar</> : <><ChevronsUpDown size={14} /> Expandir</>} todo
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Nota del proyecto (informe) */}
       {(isAdmin || notaProyecto) && (
