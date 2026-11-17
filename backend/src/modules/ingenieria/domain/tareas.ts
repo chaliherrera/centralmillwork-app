@@ -14,6 +14,8 @@ import { cargarColaIngenieros, ROLES_INGENIERO } from './planificador'
 import { capturarFechasReales } from '../../schedule/domain/captura'
 import { proyectarHitos, esInferida, type HitoPlantilla, type PasoFechas } from '../../schedule/domain/proyeccion'
 import { calcularHolgura, normalizarTipoDep, type TareaCPM, type AristaCPM, type HolguraTarea, type HolguraProyecto } from './holgura'
+import { logger } from '../../../utils/logger'
+import { captureException } from '../../../utils/sentry'
 import { tieneCiclo, planificarMovimiento, type CambioArista, type AristaRe, type TareaRe } from './reordenar'
 import { estadoDeposito, type EstadoDeposito } from './deposito'
 import { estadoMuestras, type EstadoMuestras } from './muestras'
@@ -290,6 +292,7 @@ export interface PlanProyecto {
   instalacion: EstadoInstalacion // avance del módulo de instalación de campo (I-04/I-07)
   tareas: TareaPlan[]
   aristas: AristaPlan[]
+  error_cpm: string | null       // si hay un ciclo de dependencias, el CPM no recalcula y acá va el aviso
 }
 
 /** Devuelve el plan completo de un proyecto con la holgura de cada tarea. */
@@ -319,6 +322,7 @@ export async function getPlanProyecto(runner: QueryRunner, proyectoExt: string):
   // Holgura: solo si el proyecto tiene inicio + entrega (ancla en ambas puntas).
   let holgura: PlanProyecto['tareas'] = tareas.map((t) => ({ ...t, early_start: null, early_finish: null, late_finish: null, holgura_dias: null, critico: false }))
   let finProyectado: string | null = null, holguraProyecto = 0, enRiesgo = false
+  let errorCpm: string | null = null
   if (h.ini && h.entrega) {
     const feriados = await loadFeriados(runner)
     const cpmTareas: TareaCPM[] = tareas.map((t) => ({ id: t.id, dur: t.dur_dias, noAntesDe: pisoTarea(depClave.get(t.id) ?? null, deposito, compras, t.no_antes_de) }))
@@ -335,7 +339,14 @@ export async function getPlanProyecto(runner: QueryRunner, proyectoExt: string):
         return { ...t, early_start: c?.earlyStart ?? null, early_finish: c?.earlyFinish ?? null,
           late_finish: c?.lateFinish ?? null, holgura_dias: c?.holguraDias ?? null, critico: c?.critico ?? false }
       })
-    } catch { /* ciclo en dependencias: se devuelve el plan sin holgura */ }
+    } catch (err) {
+      // Ciclo en dependencias: el CPM no puede recalcular. En vez de tragarlo en
+      // silencio (dejaba fechas viejas sin avisar), se loguea y se expone el aviso
+      // para que la UI lo muestre. Las validaciones pre-escritura hacen esto raro.
+      errorCpm = (err as Error)?.message ?? 'El plan tiene un ciclo de dependencias; las fechas no se recalculan hasta corregirlo.'
+      logger.error('CPM no recalculó (ciclo?)', { proyectoExt, err: (err as Error)?.message })
+      captureException(err, { tags: { area: 'ingenieria_cpm' }, extra: { proyectoExt } })
+    }
   }
 
   const muestras = await estadoMuestras(runner, proyectoExt)
@@ -347,6 +358,7 @@ export async function getPlanProyecto(runner: QueryRunner, proyectoExt: string):
     n_items: h.n_items, presupuesto: h.presupuesto != null ? +h.presupuesto : null,
     fin_proyectado: finProyectado, holgura_proyecto: holguraProyecto, en_riesgo: enRiesgo,
     deposito, muestras, compras, instalacion, tareas: holgura, aristas: deps,
+    error_cpm: errorCpm,
   }
 }
 
@@ -491,7 +503,13 @@ export async function recomputarYGuardar(runner: QueryRunner, proyectoExt: strin
     // al motor teórico del Life of a Deal. Es un cache derivado, refrescado en cada
     // recompute — nunca se edita solo.
     await proyectarJourney(runner, proyectoExt, tareas, r, h.entrega, feriados)
-  } catch { /* ciclo improbable: se deja como está */ }
+  } catch (err) {
+    // Ciclo improbable (las validaciones pre-escritura lo evitan): se deja el plan
+    // como está, pero NO en silencio — se loguea para detectar datos legados. No se
+    // relanza: los 15 llamadores (submittals/materiales/muestras…) no esperan excepción.
+    logger.error('recomputarYGuardar no recalculó (ciclo?)', { proyectoExt, err: (err as Error)?.message })
+    captureException(err, { tags: { area: 'ingenieria_cpm' }, extra: { proyectoExt, fase: 'recomputarYGuardar' } })
+  }
 }
 
 // Variantes de piedra que comparten milestone con su paso base (para plegar sus fechas).
@@ -851,29 +869,71 @@ export async function borrarTareaConReconexion(runner: QueryRunner, id: number):
 }
 
 // ── Dependencias (aristas) editables ──
-/** ¿Agregar (tareaId depende de dependeDeId) crearía un ciclo? */
-async function crearíaCiclo(runner: QueryRunner, proyectoExt: string | null, tareaId: number, dependeDeId: number): Promise<boolean> {
-  if (tareaId === dependeDeId) return true
+/** Si agregar (tareaId depende de dependeDeId) cierra un ciclo, devuelve la RUTA
+ *  de ids (tareaId → … → dependeDeId) que ya existe; si no, null. El flujo de las
+ *  aristas es depende_de_id → tarea_id, así que hay ciclo si dependeDeId ya es
+ *  alcanzable desde tareaId. BFS con mapa de padres para reconstruir la ruta. */
+async function rutaDeCiclo(runner: QueryRunner, proyectoExt: string | null, tareaId: number, dependeDeId: number): Promise<number[] | null> {
+  if (tareaId === dependeDeId) return [tareaId]
   const { rows } = await runner.query<{ tarea_id: number; depende_de_id: number }>(
     `SELECT d.tarea_id, d.depende_de_id FROM ing_tarea_deps d
        JOIN ing_tareas t ON t.id = d.tarea_id
       WHERE t.proyecto_ext IS NOT DISTINCT FROM $1`, [proyectoExt])
-  // flujo: depende_de_id -> tarea_id. Ciclo si dependeDeId es alcanzable desde tareaId.
   const succ = new Map<number, number[]>()
   for (const r of rows) { if (!succ.has(r.depende_de_id)) succ.set(r.depende_de_id, []); succ.get(r.depende_de_id)!.push(r.tarea_id) }
-  const seen = new Set<number>([tareaId]); const stack = [tareaId]
-  while (stack.length) { const n = stack.pop()!; for (const s of succ.get(n) ?? []) { if (s === dependeDeId) return true; if (!seen.has(s)) { seen.add(s); stack.push(s) } } }
-  return false
+  const padre = new Map<number, number>()
+  const seen = new Set<number>([tareaId]); const q = [tareaId]
+  while (q.length) {
+    const n = q.shift()!
+    for (const s of succ.get(n) ?? []) {
+      if (seen.has(s)) continue
+      seen.add(s); padre.set(s, n)
+      if (s === dependeDeId) {
+        const ruta = [s]; let x = s
+        while (x !== tareaId) { x = padre.get(x)!; ruta.push(x) }
+        return ruta.reverse()   // tareaId → … → dependeDeId
+      }
+      q.push(s)
+    }
+  }
+  return null
 }
 
+/** Mapa id → nombre para las tareas pedidas (para mensajes de error legibles). */
+async function nombresDeTareas(runner: QueryRunner, ids: number[]): Promise<Map<number, string>> {
+  if (!ids.length) return new Map()
+  const { rows } = await runner.query<{ id: number; nombre: string }>(
+    `SELECT id, nombre FROM ing_tareas WHERE id = ANY($1)`, [ids])
+  return new Map(rows.map((r) => [r.id, r.nombre]))
+}
+
+const TIPOS_DEP_OK = new Set(['FS', 'SS', 'FF', 'SF'])
+
 export async function agregarDep(runner: QueryRunner, tareaId: number, dependeDeId: number, lag = 0, tipo = 'FS'): Promise<{ ok: boolean; error?: string }> {
+  // Tipo válido (los 4 de MS Project).
+  const tnorm = String(tipo ?? '').trim().toUpperCase()
+  if (!TIPOS_DEP_OK.has(tnorm)) return { ok: false, error: `tipo de dependencia inválido: "${tipo}" (usá FS, SS, FF o SF)` }
+  // Auto-dependencia (mensaje propio, antes del chequeo de ciclo).
+  if (tareaId === dependeDeId) return { ok: false, error: 'Una tarea no puede depender de sí misma.' }
+  // La tarea existe.
   const { rows } = await runner.query<{ proyecto_ext: string | null }>(`SELECT proyecto_ext FROM ing_tareas WHERE id = $1`, [tareaId])
   if (!rows[0]) return { ok: false, error: 'tarea no encontrada' }
-  if (await crearíaCiclo(runner, rows[0].proyecto_ext, tareaId, dependeDeId)) return { ok: false, error: 'esa dependencia crearía un ciclo' }
+  const proyectoExt = rows[0].proyecto_ext
+  // La predecesora existe y es del MISMO proyecto (evita dependencias "colgadas").
+  const { rows: dep } = await runner.query<{ proyecto_ext: string | null }>(`SELECT proyecto_ext FROM ing_tareas WHERE id = $1`, [dependeDeId])
+  if (!dep[0]) return { ok: false, error: 'la tarea predecesora no existe' }
+  if (dep[0].proyecto_ext !== proyectoExt) return { ok: false, error: 'la predecesora pertenece a otro proyecto' }
+  // Sin ciclos: si lo crea, mostrar la cadena con nombres.
+  const ruta = await rutaDeCiclo(runner, proyectoExt, tareaId, dependeDeId)
+  if (ruta) {
+    const nombres = await nombresDeTareas(runner, ruta)
+    const cadena = [...ruta, tareaId].map((id) => nombres.get(id) ?? `#${id}`).join(' → ')
+    return { ok: false, error: `Esa dependencia crearía un ciclo: ${cadena}.` }
+  }
   await runner.query(
     `INSERT INTO ing_tarea_deps (tarea_id, depende_de_id, tipo, lag_dias) VALUES ($1,$2,$3,$4)
      ON CONFLICT (tarea_id, depende_de_id) DO UPDATE SET tipo = EXCLUDED.tipo, lag_dias = EXCLUDED.lag_dias`,
-    [tareaId, dependeDeId, tipo, lag])
+    [tareaId, dependeDeId, tnorm, lag])
   return { ok: true }
 }
 
