@@ -11,7 +11,7 @@ import {
   crearTarea, actualizarTarea, reportarAvance, getPlanProyecto,
   borrarTareaConReconexion, agregarDep, borrarDep, listReprogramaciones, recomputarYGuardar,
   reabrirShopDrawingsPorRechazo, cerrarGatePorAprobacion, cerrarReleasePorSdUpdate,
-  aplicarCambiosDeps, moverTarea, reasignarIngeniero, reordenarVisual, setPredecesores,
+  aplicarCambiosDeps, moverTarea, reasignarIngeniero, reordenarVisual, setPredecesores, guardarBaseline,
 } from '../domain/tareas'
 import { listReservasPendientes, liberarReserva } from '../domain/reservas'
 import { listIngenieros, actualizarIngeniero } from '../domain/ingenieros'
@@ -373,6 +373,16 @@ export async function setPredecesoresHandler(req: Request, res: Response, next: 
     if (!r.ok) return next(createError(r.error ?? 'no se pudo aplicar', 400))
     res.json({ data: r })
   } catch (e) { await client.query('ROLLBACK').catch(() => {}); next(e) } finally { client.release() }
+}
+
+// POST /api/ingenieria/proyecto/:ext/baseline  { nota? } — congela la línea base
+export async function guardarBaselineHandler(req: Request, res: Response, next: NextFunction) {
+  const ext = String(req.params.ext)
+  const nota = typeof req.body?.nota === 'string' ? req.body.nota : null
+  try {
+    const r = await guardarBaseline(pool, ext, req.user?.id ?? null, nota)
+    res.status(201).json({ data: r })
+  } catch (e) { next(e) }
 }
 
 // POST /api/ingenieria/tareas/:id/mover  { after_id, before_id, dry_run? }

@@ -4,7 +4,7 @@ import {
   resumenHandler, tareasHandler, cargaHandler, cargaDetalleHandler,
   cargaEtapasHandler, etapaDetalleHandler, planHandler,
   crearTareaHandler, actualizarTareaHandler, avanceTareaHandler, borrarTareaHandler,
-  agregarDepHandler, borrarDepHandler, bulkDepsHandler, setPredecesoresHandler, moverTareaHandler, reordenarVisualHandler, reasignarIngenieroHandler,
+  agregarDepHandler, borrarDepHandler, bulkDepsHandler, setPredecesoresHandler, guardarBaselineHandler, moverTareaHandler, reordenarVisualHandler, reasignarIngenieroHandler,
   reservarHandler, reservasPendientesHandler, confirmarReservaHandler, liberarReservaHandler,
   dealsEnCursoHandler, enviarClienteHandler, clienteAproboHandler, activarProyectoHandler,
   overrideDepositoHandler, reprogramacionesHandler, depositosBloqueandoHandler, pagosPorCobrarHandler, instalacionesPMHandler, muestrasEstadoHandler,
@@ -52,6 +52,7 @@ router.post('/tareas/:id/dep', PM, agregarDepHandler)
 router.delete('/tareas/:id/dep/:depId', PM, borrarDepHandler)
 router.put('/proyecto/:ext/deps', PM, bulkDepsHandler)          // edición atómica de deps (drag&drop / EditModal)
 router.put('/tareas/:id/predecesores', PM, setPredecesoresHandler)  // columna "Predecesoras" estilo MS Project (texto)
+router.post('/proyecto/:ext/baseline', PM, guardarBaselineHandler)   // congelar línea base (Fase 3)
 router.post('/tareas/:id/mover', PM, moverTareaHandler)          // reordenar tarea (drag&drop, recablea deps — legacy)
 router.post('/proyecto/:ext/orden-visual', PM, reordenarVisualHandler)  // reordenar la FILA (drag visual, NO toca fechas)
 router.post('/proyecto/:ext/reasignar-ingeniero', PM, reasignarIngenieroHandler)  // cambiar ingeniero propuesto (bulk + re-ancla)

@@ -276,6 +276,9 @@ export interface TareaPlan extends Tarea {
   critico: boolean
   fila: number                  // posición 1..N en la lista (el "número" de MS Project)
   predecesores_txt: string      // columna estilo MS Project ("5FF+2d,3SS"), derivada
+  baseline_inicio: string | null  // inicio congelado en la línea base activa
+  baseline_fin: string | null     // fin congelado en la línea base activa
+  variance_dias: number | null    // fin calculado − fin de la línea base (días hábiles; >0 = atrasada)
 }
 export interface AristaPlan { tarea_id: number; depende_de_id: number; tipo: string; lag_dias: number; ignorada_at?: string | null }
 export interface PlanProyecto {
@@ -316,6 +319,16 @@ export async function getPlanProyecto(runner: QueryRunner, proyectoExt: string):
           WHERE tarea_id = ANY($1) AND depende_de_id = ANY($1)`, [ids])
     : { rows: [] as AristaPlan[] }
 
+  // Línea base ACTIVA (la más reciente del proyecto): inicio/fin congelados por tarea.
+  const { rows: baseRows } = ids.length
+    ? await runner.query<{ tarea_id: number; inicio: string | null; fin: string | null }>(
+        `SELECT bt.tarea_id, to_char(bt.inicio,'YYYY-MM-DD') AS inicio, to_char(bt.fin,'YYYY-MM-DD') AS fin
+           FROM ing_baseline_tareas bt
+          WHERE bt.baseline_id = (SELECT id FROM ing_baselines WHERE proyecto_ext = $1 ORDER BY created_at DESC LIMIT 1)
+            AND bt.tarea_id = ANY($2)`, [proyectoExt, ids])
+    : { rows: [] as { tarea_id: number; inicio: string | null; fin: string | null }[] }
+  const baseMap = new Map(baseRows.map((r) => [r.tarea_id, r]))
+
   // Los hechos reales de los módulos con dueño se leen ANTES del CPM: son pisos "no antes
   // de" (depósito confirmado por Finanzas, long leads ordenados en Compras…) que empujan.
   const deposito = await estadoDeposito(runner, proyectoExt)
@@ -332,10 +345,13 @@ export async function getPlanProyecto(runner: QueryRunner, proyectoExt: string):
     predsPorTarea.get(d.tarea_id)!.push({ depende_de_id: d.depende_de_id, tipo: normalizarTipoDep(d.tipo), lag: d.lag_dias })
   }
   const txtDe = (id: number) => formatearPredecesores(predsPorTarea.get(id) ?? [], filaPorId)
-  const extra = (t: typeof tareas[number]) => ({ fila: filaPorId.get(t.id)!, predecesores_txt: txtDe(t.id) })
+  const extra = (t: typeof tareas[number]) => ({
+    fila: filaPorId.get(t.id)!, predecesores_txt: txtDe(t.id),
+    baseline_inicio: baseMap.get(t.id)?.inicio ?? null, baseline_fin: baseMap.get(t.id)?.fin ?? null,
+  })
 
   // Holgura: solo si el proyecto tiene inicio + entrega (ancla en ambas puntas).
-  let holgura: PlanProyecto['tareas'] = tareas.map((t) => ({ ...t, early_start: null, early_finish: null, late_finish: null, holgura_dias: null, critico: false, ...extra(t) }))
+  let holgura: PlanProyecto['tareas'] = tareas.map((t) => ({ ...t, early_start: null, early_finish: null, late_finish: null, holgura_dias: null, critico: false, ...extra(t), variance_dias: null }))
   let finProyectado: string | null = null, holguraProyecto = 0, enRiesgo = false
   let errorCpm: string | null = null
   if (h.ini && h.entrega) {
@@ -351,8 +367,11 @@ export async function getPlanProyecto(runner: QueryRunner, proyectoExt: string):
       finProyectado = r.finProyectado; holguraProyecto = r.holguraProyecto; enRiesgo = r.enRiesgo
       holgura = tareas.map((t) => {
         const c = r.tareas.get(t.id)
+        const bFin = baseMap.get(t.id)?.fin ?? null
+        // Variación = fin calculado − fin de la línea base (días hábiles). >0 = atrasada vs plan congelado.
+        const variance = (bFin && c?.earlyFinish) ? businessDaysBetween(bFin, c.earlyFinish, feriados) : null
         return { ...t, early_start: c?.earlyStart ?? null, early_finish: c?.earlyFinish ?? null,
-          late_finish: c?.lateFinish ?? null, holgura_dias: c?.holguraDias ?? null, critico: c?.critico ?? false, ...extra(t) }
+          late_finish: c?.lateFinish ?? null, holgura_dias: c?.holguraDias ?? null, critico: c?.critico ?? false, ...extra(t), variance_dias: variance }
       })
     } catch (err) {
       // Ciclo en dependencias: el CPM no puede recalcular. En vez de tragarlo en
@@ -1162,6 +1181,22 @@ export async function setPredecesores(
   const res = await aplicarCambiosDeps(runner, ext, remove, add, dryRun)
   const filaPorId = new Map(ordenIds.map((id, i) => [id, i + 1]))
   return { ...res, texto_normalizado: formatearPredecesores(desired, filaPorId) }
+}
+
+/** Congela una LÍNEA BASE del proyecto: una foto (inicio/fin/duración) de cada
+ *  tarea en este momento. Queda archivada (histórico); la más reciente es la activa
+ *  y alimenta la columna Variación. Se puede re-guardar cuando el scheduler quiera. */
+export async function guardarBaseline(
+  runner: QueryRunner, proyectoExt: string, userId: string | null, nota?: string | null,
+): Promise<{ ok: boolean; baseline_id: number; n: number }> {
+  const { rows: [b] } = await runner.query<{ id: number }>(
+    `INSERT INTO ing_baselines (proyecto_ext, nota, created_by) VALUES ($1, $2, $3) RETURNING id`,
+    [proyectoExt, nota ?? null, userId])
+  const { rowCount } = await runner.query(
+    `INSERT INTO ing_baseline_tareas (baseline_id, tarea_id, inicio, fin, dur_dias)
+       SELECT $1, id, fecha_inicio, fecha_fin, dur_dias FROM ing_tareas WHERE proyecto_ext = $2`,
+    [b.id, proyectoExt])
+  return { ok: true, baseline_id: b.id, n: rowCount ?? 0 }
 }
 
 /** Mueve una tarea al slot (afterId = fila de arriba, beforeId = fila de abajo),
