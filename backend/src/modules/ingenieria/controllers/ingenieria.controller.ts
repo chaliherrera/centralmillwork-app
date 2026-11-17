@@ -11,7 +11,7 @@ import {
   crearTarea, actualizarTarea, reportarAvance, getPlanProyecto,
   borrarTareaConReconexion, agregarDep, borrarDep, listReprogramaciones, recomputarYGuardar,
   reabrirShopDrawingsPorRechazo, cerrarGatePorAprobacion, cerrarReleasePorSdUpdate,
-  aplicarCambiosDeps, moverTarea, reasignarIngeniero, reordenarVisual,
+  aplicarCambiosDeps, moverTarea, reasignarIngeniero, reordenarVisual, setPredecesores,
 } from '../domain/tareas'
 import { listReservasPendientes, liberarReserva } from '../domain/reservas'
 import { listIngenieros, actualizarIngeniero } from '../domain/ingenieros'
@@ -351,6 +351,25 @@ export async function bulkDepsHandler(req: Request, res: Response, next: NextFun
     await client.query('BEGIN')
     const r = await aplicarCambiosDeps(client, ext, cambios(req.body?.remove), cambios(req.body?.add), dryRun)
     await client.query('COMMIT')
+    if (!r.ok) return next(createError(r.error ?? 'no se pudo aplicar', 400))
+    res.json({ data: r })
+  } catch (e) { await client.query('ROLLBACK').catch(() => {}); next(e) } finally { client.release() }
+}
+
+// PUT /api/ingenieria/tareas/:id/predecesores  { texto, dry_run? }
+// Reemplaza los predecesores de una tarea desde el texto estilo MS Project ("5FF+2d,3SS").
+// 422 con la lista de errores si el texto es inválido; 400 si el cambio crea un ciclo.
+export async function setPredecesoresHandler(req: Request, res: Response, next: NextFunction) {
+  const id = parseInt(String(req.params.id), 10)
+  if (Number.isNaN(id)) return next(createError('id inválido', 400))
+  const texto = typeof req.body?.texto === 'string' ? req.body.texto : ''
+  const dryRun = req.body?.dry_run === true
+  const client = await pool.connect()
+  try {
+    await client.query('BEGIN')
+    const r = await setPredecesores(client, id, texto, dryRun)
+    await client.query('COMMIT')
+    if ('errores' in r) return res.status(422).json({ message: 'Revisá los predecesores', errores: r.errores })
     if (!r.ok) return next(createError(r.error ?? 'no se pudo aplicar', 400))
     res.json({ data: r })
   } catch (e) { await client.query('ROLLBACK').catch(() => {}); next(e) } finally { client.release() }

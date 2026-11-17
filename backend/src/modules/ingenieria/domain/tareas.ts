@@ -16,6 +16,7 @@ import { proyectarHitos, esInferida, type HitoPlantilla, type PasoFechas } from 
 import { calcularHolgura, normalizarTipoDep, type TareaCPM, type AristaCPM, type HolguraTarea, type HolguraProyecto } from './holgura'
 import { logger } from '../../../utils/logger'
 import { captureException } from '../../../utils/sentry'
+import { parsearPredecesores, resolverPredecesores, formatearPredecesores, type ErrorPred } from './predecesores'
 import { tieneCiclo, planificarMovimiento, type CambioArista, type AristaRe, type TareaRe } from './reordenar'
 import { estadoDeposito, type EstadoDeposito } from './deposito'
 import { estadoMuestras, type EstadoMuestras } from './muestras'
@@ -273,6 +274,8 @@ export interface TareaPlan extends Tarea {
   late_finish: string | null
   holgura_dias: number | null
   critico: boolean
+  fila: number                  // posición 1..N en la lista (el "número" de MS Project)
+  predecesores_txt: string      // columna estilo MS Project ("5FF+2d,3SS"), derivada
 }
 export interface AristaPlan { tarea_id: number; depende_de_id: number; tipo: string; lag_dias: number; ignorada_at?: string | null }
 export interface PlanProyecto {
@@ -319,8 +322,20 @@ export async function getPlanProyecto(runner: QueryRunner, proyectoExt: string):
   const compras = await estadoCompras(runner, proyectoExt)
   const depClave = new Map(tareas.map((t) => [t.id, t.tipo_clave]))
 
+  // Fila (número 1..N) y texto de predecesoras estilo MS Project, derivados del orden
+  // y de las aristas. Son columnas de solo lectura para la grilla; la fila alimenta el
+  // parser (el "5" = fila 5).
+  const filaPorId = new Map(tareas.map((t, i) => [t.id, i + 1]))
+  const predsPorTarea = new Map<number, { depende_de_id: number; tipo: ReturnType<typeof normalizarTipoDep>; lag: number }[]>()
+  for (const d of deps) {
+    if (!predsPorTarea.has(d.tarea_id)) predsPorTarea.set(d.tarea_id, [])
+    predsPorTarea.get(d.tarea_id)!.push({ depende_de_id: d.depende_de_id, tipo: normalizarTipoDep(d.tipo), lag: d.lag_dias })
+  }
+  const txtDe = (id: number) => formatearPredecesores(predsPorTarea.get(id) ?? [], filaPorId)
+  const extra = (t: typeof tareas[number]) => ({ fila: filaPorId.get(t.id)!, predecesores_txt: txtDe(t.id) })
+
   // Holgura: solo si el proyecto tiene inicio + entrega (ancla en ambas puntas).
-  let holgura: PlanProyecto['tareas'] = tareas.map((t) => ({ ...t, early_start: null, early_finish: null, late_finish: null, holgura_dias: null, critico: false }))
+  let holgura: PlanProyecto['tareas'] = tareas.map((t) => ({ ...t, early_start: null, early_finish: null, late_finish: null, holgura_dias: null, critico: false, ...extra(t) }))
   let finProyectado: string | null = null, holguraProyecto = 0, enRiesgo = false
   let errorCpm: string | null = null
   if (h.ini && h.entrega) {
@@ -337,7 +352,7 @@ export async function getPlanProyecto(runner: QueryRunner, proyectoExt: string):
       holgura = tareas.map((t) => {
         const c = r.tareas.get(t.id)
         return { ...t, early_start: c?.earlyStart ?? null, early_finish: c?.earlyFinish ?? null,
-          late_finish: c?.lateFinish ?? null, holgura_dias: c?.holguraDias ?? null, critico: c?.critico ?? false }
+          late_finish: c?.lateFinish ?? null, holgura_dias: c?.holguraDias ?? null, critico: c?.critico ?? false, ...extra(t) }
       })
     } catch (err) {
       // Ciclo en dependencias: el CPM no puede recalcular. En vez de tragarlo en
@@ -1103,6 +1118,50 @@ export async function aplicarCambiosDeps(
   }
   return { ok: true, dryRun, diffs, fin_antes: antes?.finProyectado ?? null, fin_despues: despues?.finProyectado ?? null,
     holgura: despues?.holguraProyecto ?? 0, en_riesgo: despues?.enRiesgo ?? false, inverso, explicacion }
+}
+
+export type SetPredecesoresResult =
+  | { ok: false; errores: ErrorPred[] }                                  // texto inválido (→ 422)
+  | (CambioDepsResult & { texto_normalizado: string })                   // preview/aplicado
+
+/** Reemplaza TODOS los predecesores de una tarea a partir del texto estilo MS Project
+ *  ("5FF+2d,3SS"): parsea, resuelve fila→id, calcula el diff contra las aristas actuales
+ *  y lo aplica con aplicarCambiosDeps (preview si dryRun). Las deps con candado abierto
+ *  (ignorada_at) NO se quitan aunque el texto las omita. */
+export async function setPredecesores(
+  runner: QueryRunner, tareaId: number, texto: string, dryRun: boolean,
+): Promise<SetPredecesoresResult> {
+  const { rows } = await runner.query<{ proyecto_ext: string | null }>(`SELECT proyecto_ext FROM ing_tareas WHERE id = $1`, [tareaId])
+  if (!rows[0]) return { ok: false, errores: [{ codigo: 'REF_INEXISTENTE', mensaje: 'La tarea no existe.' }] }
+  const ext = rows[0].proyecto_ext
+  if (!ext) return { ok: false, errores: [{ codigo: 'REF_INEXISTENTE', mensaje: 'La tarea no pertenece a un proyecto.' }] }
+
+  const parsed = parsearPredecesores(texto)
+  if (!parsed.ok) return { ok: false, errores: parsed.errores }
+
+  const tareas = await listTareas(runner, ext)
+  const ordenIds = tareas.map((t) => t.id)
+  const resolved = resolverPredecesores(parsed.items, ordenIds, tareaId)
+  if (!resolved.ok) return { ok: false, errores: resolved.errores }
+  const desired = resolved.aristas
+
+  const { rows: cur } = await runner.query<{ depende_de_id: number; tipo: string; lag_dias: number; ignorada_at: string | null }>(
+    `SELECT depende_de_id, tipo, lag_dias, to_char(ignorada_at,'YYYY-MM-DD') AS ignorada_at FROM ing_tarea_deps WHERE tarea_id = $1`, [tareaId])
+  const desByDep = new Map(desired.map((a) => [a.depende_de_id, a]))
+  const curByDep = new Map(cur.map((c) => [c.depende_de_id, c]))
+
+  // add = nuevas o con tipo/lag cambiado (agregarDep hace upsert). remove = las que el
+  // texto saca, pero NUNCA una con candado abierto (ignorada_at).
+  const add = desired
+    .filter((a) => { const c = curByDep.get(a.depende_de_id); return !c || c.tipo !== a.tipo || c.lag_dias !== a.lag })
+    .map((a) => ({ tarea_id: tareaId, depende_de_id: a.depende_de_id, tipo: a.tipo, lag_dias: a.lag }))
+  const remove = cur
+    .filter((c) => !desByDep.has(c.depende_de_id) && !c.ignorada_at)
+    .map((c) => ({ tarea_id: tareaId, depende_de_id: c.depende_de_id }))
+
+  const res = await aplicarCambiosDeps(runner, ext, remove, add, dryRun)
+  const filaPorId = new Map(ordenIds.map((id, i) => [id, i + 1]))
+  return { ...res, texto_normalizado: formatearPredecesores(desired, filaPorId) }
 }
 
 /** Mueve una tarea al slot (afterId = fila de arriba, beforeId = fila de abajo),
