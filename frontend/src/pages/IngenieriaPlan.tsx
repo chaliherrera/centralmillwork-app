@@ -272,6 +272,86 @@ export function VistaDisponibilidad({ carga, foco, ruta }: { carga: IngCarga | n
 }
 
 // ── Vista PRINCIPAL: Gantt del proyecto con holgura/riesgo (CPM sobre fecha fija) ──
+// ── Grilla tipo MS Project (columnas: #, Tarea, Resp, %, Días, Predecesoras, Inicio, Fin, Estado) ──
+const EST_GRILLA: Record<string, { t: string; c: string }> = {
+  pendiente: { t: 'Pendiente', c: 'bg-stone-100 text-stone-600' },
+  en_curso: { t: 'En curso', c: 'bg-sky-100 text-sky-700' },
+  hecha: { t: 'Completado', c: 'bg-emerald-100 text-emerald-700' },
+  na: { t: 'N/A', c: 'bg-stone-100 text-stone-400' },
+}
+
+// Celda editable de Predecesoras: escribir "5FF+2d,3SS" (atajo estilo MS Project).
+// Al confirmar (Enter/salir) llama al endpoint; si hay error de texto, revierte y avisa.
+function PredCell({ t, onRefresh }: { t: IngTareaPlan; onRefresh: () => void }) {
+  const [val, setVal] = useState(t.predecesores_txt)
+  const [busy, setBusy] = useState(false)
+  useEffect(() => { setVal(t.predecesores_txt) }, [t.predecesores_txt])
+  const commit = async () => {
+    if (val.trim() === (t.predecesores_txt ?? '')) return
+    setBusy(true)
+    try {
+      const r = await ingenieriaService.setPredecesores(t.id, val.trim())
+      const n = r.data?.diffs?.length ?? 0
+      toast.success(n ? `Guardado · ${n} tarea${n === 1 ? '' : 's'} recalculada${n === 1 ? '' : 's'}` : 'Guardado')
+      await onRefresh()
+    } catch (e: any) {
+      const errs = e?.response?.data?.errores as { mensaje: string }[] | undefined
+      toast.error(errs?.[0]?.mensaje || e?.response?.data?.message || 'No se pudo guardar')
+      setVal(t.predecesores_txt)
+    } finally { setBusy(false) }
+  }
+  return (
+    <input value={val} disabled={busy} placeholder="—"
+      onClick={(e) => e.stopPropagation()}
+      onChange={(e) => setVal(e.target.value)}
+      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === 'Escape') { if (e.key === 'Escape') setVal(t.predecesores_txt); (e.target as HTMLInputElement).blur() } }}
+      onBlur={commit}
+      title='Escribí "5FF+2d,3SS": número de fila + tipo (FS/SS/FF/SF) + desfase'
+      className="w-full bg-transparent border border-transparent hover:border-stone-200 focus:border-forest-400 rounded px-1 py-0.5 text-[12px] font-mono tabular-nums outline-none disabled:opacity-50" />
+  )
+}
+
+function GrillaTabla({ rows, onEdit, engColor, onRefresh }: { rows: any[]; onEdit: (t: IngTarea | 'new') => void; engColor: Map<string, string>; onRefresh: () => void }) {
+  const Th = ({ children, cls = '' }: { children: React.ReactNode; cls?: string }) => <th className={`px-2 py-2 font-semibold ${cls}`}>{children}</th>
+  return (
+    <div className="rounded-2xl border border-stone-200 bg-white overflow-x-auto">
+      <table className="w-full text-sm border-collapse min-w-[900px]">
+        <thead>
+          <tr className="bg-stone-50/60 text-[10.5px] uppercase tracking-wide text-stone-400 border-b border-stone-100">
+            <Th cls="text-right w-10">#</Th><Th cls="text-left">Tarea</Th><Th cls="text-left">Responsable</Th>
+            <Th cls="text-right w-12">%</Th><Th cls="text-right w-14">Días</Th><Th cls="text-left w-40">Predecesoras</Th>
+            <Th cls="text-left w-20">Inicio</Th><Th cls="text-left w-20">Fin</Th><Th cls="text-left w-24">Estado</Th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((r: any, i: number) => r.type === 'phase'
+            ? <tr key={i} className="bg-forest-50/40"><td colSpan={9} className="px-3 py-1.5 text-[11px] font-bold text-forest-700 uppercase tracking-wide">{r.label} <span className="text-forest-400 font-normal normal-case">· {r.count}</span></td></tr>
+            : (() => {
+                const t = r.tarea as IngTareaPlan
+                const est = EST_GRILLA[t.estado] ?? { t: t.estado, c: 'bg-stone-100 text-stone-500' }
+                return (
+                  <tr key={i} onClick={() => onEdit(t)} className="border-t border-stone-50 hover:bg-forest-50/30 cursor-pointer">
+                    <td className="text-right px-2 py-1.5 text-[11px] text-stone-400 tabular-nums">{t.fila}</td>
+                    <td className="px-2 py-1.5 text-stone-800">{t.nombre}</td>
+                    <td className="px-2 py-1.5 text-stone-600">{t.asignado_nombre
+                      ? <span className="inline-flex items-center gap-1.5"><span className="w-2 h-2 rounded-full shrink-0" style={{ background: engColor.get(t.asignado_nombre) }} />{t.asignado_nombre}</span>
+                      : <span className="text-stone-300">—</span>}</td>
+                    <td className={`text-right px-2 py-1.5 tabular-nums ${t.allocation_pct > 1 ? 'text-rose-600 font-semibold' : 'text-stone-600'}`}>{Math.round(t.allocation_pct * 100)}%</td>
+                    <td className="text-right px-2 py-1.5 tabular-nums text-stone-600">{t.dur_dias}</td>
+                    <td className="px-1 py-1" onClick={(e) => e.stopPropagation()}><PredCell t={t} onRefresh={onRefresh} /></td>
+                    <td className="px-2 py-1.5 text-stone-600 tabular-nums">{fmtD(t.early_start || t.fecha_inicio)}</td>
+                    <td className="px-2 py-1.5 text-stone-600 tabular-nums">{fmtD(t.early_finish || t.fecha_fin)}</td>
+                    <td className="px-2 py-1.5"><span className={`inline-flex rounded px-1.5 py-0.5 text-[10px] font-bold ${est.c}`}>{est.t}</span></td>
+                  </tr>
+                )
+              })()
+          )}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
 function VistaProyecto({ proyectos, all, plan, planLoading, sel, setSel, onEdit, onRefresh }: { proyectos: IngProyecto[]; all: IngTarea[]; plan: IngPlan | null; planLoading: boolean; sel: string; setSel: (s: string) => void; onEdit: (t: IngTarea | 'new') => void; onRefresh: () => void }) {
   const loadingPlan = planLoading
   const [depBusy, setDepBusy] = useState(false)
@@ -308,6 +388,7 @@ function VistaProyecto({ proyectos, all, plan, planLoading, sel, setSel, onEdit,
   const [dropIdx, setDropIdx] = useState<number | null>(null)   // índice de inserción en taskOrder (0..N)
   const [dndBusy, setDndBusy] = useState(false)
   const [cronoOpen, setCronoOpen] = useState(false)
+  const [vista, setVista] = useState<'gantt' | 'grilla'>('gantt')   // Gantt (barras) o Grilla (tabla tipo MS Project)
 
   // Soltar = reordenar la FILA (visual), SIN tocar fechas ni dependencias. Después
   // se abre el modal de la tarea para que, si se quiere, se la secuencie de verdad
@@ -526,7 +607,17 @@ function VistaProyecto({ proyectos, all, plan, planLoading, sel, setSel, onEdit,
         )
       })()}
 
-      <div className="rounded-2xl border border-stone-200 bg-white overflow-hidden">
+      {/* Toggle Gantt (barras) ⇄ Grilla (tabla tipo MS Project) */}
+      <div className="inline-flex rounded-xl border border-stone-200 bg-white p-1 text-sm">
+        <button onClick={() => setVista('gantt')} className={`rounded-lg px-3 py-1.5 font-semibold ${vista === 'gantt' ? 'bg-forest-600 text-white' : 'text-stone-500 hover:text-stone-800'}`}>Gantt</button>
+        <button onClick={() => setVista('grilla')} className={`rounded-lg px-3 py-1.5 font-semibold ${vista === 'grilla' ? 'bg-forest-600 text-white' : 'text-stone-500 hover:text-stone-800'}`}>Grilla</button>
+      </div>
+
+      {vista === 'grilla' && (plan
+        ? <GrillaTabla rows={g.rows} onEdit={onEdit} engColor={engColor} onRefresh={onRefresh} />
+        : <div className="rounded-2xl border border-stone-200 bg-white py-16 text-center text-stone-400">{loadingPlan ? <Loader2 className="animate-spin inline" size={22} /> : 'Elegí un proyecto'}</div>)}
+
+      <div className={`rounded-2xl border border-stone-200 bg-white overflow-hidden ${vista === 'grilla' ? 'hidden' : ''}`}>
         {loadingPlan && !plan ? <div className="py-16 text-center text-stone-400"><Loader2 className="animate-spin inline" size={22} /></div> : (
         <div className="overflow-x-auto"><div className="min-w-[960px]">
           {/* header: gutter + meses + marca de entrega */}
