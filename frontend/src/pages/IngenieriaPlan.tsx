@@ -890,7 +890,8 @@ function EditModal({ tarea, proyecto, engineers, planTareas, aristas, onClose, o
   //  · Paralela a (SS): ESTA arranca junto con… → arista (ESTA ← PAR), tipo SS.
   // Las FS y las SS se separan por a.tipo (una SS no es un predecesor, arrancan juntas).
   const origPreds = useMemo(() => (tarea && aristas ? aristas.filter((a) => a.tarea_id === tarea.id && a.tipo !== 'SS') : []), [tarea, aristas])
-  const [preds, setPreds] = useState<{ id: number; lag: number }[]>(origPreds.map((a) => ({ id: a.depende_de_id, lag: a.lag_dias })))
+  const [preds, setPreds] = useState<{ id: number; lag: number; tipo: 'FS' | 'FF' | 'SF' }[]>(
+    origPreds.map((a) => ({ id: a.depende_de_id, lag: a.lag_dias, tipo: (a.tipo === 'FF' || a.tipo === 'SF') ? a.tipo : 'FS' })))
   const origSuccs = useMemo(() => (tarea && aristas ? aristas.filter((a) => a.depende_de_id === tarea.id && a.tipo !== 'SS') : []), [tarea, aristas])
   const [succs, setSuccs] = useState<{ id: number; lag: number }[]>(origSuccs.map((a) => ({ id: a.tarea_id, lag: a.lag_dias })))
   // Paralelas (SS): la relación es simétrica ("arrancan juntas"). Se muestran las de
@@ -905,7 +906,7 @@ function EditModal({ tarea, proyecto, engineers, planTareas, aristas, onClose, o
   const opciones = useMemo(() => (planTareas ?? []).filter((t) => t.id !== tarea?.id && !preds.some((p) => p.id === t.id) && !succs.some((s) => s.id === t.id) && !pars.some((p) => p === t.id)), [planTareas, tarea, preds, succs, pars])
 
   const syncDeps = async (id: number) => {
-    for (const p of preds) await ingenieriaService.agregarDep(id, p.id, p.lag)         // upsert (agrega o cambia lag)
+    for (const p of preds) await ingenieriaService.agregarDep(id, p.id, p.lag, p.tipo)  // upsert (agrega o cambia tipo/lag)
     for (const o of origPreds) if (!preds.some((p) => p.id === o.depende_de_id)) await ingenieriaService.borrarDep(id, o.depende_de_id)
     // Sucesores: la arista es (SUCESOR depende de ESTA) → agregarDep(succId, id).
     for (const s of succs) await ingenieriaService.agregarDep(s.id, id, s.lag)
@@ -1027,12 +1028,18 @@ function EditModal({ tarea, proyecto, engineers, planTareas, aristas, onClose, o
 
           {/* Predecesores — esta tarea empieza después de… (recalcula holgura al guardar) */}
           {planTareas && (
-            <L t="Predecesores · empieza después de">
+            <L t="Predecesores · depende de">
               <div className="space-y-1.5">
                 {preds.length === 0 && <div className="text-[12px] text-stone-400 italic">Sin predecesores (arranca al inicio del proyecto).</div>}
                 {preds.map((p) => (
                   <div key={p.id} className="flex items-center gap-2 bg-stone-50 rounded-lg px-2 py-1.5">
                     <span className="flex-1 text-[13px] text-stone-700 truncate">{nameOf(p.id)}</span>
+                    <select value={p.tipo} onChange={(e) => setPreds((xs) => xs.map((x) => x.id === p.id ? { ...x, tipo: e.target.value as 'FS' | 'FF' | 'SF' } : x))}
+                      className="rounded-md border border-stone-300 px-1 py-1 text-[11px] text-stone-700" title="Tipo de relación (MS Project)">
+                      <option value="FS">después de (FS)</option>
+                      <option value="FF">termina junto (FF)</option>
+                      <option value="SF">inicio→fin (SF)</option>
+                    </select>
                     <span className="text-[11px] text-stone-400">lag</span>
                     <input type="number" step="1" value={p.lag} onChange={(e) => setPreds((xs) => xs.map((x) => x.id === p.id ? { ...x, lag: Math.trunc(Number(e.target.value) || 0) } : x))}
                       className="w-14 rounded-md border border-stone-300 px-1.5 py-1 text-[12px] text-stone-800" />
@@ -1041,7 +1048,7 @@ function EditModal({ tarea, proyecto, engineers, planTareas, aristas, onClose, o
                   </div>
                 ))}
                 {opciones.length > 0 && (
-                  <select value="" onChange={(e) => { const id = Number(e.target.value); if (id) setPreds((xs) => [...xs, { id, lag: 0 }]) }}
+                  <select value="" onChange={(e) => { const id = Number(e.target.value); if (id) setPreds((xs) => [...xs, { id, lag: 0, tipo: 'FS' }]) }}
                     className="inp text-[13px]">
                     <option value="">+ agregar predecesor…</option>
                     {opciones.map((t) => <option key={t.id} value={t.id}>{t.nombre}</option>)}

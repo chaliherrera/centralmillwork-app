@@ -311,8 +311,9 @@ export const ingenieriaService = {
   borrarTarea: (id: number) =>
     api.delete<ApiResponse<{ ok: boolean; reconectadas: number }>>(`/ingenieria/tareas/${id}`).then((r) => r.data),
 
-  // Dependencias. tipo: 'FS' (por defecto, "después de") o 'SS' ("arranca junto con" = paralela).
-  agregarDep: (tareaId: number, depende_de_id: number, lag_dias = 0, tipo: 'FS' | 'SS' = 'FS') =>
+  // Dependencias. tipo: FS (default, "después de"), SS ("arranca junto con"), FF
+  // ("termina junto con") o SF (inicio→fin). El backend valida los 4.
+  agregarDep: (tareaId: number, depende_de_id: number, lag_dias = 0, tipo: 'FS' | 'SS' | 'FF' | 'SF' = 'FS') =>
     api.post<ApiResponse<{ ok: boolean }>>(`/ingenieria/tareas/${tareaId}/dep`, { depende_de_id, lag_dias, tipo }).then((r) => r.data),
   borrarDep: (tareaId: number, dependeDeId: number) =>
     api.delete<ApiResponse<{ ok: boolean }>>(`/ingenieria/tareas/${tareaId}/dep/${dependeDeId}`).then((r) => r.data),
