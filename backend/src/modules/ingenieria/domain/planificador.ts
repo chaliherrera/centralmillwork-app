@@ -15,7 +15,7 @@
 
 import type { PoolClient } from 'pg'
 import pool from '../../../db/pool'
-import { calcularHolgura, TareaCPM, AristaCPM, HolguraProyecto } from './holgura'
+import { calcularHolgura, normalizarTipoDep, TareaCPM, AristaCPM, HolguraProyecto, type TipoDep } from './holgura'
 import { addBusinessDays, businessDaysBetween, loadFeriados, ISODate } from '../../schedule/domain/calendario'
 
 type QueryRunner = PoolClient | typeof pool
@@ -25,7 +25,7 @@ export const ROLES_INGENIERO = new Set(['ingenieria', 'field'])
 const STONE_CLAVES = ['stone_measure', 'stone_fab', 'stone_install']
 
 export interface PasoRuta { clave: string; tipoId: number; nombre: string; rol: string | null; dur: number }
-export interface AristaRuta { clave: string; dependeDe: string; tipo: 'FS' | 'SS'; lag: number }
+export interface AristaRuta { clave: string; dependeDe: string; tipo: TipoDep; lag: number }
 export interface PlantillaRuta { pasos: PasoRuta[]; aristas: AristaRuta[] }
 
 export interface ColaIngeniero { nombre: string; hace_cnc: boolean; n_pendientes: number; fin_ultima: ISODate | null }
@@ -67,7 +67,7 @@ export async function cargarPlantillaRuta(
     `SELECT tipo_clave, depende_de_clave, tipo, lag_dias FROM ing_tipo_deps`)
   const aristas: AristaRuta[] = deps
     .filter((d) => claves.has(d.tipo_clave) && claves.has(d.depende_de_clave))
-    .map((d) => ({ clave: d.tipo_clave, dependeDe: d.depende_de_clave, tipo: d.tipo === 'SS' ? 'SS' : 'FS', lag: d.lag_dias }))
+    .map((d) => ({ clave: d.tipo_clave, dependeDe: d.depende_de_clave, tipo: normalizarTipoDep(d.tipo), lag: d.lag_dias }))
   return { pasos, aristas }
 }
 

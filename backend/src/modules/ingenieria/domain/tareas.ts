@@ -13,7 +13,7 @@ import { loadFeriados, addBusinessDays, businessDaysBetween, type ISODate } from
 import { cargarColaIngenieros, ROLES_INGENIERO } from './planificador'
 import { capturarFechasReales } from '../../schedule/domain/captura'
 import { proyectarHitos, esInferida, type HitoPlantilla, type PasoFechas } from '../../schedule/domain/proyeccion'
-import { calcularHolgura, type TareaCPM, type AristaCPM, type HolguraTarea, type HolguraProyecto } from './holgura'
+import { calcularHolgura, normalizarTipoDep, type TareaCPM, type AristaCPM, type HolguraTarea, type HolguraProyecto } from './holgura'
 import { tieneCiclo, planificarMovimiento, type CambioArista, type AristaRe, type TareaRe } from './reordenar'
 import { estadoDeposito, type EstadoDeposito } from './deposito'
 import { estadoMuestras, type EstadoMuestras } from './muestras'
@@ -326,7 +326,7 @@ export async function getPlanProyecto(runner: QueryRunner, proyectoExt: string):
     // de material_deposit (fecha de apertura), no borrando la dependencia. La marca
     // ignorada_at se sigue devolviendo (abajo) para dibujar el gate abierto en la UI.
     const cpmAristas: AristaCPM[] = deps
-      .map((d) => ({ tareaId: d.tarea_id, dependeDeId: d.depende_de_id, lag: d.lag_dias, tipo: d.tipo === 'SS' ? 'SS' : 'FS' }))
+      .map((d) => ({ tareaId: d.tarea_id, dependeDeId: d.depende_de_id, lag: d.lag_dias, tipo: normalizarTipoDep(d.tipo) }))
     try {
       const r = calcularHolgura(cpmTareas, cpmAristas, h.ini, h.entrega, feriados)
       finProyectado = r.finProyectado; holguraProyecto = r.holguraProyecto; enRiesgo = r.enRiesgo
@@ -477,7 +477,7 @@ export async function recomputarYGuardar(runner: QueryRunner, proyectoExt: strin
   const clave = new Map(tareas.map((t) => [t.id, t.tipo_clave]))
   const feriados = await loadFeriados(runner)
   const cpmTareas: TareaCPM[] = tareas.map((t) => ({ id: t.id, dur: t.dur_dias, noAntesDe: pisoTarea(clave.get(t.id) ?? null, deposito, compras, t.no_antes_de) }))
-  const aristas: AristaCPM[] = deps.map((d) => ({ tareaId: d.tarea_id, dependeDeId: d.depende_de_id, lag: d.lag_dias, tipo: d.tipo === 'SS' ? 'SS' : 'FS' }))
+  const aristas: AristaCPM[] = deps.map((d) => ({ tareaId: d.tarea_id, dependeDeId: d.depende_de_id, lag: d.lag_dias, tipo: normalizarTipoDep(d.tipo) }))
   try {
     const r = calcularHolgura(cpmTareas, aristas, h.ini, h.entrega, feriados)
     for (const t of tareas) {
@@ -947,7 +947,7 @@ export async function reasignarIngeniero(
   const deposito = await estadoDeposito(runner, proyectoExt)
   const compras = await estadoCompras(runner, proyectoExt)
   const clave = new Map(tareas.map((t) => [t.id, t.tipo_clave]))
-  const aristas: AristaCPM[] = deps.map((d) => ({ tareaId: d.tarea_id, dependeDeId: d.depende_de_id, lag: d.lag_dias, tipo: d.tipo === 'SS' ? 'SS' : 'FS' }))
+  const aristas: AristaCPM[] = deps.map((d) => ({ tareaId: d.tarea_id, dependeDeId: d.depende_de_id, lag: d.lag_dias, tipo: normalizarTipoDep(d.tipo) }))
   const correr = (pisoNuevo: boolean): string => {
     const cpmTareas: TareaCPM[] = tareas.map((t) => ({
       id: t.id, dur: t.dur_dias,
@@ -990,7 +990,7 @@ async function cpmConAristas(runner: QueryRunner, ext: string, aristas: Array<{ 
   const clave = new Map(tareas.map((t) => [t.id, t.tipo_clave]))
   const feriados = await loadFeriados(runner)
   const cpmTareas: TareaCPM[] = tareas.map((t) => ({ id: t.id, dur: t.dur_dias, noAntesDe: pisoTarea(clave.get(t.id) ?? null, deposito, compras, t.no_antes_de) }))
-  const cpmAristas: AristaCPM[] = aristas.map((a) => ({ tareaId: a.tarea_id, dependeDeId: a.depende_de_id, lag: a.lag_dias, tipo: a.tipo === 'SS' ? 'SS' : 'FS' }))
+  const cpmAristas: AristaCPM[] = aristas.map((a) => ({ tareaId: a.tarea_id, dependeDeId: a.depende_de_id, lag: a.lag_dias, tipo: normalizarTipoDep(a.tipo) }))
   try { return calcularHolgura(cpmTareas, cpmAristas, h.ini, h.entrega, feriados) } catch { return null }
 }
 

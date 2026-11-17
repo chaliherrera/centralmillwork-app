@@ -22,6 +22,15 @@
 
 import { ISODate, subBusinessDays, addBusinessDays, businessDaysBetween } from '../../schedule/domain/calendario'
 
+// Los 4 tipos de relación de MS Project. FS (finish-to-start) es el default.
+export type TipoDep = 'FS' | 'SS' | 'FF' | 'SF'
+const TIPOS_DEP: readonly TipoDep[] = ['FS', 'SS', 'FF', 'SF']
+/** Normaliza cualquier valor a un tipo de dependencia válido; default 'FS'. */
+export function normalizarTipoDep(s: unknown): TipoDep {
+  const t = String(s ?? '').trim().toUpperCase()
+  return (TIPOS_DEP as readonly string[]).includes(t) ? (t as TipoDep) : 'FS'
+}
+
 export interface TareaCPM {
   id: number
   /** duración en días hábiles */
@@ -39,10 +48,10 @@ export interface AristaCPM {
   dependeDeId: number
   /** lag en días hábiles (FS+Nd). Puede ser negativo (adelanto). */
   lag: number
-  /** tipo de dependencia. 'FS' (finish-to-start, default) o 'SS' (start-to-start:
-   *  el sucesor arranca cuando arranca el predecesor + lag). El Excel real usa SS
-   *  para Samples (corre en paralelo a Shop Drawings). FF/SF no se usan hoy. */
-  tipo?: 'FS' | 'SS'
+  /** tipo de dependencia (estilo MS Project): 'FS' finish-to-start (default),
+   *  'SS' start-to-start, 'FF' finish-to-finish, 'SF' start-to-finish. El lag
+   *  (puede ser negativo = adelanto) aplica a cualquiera de los cuatro. */
+  tipo?: TipoDep
 }
 
 export interface HolguraTarea {
@@ -84,13 +93,13 @@ export function calcularHolgura(
   for (const t of tareas) if (t.noAntesDe) noAntes.set(t.id, t.noAntesDe)
 
   // pred[x] = [{de, lag, tipo}] de qué depende x ; succ[x] = quiénes dependen de x
-  type Link = { id: number; lag: number; tipo: 'FS' | 'SS' }
+  type Link = { id: number; lag: number; tipo: TipoDep }
   const pred = new Map<number, Link[]>()
   const succ = new Map<number, Link[]>()
   for (const t of tareas) { pred.set(t.id, []); succ.set(t.id, []) }
   for (const a of aristas) {
     if (!pred.has(a.tareaId) || !pred.has(a.dependeDeId)) continue  // aristas colgadas: ignorar
-    const tipo = a.tipo === 'SS' ? 'SS' : 'FS'
+    const tipo = normalizarTipoDep(a.tipo)
     pred.get(a.tareaId)!.push({ id: a.dependeDeId, lag: a.lag, tipo })
     succ.get(a.dependeDeId)!.push({ id: a.tareaId, lag: a.lag, tipo })
   }
@@ -131,12 +140,22 @@ export function calcularHolgura(
   const EF = new Map<number, ISODate>()
   for (const n of topo) {
     const preds = pred.get(n)!
-    const gap = gapDe(dur.get(n) ?? 0)
+    const d = dur.get(n) ?? 0
+    const gap = gapDe(d)
     let es = fechaInicio
     for (const p of preds) {
-      const cand = p.tipo === 'SS'
-        ? shift(ES.get(p.id)!, p.lag)          // SS: inicio del predecesor + lag
-        : shift(EF.get(p.id)!, gap + p.lag)    // FS: fin del predecesor + gap del sucesor + lag
+      // Cada relación se traduce a una cota "no antes de" sobre el ES del sucesor.
+      let cand: ISODate
+      switch (p.tipo) {
+        case 'SS':  // start-to-start: arranca con el inicio del predecesor + lag
+          cand = shift(ES.get(p.id)!, p.lag); break
+        case 'FF':  // finish-to-finish: termina con el fin del predecesor + lag → inicio = fin − (dur−1)
+          cand = inicioDe(shift(EF.get(p.id)!, p.lag), d); break
+        case 'SF':  // start-to-finish: termina cuando arranca el predecesor + lag (gap espejo del FS)
+          cand = inicioDe(shift(ES.get(p.id)!, p.lag - gap), d); break
+        default:    // FS: fin del predecesor + gap del sucesor + lag
+          cand = shift(EF.get(p.id)!, gap + p.lag)
+      }
       if (cand > es) es = cand
     }
     // Piso "no antes de" (hecho real): nunca arranca antes de esa fecha.
@@ -160,9 +179,19 @@ export function calcularHolgura(
     const succs = succ.get(n)!
     let ls = inicioDe(fechaEntrega, d)   // cota por defecto: terminar para la entrega
     for (const s of succs) {
-      const candLs = s.tipo === 'SS'
-        ? unshift(LS.get(s.id)!, s.lag)                                       // SS: LS(pred) ≤ LS(succ) − lag
-        : inicioDe(unshift(LS.get(s.id)!, gapDe(dur.get(s.id) ?? 0) + s.lag), d)  // FS: vía LF(pred)
+      const gs = gapDe(dur.get(s.id) ?? 0)
+      // Cada relación se traduce a una cota "no después de" sobre el LS del predecesor.
+      let candLs: ISODate
+      switch (s.tipo) {
+        case 'SS':  // LS(pred) ≤ LS(succ) − lag
+          candLs = unshift(LS.get(s.id)!, s.lag); break
+        case 'FF':  // LF(pred) ≤ LF(succ) − lag → LS(pred) vía inicioDe
+          candLs = inicioDe(unshift(LF.get(s.id)!, s.lag), d); break
+        case 'SF':  // ES(pred) ≤ LF(succ) + gap − lag → LS(pred) directo
+          candLs = unshift(LF.get(s.id)!, s.lag - gs); break
+        default:    // FS: LF(pred) ≤ LS(succ) − gap − lag → vía inicioDe
+          candLs = inicioDe(unshift(LS.get(s.id)!, gs + s.lag), d)
+      }
       if (candLs < ls) ls = candLs
     }
     LS.set(n, ls)

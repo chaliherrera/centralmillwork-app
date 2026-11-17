@@ -65,3 +65,70 @@ describe('calcularHolgura (CPM sobre fecha fija)', () => {
     )).toThrow()
   })
 })
+
+// FF (finish-to-finish) y SF (start-to-finish) estilo MS Project. 02-mar-2026 = lunes.
+describe('calcularHolgura — tipos FF y SF', () => {
+  const entrega = '2026-04-30'
+
+  it('FF: B termina con el fin de A (lag 0)', () => {
+    // A(5): 02→06 mar. B(2) FF A: fin(B) = fin(A) = 06; inicio(B) = 05.
+    const r = calcularHolgura(
+      [{ id: 1, dur: 5 }, { id: 2, dur: 2 }],
+      [{ tareaId: 2, dependeDeId: 1, lag: 0, tipo: 'FF' }],
+      '2026-03-02', entrega, F,
+    )
+    expect(r.tareas.get(1)!.earlyFinish).toBe('2026-03-06')
+    expect(r.tareas.get(2)!.earlyStart).toBe('2026-03-05')
+    expect(r.tareas.get(2)!.earlyFinish).toBe('2026-03-06')
+  })
+
+  it('FF con lag +2d y -1d corre el fin de B', () => {
+    const mas = calcularHolgura(
+      [{ id: 1, dur: 5 }, { id: 2, dur: 2 }],
+      [{ tareaId: 2, dependeDeId: 1, lag: 2, tipo: 'FF' }],
+      '2026-03-02', entrega, F,
+    )
+    expect(mas.tareas.get(2)!.earlyStart).toBe('2026-03-09')
+    expect(mas.tareas.get(2)!.earlyFinish).toBe('2026-03-10')
+    const menos = calcularHolgura(
+      [{ id: 1, dur: 5 }, { id: 2, dur: 2 }],
+      [{ tareaId: 2, dependeDeId: 1, lag: -1, tipo: 'FF' }],
+      '2026-03-02', entrega, F,
+    )
+    expect(menos.tareas.get(2)!.earlyStart).toBe('2026-03-04')
+    expect(menos.tareas.get(2)!.earlyFinish).toBe('2026-03-05')
+  })
+
+  it('FF: sucesor más largo que el predecesor se ancla al inicio y termina ≥ que A', () => {
+    // B(10) FF A(5): la cota caería antes del inicio → clampa a fechaInicio; EF(B) ≥ EF(A).
+    const r = calcularHolgura(
+      [{ id: 1, dur: 5 }, { id: 2, dur: 10 }],
+      [{ tareaId: 2, dependeDeId: 1, lag: 0, tipo: 'FF' }],
+      '2026-03-02', entrega, F,
+    )
+    expect(r.tareas.get(2)!.earlyStart).toBe('2026-03-02')
+    expect(r.tareas.get(2)!.earlyFinish >= r.tareas.get(1)!.earlyFinish).toBe(true)
+  })
+
+  it('SF: B termina cuando arranca A (A demorada por "no antes de")', () => {
+    // A arranca 09-mar (piso). B(2) SF A: fin(B) = hábil anterior al inicio de A = 06; inicio(B) = 05.
+    const r = calcularHolgura(
+      [{ id: 1, dur: 5, noAntesDe: '2026-03-09' }, { id: 2, dur: 2 }],
+      [{ tareaId: 2, dependeDeId: 1, lag: 0, tipo: 'SF' }],
+      '2026-03-02', entrega, F,
+    )
+    expect(r.tareas.get(1)!.earlyStart).toBe('2026-03-09')
+    expect(r.tareas.get(2)!.earlyStart).toBe('2026-03-05')
+    expect(r.tareas.get(2)!.earlyFinish).toBe('2026-03-06')
+  })
+
+  it('SF hito (0 días) coincide con el inicio de A', () => {
+    const r = calcularHolgura(
+      [{ id: 1, dur: 5, noAntesDe: '2026-03-09' }, { id: 2, dur: 0 }],
+      [{ tareaId: 2, dependeDeId: 1, lag: 0, tipo: 'SF' }],
+      '2026-03-02', entrega, F,
+    )
+    expect(r.tareas.get(2)!.earlyStart).toBe('2026-03-09')
+    expect(r.tareas.get(2)!.earlyFinish).toBe('2026-03-09')
+  })
+})
