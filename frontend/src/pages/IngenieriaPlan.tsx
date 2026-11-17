@@ -772,10 +772,11 @@ function VistaProyecto({ proyectos, all, plan, planLoading, sel, setSel, onEdit,
                         background: done ? '#d1fae5' : col + '26',
                         borderLeft: `3px solid ${done ? '#059669' : col}`,
                         boxShadow: t.critico ? 'inset 0 0 0 1.5px #3b4233' : undefined }}>
-                      {/* relleno de avance (se llena según el % completado) */}
+                      {/* relleno de avance (se llena según el % completado) — tinte oscuro para que
+                          se vea sobre cualquier barra (gris o de color) */}
                       {!geo.hito && t.avance_pct != null && t.avance_pct > 0 && (
-                        <div className="absolute inset-y-0 left-0 pointer-events-none border-r-2" title={`avance ${Math.round(t.avance_pct * 100)}%`}
-                          style={{ width: `${Math.min(100, t.avance_pct * 100)}%`, background: done ? '#34d399' : col + 'b3', borderColor: done ? '#047857' : col }} />
+                        <div className="absolute inset-y-0 left-0 pointer-events-none" title={`avance ${Math.round(t.avance_pct * 100)}%`}
+                          style={{ width: `${Math.min(100, t.avance_pct * 100)}%`, background: done ? '#34d399' : 'rgba(41,37,36,0.30)', borderRight: done ? '2px solid #047857' : '2px solid rgba(41,37,36,0.6)' }} />
                       )}
                       {done && <Check size={11} className="text-emerald-700 shrink-0 relative" />}
                       {!geo.hito && <span className="relative text-[9.5px] font-semibold text-stone-600 whitespace-nowrap">{fmtD(t.early_start)}→{fmtD(t.early_finish)}</span>}
