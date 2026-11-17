@@ -241,21 +241,25 @@ export async function avanceTareaHandler(req: Request, res: Response, next: Next
   if (!parsed.success || Object.keys(parsed.data).length === 0)
     return next(createError('Datos inválidos', 400))
   try {
-    // Orden de la ruta: no se puede COMPLETAR una tarea si sus predecesores FS que son
-    // trabajo del ingeniero todavía no están hechos. Cubre el pedido de Chali (field
-    // measurements DEBE estar completo antes de SD update) de forma general y segura
-    // (solo mira predecesores de rol ingeniería/field, no los auto de Compras/Producción).
+    // Orden de la ruta: no se puede COMPLETAR una tarea si sus predecesores que son
+    // trabajo del ingeniero todavía no están hechos. Frenan los tipos cuyo plan dice
+    // que la predecesora termina antes/junto: FS (fin→inicio) y FF (fin→fin, decisión
+    // Chali 2026-11-16). SS/SF NO frenan el cierre (acotan el inicio, no el fin).
+    // Las dependencias con candado abierto (ignorada_at) NO frenan — consistente con el
+    // escritorio. Solo mira predecesores de rol ingeniería/field (no los auto de Compras).
     if (parsed.data.estado === 'hecha' || parsed.data.fecha_fin_real) {
-      const { rows: pend } = await pool.query<{ nombre: string }>(
-        `SELECT dd.nombre
+      const { rows: pend } = await pool.query<{ nombre: string; tipo: string }>(
+        `SELECT dd.nombre, td.tipo
            FROM ing_tarea_deps td
            JOIN ing_tareas dd ON dd.id = td.depende_de_id
            JOIN ing_tarea_tipos dtt ON dtt.id = dd.tipo_id
-          WHERE td.tarea_id = $1 AND td.tipo = 'FS'
+          WHERE td.tarea_id = $1 AND td.tipo IN ('FS', 'FF')
+            AND td.ignorada_at IS NULL
             AND dtt.rol IN ('ingenieria', 'field')
             AND dd.estado NOT IN ('hecha', 'na')`, [id])
       if (pend.length) {
-        return next(createError(`Falta completar primero: ${pend.map((p) => p.nombre).join(', ')}`, 400))
+        const lista = pend.map((p) => (p.tipo === 'FF' ? `${p.nombre} (debe terminar junto)` : p.nombre)).join(', ')
+        return next(createError(`Falta completar primero: ${lista}`, 400))
       }
     }
     const ok = await reportarAvance(pool, id, parsed.data)
