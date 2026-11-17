@@ -121,6 +121,9 @@ export interface IngTareaPlan extends IngTarea {
   critico: boolean
   fila: number                  // número 1..N (el "#" de MS Project)
   predecesores_txt: string      // columna de predecesoras ("5FF+2d,3SS")
+  baseline_inicio: string | null
+  baseline_fin: string | null
+  variance_dias: number | null  // fin − línea base (días hábiles; >0 = atrasada)
 }
 export interface IngArista { tarea_id: number; depende_de_id: number; tipo: string; lag_dias: number; ignorada_at?: string | null }
 export interface EstadoDeposito {
@@ -330,6 +333,9 @@ export const ingenieriaService = {
   // Lanza con response 422 { message, errores } si el texto es inválido.
   setPredecesores: (tareaId: number, texto: string, dry_run = false) =>
     api.put<ApiResponse<SetPredecesoresResp>>(`/ingenieria/tareas/${tareaId}/predecesores`, { texto, dry_run }).then((r) => r.data),
+  // Fase 3: congelar la línea base del proyecto (histórico; la más reciente es la activa).
+  guardarBaseline: (ext: string, nota?: string) =>
+    api.post<ApiResponse<{ ok: boolean; baseline_id: number; n: number }>>(`/ingenieria/proyecto/${ext}/baseline`, { nota }).then((r) => r.data),
   // Cambiar el ingeniero propuesto (reasigna todas las tareas de ingeniería + re-ancla).
   reasignarIngeniero: (ext: string, ingeniero: string, dry_run = false) =>
     api.post<ApiResponse<ReasignarPreview>>(`/ingenieria/proyecto/${ext}/reasignar-ingeniero`, { ingeniero, dry_run }).then((r) => r.data),

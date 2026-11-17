@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useMemo, useState } from 'react'
-import { Users, Layers, ClipboardList, Plus, X, Loader2, Trash2, Gauge, Check, FolderKanban, Activity, AlertTriangle, Wallet, Lock, LockOpen, FlaskConical, Package, Wrench, CalendarClock, ChevronUp, ChevronDown, GripVertical, Split, MoreHorizontal } from 'lucide-react'
+import { Users, Layers, ClipboardList, Plus, X, Loader2, Trash2, Gauge, Check, FolderKanban, Activity, AlertTriangle, Wallet, Lock, LockOpen, FlaskConical, Package, Wrench, CalendarClock, ChevronUp, ChevronDown, GripVertical, Split, MoreHorizontal, Flag } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { ingenieriaService, type IngProyecto, type IngTarea, type TareaInput, type IngPlan, type IngTareaPlan, type IngArista, type IngCarga, type IngTareaCelda, type InstalacionDetalle } from '@/services/ingenieria'
 import MapaEtapas from '@/components/modules/ingenieria/MapaEtapas'
@@ -390,6 +390,16 @@ function VistaProyecto({ proyectos, all, plan, planLoading, sel, setSel, onEdit,
   const [dropIdx, setDropIdx] = useState<number | null>(null)   // índice de inserción en taskOrder (0..N)
   const [dndBusy, setDndBusy] = useState(false)
   const [cronoOpen, setCronoOpen] = useState(false)
+  const [baseBusy, setBaseBusy] = useState(false)
+  // Congela la línea base del proyecto (histórico). Después aparece como barra gris en el Gantt
+  // y alimenta la Variación. Se puede re-guardar cuando el scheduler quiera.
+  async function guardarLineaBase() {
+    if (!sel) return
+    setBaseBusy(true)
+    try { const r = await ingenieriaService.guardarBaseline(sel); toast.success(`Línea base guardada (${r.data.n} tareas)`); await onRefresh() }
+    catch (e: any) { toast.error(e?.response?.data?.message || 'No se pudo guardar la línea base') }
+    finally { setBaseBusy(false) }
+  }
 
   // Soltar = reordenar la FILA (visual), SIN tocar fechas ni dependencias. Después
   // se abre el modal de la tarea para que, si se quiere, se la secuencie de verdad
@@ -483,7 +493,9 @@ function VistaProyecto({ proyectos, all, plan, planLoading, sel, setSel, onEdit,
         <span className="text-xs text-stone-400 inline-flex items-center gap-1"><Users size={13} /> {ingenieros.length ? ingenieros.join(', ') : 'sin responsables'}</span>
         {/* Cambiar ingeniero en cualquier etapa (reasigna todo + recalcula vs la entrega fija). */}
         <CambiarIngeniero proyectoExt={sel} propuesto={propuesto} onDone={onRefresh} label="Cambiar ingeniero" />
-        <button onClick={() => setCronoOpen(true)} className="ml-auto inline-flex items-center gap-1.5 rounded-lg border border-forest-200 text-forest-700 hover:bg-forest-50 text-sm font-semibold px-3 py-1.5"><CalendarClock size={15} /> Cronograma cliente</button>
+        <button onClick={guardarLineaBase} disabled={baseBusy || !plan} title="Congela una foto del plan (inicio/fin de cada tarea). Aparece como barra gris en el Gantt y alimenta la Variación."
+          className="ml-auto inline-flex items-center gap-1.5 rounded-lg border border-stone-300 text-stone-600 hover:bg-stone-50 disabled:opacity-50 text-sm font-semibold px-3 py-1.5"><Flag size={15} /> {baseBusy ? 'Guardando…' : 'Guardar línea base'}</button>
+        <button onClick={() => setCronoOpen(true)} className="inline-flex items-center gap-1.5 rounded-lg border border-forest-200 text-forest-700 hover:bg-forest-50 text-sm font-semibold px-3 py-1.5"><CalendarClock size={15} /> Cronograma cliente</button>
         <button onClick={() => onEdit('new')} className="inline-flex items-center gap-1.5 rounded-lg bg-forest-600 hover:bg-forest-700 text-white text-sm font-semibold px-3 py-1.5"><Plus size={15} /> Nueva tarea</button>
       </div>
 
@@ -672,7 +684,10 @@ function VistaProyecto({ proyectos, all, plan, planLoading, sel, setSel, onEdit,
                         <div className="px-0.5" title='Escribí "5FF+2d,3SS"'><PredCell t={t} onRefresh={onRefresh} /></div>
                         {/* Inicio / Fin (calculadas) */}
                         <span className="px-1 text-[11px] text-stone-500 tabular-nums truncate" title="Calculada por el sistema">{fmtD(t.early_start || t.fecha_inicio)}</span>
-                        <span className="px-1 text-[11px] text-stone-500 tabular-nums truncate" title="Calculada por el sistema">{fmtD(t.early_finish || t.fecha_fin)}</span>
+                        <span className="px-1 text-[11px] text-stone-500 tabular-nums truncate flex items-center gap-1" title="Fin calculado · variación vs línea base">
+                          {fmtD(t.early_finish || t.fecha_fin)}
+                          {t.variance_dias != null && t.variance_dias !== 0 && <span className={`text-[9px] font-bold shrink-0 ${t.variance_dias > 0 ? 'text-rose-600' : 'text-emerald-600'}`} title="Variación vs línea base">{t.variance_dias > 0 ? '+' : ''}{t.variance_dias}d</span>}
+                        </span>
                         {/* Estado + avanzado (modal) */}
                         <div className="px-0.5 flex items-center gap-1">
                           <span className={`shrink-0 rounded px-1 py-0.5 text-[9px] font-bold ${est.c}`}>{est.t}</span>
@@ -714,6 +729,12 @@ function VistaProyecto({ proyectos, all, plan, planLoading, sel, setSel, onEdit,
                 const done = t.estado === 'hecha'
                 return (
                   <div key={i} className="absolute" style={{ top: r.y, height: ROW_H, left: 0, right: 0 }}>
+                    {/* línea base (inamovible) — barra fina gris bajo la barra de la tarea */}
+                    {t.baseline_inicio && t.baseline_fin && (() => {
+                      const bx = g.pct(t.baseline_inicio!); const bw = Math.max(g.pct(t.baseline_fin!) - bx, minW)
+                      return <div className="absolute rounded-sm" title={`Línea base: ${fmtD(t.baseline_inicio)} → ${fmtD(t.baseline_fin)}`}
+                        style={{ top: (ROW_H - BAR_H) / 2 + BAR_H - 1, height: 3, left: `${bx}%`, width: `calc(${bw}% - 1px)`, background: '#a8a29e' }} />
+                    })()}
                     {/* holgura sombreada tras la barra */}
                     {geo.slackW > 0.3 && (
                       <div className="absolute rounded-r-sm" title={`holgura ${t.holgura_dias}d`}
