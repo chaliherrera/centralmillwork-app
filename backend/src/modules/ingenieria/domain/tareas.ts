@@ -349,9 +349,10 @@ export async function getPlanProyecto(runner: QueryRunner, proyectoExt: string):
     predsPorTarea.get(d.tarea_id)!.push({ depende_de_id: d.depende_de_id, tipo: normalizarTipoDep(d.tipo), lag: d.lag_dias })
   }
   const txtDe = (id: number) => formatearPredecesores(predsPorTarea.get(id) ?? [], filaPorId)
-  // Avance efectivo (0..1) MIXTO: auto desde los módulos/estado, o manual del scheduler.
+  // Avance efectivo (0..1), SIEMPRE REAL (nunca tipeado a mano):
   //  · 'hecha' = 100%, 'na' = s/d. material_proc = recibidos/total (Compras). installation
-  //    = instalados/total (Campo). long_leads = 100% si ya hay 1ª OC. resto = avance_pct manual.
+  //    = instalados/total (Campo). long_leads = 100% si ya hay 1ª OC.
+  //  · Diseño / resto = BINARIO por estado: 0% hasta que el ingeniero la completa (→ 100%).
   const avanceDe = (t: typeof tareas[number]): { pct: number | null; auto: boolean } => {
     if (t.estado === 'na') return { pct: null, auto: true }
     if (t.estado === 'hecha') return { pct: 1, auto: true }
@@ -359,7 +360,7 @@ export async function getPlanProyecto(runner: QueryRunner, proyectoExt: string):
     if (k === 'material_proc' && compras.hay && compras.n_materiales > 0) return { pct: compras.pct_disponible, auto: true }
     if (k === 'installation' && instalacion.hay && instalacion.total > 0) return { pct: instalacion.pct, auto: true }
     if (k === 'long_leads' && compras.hay) return { pct: compras.fecha_primera_oc ? 1 : 0, auto: true }
-    return { pct: t.avance_pct != null ? +t.avance_pct : 0, auto: false }
+    return { pct: 0, auto: true }
   }
   const extra = (t: typeof tareas[number]) => {
     const av = avanceDe(t)

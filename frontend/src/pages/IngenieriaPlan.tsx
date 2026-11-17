@@ -363,32 +363,6 @@ function InlineFecha({ t, campo, value, pinned, onRefresh }: { t: IngTareaPlan; 
     </button>
   )
 }
-// Celda de AVANCE: editable en tareas manuales; en las automáticas (Compras/Instalación/
-// hechas) muestra el % que calcula el sistema, en gris y solo lectura.
-function InlineAvance({ t, onRefresh }: { t: IngTareaPlan; onRefresh: () => void }) {
-  const pct = t.avance_pct != null ? Math.round(t.avance_pct * 100) : 0
-  const [v, setV] = useState(String(pct)); const [busy, setBusy] = useState(false)
-  useEffect(() => setV(String(t.avance_pct != null ? Math.round(t.avance_pct * 100) : 0)), [t.avance_pct])
-  const commit = async () => {
-    const n = Math.max(0, Math.min(100, Math.round(Number(v) || 0)))
-    if (n / 100 === (t.avance_pct ?? 0)) { setV(String(pct)); return }
-    setBusy(true)
-    try { await ingenieriaService.actualizarTarea(t.id, { avance_pct: n / 100 }); await onRefresh() }
-    catch (e: any) { toast.error(e?.response?.data?.message || 'No se pudo guardar el avance'); setV(String(pct)) }
-    finally { setBusy(false) }
-  }
-  if (t.avance_auto) return (
-    <span className="px-1 text-[11px] text-stone-400 tabular-nums" title="Automático: lo calcula el sistema (Compras / Instalación / hechas)">
-      {t.estado === 'na' ? '—' : pct + '%'}
-    </span>
-  )
-  return (
-    <input type="number" min="0" max="100" value={v} disabled={busy} onClick={stopEv}
-      onChange={(e) => setV(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }}
-      onBlur={commit} title="% de avance (manual) — escribí 0 a 100"
-      className={CELL_CLS + ' text-right tabular-nums text-stone-700'} />
-  )
-}
 function InlineResp({ t, options, color, onRefresh }: { t: IngTareaPlan; options: string[]; color?: string; onRefresh: () => void }) {
   const [busy, setBusy] = useState(false)
   return (
@@ -482,7 +456,7 @@ function VistaProyecto({ proyectos, all, plan, planLoading, sel, setSel, onEdit,
   // GUT = ancho de la TABLA de columnas (izquierda). GRID = sus columnas (estilo MS Project):
   // [arrastre][#][Tarea][Resp][%][Días][Predec][Inicio][Fin][Estado/avanzado]
   const GUT = 760, ROW_H = 40, PH_H = 26, BAR_H = 22
-  const GRID = '16px 26px minmax(130px,1fr) 104px 42px 44px 54px 116px 62px 62px 96px'
+  const GRID = '16px 26px minmax(130px,1fr) 104px 42px 44px 116px 62px 62px 96px'
   const todosIng = useMemo(() => [...new Set(all.map((t) => t.asignado_nombre).filter(Boolean) as string[])].sort((a, b) => a.localeCompare(b)), [all])
   const g = useMemo(() => {
     // fases en orden, tareas por fecha temprana
@@ -681,7 +655,7 @@ function VistaProyecto({ proyectos, all, plan, planLoading, sel, setSel, onEdit,
           <div className="flex items-stretch border-b border-stone-100 bg-stone-50/60">
             <div className="shrink-0 grid items-center py-2 text-[10px] uppercase tracking-wide text-stone-400 font-semibold" style={{ width: GUT, gridTemplateColumns: GRID }}>
               <span /><span className="text-right pr-1">#</span><span className="px-1">Tarea</span>
-              <span className="px-1">Resp.</span><span className="px-1 text-right">%</span><span className="px-1 text-right">Días</span><span className="px-1 text-right">Av.</span>
+              <span className="px-1">Resp.</span><span className="px-1 text-right">%</span><span className="px-1 text-right">Días</span>
               <span className="px-1">Predec.</span><span className="px-1">Inicio</span><span className="px-1">Fin</span><span className="px-1">Estado</span>
             </div>
             <div className="relative flex-1 h-7">
@@ -730,8 +704,6 @@ function VistaProyecto({ proyectos, all, plan, planLoading, sel, setSel, onEdit,
                         <div className="px-0.5"><InlineNum t={t} field="allocation_pct" value={t.allocation_pct} pct onRefresh={onRefresh} /></div>
                         {/* Días */}
                         <div className="px-0.5"><InlineNum t={t} field="dur_dias" value={t.dur_dias} onRefresh={onRefresh} /></div>
-                        {/* Avance (manual editable / automático solo lectura) */}
-                        <div className="px-0.5"><InlineAvance t={t} onRefresh={onRefresh} /></div>
                         {/* Predecesoras (texto estilo MS Project) */}
                         <div className="px-0.5" title='Escribí "5FF+2d,3SS"'><PredCell t={t} onRefresh={onRefresh} /></div>
                         {/* Inicio / Fin (click para FIJAR = restricción; variación en Fin) */}
@@ -1045,7 +1017,6 @@ function EditModal({ tarea, proyecto, engineers, planTareas, aristas, onClose, o
     proyecto_ext: tarea?.proyecto_ext ?? proyecto, nombre: tarea?.nombre ?? '', asignado_nombre: tarea?.asignado_nombre ?? '',
     allocation_pct: tarea?.allocation_pct ?? 1, dur_dias: tarea?.dur_dias ?? 1,
     fecha_inicio: tarea?.fecha_inicio ?? '', fecha_fin: tarea?.fecha_fin ?? '', estado: tarea?.estado ?? 'pendiente', comentario: tarea?.comentario ?? '',
-    avance_pct: tarea?.avance_pct ?? null,
   })
   // Responsable por desplegable (evita nombres partidos por tipeo). "Otro…" abre texto libre
   // solo para dar de alta un ingeniero genuinamente nuevo.
@@ -1185,7 +1156,6 @@ function EditModal({ tarea, proyecto, engineers, planTareas, aristas, onClose, o
           )}
           <div className="grid grid-cols-2 gap-3">
             <L t="% de asignación"><input type="number" step="0.1" min="0" value={f.allocation_pct} onChange={(e) => set('allocation_pct', Number(e.target.value))} className="inp" /></L>
-            <L t="% de avance (manual)"><input type="number" step="5" min="0" max="100" value={f.avance_pct != null ? Math.round(f.avance_pct * 100) : ''} onChange={(e) => set('avance_pct', e.target.value === '' ? null : Math.max(0, Math.min(100, Number(e.target.value))) / 100)} className="inp" placeholder="auto en Compras / Instalación / hechas" /></L>
             <L t="Duración (días)"><input type="number" step="0.5" min="0" value={f.dur_dias} onChange={(e) => set('dur_dias', Number(e.target.value))} className="inp" /></L>
           </div>
           {/* Las fechas las calcula el CPM (duración + predecesores + entrega fija). Solo lectura:
