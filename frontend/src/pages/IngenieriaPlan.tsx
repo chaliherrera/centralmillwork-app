@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useMemo, useState } from 'react'
-import { Users, Layers, ClipboardList, Plus, X, Loader2, Trash2, Gauge, Check, FolderKanban, Activity, AlertTriangle, Wallet, Lock, LockOpen, FlaskConical, Package, Wrench, CalendarClock, ChevronUp, ChevronDown, GripVertical, Split } from 'lucide-react'
+import { Users, Layers, ClipboardList, Plus, X, Loader2, Trash2, Gauge, Check, FolderKanban, Activity, AlertTriangle, Wallet, Lock, LockOpen, FlaskConical, Package, Wrench, CalendarClock, ChevronUp, ChevronDown, GripVertical, Split, MoreHorizontal } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { ingenieriaService, type IngProyecto, type IngTarea, type TareaInput, type IngPlan, type IngTareaPlan, type IngArista, type IngCarga, type IngTareaCelda, type InstalacionDetalle } from '@/services/ingenieria'
 import MapaEtapas from '@/components/modules/ingenieria/MapaEtapas'
@@ -311,43 +311,45 @@ function PredCell({ t, onRefresh }: { t: IngTareaPlan; onRefresh: () => void }) 
   )
 }
 
-function GrillaTabla({ rows, onEdit, engColor, onRefresh }: { rows: any[]; onEdit: (t: IngTarea | 'new') => void; engColor: Map<string, string>; onRefresh: () => void }) {
-  const Th = ({ children, cls = '' }: { children: React.ReactNode; cls?: string }) => <th className={`px-2 py-2 font-semibold ${cls}`}>{children}</th>
+// Editores de celda INLINE para la grilla integrada (edita y guarda sin modal).
+const stopEv = (e: any) => e.stopPropagation()
+const CELL_CLS = 'w-full bg-transparent border border-transparent hover:border-stone-300 focus:border-forest-400 rounded px-1 py-0.5 text-[12px] outline-none disabled:opacity-50'
+async function commitTarea(id: number, payload: Record<string, unknown>, onRefresh: () => void) {
+  try { await ingenieriaService.actualizarTarea(id, payload); await onRefresh() }
+  catch (e: any) { toast.error(e?.response?.data?.message || 'No se pudo guardar') }
+}
+function InlineText({ t, onRefresh }: { t: IngTareaPlan; onRefresh: () => void }) {
+  const [v, setV] = useState(t.nombre); const [busy, setBusy] = useState(false)
+  useEffect(() => setV(t.nombre), [t.nombre])
+  const commit = async () => { const n = v.trim(); if (!n || n === t.nombre) { setV(t.nombre); return } setBusy(true); await commitTarea(t.id, { nombre: n }, onRefresh); setBusy(false) }
+  return <input value={v} disabled={busy} onClick={stopEv} onChange={(e) => setV(e.target.value)}
+    onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); if (e.key === 'Escape') { setV(t.nombre); (e.target as HTMLInputElement).blur() } }}
+    onBlur={commit} className={CELL_CLS + ' text-stone-800 font-medium truncate'} />
+}
+function InlineNum({ t, field, value, pct, onRefresh }: { t: IngTareaPlan; field: 'allocation_pct' | 'dur_dias'; value: number; pct?: boolean; onRefresh: () => void }) {
+  const show = () => String(pct ? Math.round(value * 100) : value)
+  const [v, setV] = useState(show()); const [busy, setBusy] = useState(false)
+  useEffect(() => setV(show()), [value])   // eslint-disable-line react-hooks/exhaustive-deps
+  const commit = async () => {
+    const num = Number(v); if (!Number.isFinite(num)) { setV(show()); return }
+    const val = pct ? num / 100 : num; if (val === value) return
+    setBusy(true); await commitTarea(t.id, { [field]: val }, onRefresh); setBusy(false)
+  }
+  return <input type="number" value={v} disabled={busy} onClick={stopEv} onChange={(e) => setV(e.target.value)}
+    onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }}
+    onBlur={commit} className={CELL_CLS + ' text-right tabular-nums text-stone-700'} />
+}
+function InlineResp({ t, options, color, onRefresh }: { t: IngTareaPlan; options: string[]; color?: string; onRefresh: () => void }) {
+  const [busy, setBusy] = useState(false)
   return (
-    <div className="rounded-2xl border border-stone-200 bg-white overflow-x-auto">
-      <table className="w-full text-sm border-collapse min-w-[900px]">
-        <thead>
-          <tr className="bg-stone-50/60 text-[10.5px] uppercase tracking-wide text-stone-400 border-b border-stone-100">
-            <Th cls="text-right w-10">#</Th><Th cls="text-left">Tarea</Th><Th cls="text-left">Responsable</Th>
-            <Th cls="text-right w-12">%</Th><Th cls="text-right w-14">Días</Th><Th cls="text-left w-40">Predecesoras</Th>
-            <Th cls="text-left w-20">Inicio</Th><Th cls="text-left w-20">Fin</Th><Th cls="text-left w-24">Estado</Th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((r: any, i: number) => r.type === 'phase'
-            ? <tr key={i} className="bg-forest-50/40"><td colSpan={9} className="px-3 py-1.5 text-[11px] font-bold text-forest-700 uppercase tracking-wide">{r.label} <span className="text-forest-400 font-normal normal-case">· {r.count}</span></td></tr>
-            : (() => {
-                const t = r.tarea as IngTareaPlan
-                const est = EST_GRILLA[t.estado] ?? { t: t.estado, c: 'bg-stone-100 text-stone-500' }
-                return (
-                  <tr key={i} onClick={() => onEdit(t)} className="border-t border-stone-50 hover:bg-forest-50/30 cursor-pointer">
-                    <td className="text-right px-2 py-1.5 text-[11px] text-stone-400 tabular-nums">{t.fila}</td>
-                    <td className="px-2 py-1.5 text-stone-800">{t.nombre}</td>
-                    <td className="px-2 py-1.5 text-stone-600">{t.asignado_nombre
-                      ? <span className="inline-flex items-center gap-1.5"><span className="w-2 h-2 rounded-full shrink-0" style={{ background: engColor.get(t.asignado_nombre) }} />{t.asignado_nombre}</span>
-                      : <span className="text-stone-300">—</span>}</td>
-                    <td className={`text-right px-2 py-1.5 tabular-nums ${t.allocation_pct > 1 ? 'text-rose-600 font-semibold' : 'text-stone-600'}`}>{Math.round(t.allocation_pct * 100)}%</td>
-                    <td className="text-right px-2 py-1.5 tabular-nums text-stone-600">{t.dur_dias}</td>
-                    <td className="px-1 py-1" onClick={(e) => e.stopPropagation()}><PredCell t={t} onRefresh={onRefresh} /></td>
-                    <td className="px-2 py-1.5 text-stone-600 tabular-nums">{fmtD(t.early_start || t.fecha_inicio)}</td>
-                    <td className="px-2 py-1.5 text-stone-600 tabular-nums">{fmtD(t.early_finish || t.fecha_fin)}</td>
-                    <td className="px-2 py-1.5"><span className={`inline-flex rounded px-1.5 py-0.5 text-[10px] font-bold ${est.c}`}>{est.t}</span></td>
-                  </tr>
-                )
-              })()
-          )}
-        </tbody>
-      </table>
+    <div className="flex items-center gap-1 min-w-0">
+      <span className="w-2 h-2 rounded-full shrink-0" style={{ background: t.asignado_nombre ? color : '#d6d3d1' }} />
+      <select value={t.asignado_nombre ?? ''} disabled={busy} onClick={stopEv}
+        onChange={async (e) => { setBusy(true); await commitTarea(t.id, { asignado_nombre: e.target.value || null }, onRefresh); setBusy(false) }}
+        className={CELL_CLS + ' text-stone-700'}>
+        <option value="">— sin asignar —</option>
+        {options.map((o) => <option key={o} value={o}>{o}</option>)}
+      </select>
     </div>
   )
 }
@@ -388,7 +390,6 @@ function VistaProyecto({ proyectos, all, plan, planLoading, sel, setSel, onEdit,
   const [dropIdx, setDropIdx] = useState<number | null>(null)   // índice de inserción en taskOrder (0..N)
   const [dndBusy, setDndBusy] = useState(false)
   const [cronoOpen, setCronoOpen] = useState(false)
-  const [vista, setVista] = useState<'gantt' | 'grilla'>('gantt')   // Gantt (barras) o Grilla (tabla tipo MS Project)
 
   // Soltar = reordenar la FILA (visual), SIN tocar fechas ni dependencias. Después
   // se abre el modal de la tarea para que, si se quiere, se la secuencie de verdad
@@ -418,7 +419,11 @@ function VistaProyecto({ proyectos, all, plan, planLoading, sel, setSel, onEdit,
   const valida = useMemo(() => { const con = tareas.filter((t) => t.early_finish && t.fecha_fin); return { match: con.filter((t) => t.early_finish === t.fecha_fin).length, total: con.length } }, [tareas])
 
   // ── Geometría del Gantt (usa las fechas tempranas del CPM + la entrega fija) ──
-  const GUT = 320, ROW_H = 40, PH_H = 26, BAR_H = 22
+  // GUT = ancho de la TABLA de columnas (izquierda). GRID = sus columnas (estilo MS Project):
+  // [arrastre][#][Tarea][Resp][%][Días][Predec][Inicio][Fin][Estado/avanzado]
+  const GUT = 760, ROW_H = 40, PH_H = 26, BAR_H = 22
+  const GRID = '16px 26px minmax(130px,1fr) 104px 42px 44px 116px 62px 62px 96px'
+  const todosIng = useMemo(() => [...new Set(all.map((t) => t.asignado_nombre).filter(Boolean) as string[])].sort((a, b) => a.localeCompare(b)), [all])
   const g = useMemo(() => {
     // fases en orden, tareas por fecha temprana
     const fasesMap = new Map<string, typeof tareas>()
@@ -607,22 +612,16 @@ function VistaProyecto({ proyectos, all, plan, planLoading, sel, setSel, onEdit,
         )
       })()}
 
-      {/* Toggle Gantt (barras) ⇄ Grilla (tabla tipo MS Project) */}
-      <div className="inline-flex rounded-xl border border-stone-200 bg-white p-1 text-sm">
-        <button onClick={() => setVista('gantt')} className={`rounded-lg px-3 py-1.5 font-semibold ${vista === 'gantt' ? 'bg-forest-600 text-white' : 'text-stone-500 hover:text-stone-800'}`}>Gantt</button>
-        <button onClick={() => setVista('grilla')} className={`rounded-lg px-3 py-1.5 font-semibold ${vista === 'grilla' ? 'bg-forest-600 text-white' : 'text-stone-500 hover:text-stone-800'}`}>Grilla</button>
-      </div>
-
-      {vista === 'grilla' && (plan
-        ? <GrillaTabla rows={g.rows} onEdit={onEdit} engColor={engColor} onRefresh={onRefresh} />
-        : <div className="rounded-2xl border border-stone-200 bg-white py-16 text-center text-stone-400">{loadingPlan ? <Loader2 className="animate-spin inline" size={22} /> : 'Elegí un proyecto'}</div>)}
-
-      <div className={`rounded-2xl border border-stone-200 bg-white overflow-hidden ${vista === 'grilla' ? 'hidden' : ''}`}>
+      <div className="rounded-2xl border border-stone-200 bg-white overflow-hidden">
         {loadingPlan && !plan ? <div className="py-16 text-center text-stone-400"><Loader2 className="animate-spin inline" size={22} /></div> : (
-        <div className="overflow-x-auto"><div className="min-w-[960px]">
+        <div className="overflow-x-auto"><div style={{ minWidth: GUT + 440 }}>
           {/* header: gutter + meses + marca de entrega */}
           <div className="flex items-stretch border-b border-stone-100 bg-stone-50/60">
-            <div className="shrink-0 px-4 py-2 text-[10.5px] uppercase tracking-wide text-stone-400 font-semibold" style={{ width: GUT }}>Tarea · responsable · holgura</div>
+            <div className="shrink-0 grid items-center py-2 text-[10px] uppercase tracking-wide text-stone-400 font-semibold" style={{ width: GUT, gridTemplateColumns: GRID }}>
+              <span /><span className="text-right pr-1">#</span><span className="px-1">Tarea</span>
+              <span className="px-1">Resp.</span><span className="px-1 text-right">%</span><span className="px-1 text-right">Días</span>
+              <span className="px-1">Predec.</span><span className="px-1">Inicio</span><span className="px-1">Fin</span><span className="px-1">Estado</span>
+            </div>
             <div className="relative flex-1 h-7">
               {g.months.map((m, i) => <div key={i} className="absolute top-0 bottom-0 border-l border-stone-200 flex items-center pl-1.5 text-[10.5px] font-semibold text-forest-700" style={{ left: `${m.startPct}%` }}>{m.label}</div>)}
               {g.hoyPct !== null && <div className="absolute top-0 bottom-0 border-l-2 border-rose-400 z-10" style={{ left: `${g.hoyPct}%` }}><span className="absolute -top-0 left-1 text-[9px] font-bold text-rose-500">hoy</span></div>}
@@ -637,6 +636,7 @@ function VistaProyecto({ proyectos, all, plan, planLoading, sel, setSel, onEdit,
               {g.rows.map((r: any, i: number) => r.type === 'phase'
                 ? <div key={i} className="bg-forest-50/40 px-4 text-[11px] font-bold text-forest-700 uppercase tracking-wide flex items-center" style={{ height: PH_H }}>{r.label} <span className="text-forest-400 font-normal normal-case ml-1">· {r.count}</span></div>
                 : (() => { const t = r.tarea as IngTareaPlan; const holg = t.holgura_dias
+                    const est = EST_GRILLA[t.estado] ?? { t: t.estado, c: 'bg-stone-100 text-stone-500' }
                     const vi = taskOrder.findIndex((x) => x.id === t.id); const arrastrable = t.estado !== 'hecha' && t.estado !== 'na'
                     return (
                       <div key={i}
@@ -645,37 +645,38 @@ function VistaProyecto({ proyectos, all, plan, planLoading, sel, setSel, onEdit,
                         onDragEnd={() => { setDragId(null); setDropIdx(null) }}
                         onDragOver={(e) => { if (dragId == null || dragId === t.id) return; e.preventDefault(); const rc = e.currentTarget.getBoundingClientRect(); setDropIdx(e.clientY > rc.top + rc.height / 2 ? vi + 1 : vi) }}
                         onDrop={(e) => { e.preventDefault(); if (dropIdx != null) soltarEn(dropIdx) }}
-                        onClick={() => onEdit(t)}
-                        className={`group px-4 border-b border-stone-50 border-r border-stone-100 hover:bg-forest-50/30 cursor-pointer flex flex-col justify-center ${dragId === t.id ? 'opacity-40' : ''} ${dropIdx === vi ? 'shadow-[inset_0_2px_0_0_#16a34a]' : ''} ${dropIdx === vi + 1 ? 'shadow-[inset_0_-2px_0_0_#16a34a]' : ''}`}
-                        style={{ height: ROW_H }}>
-                        <div className="flex items-center gap-1.5">
-                          {arrastrable && <span title="Arrastrá para reordenar" className="shrink-0 -ml-2 cursor-grab"><GripVertical size={12} className="text-stone-300 group-hover:text-stone-500" /></span>}
-                          {difExcel(t) && <span className="shrink-0 flex" title={`No coincide con el Excel\nExcel: ${fmtD(t.fecha_fin)} · app: ${fmtD(t.early_finish)}\n(revisá dependencias)`}><AlertTriangle size={12} className="text-amber-500" /></span>}
-                          {t.reprogramacion_pedida && <span className="shrink-0 flex" title="El ingeniero dejó un aviso"><CalendarClock size={12} className="text-amber-600" /></span>}
-                          <span className="shrink-0 w-5 text-right text-[10px] text-stone-300 tabular-nums font-semibold" title="Número de fila (para predecesoras)">{t.fila}</span>
-                          <div className="text-[12.5px] text-stone-800 truncate flex-1">{t.nombre}</div>
-                          {t.decision && <span className={`shrink-0 rounded px-1 text-[9px] font-bold ${t.decision === 'aprobado' ? 'bg-emerald-100 text-emerald-700' : t.decision === 'rechazado' ? 'bg-rose-100 text-rose-700' : 'bg-amber-100 text-amber-700'}`} title={`Cliente: ${t.decision}`}>{t.decision === 'aprobado' ? 'APROB' : t.decision === 'rechazado' ? 'RECH' : 'COMENT'}</span>}
-                          {t.tipo_clave === 'long_leads' && (plan?.compras?.fecha_primera_oc
-                            ? <span className="shrink-0 rounded px-1 text-[9px] font-bold bg-emerald-100 text-emerald-700" title={`Long leads ordenados (1ª OC en Compras) el ${fmtD(plan.compras.fecha_primera_oc)}`}>ORDENADO</span>
-                            : <span className="shrink-0 rounded px-1 text-[9px] font-bold bg-stone-100 text-stone-500" title="Compras aún no emitió ninguna OC">sin OC</span>)}
-                          {t.tipo_clave === 'samples' && (plan?.muestras?.hay
-                            ? <span className={`shrink-0 rounded px-1 text-[9px] font-bold ${plan.muestras.todas_aprobadas ? 'bg-emerald-100 text-emerald-700' : plan.muestras.rechazadas > 0 ? 'bg-rose-100 text-rose-700' : 'bg-sky-100 text-sky-700'}`} title={`Muestras: ${plan.muestras.aprobadas}/${plan.muestras.total} aprobadas (módulo de Muestras)`}>{plan.muestras.aprobadas}/{plan.muestras.total}</span>
-                            : <span className="shrink-0 rounded px-1 text-[9px] font-bold bg-stone-100 text-stone-500" title="Sin muestras solicitadas en el módulo">sin muestras</span>)}
-                          {t.tipo_clave === 'material_proc' && (plan?.compras?.hay
-                            ? <span className={`shrink-0 rounded px-1 text-[9px] font-bold ${(plan.compras.recibidos + plan.compras.en_stock) >= plan.compras.n_materiales ? 'bg-emerald-100 text-emerald-700' : 'bg-sky-100 text-sky-700'}`} title={`Compras: ${plan.compras.recibidos}/${plan.compras.n_materiales} recibidos · ${plan.compras.en_oc} en OC`}>{Math.round(plan.compras.pct_disponible * 100)}%</span>
-                            : <span className="shrink-0 rounded px-1 text-[9px] font-bold bg-stone-100 text-stone-500" title="Sin MTO importado en Compras">sin MTO</span>)}
-                          {holg !== null && (
-                            <span className={`text-[10px] font-bold rounded px-1 py-0.5 tabular-nums shrink-0 ${t.critico ? 'bg-forest-100 text-forest-700' : holg < 0 ? 'bg-rose-100 text-rose-700' : 'bg-stone-100 text-stone-500'}`}>
-                              {t.critico ? 'crítico' : (holg < 0 ? holg : '+' + holg) + 'd'}
-                            </span>
-                          )}
+                        className={`group grid items-center border-b border-stone-50 border-r border-stone-100 hover:bg-forest-50/30 ${dragId === t.id ? 'opacity-40' : ''} ${dropIdx === vi ? 'shadow-[inset_0_2px_0_0_#16a34a]' : ''} ${dropIdx === vi + 1 ? 'shadow-[inset_0_-2px_0_0_#16a34a]' : ''}`}
+                        style={{ height: ROW_H, gridTemplateColumns: GRID }}>
+                        {/* arrastre */}
+                        <span className="flex justify-center cursor-grab" title="Arrastrá para reordenar">{arrastrable && <GripVertical size={12} className="text-stone-300 group-hover:text-stone-500" />}</span>
+                        {/* # */}
+                        <span className="text-right pr-1 text-[10px] text-stone-400 tabular-nums">{t.fila}</span>
+                        {/* Tarea (editable) + avisos/badges compactos */}
+                        <div className="min-w-0 flex items-center gap-1 overflow-hidden">
+                          {difExcel(t) && <span className="shrink-0 flex" title={`No coincide con el Excel\nExcel: ${fmtD(t.fecha_fin)} · app: ${fmtD(t.early_finish)}`}><AlertTriangle size={11} className="text-amber-500" /></span>}
+                          {t.reprogramacion_pedida && <span className="shrink-0 flex" title="El ingeniero dejó un aviso"><CalendarClock size={11} className="text-amber-600" /></span>}
+                          <div className="min-w-0 flex-1"><InlineText t={t} onRefresh={onRefresh} /></div>
+                          {t.decision && <span className={`shrink-0 rounded px-1 text-[9px] font-bold ${t.decision === 'aprobado' ? 'bg-emerald-100 text-emerald-700' : t.decision === 'rechazado' ? 'bg-rose-100 text-rose-700' : 'bg-amber-100 text-amber-700'}`} title={`Cliente: ${t.decision}`}>{t.decision === 'aprobado' ? 'APROB' : t.decision === 'rechazado' ? 'RECH' : 'COM'}</span>}
+                          {t.tipo_clave === 'long_leads' && plan?.compras?.fecha_primera_oc && <span className="shrink-0 rounded px-1 text-[9px] font-bold bg-emerald-100 text-emerald-700" title={`Long leads ordenados ${fmtD(plan.compras.fecha_primera_oc)}`}>OC</span>}
+                          {t.tipo_clave === 'samples' && plan?.muestras?.hay && <span className={`shrink-0 rounded px-1 text-[9px] font-bold ${plan.muestras.todas_aprobadas ? 'bg-emerald-100 text-emerald-700' : plan.muestras.rechazadas > 0 ? 'bg-rose-100 text-rose-700' : 'bg-sky-100 text-sky-700'}`} title="Muestras aprobadas / total">{plan.muestras.aprobadas}/{plan.muestras.total}</span>}
+                          {t.tipo_clave === 'material_proc' && plan?.compras?.hay && <span className={`shrink-0 rounded px-1 text-[9px] font-bold ${(plan.compras.recibidos + plan.compras.en_stock) >= plan.compras.n_materiales ? 'bg-emerald-100 text-emerald-700' : 'bg-sky-100 text-sky-700'}`} title="Compras: recibidos / total">{Math.round(plan.compras.pct_disponible * 100)}%</span>}
+                          {holg !== null && <span className={`shrink-0 text-[9px] font-bold rounded px-1 tabular-nums ${t.critico ? 'bg-forest-100 text-forest-700' : holg < 0 ? 'bg-rose-100 text-rose-700' : 'bg-stone-100 text-stone-500'}`} title="Holgura">{t.critico ? 'crít' : (holg < 0 ? holg : '+' + holg) + 'd'}</span>}
                         </div>
-                        <div className="text-[10.5px] text-stone-400 truncate flex items-center gap-1">
-                          {t.asignado_nombre
-                            ? <><span className="w-2 h-2 rounded-full shrink-0" style={{ background: engColor.get(t.asignado_nombre) }} /><span className="font-semibold text-stone-600">{t.asignado_nombre}</span></>
-                            : <span className="text-stone-300">sin responsable</span>}
-                          <span>· <span className={t.allocation_pct > 1 ? 'text-rose-600 font-semibold' : ''}>{Math.round(t.allocation_pct * 100)}%</span> · {t.dur_dias}d</span>
-                          {t.predecesores_txt && <span className="shrink-0 font-semibold text-forest-600 tabular-nums" title="Predecesoras (de qué tareas depende)">· pred {t.predecesores_txt}</span>}
+                        {/* Responsable */}
+                        <div className="min-w-0 px-0.5"><InlineResp t={t} options={todosIng} color={t.asignado_nombre ? engColor.get(t.asignado_nombre) : undefined} onRefresh={onRefresh} /></div>
+                        {/* % */}
+                        <div className="px-0.5"><InlineNum t={t} field="allocation_pct" value={t.allocation_pct} pct onRefresh={onRefresh} /></div>
+                        {/* Días */}
+                        <div className="px-0.5"><InlineNum t={t} field="dur_dias" value={t.dur_dias} onRefresh={onRefresh} /></div>
+                        {/* Predecesoras (texto estilo MS Project) */}
+                        <div className="px-0.5" title='Escribí "5FF+2d,3SS"'><PredCell t={t} onRefresh={onRefresh} /></div>
+                        {/* Inicio / Fin (calculadas) */}
+                        <span className="px-1 text-[11px] text-stone-500 tabular-nums truncate" title="Calculada por el sistema">{fmtD(t.early_start || t.fecha_inicio)}</span>
+                        <span className="px-1 text-[11px] text-stone-500 tabular-nums truncate" title="Calculada por el sistema">{fmtD(t.early_finish || t.fecha_fin)}</span>
+                        {/* Estado + avanzado (modal) */}
+                        <div className="px-0.5 flex items-center gap-1">
+                          <span className={`shrink-0 rounded px-1 py-0.5 text-[9px] font-bold ${est.c}`}>{est.t}</span>
+                          <button onClick={(e) => { e.stopPropagation(); onEdit(t) }} title="Avanzado: sucesores, paralela a, comentario, borrar" className="ml-auto text-stone-300 hover:text-stone-700"><MoreHorizontal size={15} /></button>
                         </div>
                       </div>
                     ) })()
