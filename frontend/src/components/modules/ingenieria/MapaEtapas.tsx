@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Loader2, X, Layers } from 'lucide-react'
-import { ingenieriaService, type IngCargaEtapas, type IngProyectoEtapa } from '@/services/ingenieria'
+import { ingenieriaService, type IngCargaEtapas, type IngProyectoEtapa, type IngLookahead } from '@/services/ingenieria'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Mapa de calor de ETAPAS del portafolio — herramienta de negociación de Estimados.
@@ -14,6 +14,78 @@ const d = (iso: string) => new Date(iso + 'T00:00:00')
 
 // Marca la huella del plan sugerido del proyecto en negociación (prop sugerenciaExt).
 const FOREST = '#2f5e4f'
+
+// ── Lookahead: una etapa + rango de semanas → día a día (qué proyectos, cuántos simultáneos) ──
+function LookaheadPanel({ etapas, semanas }: { etapas: IngCargaEtapas['etapas']; semanas: string[] }) {
+  const hoy = new Date().toISOString().slice(0, 10)
+  const [etapa, setEtapa] = useState(etapas.find((e) => e.clave === 'fabrication')?.clave ?? etapas[0]?.clave ?? '')
+  const [desde, setDesde] = useState(() => semanas.find((w) => w >= hoy) ?? semanas[0] ?? '')
+  const [sem, setSem] = useState(3)
+  const [data, setData] = useState<IngLookahead | null>(null)
+  const [loading, setLoading] = useState(false)
+  useEffect(() => {
+    if (!etapa || !desde) { setData(null); return }
+    setLoading(true)
+    ingenieriaService.getLookahead(etapa, desde, sem).then((r) => setData(r.data)).catch(() => setData(null)).finally(() => setLoading(false))
+  }, [etapa, desde, sem])
+
+  const celC = (n: number) => n <= 0 ? '#f5f5f4' : n <= 2 ? '#bbf7d0' : n <= 4 ? '#fde68a' : '#fecaca'
+  const dlabel = (iso: string) => d(iso).getDate()
+  const DW = 24   // ancho de columna por día
+
+  return (
+    <div className="rounded-2xl border border-stone-200 bg-white overflow-hidden w-full max-w-full min-w-0">
+      <div className="flex items-center gap-2 px-4 py-3 border-b border-stone-100 flex-wrap">
+        <Layers size={17} className="text-forest-600" />
+        <h2 className="font-bold text-stone-800">Lookahead · día a día</h2>
+        <div className="flex items-center gap-2 ml-auto text-xs flex-wrap">
+          <select value={etapa} onChange={(e) => setEtapa(e.target.value)} className="rounded-lg border border-stone-300 px-2 py-1 text-stone-700">
+            {etapas.map((e) => <option key={e.clave} value={e.clave}>{e.nombre}</option>)}
+          </select>
+          <select value={desde} onChange={(e) => setDesde(e.target.value)} className="rounded-lg border border-stone-300 px-2 py-1 text-stone-700">
+            {semanas.map((w) => <option key={w} value={w}>sem. {d(w).getDate()} {MES[d(w).getMonth()]}</option>)}
+          </select>
+          <div className="inline-flex rounded-lg border border-stone-200 p-0.5">
+            {[1, 2, 3, 4, 6].map((n) => <button key={n} onClick={() => setSem(n)} className={`rounded-md px-2 py-0.5 font-semibold ${sem === n ? 'bg-forest-600 text-white' : 'text-stone-500 hover:text-stone-800'}`}>{n}s</button>)}
+          </div>
+        </div>
+      </div>
+      {loading ? <div className="py-10 text-center text-stone-400"><Loader2 className="animate-spin inline" size={18} /></div>
+        : !data || !data.proyectos.length ? <div className="py-10 text-center text-stone-400 text-sm">Ningún proyecto en <b>{data?.etapa?.nombre ?? 'esa etapa'}</b> en el rango elegido.</div>
+        : (
+        <div className="overflow-x-auto">
+          <div style={{ minWidth: 240 + data.dias.length * DW }}>
+            {/* días */}
+            <div className="flex items-stretch border-b border-stone-100 bg-stone-50/60">
+              <div className="shrink-0 px-3 py-1.5 text-[10px] uppercase tracking-wide text-stone-400 font-semibold" style={{ width: 180 }}>Proyecto</div>
+              <div className="shrink-0 px-1 py-1.5 text-[10px] uppercase tracking-wide text-stone-400 font-semibold text-right" style={{ width: 60 }}>Ítems</div>
+              {data.dias.map((dia, i) => <div key={i} className={`shrink-0 text-center text-[10px] text-stone-500 py-1.5 tabular-nums ${i % 5 === 0 ? 'border-l border-stone-200' : ''}`} style={{ width: DW }} title={dia}>{dlabel(dia)}</div>)}
+            </div>
+            {/* simultáneos */}
+            <div className="flex items-stretch border-b border-stone-100 bg-forest-50/40">
+              <div className="shrink-0 px-3 py-1 text-[11px] font-bold text-forest-700" style={{ width: 240 }}>Simultáneos</div>
+              {data.simultaneos.map((n, i) => <div key={i} className="shrink-0 text-center text-[10px] font-bold tabular-nums flex items-center justify-center" style={{ width: DW, background: celC(n), color: n > 4 ? '#991b1b' : n > 2 ? '#92400e' : n > 0 ? '#166534' : '#a8a29e' }} title={`${n} proyecto${n === 1 ? '' : 's'}`}>{n || ''}</div>)}
+            </div>
+            {/* proyectos */}
+            {data.proyectos.map((p, pi) => (
+              <div key={pi} className="flex items-stretch border-b border-stone-50 hover:bg-stone-50/40">
+                <div className="shrink-0 px-3 py-1.5 min-w-0" style={{ width: 180 }}>
+                  <div className="text-[12px] font-medium text-stone-800 truncate">{p.proyecto_ext ?? p.nombre}</div>
+                  <div className="text-[10px] text-stone-400 truncate">{p.asignado_nombre ?? 'sin asignar'}</div>
+                </div>
+                <div className="shrink-0 px-1 py-1.5 text-[11px] text-stone-500 tabular-nums text-right" style={{ width: 60 }}>{p.n_items ?? '—'}</div>
+                {p.dias.map((on, i) => <div key={i} className={`shrink-0 ${i % 5 === 0 ? 'border-l border-stone-200' : ''}`} style={{ width: DW, background: on ? '#2f5e4f' : 'transparent' }} title={on ? `${p.proyecto_ext} trabaja el ${data.dias[i]}` : undefined} />)}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+      <div className="px-4 py-2 text-[11px] text-stone-400 border-t border-stone-100">
+        La barra verde = días en que ese proyecto trabaja esa etapa. "Simultáneos" = cuántos proyectos coinciden cada día. Los montos $ de millwork se agregan cuando definamos lo de costos.
+      </div>
+    </div>
+  )
+}
 
 export default function MapaEtapas({ sugerenciaExt }: { sugerenciaExt?: string } = {}) {
   const [carga, setCarga] = useState<IngCargaEtapas | null>(null)
@@ -61,7 +133,8 @@ export default function MapaEtapas({ sugerenciaExt }: { sugerenciaExt?: string }
   const GUT = 220
 
   return (
-    <div className="rounded-2xl border border-stone-200 bg-white overflow-hidden w-full max-w-full min-w-0">
+    <div className="space-y-4 w-full max-w-full min-w-0">
+      <div className="rounded-2xl border border-stone-200 bg-white overflow-hidden">
       <div className="flex items-center gap-2 px-4 py-3 border-b border-stone-100">
         <Layers size={17} className="text-forest-600" />
         <h2 className="font-bold text-stone-800">Portafolio por etapas · cada semana</h2>
@@ -137,6 +210,8 @@ export default function MapaEtapas({ sugerenciaExt }: { sugerenciaExt?: string }
           </div>
         </div>
       )}
+      </div>
+      <LookaheadPanel etapas={g.etapas} semanas={g.semanas} />
     </div>
   )
 }

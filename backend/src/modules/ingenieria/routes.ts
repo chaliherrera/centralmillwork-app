@@ -2,7 +2,7 @@ import { Router } from 'express'
 import { requireRole } from '../../middleware/auth'
 import {
   resumenHandler, tareasHandler, cargaHandler, cargaDetalleHandler,
-  cargaEtapasHandler, etapaDetalleHandler, planHandler,
+  cargaEtapasHandler, etapaDetalleHandler, lookaheadHandler, planHandler,
   crearTareaHandler, actualizarTareaHandler, avanceTareaHandler, borrarTareaHandler,
   agregarDepHandler, borrarDepHandler, bulkDepsHandler, setPredecesoresHandler, fijarFechaHandler, guardarBaselineHandler, moverTareaHandler, reordenarVisualHandler, reasignarIngenieroHandler,
   reservarHandler, reservasPendientesHandler, confirmarReservaHandler, liberarReservaHandler,
@@ -28,6 +28,7 @@ router.get('/carga', READ, cargaHandler)
 router.get('/carga/detalle', READ, cargaDetalleHandler)
 router.get('/carga-etapas', READ, cargaEtapasHandler)
 router.get('/carga-etapas/detalle', READ, etapaDetalleHandler)
+router.get('/lookahead', READ, lookaheadHandler)   // día a día de una etapa en un rango
 router.get('/plan', READ, planHandler)
 router.get('/reprogramaciones', READ, reprogramacionesHandler)  // pedidos del ingeniero → bandeja del PM
 router.get('/depositos-bloqueando', READ, depositosBloqueandoHandler)  // depósito impago con compras listas → bandeja del PM

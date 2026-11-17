@@ -108,6 +108,9 @@ export interface IngTareaCelda {
 export interface IngEtapaCarga { clave: string; nombre: string; orden: number; hito: string | null; counts: number[]; overlay?: number[] }
 export interface IngCargaEtapas { semanas: string[]; etapas: IngEtapaCarga[]; sugerencia?: string }
 export interface IngProyectoEtapa { proyecto_ext: string | null; nombre: string; asignado_nombre: string | null; fecha_inicio: string | null; fecha_fin: string | null }
+// Lookahead: día a día de una etapa en un rango, across proyectos.
+export interface IngLookaheadProyecto { proyecto_ext: string | null; nombre: string; asignado_nombre: string | null; inicio: string | null; fin: string | null; n_items: number | null; dias: boolean[] }
+export interface IngLookahead { etapa: { clave: string; nombre: string } | null; dias: string[]; simultaneos: number[]; proyectos: IngLookaheadProyecto[] }
 // Deal en curso (handoff Estimados → Cliente → PM)
 export type DealEstado = 'borrador' | 'esperando_pm' | 'plan_propuesto' | 'esperando_cliente' | 'aprobado'
 export interface IngDealEnCurso { proyecto_id: number; codigo: string; nombre: string; cliente: string | null; estado: string; deal_estado: DealEstado; fecha_objetivo: string | null; n_tareas: number; portal_token: string | null; deal_aprobado_at: string | null }
@@ -256,6 +259,8 @@ export const ingenieriaService = {
     api.get<ApiResponse<IngCargaEtapas>>('/ingenieria/carga-etapas', { params: sugerencia ? { sugerencia } : undefined }).then((r) => r.data),
   getEtapaDetalle: (etapa: string, semana: string) =>
     api.get<ApiResponse<IngProyectoEtapa[]>>('/ingenieria/carga-etapas/detalle', { params: { etapa, semana } }).then((r) => r.data),
+  getLookahead: (etapa: string, desde: string, semanas: number) =>
+    api.get<ApiResponse<IngLookahead>>('/ingenieria/lookahead', { params: { etapa, desde, semanas } }).then((r) => r.data),
   getPlan: (proyecto: string) =>
     api.get<ApiResponse<IngPlan>>('/ingenieria/plan', { params: { proyecto } }).then((r) => r.data),
   // Gate del depósito: el PM lo abre/cierra a mano (la confirmación de Finanzas se lee sola)

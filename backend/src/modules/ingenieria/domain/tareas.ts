@@ -9,7 +9,7 @@
 
 import type { PoolClient } from 'pg'
 import pool from '../../../db/pool'
-import { loadFeriados, addBusinessDays, subBusinessDays, businessDaysBetween, type ISODate } from '../../schedule/domain/calendario'
+import { loadFeriados, addBusinessDays, subBusinessDays, businessDaysBetween, isBusinessDay, type ISODate } from '../../schedule/domain/calendario'
 import { cargarColaIngenieros, ROLES_INGENIERO } from './planificador'
 import { capturarFechasReales } from '../../schedule/domain/captura'
 import { proyectarHitos, esInferida, type HitoPlantilla, type PasoFechas } from '../../schedule/domain/proyeccion'
@@ -266,6 +266,55 @@ export async function getProyectosDeEtapa(runner: QueryRunner, clave: string, se
         AND t.fecha_inicio <= ($2::date + 6) AND t.fecha_fin >= $2::date
       ORDER BY t.proyecto_ext`, [clave, semanaLunes])
   return rows as any
+}
+
+// ── Lookahead: una ETAPA, un rango de semanas, DÍA A DÍA across proyectos ──
+// Qué proyectos deben trabajarse cada día en esa etapa, cuántos simultáneos, y la
+// cantidad de ítems por proyecto. (Los montos $ quedan fuera: los costos reales no
+// están en main — ver [[project_estimados_costeo_2026_09_30]].)
+export interface LookaheadProyecto {
+  proyecto_ext: string | null; nombre: string; asignado_nombre: string | null
+  inicio: string | null; fin: string | null; n_items: number | null
+  dias: boolean[]   // activo cada día del rango (alineado con `dias`)
+}
+export interface LookaheadResp {
+  etapa: { clave: string; nombre: string } | null
+  dias: string[]          // días hábiles del rango
+  simultaneos: number[]   // cuántos proyectos activos cada día
+  proyectos: LookaheadProyecto[]
+}
+
+export async function getLookaheadEtapa(runner: QueryRunner, clave: string, desde: string, hasta: string): Promise<LookaheadResp> {
+  const { rows: [tt] } = await runner.query<{ nombre: string }>(`SELECT nombre FROM ing_tarea_tipos WHERE clave = $1`, [clave])
+  const etapa = tt ? { clave, nombre: tt.nombre } : null
+  const feriados = await loadFeriados(runner)
+  // Días HÁBILES del rango (lun-vie menos feriados), con tope de seguridad.
+  const dias: string[] = []
+  const DAY = 86_400_000
+  let cur = Date.parse(desde + 'T00:00:00Z'); const end = Date.parse(hasta + 'T00:00:00Z')
+  while (cur <= end && dias.length < 90) {
+    const iso = new Date(cur).toISOString().slice(0, 10)
+    if (isBusinessDay(iso, feriados)) dias.push(iso)
+    cur += DAY
+  }
+  const { rows } = await runner.query<{ proyecto_ext: string | null; nombre: string; asignado_nombre: string | null; inicio: string | null; fin: string | null; n_items: number | null }>(
+    `SELECT t.proyecto_ext, t.nombre, t.asignado_nombre,
+            to_char(t.fecha_inicio,'YYYY-MM-DD') AS inicio, to_char(t.fecha_fin,'YYYY-MM-DD') AS fin, ip.n_items
+       FROM ing_tareas t JOIN ing_tarea_tipos tt ON tt.id = t.tipo_id
+       LEFT JOIN ing_proyectos ip ON ip.proyecto_ext = t.proyecto_ext
+      WHERE tt.clave = $1 AND t.estado <> 'hecha' AND t.origen IN ('import_excel','app')
+        AND t.fecha_inicio <= $3::date AND t.fecha_fin >= $2::date
+      ORDER BY t.fecha_inicio NULLS LAST, t.proyecto_ext`, [clave, desde, hasta])
+  const simultaneos = dias.map(() => 0)
+  const proyectos: LookaheadProyecto[] = rows.map((r) => {
+    const activos = dias.map((dia, i) => {
+      const on = !!(r.inicio && r.fin && dia >= r.inicio && dia <= r.fin)
+      if (on) simultaneos[i]++
+      return on
+    })
+    return { proyecto_ext: r.proyecto_ext, nombre: r.nombre, asignado_nombre: r.asignado_nombre, inicio: r.inicio, fin: r.fin, n_items: r.n_items, dias: activos }
+  })
+  return { etapa, dias, simultaneos, proyectos }
 }
 
 // ── Plan de UN proyecto: tareas + dependencias + holgura/riesgo (CPM) ──

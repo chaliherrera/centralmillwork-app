@@ -7,7 +7,7 @@ import pool from '../../../db/pool'
 import { createError } from '../../../middleware/errorHandler'
 import {
   getResumen, listProyectos, listTareas, getCargaPorIngeniero, getTareasDeCelda,
-  getCargaPorEtapa, getProyectosDeEtapa,
+  getCargaPorEtapa, getProyectosDeEtapa, getLookaheadEtapa,
   crearTarea, actualizarTarea, reportarAvance, getPlanProyecto,
   borrarTareaConReconexion, agregarDep, borrarDep, listReprogramaciones, recomputarYGuardar,
   reabrirShopDrawingsPorRechazo, cerrarGatePorAprobacion, cerrarReleasePorSdUpdate,
@@ -144,6 +144,19 @@ export async function etapaDetalleHandler(req: Request, res: Response, next: Nex
     const semana = typeof req.query.semana === 'string' ? req.query.semana : ''
     if (!etapa || !/^\d{4}-\d{2}-\d{2}$/.test(semana)) return next(createError('faltan etapa/semana', 400))
     res.json({ data: await getProyectosDeEtapa(pool, etapa, semana) })
+  } catch (e) { next(e) }
+}
+
+// GET /api/ingenieria/lookahead?etapa=<clave>&desde=<YYYY-MM-DD>&semanas=<1..8>
+// Día a día de una etapa en un rango de semanas, across proyectos (simultaneidad + ítems).
+export async function lookaheadHandler(req: Request, res: Response, next: NextFunction) {
+  try {
+    const etapa = typeof req.query.etapa === 'string' ? req.query.etapa : ''
+    const desde = typeof req.query.desde === 'string' ? req.query.desde : ''
+    const semanas = Math.max(1, Math.min(8, parseInt(String(req.query.semanas ?? '3'), 10) || 3))
+    if (!etapa || !/^\d{4}-\d{2}-\d{2}$/.test(desde)) return next(createError('faltan etapa/desde (YYYY-MM-DD)', 400))
+    const hasta = new Date(Date.parse(desde + 'T00:00:00Z') + (semanas * 7 - 1) * 86_400_000).toISOString().slice(0, 10)
+    res.json({ data: await getLookaheadEtapa(pool, etapa, desde, hasta) })
   } catch (e) { next(e) }
 }
 
