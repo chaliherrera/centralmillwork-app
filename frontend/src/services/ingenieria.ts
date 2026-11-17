@@ -119,6 +119,8 @@ export interface IngTareaPlan extends IngTarea {
   late_finish: string | null
   holgura_dias: number | null
   critico: boolean
+  fila: number                  // número 1..N (el "#" de MS Project)
+  predecesores_txt: string      // columna de predecesoras ("5FF+2d,3SS")
 }
 export interface IngArista { tarea_id: number; depende_de_id: number; tipo: string; lag_dias: number; ignorada_at?: string | null }
 export interface EstadoDeposito {
@@ -209,6 +211,16 @@ export interface IngPlan {
   instalacion: EstadoInstalacion
   tareas: IngTareaPlan[]
   aristas: IngArista[]
+  error_cpm: string | null       // aviso si hay un ciclo de dependencias (el CPM no recalcula)
+}
+
+// Resultado de editar predecesoras por texto (preview o aplicado)
+export interface ErrorPred { codigo: string; mensaje: string; fragmento?: string; fila?: number }
+export interface SetPredecesoresResp {
+  ok: boolean
+  texto_normalizado: string
+  diffs: Array<{ id: number; nombre: string; ef_antes: string | null; ef_despues: string | null }>
+  fin_antes: string | null; fin_despues: string | null; holgura: number; en_riesgo: boolean
 }
 
 export interface TareaInput {
@@ -313,6 +325,10 @@ export const ingenieriaService = {
   // Edición atómica de dependencias (para deshacer / EditModal).
   bulkDeps: (ext: string, remove: CambioDep[], add: CambioDep[], dry_run = false) =>
     api.put<ApiResponse<MoverResult>>(`/ingenieria/proyecto/${ext}/deps`, { remove, add, dry_run }).then((r) => r.data),
+  // Columna "Predecesoras" estilo MS Project: texto "5FF+2d,3SS". dry_run = preview.
+  // Lanza con response 422 { message, errores } si el texto es inválido.
+  setPredecesores: (tareaId: number, texto: string, dry_run = false) =>
+    api.put<ApiResponse<SetPredecesoresResp>>(`/ingenieria/tareas/${tareaId}/predecesores`, { texto, dry_run }).then((r) => r.data),
   // Cambiar el ingeniero propuesto (reasigna todas las tareas de ingeniería + re-ancla).
   reasignarIngeniero: (ext: string, ingeniero: string, dry_run = false) =>
     api.post<ApiResponse<ReasignarPreview>>(`/ingenieria/proyecto/${ext}/reasignar-ingeniero`, { ingeniero, dry_run }).then((r) => r.data),

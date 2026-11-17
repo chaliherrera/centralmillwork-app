@@ -561,6 +561,7 @@ function VistaProyecto({ proyectos, all, plan, planLoading, sel, setSel, onEdit,
                           {arrastrable && <span title="Arrastrá para reordenar" className="shrink-0 -ml-2 cursor-grab"><GripVertical size={12} className="text-stone-300 group-hover:text-stone-500" /></span>}
                           {difExcel(t) && <span className="shrink-0 flex" title={`No coincide con el Excel\nExcel: ${fmtD(t.fecha_fin)} · app: ${fmtD(t.early_finish)}\n(revisá dependencias)`}><AlertTriangle size={12} className="text-amber-500" /></span>}
                           {t.reprogramacion_pedida && <span className="shrink-0 flex" title="El ingeniero dejó un aviso"><CalendarClock size={12} className="text-amber-600" /></span>}
+                          <span className="shrink-0 w-5 text-right text-[10px] text-stone-300 tabular-nums font-semibold" title="Número de fila (para predecesoras)">{t.fila}</span>
                           <div className="text-[12.5px] text-stone-800 truncate flex-1">{t.nombre}</div>
                           {t.decision && <span className={`shrink-0 rounded px-1 text-[9px] font-bold ${t.decision === 'aprobado' ? 'bg-emerald-100 text-emerald-700' : t.decision === 'rechazado' ? 'bg-rose-100 text-rose-700' : 'bg-amber-100 text-amber-700'}`} title={`Cliente: ${t.decision}`}>{t.decision === 'aprobado' ? 'APROB' : t.decision === 'rechazado' ? 'RECH' : 'COMENT'}</span>}
                           {t.tipo_clave === 'long_leads' && (plan?.compras?.fecha_primera_oc
@@ -583,6 +584,7 @@ function VistaProyecto({ proyectos, all, plan, planLoading, sel, setSel, onEdit,
                             ? <><span className="w-2 h-2 rounded-full shrink-0" style={{ background: engColor.get(t.asignado_nombre) }} /><span className="font-semibold text-stone-600">{t.asignado_nombre}</span></>
                             : <span className="text-stone-300">sin responsable</span>}
                           <span>· <span className={t.allocation_pct > 1 ? 'text-rose-600 font-semibold' : ''}>{Math.round(t.allocation_pct * 100)}%</span> · {t.dur_dias}d</span>
+                          {t.predecesores_txt && <span className="shrink-0 font-semibold text-forest-600 tabular-nums" title="Predecesoras (de qué tareas depende)">· pred {t.predecesores_txt}</span>}
                         </div>
                       </div>
                     ) })()
