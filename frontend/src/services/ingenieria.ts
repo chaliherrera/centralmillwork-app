@@ -19,6 +19,8 @@ export interface IngTarea {
   allocation_pct: number
   dur_dias: number
   orden_visual: number | null       // orden de la FILA en la lista (drag visual, no toca fechas)
+  no_antes_de: string | null        // restricción: "no empieza antes de" (fecha fijada)
+  avance_pct: number | null         // % de avance efectivo (0..1)
   fecha_inicio: string | null
   fecha_fin: string | null
   fecha_compromiso: string | null   // "comprometida + cumplida": cuándo se hará
@@ -124,6 +126,7 @@ export interface IngTareaPlan extends IngTarea {
   baseline_inicio: string | null
   baseline_fin: string | null
   variance_dias: number | null  // fin − línea base (días hábiles; >0 = atrasada)
+  avance_auto: boolean          // true = el % lo calcula el sistema (read-only)
 }
 export interface IngArista { tarea_id: number; depende_de_id: number; tipo: string; lag_dias: number; ignorada_at?: string | null }
 export interface EstadoDeposito {
@@ -236,6 +239,7 @@ export interface TareaInput {
   fecha_fin?: string | null
   estado?: string
   comentario?: string | null
+  avance_pct?: number | null
 }
 
 export const ingenieriaService = {
@@ -336,6 +340,9 @@ export const ingenieriaService = {
   // Fase 3: congelar la línea base del proyecto (histórico; la más reciente es la activa).
   guardarBaseline: (ext: string, nota?: string) =>
     api.post<ApiResponse<{ ok: boolean; baseline_id: number; n: number }>>(`/ingenieria/proyecto/${ext}/baseline`, { nota }).then((r) => r.data),
+  // Fijar/liberar una fecha (restricción tipo MS Project vía piso no_antes_de). fecha=null libera.
+  fijarFecha: (id: number, campo: 'inicio' | 'fin', fecha: string | null) =>
+    api.put<ApiResponse<{ ok: boolean }>>(`/ingenieria/tareas/${id}/fecha`, { campo, fecha }).then((r) => r.data),
   // Cambiar el ingeniero propuesto (reasigna todas las tareas de ingeniería + re-ancla).
   reasignarIngeniero: (ext: string, ingeniero: string, dry_run = false) =>
     api.post<ApiResponse<ReasignarPreview>>(`/ingenieria/proyecto/${ext}/reasignar-ingeniero`, { ingeniero, dry_run }).then((r) => r.data),

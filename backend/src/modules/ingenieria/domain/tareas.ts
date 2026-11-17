@@ -9,7 +9,7 @@
 
 import type { PoolClient } from 'pg'
 import pool from '../../../db/pool'
-import { loadFeriados, addBusinessDays, businessDaysBetween, type ISODate } from '../../schedule/domain/calendario'
+import { loadFeriados, addBusinessDays, subBusinessDays, businessDaysBetween, type ISODate } from '../../schedule/domain/calendario'
 import { cargarColaIngenieros, ROLES_INGENIERO } from './planificador'
 import { capturarFechasReales } from '../../schedule/domain/captura'
 import { proyectarHitos, esInferida, type HitoPlantilla, type PasoFechas } from '../../schedule/domain/proyeccion'
@@ -42,6 +42,7 @@ export interface Tarea {
   fecha_compromiso: string | null   // patrón "comprometida + cumplida": cuándo se hará
   fecha_fin_real: string | null     // cuándo se cumplió realmente
   no_antes_de: string | null        // piso explícito (planificador: disponibilidad del ingeniero)
+  avance_pct: number | null         // % de avance MANUAL (0..1) para pasos de diseño
   estado: string
   status_ext: string | null
   comentario: string | null
@@ -96,7 +97,7 @@ export async function listTareas(runner: QueryRunner, proyectoExt?: string): Pro
             to_char(t.fecha_fin,'YYYY-MM-DD') AS fecha_fin,
             to_char(t.fecha_compromiso,'YYYY-MM-DD') AS fecha_compromiso,
             to_char(t.fecha_fin_real,'YYYY-MM-DD') AS fecha_fin_real,
-            to_char(t.no_antes_de,'YYYY-MM-DD') AS no_antes_de,
+            to_char(t.no_antes_de,'YYYY-MM-DD') AS no_antes_de, t.avance_pct,
             t.estado, t.status_ext, t.comentario, t.reprogramacion_pedida, t.reprogramacion_motivo,
             t.decision, t.decision_comentarios, t.envio_metodo
        FROM ing_tareas t
@@ -279,6 +280,7 @@ export interface TareaPlan extends Tarea {
   baseline_inicio: string | null  // inicio congelado en la línea base activa
   baseline_fin: string | null     // fin congelado en la línea base activa
   variance_dias: number | null    // fin calculado − fin de la línea base (días hábiles; >0 = atrasada)
+  avance_auto: boolean            // true = el % de avance lo calcula el sistema (read-only); false = manual
 }
 export interface AristaPlan { tarea_id: number; depende_de_id: number; tipo: string; lag_dias: number; ignorada_at?: string | null }
 export interface PlanProyecto {
@@ -333,6 +335,8 @@ export async function getPlanProyecto(runner: QueryRunner, proyectoExt: string):
   // de" (depósito confirmado por Finanzas, long leads ordenados en Compras…) que empujan.
   const deposito = await estadoDeposito(runner, proyectoExt)
   const compras = await estadoCompras(runner, proyectoExt)
+  const muestras = await estadoMuestras(runner, proyectoExt)
+  const instalacion = await estadoInstalacion(runner, proyectoExt)
   const depClave = new Map(tareas.map((t) => [t.id, t.tipo_clave]))
 
   // Fila (número 1..N) y texto de predecesoras estilo MS Project, derivados del orden
@@ -345,10 +349,26 @@ export async function getPlanProyecto(runner: QueryRunner, proyectoExt: string):
     predsPorTarea.get(d.tarea_id)!.push({ depende_de_id: d.depende_de_id, tipo: normalizarTipoDep(d.tipo), lag: d.lag_dias })
   }
   const txtDe = (id: number) => formatearPredecesores(predsPorTarea.get(id) ?? [], filaPorId)
-  const extra = (t: typeof tareas[number]) => ({
-    fila: filaPorId.get(t.id)!, predecesores_txt: txtDe(t.id),
-    baseline_inicio: baseMap.get(t.id)?.inicio ?? null, baseline_fin: baseMap.get(t.id)?.fin ?? null,
-  })
+  // Avance efectivo (0..1) MIXTO: auto desde los módulos/estado, o manual del scheduler.
+  //  · 'hecha' = 100%, 'na' = s/d. material_proc = recibidos/total (Compras). installation
+  //    = instalados/total (Campo). long_leads = 100% si ya hay 1ª OC. resto = avance_pct manual.
+  const avanceDe = (t: typeof tareas[number]): { pct: number | null; auto: boolean } => {
+    if (t.estado === 'na') return { pct: null, auto: true }
+    if (t.estado === 'hecha') return { pct: 1, auto: true }
+    const k = t.tipo_clave
+    if (k === 'material_proc' && compras.hay && compras.n_materiales > 0) return { pct: compras.pct_disponible, auto: true }
+    if (k === 'installation' && instalacion.hay && instalacion.total > 0) return { pct: instalacion.pct, auto: true }
+    if (k === 'long_leads' && compras.hay) return { pct: compras.fecha_primera_oc ? 1 : 0, auto: true }
+    return { pct: t.avance_pct != null ? +t.avance_pct : 0, auto: false }
+  }
+  const extra = (t: typeof tareas[number]) => {
+    const av = avanceDe(t)
+    return {
+      fila: filaPorId.get(t.id)!, predecesores_txt: txtDe(t.id),
+      baseline_inicio: baseMap.get(t.id)?.inicio ?? null, baseline_fin: baseMap.get(t.id)?.fin ?? null,
+      avance_pct: av.pct, avance_auto: av.auto,
+    }
+  }
 
   // Holgura: solo si el proyecto tiene inicio + entrega (ancla en ambas puntas).
   let holgura: PlanProyecto['tareas'] = tareas.map((t) => ({ ...t, early_start: null, early_finish: null, late_finish: null, holgura_dias: null, critico: false, ...extra(t), variance_dias: null }))
@@ -382,9 +402,6 @@ export async function getPlanProyecto(runner: QueryRunner, proyectoExt: string):
       captureException(err, { tags: { area: 'ingenieria_cpm' }, extra: { proyectoExt } })
     }
   }
-
-  const muestras = await estadoMuestras(runner, proyectoExt)
-  const instalacion = await estadoInstalacion(runner, proyectoExt)
 
   return {
     proyecto_ext: proyectoExt, fecha_inicio: h.ini, fecha_entrega: h.entrega, status_ext: h.status,
@@ -681,7 +698,7 @@ async function proyectarJourney(
 export interface TareaInput {
   proyecto_ext?: string | null; nombre: string; asignado_nombre?: string | null
   allocation_pct?: number; dur_dias?: number; fecha_inicio?: string | null; fecha_fin?: string | null
-  estado?: string; comentario?: string | null
+  estado?: string; comentario?: string | null; avance_pct?: number | null
 }
 
 /** Normaliza el nombre del ingeniero: trim + reusa la forma canónica ya existente si
@@ -720,10 +737,12 @@ export async function actualizarTarea(runner: QueryRunner, id: number, t: TareaI
         fecha_inicio = $6, fecha_fin = $7,
         estado = COALESCE($8, estado),
         comentario = $9,
+        avance_pct = COALESCE($10, avance_pct),
         updated_at = NOW()
       WHERE id = $1`,
     [id, t.nombre ?? null, asignado, t.allocation_pct ?? null, t.dur_dias ?? null,
-     t.fecha_inicio ?? null, t.fecha_fin ?? null, t.estado ?? null, t.comentario ?? null])
+     t.fecha_inicio ?? null, t.fecha_fin ?? null, t.estado ?? null, t.comentario ?? null,
+     t.avance_pct ?? null])
   return (rowCount ?? 0) > 0
 }
 
@@ -1197,6 +1216,28 @@ export async function guardarBaseline(
        SELECT $1, id, fecha_inicio, fecha_fin, dur_dias FROM ing_tareas WHERE proyecto_ext = $2`,
     [b.id, proyectoExt])
   return { ok: true, baseline_id: b.id, n: rowCount ?? 0 }
+}
+
+/** Fija (o libera) una tarea a una fecha, estilo restricción de MS Project, usando el
+ *  piso `no_antes_de` del CPM. campo='inicio' → "no empieza antes de X" (SNET). campo='fin'
+ *  → piso = inicioDe(X, dur) para que "no termine antes de X" (FNET aproximado). fecha=null
+ *  libera la restricción. Si un predecesor empuja más tarde, manda el predecesor (correcto). */
+export async function fijarFechaTarea(
+  runner: QueryRunner, id: number, campo: 'inicio' | 'fin', fecha: string | null,
+): Promise<{ ok: boolean; error?: string }> {
+  const { rows } = await runner.query<{ proyecto_ext: string | null; dur_dias: number }>(
+    `SELECT proyecto_ext, dur_dias FROM ing_tareas WHERE id = $1`, [id])
+  if (!rows[0]) return { ok: false, error: 'tarea no encontrada' }
+  const ext = rows[0].proyecto_ext
+  let piso: string | null = fecha
+  if (fecha && campo === 'fin') {
+    const feriados = await loadFeriados(runner)
+    const dur = Math.max(0, Math.round(rows[0].dur_dias))
+    piso = dur <= 0 ? fecha : subBusinessDays(fecha, dur - 1, feriados)   // inicioDe(fin, dur)
+  }
+  await runner.query(`UPDATE ing_tareas SET no_antes_de = $2::date, updated_at = NOW() WHERE id = $1`, [id, piso])
+  if (ext) await recomputarYGuardar(runner, ext)
+  return { ok: true }
 }
 
 /** Mueve una tarea al slot (afterId = fila de arriba, beforeId = fila de abajo),

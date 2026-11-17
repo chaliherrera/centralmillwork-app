@@ -11,7 +11,7 @@ import {
   crearTarea, actualizarTarea, reportarAvance, getPlanProyecto,
   borrarTareaConReconexion, agregarDep, borrarDep, listReprogramaciones, recomputarYGuardar,
   reabrirShopDrawingsPorRechazo, cerrarGatePorAprobacion, cerrarReleasePorSdUpdate,
-  aplicarCambiosDeps, moverTarea, reasignarIngeniero, reordenarVisual, setPredecesores, guardarBaseline,
+  aplicarCambiosDeps, moverTarea, reasignarIngeniero, reordenarVisual, setPredecesores, guardarBaseline, fijarFechaTarea,
 } from '../domain/tareas'
 import { listReservasPendientes, liberarReserva } from '../domain/reservas'
 import { listIngenieros, actualizarIngeniero } from '../domain/ingenieros'
@@ -373,6 +373,20 @@ export async function setPredecesoresHandler(req: Request, res: Response, next: 
     if (!r.ok) return next(createError(r.error ?? 'no se pudo aplicar', 400))
     res.json({ data: r })
   } catch (e) { await client.query('ROLLBACK').catch(() => {}); next(e) } finally { client.release() }
+}
+
+// PUT /api/ingenieria/tareas/:id/fecha  { campo:'inicio'|'fin', fecha:string|null }
+// Fija (o libera con fecha=null) la tarea a una fecha vía el piso no_antes_de (restricción MSP).
+export async function fijarFechaHandler(req: Request, res: Response, next: NextFunction) {
+  const id = parseInt(String(req.params.id), 10)
+  if (Number.isNaN(id)) return next(createError('id inválido', 400))
+  const campo = req.body?.campo === 'fin' ? 'fin' : 'inicio'
+  const fecha = typeof req.body?.fecha === 'string' && req.body.fecha ? req.body.fecha : null
+  try {
+    const r = await fijarFechaTarea(pool, id, campo, fecha)
+    if (!r.ok) return next(createError(r.error ?? 'no se pudo fijar la fecha', 400))
+    res.json({ data: { ok: true } })
+  } catch (e) { next(e) }
 }
 
 // POST /api/ingenieria/proyecto/:ext/baseline  { nota? } — congela la línea base

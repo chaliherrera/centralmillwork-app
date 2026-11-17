@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useMemo, useState } from 'react'
-import { Users, Layers, ClipboardList, Plus, X, Loader2, Trash2, Gauge, Check, FolderKanban, Activity, AlertTriangle, Wallet, Lock, LockOpen, FlaskConical, Package, Wrench, CalendarClock, ChevronUp, ChevronDown, GripVertical, Split, MoreHorizontal, Flag } from 'lucide-react'
+import { Users, Layers, ClipboardList, Plus, X, Loader2, Trash2, Gauge, Check, FolderKanban, Activity, AlertTriangle, Wallet, Lock, LockOpen, FlaskConical, Package, Wrench, CalendarClock, ChevronUp, ChevronDown, GripVertical, Split, MoreHorizontal, Flag, Pin } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { ingenieriaService, type IngProyecto, type IngTarea, type TareaInput, type IngPlan, type IngTareaPlan, type IngArista, type IngCarga, type IngTareaCelda, type InstalacionDetalle } from '@/services/ingenieria'
 import MapaEtapas from '@/components/modules/ingenieria/MapaEtapas'
@@ -338,6 +338,30 @@ function InlineNum({ t, field, value, pct, onRefresh }: { t: IngTareaPlan; field
   return <input type="number" value={v} disabled={busy} onClick={stopEv} onChange={(e) => setV(e.target.value)}
     onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }}
     onBlur={commit} className={CELL_CLS + ' text-right tabular-nums text-stone-700'} />
+}
+// Celda de fecha: muestra la fecha calculada; al clickear, un selector para FIJARLA
+// (restricción MSP vía no_antes_de). Vaciar = liberar. El pin marca que está fijada.
+function InlineFecha({ t, campo, value, pinned, onRefresh }: { t: IngTareaPlan; campo: 'inicio' | 'fin'; value: string | null; pinned?: boolean; onRefresh: () => void }) {
+  const [editing, setEditing] = useState(false); const [busy, setBusy] = useState(false)
+  const commit = async (fecha: string | null) => {
+    setEditing(false); setBusy(true)
+    try { await ingenieriaService.fijarFecha(t.id, campo, fecha); await onRefresh() }
+    catch (e: any) { toast.error(e?.response?.data?.message || 'No se pudo fijar la fecha') }
+    finally { setBusy(false) }
+  }
+  if (editing) return (
+    <input type="date" autoFocus defaultValue={value ?? ''} onClick={stopEv}
+      onBlur={(e) => commit(e.target.value || null)}
+      onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); if (e.key === 'Escape') setEditing(false) }}
+      className="w-full text-[11px] tabular-nums border border-forest-400 rounded px-0.5 outline-none" />
+  )
+  return (
+    <button type="button" disabled={busy} onClick={(e) => { e.stopPropagation(); setEditing(true) }}
+      title={`Click para fijar: la tarea no ${campo === 'inicio' ? 'empieza' : 'termina'} antes de esa fecha (restricción). Vaciar = libre.`}
+      className="flex items-center gap-0.5 w-full text-left text-[11px] text-stone-500 tabular-nums hover:text-forest-700 disabled:opacity-50 truncate">
+      {pinned && <Pin size={9} className="text-amber-500 shrink-0" />}{fmtD(value)}
+    </button>
+  )
 }
 function InlineResp({ t, options, color, onRefresh }: { t: IngTareaPlan; options: string[]; color?: string; onRefresh: () => void }) {
   const [busy, setBusy] = useState(false)
@@ -682,12 +706,12 @@ function VistaProyecto({ proyectos, all, plan, planLoading, sel, setSel, onEdit,
                         <div className="px-0.5"><InlineNum t={t} field="dur_dias" value={t.dur_dias} onRefresh={onRefresh} /></div>
                         {/* Predecesoras (texto estilo MS Project) */}
                         <div className="px-0.5" title='Escribí "5FF+2d,3SS"'><PredCell t={t} onRefresh={onRefresh} /></div>
-                        {/* Inicio / Fin (calculadas) */}
-                        <span className="px-1 text-[11px] text-stone-500 tabular-nums truncate" title="Calculada por el sistema">{fmtD(t.early_start || t.fecha_inicio)}</span>
-                        <span className="px-1 text-[11px] text-stone-500 tabular-nums truncate flex items-center gap-1" title="Fin calculado · variación vs línea base">
-                          {fmtD(t.early_finish || t.fecha_fin)}
+                        {/* Inicio / Fin (click para FIJAR = restricción; variación en Fin) */}
+                        <div className="px-0.5 min-w-0"><InlineFecha t={t} campo="inicio" value={t.early_start || t.fecha_inicio} pinned={!!t.no_antes_de} onRefresh={onRefresh} /></div>
+                        <div className="px-0.5 flex items-center gap-1 min-w-0">
+                          <InlineFecha t={t} campo="fin" value={t.early_finish || t.fecha_fin} onRefresh={onRefresh} />
                           {t.variance_dias != null && t.variance_dias !== 0 && <span className={`text-[9px] font-bold shrink-0 ${t.variance_dias > 0 ? 'text-rose-600' : 'text-emerald-600'}`} title="Variación vs línea base">{t.variance_dias > 0 ? '+' : ''}{t.variance_dias}d</span>}
-                        </span>
+                        </div>
                         {/* Estado + avanzado (modal) */}
                         <div className="px-0.5 flex items-center gap-1">
                           <span className={`shrink-0 rounded px-1 py-0.5 text-[9px] font-bold ${est.c}`}>{est.t}</span>
@@ -748,8 +772,13 @@ function VistaProyecto({ proyectos, all, plan, planLoading, sel, setSel, onEdit,
                         background: done ? '#d1fae5' : col + '26',
                         borderLeft: `3px solid ${done ? '#059669' : col}`,
                         boxShadow: t.critico ? 'inset 0 0 0 1.5px #3b4233' : undefined }}>
-                      {done && <Check size={11} className="text-emerald-700 shrink-0" />}
-                      {!geo.hito && <span className="text-[9.5px] font-semibold text-stone-600 whitespace-nowrap">{fmtD(t.early_start)}→{fmtD(t.early_finish)}</span>}
+                      {/* relleno de avance (se llena según el % completado) */}
+                      {!geo.hito && t.avance_pct != null && t.avance_pct > 0 && (
+                        <div className="absolute inset-y-0 left-0 pointer-events-none" title={`avance ${Math.round(t.avance_pct * 100)}%`}
+                          style={{ width: `${Math.min(100, t.avance_pct * 100)}%`, background: done ? '#6ee7b7' : col + '59' }} />
+                      )}
+                      {done && <Check size={11} className="text-emerald-700 shrink-0 relative" />}
+                      {!geo.hito && <span className="relative text-[9.5px] font-semibold text-stone-600 whitespace-nowrap">{fmtD(t.early_start)}→{fmtD(t.early_finish)}</span>}
                       {geo.hito && <span className="text-[9px] font-bold" style={{ color: col }}>◆</span>}
                     </div>
                   </div>
@@ -987,6 +1016,7 @@ function EditModal({ tarea, proyecto, engineers, planTareas, aristas, onClose, o
     proyecto_ext: tarea?.proyecto_ext ?? proyecto, nombre: tarea?.nombre ?? '', asignado_nombre: tarea?.asignado_nombre ?? '',
     allocation_pct: tarea?.allocation_pct ?? 1, dur_dias: tarea?.dur_dias ?? 1,
     fecha_inicio: tarea?.fecha_inicio ?? '', fecha_fin: tarea?.fecha_fin ?? '', estado: tarea?.estado ?? 'pendiente', comentario: tarea?.comentario ?? '',
+    avance_pct: tarea?.avance_pct ?? null,
   })
   // Responsable por desplegable (evita nombres partidos por tipeo). "Otro…" abre texto libre
   // solo para dar de alta un ingeniero genuinamente nuevo.
@@ -1126,6 +1156,7 @@ function EditModal({ tarea, proyecto, engineers, planTareas, aristas, onClose, o
           )}
           <div className="grid grid-cols-2 gap-3">
             <L t="% de asignación"><input type="number" step="0.1" min="0" value={f.allocation_pct} onChange={(e) => set('allocation_pct', Number(e.target.value))} className="inp" /></L>
+            <L t="% de avance (manual)"><input type="number" step="5" min="0" max="100" value={f.avance_pct != null ? Math.round(f.avance_pct * 100) : ''} onChange={(e) => set('avance_pct', e.target.value === '' ? null : Math.max(0, Math.min(100, Number(e.target.value))) / 100)} className="inp" placeholder="auto en Compras / Instalación / hechas" /></L>
             <L t="Duración (días)"><input type="number" step="0.5" min="0" value={f.dur_dias} onChange={(e) => set('dur_dias', Number(e.target.value))} className="inp" /></L>
           </div>
           {/* Las fechas las calcula el CPM (duración + predecesores + entrega fija). Solo lectura:
