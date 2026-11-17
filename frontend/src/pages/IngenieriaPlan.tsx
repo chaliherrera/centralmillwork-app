@@ -414,6 +414,7 @@ function VistaProyecto({ proyectos, all, plan, planLoading, sel, setSel, onEdit,
   const [dropIdx, setDropIdx] = useState<number | null>(null)   // índice de inserción en taskOrder (0..N)
   const [dndBusy, setDndBusy] = useState(false)
   const [cronoOpen, setCronoOpen] = useState(false)
+  const [zoom, setZoom] = useState<'dia' | 'semana' | 'mes'>('mes')   // escala del Gantt
   const [baseBusy, setBaseBusy] = useState(false)
   // Congela la línea base del proyecto (histórico). Después aparece como barra gris en el Gantt
   // y alimenta la Variación. Se puede re-guardar cuando el scheduler quiera.
@@ -480,7 +481,7 @@ function VistaProyecto({ proyectos, all, plan, planLoading, sel, setSel, onEdit,
     for (const t of tareas) { if (t.early_start) fechas.push(t.early_start); if (t.late_finish) fechas.push(t.late_finish); if (t.fecha_inicio) fechas.push(t.fecha_inicio); if (t.fecha_fin) fechas.push(t.fecha_fin) }
     if (plan?.fecha_inicio) fechas.push(plan.fecha_inicio)
     if (plan?.fecha_entrega) fechas.push(plan.fecha_entrega)
-    if (!fechas.length) return { fases, rows, totalH, months: [] as any[], pct: () => 0, hoyPct: null as number | null, entregaPct: null as number | null }
+    if (!fechas.length) return { fases, rows, totalH, months: [] as any[], pct: () => 0, hoyPct: null as number | null, entregaPct: null as number | null, spanDays: 0, nWeeks: 0 }
     let min = d(fechas[0]), max = d(fechas[0])
     for (const f of fechas) { const dd = d(f); if (dd < min) min = dd; if (dd > max) max = dd }
     const week0 = mondayOf(min); const nWeeks = Math.max(1, Math.ceil((max.getTime() - week0.getTime()) / (7 * DAY)) + 2)
@@ -491,8 +492,12 @@ function VistaProyecto({ proyectos, all, plan, planLoading, sel, setSel, onEdit,
     const today = new Date(); today.setHours(0, 0, 0, 0)
     const hoyPct = today >= week0 && today <= max ? pct(today.toISOString().slice(0, 10)) : null
     const entregaPct = plan?.fecha_entrega ? pct(plan.fecha_entrega) : null
-    return { fases, rows, totalH, months, pct, hoyPct, entregaPct, yOf }
+    return { fases, rows, totalH, months, pct, hoyPct, entregaPct, yOf, spanDays: nWeeks * 7, nWeeks }
   }, [tareas, plan])
+
+  // Zoom: px por día según la escala. Día = barras anchas (mucho scroll); Mes = compacto.
+  const PX_DIA = ({ dia: 26, semana: 9, mes: 3.4 } as const)[zoom]
+  const timelineW = Math.max(440, Math.round(g.spanDays * PX_DIA))
 
   // barra mínima (para hitos de 0 días): medio % de una semana
   const minW = 0.7
@@ -648,9 +653,19 @@ function VistaProyecto({ proyectos, all, plan, planLoading, sel, setSel, onEdit,
         )
       })()}
 
+      {/* Zoom de la escala del Gantt */}
+      <div className="flex items-center gap-2">
+        <span className="text-[11px] text-stone-400 font-semibold uppercase tracking-wide">Escala</span>
+        <div className="inline-flex rounded-lg border border-stone-200 bg-white p-0.5 text-xs">
+          {([['dia', 'Día'], ['semana', 'Semana'], ['mes', 'Mes']] as const).map(([k, lbl]) => (
+            <button key={k} onClick={() => setZoom(k)} className={`rounded-md px-2.5 py-1 font-semibold ${zoom === k ? 'bg-forest-600 text-white' : 'text-stone-500 hover:text-stone-800'}`}>{lbl}</button>
+          ))}
+        </div>
+      </div>
+
       <div className="rounded-2xl border border-stone-200 bg-white overflow-hidden">
         {loadingPlan && !plan ? <div className="py-16 text-center text-stone-400"><Loader2 className="animate-spin inline" size={22} /></div> : (
-        <div className="overflow-x-auto"><div style={{ minWidth: GUT + 440 }}>
+        <div className="overflow-x-auto"><div style={{ width: GUT + timelineW }}>
           {/* header: gutter + meses + marca de entrega */}
           <div className="flex items-stretch border-b border-stone-100 bg-stone-50/60">
             <div className="shrink-0 grid items-center py-2 text-[10px] uppercase tracking-wide text-stone-400 font-semibold" style={{ width: GUT, gridTemplateColumns: GRID }}>
@@ -658,7 +673,7 @@ function VistaProyecto({ proyectos, all, plan, planLoading, sel, setSel, onEdit,
               <span className="px-1">Resp.</span><span className="px-1 text-right">%</span><span className="px-1 text-right">Días</span>
               <span className="px-1">Predec.</span><span className="px-1">Inicio</span><span className="px-1">Fin</span><span className="px-1">Estado</span>
             </div>
-            <div className="relative flex-1 h-7">
+            <div className="relative h-7 shrink-0" style={{ width: timelineW }}>
               {g.months.map((m, i) => <div key={i} className="absolute top-0 bottom-0 border-l border-stone-200 flex items-center pl-1.5 text-[10.5px] font-semibold text-forest-700" style={{ left: `${m.startPct}%` }}>{m.label}</div>)}
               {g.hoyPct !== null && <div className="absolute top-0 bottom-0 border-l-2 border-rose-400 z-10" style={{ left: `${g.hoyPct}%` }}><span className="absolute -top-0 left-1 text-[9px] font-bold text-rose-500">hoy</span></div>}
               {g.entregaPct !== null && <div className="absolute top-0 bottom-0 z-10" style={{ left: `${g.entregaPct}%`, borderLeft: '2px dashed #059669' }}><span className="absolute top-0 -left-8 text-[9px] font-bold text-emerald-700">entrega</span></div>}
@@ -723,9 +738,10 @@ function VistaProyecto({ proyectos, all, plan, planLoading, sel, setSel, onEdit,
             </div>
 
             {/* timeline: barras + slack + conectores (SVG) */}
-            <div className="relative flex-1" style={{ height: g.totalH }}>
-              {/* gridlines de meses + hoy + entrega */}
-              {g.months.map((m: any, i: number) => <div key={i} className="absolute top-0 bottom-0 border-l border-stone-50" style={{ left: `${m.startPct}%` }} />)}
+            <div className="relative shrink-0" style={{ height: g.totalH, width: timelineW }}>
+              {/* gridlines de semana (solo en zoom fino) + meses + hoy + entrega */}
+              {zoom !== 'mes' && g.nWeeks > 0 && Array.from({ length: g.nWeeks }, (_, i) => <div key={`w${i}`} className="absolute top-0 bottom-0 border-l border-stone-100/70" style={{ left: `${(i / g.nWeeks) * 100}%` }} />)}
+              {g.months.map((m: any, i: number) => <div key={i} className="absolute top-0 bottom-0 border-l border-stone-200" style={{ left: `${m.startPct}%` }} />)}
               {g.hoyPct !== null && <div className="absolute top-0 bottom-0 border-l-2 border-rose-200" style={{ left: `${g.hoyPct}%` }} />}
               {g.entregaPct !== null && <div className="absolute top-0 bottom-0 z-20" style={{ left: `${g.entregaPct}%`, borderLeft: '2px dashed #059669' }} />}
 
