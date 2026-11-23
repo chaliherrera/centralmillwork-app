@@ -99,7 +99,7 @@ export default function IngenieriaPlan({ embedded, initialProyecto, initialMode 
         <button onClick={() => setMode('disponibilidad')} className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 font-semibold ${mode === 'disponibilidad' ? 'bg-forest-600 text-white' : 'text-stone-500 hover:text-stone-800'}`}><Activity size={15} /> Disponibilidad</button>
         <button onClick={() => setMode('proyecto')} className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 font-semibold ${mode === 'proyecto' ? 'bg-forest-600 text-white' : 'text-stone-500 hover:text-stone-800'}`}><FolderKanban size={15} /> Por proyecto</button>
         <button onClick={() => setMode('carga')} className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 font-semibold ${mode === 'carga' ? 'bg-forest-600 text-white' : 'text-stone-500 hover:text-stone-800'}`}><Gauge size={15} /> Carga por ingeniero</button>
-        <button onClick={() => setMode('etapas')} className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 font-semibold ${mode === 'etapas' ? 'bg-forest-600 text-white' : 'text-stone-500 hover:text-stone-800'}`}><Layers size={15} /> Portafolio</button>
+        <button onClick={() => setMode('etapas')} className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 font-semibold ${mode === 'etapas' ? 'bg-forest-600 text-white' : 'text-stone-500 hover:text-stone-800'}`}><Layers size={15} /> Lookahead</button>
       </div>
 
       {mode === 'disponibilidad'

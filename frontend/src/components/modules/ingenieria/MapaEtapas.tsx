@@ -20,7 +20,7 @@ function LookaheadPanel({ etapas, semanas }: { etapas: IngCargaEtapas['etapas'];
   const hoy = new Date().toISOString().slice(0, 10)
   const [etapa, setEtapa] = useState(etapas.find((e) => e.clave === 'fabrication')?.clave ?? etapas[0]?.clave ?? '')
   const [desde, setDesde] = useState(() => semanas.find((w) => w >= hoy) ?? semanas[0] ?? '')
-  const [sem, setSem] = useState(3)
+  const [sem, setSem] = useState(4)
   const [data, setData] = useState<IngLookahead | null>(null)
   const [loading, setLoading] = useState(false)
   useEffect(() => {
@@ -46,7 +46,7 @@ function LookaheadPanel({ etapas, semanas }: { etapas: IngCargaEtapas['etapas'];
             {semanas.map((w) => <option key={w} value={w}>sem. {d(w).getDate()} {MES[d(w).getMonth()]}</option>)}
           </select>
           <div className="inline-flex rounded-lg border border-stone-200 p-0.5">
-            {[1, 2, 3, 4, 6].map((n) => <button key={n} onClick={() => setSem(n)} className={`rounded-md px-2 py-0.5 font-semibold ${sem === n ? 'bg-forest-600 text-white' : 'text-stone-500 hover:text-stone-800'}`}>{n}s</button>)}
+            {[2, 4, 6, 8].map((n) => <button key={n} onClick={() => setSem(n)} className={`rounded-md px-2 py-0.5 font-semibold ${sem === n ? 'bg-forest-600 text-white' : 'text-stone-500 hover:text-stone-800'}`}>{n} sem</button>)}
           </div>
         </div>
       </div>
