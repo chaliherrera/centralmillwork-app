@@ -6,11 +6,12 @@
 // en etapas B/C. El % de avance es SIEMPRE el real calculado (nunca tecleado).
 // ─────────────────────────────────────────────────────────────────────────────
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import { Search, Plus, Loader2, Trash2, Pin, PinOff, MoreHorizontal, Flag, CalendarClock, X, Package, FlaskConical, Wrench, Wallet, ChevronDown, Printer } from 'lucide-react'
+import { Search, Plus, Loader2, Trash2, Pin, PinOff, MoreHorizontal, Flag, CalendarClock, X, Package, FlaskConical, Wrench, Wallet, ChevronDown, Printer, Lock, LockOpen } from 'lucide-react'
 import toast from 'react-hot-toast'
-import { ingenieriaService, type IngProyecto, type IngTarea, type IngPlan, type IngTareaPlan } from '@/services/ingenieria'
+import { ingenieriaService, type IngProyecto, type IngTarea, type IngPlan, type IngTareaPlan, type InstalacionDetalle } from '@/services/ingenieria'
 import CronogramaCliente, { ganttDesdePlan } from '@/components/schedule/CronogramaCliente'
 import CambiarIngeniero from '@/components/modules/ingenieria/CambiarIngeniero'
+import InstalacionPanel from '@/components/modules/ingenieria/InstalacionPanel'
 
 const shortProj = (p: string | null) => (p || '—').replace(/^\s*(\d{2}-\d{3})\s*/, '$1 · ')
 
@@ -65,6 +66,10 @@ export default function CronogramaPM({ proyectos, all, plan, planLoading, sel, s
   const [cronoOpen, setCronoOpen] = useState(false)                // modal cronograma cliente
   const [baseBusy, setBaseBusy] = useState(false)
   const [modOpen, setModOpen] = useState(false)                    // fila de módulos (Compras/Muestras/...) desplegada
+  const [depBusy, setDepBusy] = useState(false)                    // gate del depósito (abrir/cerrar)
+  const [instOpen, setInstOpen] = useState(false)                  // modal detalle de instalación
+  const [instDet, setInstDet] = useState<InstalacionDetalle | null>(null)
+  const [instBusy, setInstBusy] = useState(false)
 
   const scrollRef = useRef<HTMLDivElement>(null)
   const [gridH, setGridH] = useState(520)
@@ -220,6 +225,23 @@ export default function CronogramaPM({ proyectos, all, plan, planLoading, sel, s
     finally { setBaseBusy(false); setMenuOpen(false) }
   }
 
+  // Acción del gate del depósito: el PM lo abre/cierra a mano (la confirmación de
+  // Finanzas se lee sola). Solo cuando Finanzas todavía no lo confirmó.
+  async function toggleDeposito(abrir: boolean) {
+    if (!sel) return
+    setDepBusy(true)
+    try { await ingenieriaService.overrideDeposito(sel, abrir); await onRefresh() }
+    catch (e: any) { toast.error(e?.response?.data?.message || 'No se pudo cambiar el gate') }
+    finally { setDepBusy(false) }
+  }
+  // Detalle de instalación (ítem×ítem + punch) — solo lectura, del módulo de campo.
+  async function abrirInstalacion() {
+    if (!sel) return
+    setInstOpen(true); setInstBusy(true); setInstDet(null)
+    try { setInstDet((await ingenieriaService.instalacionDetalle(sel)).data) }
+    catch { setInstDet({ items: [], punch: [] }) } finally { setInstBusy(false) }
+  }
+
   // Imprimir / exportar a PDF (Tabloid 11x17 landscape). El navegador abre el
   // diálogo; el usuario elige "Guardar como PDF". Despliega todas las tareas y
   // oculta la interfaz interactiva (toolbar, inspector, menú) vía @media print.
@@ -331,10 +353,16 @@ export default function CronogramaPM({ proyectos, all, plan, planLoading, sel, s
               <span className="cpm-mods-more">{modOpen ? 'ocultar' : 'detalle'}</span>
             </button>
             {modOpen && <div className="cpm-mods-detail">
-              {hayDeposito && <div className="cpm-moddet"><Wallet size={14} className="cpm-moddet-ic" /><b>Depósito.</b> {dep.confirmado_finanzas ? `Confirmado por Finanzas${dep.fecha_confirmacion ? ' · ' + fmtD(dep.fecha_confirmacion) : ''} · compras habilitadas` : dep.override_pm ? `Gate abierto a mano por ${dep.override_por ?? '—'} · las compras siguen` : 'Finanzas aún no lo confirmó · long leads y materiales frenados'}{(dep.dias_atribuibles_cliente ?? 0) > 0 ? ` · ${dep.dias_atribuibles_cliente} d atribuibles al cliente` : ''}</div>}
+              {hayDeposito && <div className="cpm-moddet"><Wallet size={14} className="cpm-moddet-ic" /><span><b>Depósito.</b> {dep.confirmado_finanzas ? `Confirmado por Finanzas${dep.fecha_confirmacion ? ' · ' + fmtD(dep.fecha_confirmacion) : ''} · compras habilitadas` : dep.override_pm ? `Gate abierto a mano por ${dep.override_por ?? '—'} · las compras siguen` : 'Finanzas aún no lo confirmó · long leads y materiales frenados'}{(dep.dias_atribuibles_cliente ?? 0) > 0 ? ` · ${dep.dias_atribuibles_cliente} d atribuibles al cliente` : ''}</span>
+                {!dep.confirmado_finanzas && (dep.override_pm
+                  ? <button className="cpm-modbtn" disabled={depBusy} onClick={() => toggleDeposito(false)}>{depBusy ? <Loader2 size={12} className="animate-spin" /> : <Lock size={12} />} Cerrar gate</button>
+                  : <button className="cpm-modbtn" disabled={depBusy} onClick={() => toggleDeposito(true)}>{depBusy ? <Loader2 size={12} className="animate-spin" /> : <LockOpen size={12} />} Abrir gate igual</button>)}
+              </div>}
               {c.hay && <div className="cpm-moddet"><Package size={14} className="cpm-moddet-ic" /><b>Compras.</b> {c.n_materiales} materiales{c.fecha_mto ? ` · MTO ${fmtD(c.fecha_mto)}` : ''} · {c.con_precio} c/precio → {c.en_oc} en OC → {c.recibidos} recibidos{c.en_stock > 0 ? ` (+${c.en_stock} stock)` : ''} · <b>{Math.round(c.pct_disponible * 100)}% disponible</b></div>}
               {m.hay && <div className="cpm-moddet"><FlaskConical size={14} className="cpm-moddet-ic" /><b>Muestras.</b> {m.total} en total · {m.aprobadas} aprobadas{m.pendientes > 0 ? ` · ${m.pendientes} en curso` : ''}{m.rechazadas > 0 ? ` · ${m.rechazadas} rechazadas` : ''}{m.todas_aprobadas ? ' · todas OK ✓' : ''} · <i>no bloquea, corre en paralelo</i></div>}
-              {ins.hay && <div className="cpm-moddet"><Wrench size={14} className="cpm-moddet-ic" /><b>Instalación.</b> {ins.instalados} de {ins.total} instalados{ins.fecha_ultima ? ` · última ${fmtD(ins.fecha_ultima)}` : ''}{ins.punch_abiertos > 0 ? ` · ${ins.punch_abiertos} punch abierto${ins.punch_abiertos === 1 ? '' : 's'}` : ''}{ins.completa ? ' · lista ✓' : ''} · <b>{Math.round(ins.pct * 100)}%</b></div>}
+              {ins.hay && <div className="cpm-moddet"><Wrench size={14} className="cpm-moddet-ic" /><span><b>Instalación.</b> {ins.instalados} de {ins.total} instalados{ins.fecha_ultima ? ` · última ${fmtD(ins.fecha_ultima)}` : ''}{ins.punch_abiertos > 0 ? ` · ${ins.punch_abiertos} punch abierto${ins.punch_abiertos === 1 ? '' : 's'}` : ''}{ins.completa ? ' · lista ✓' : ''} · <b>{Math.round(ins.pct * 100)}%</b></span>
+                <button className="cpm-modbtn" onClick={abrirInstalacion}><Wrench size={12} /> Ver detalle (ítem×ítem + punch)</button>
+              </div>}
             </div>}
           </div>
         )
@@ -502,6 +530,9 @@ export default function CronogramaPM({ proyectos, all, plan, planLoading, sel, s
           </div>
         </div>
       )}
+
+      {/* Detalle de instalación (ítem×ítem + punch) */}
+      {instOpen && <InstalacionPanel det={instDet} busy={instBusy} proyecto={sel} onClose={() => setInstOpen(false)} />}
     </div>
   )
 }
@@ -813,9 +844,12 @@ const CSS = `
 .cpm-modchip svg{color:var(--tx3);}
 .cpm-mods-more{margin-left:auto;font-size:11px;color:var(--acc);font-weight:500;}
 .cpm-mods-detail{border-top:.5px solid var(--div);padding:8px 14px;display:flex;flex-direction:column;gap:5px;}
-.cpm-moddet{font-size:12.5px;color:var(--tx2);display:flex;align-items:baseline;gap:7px;}
+.cpm-moddet{font-size:12.5px;color:var(--tx2);display:flex;align-items:center;gap:7px;flex-wrap:wrap;}
 .cpm-moddet b{color:var(--tx);font-weight:600;}
 .cpm-moddet-ic{color:var(--tx3);flex:none;position:relative;top:2px;}
+.cpm-modbtn{display:inline-flex;align-items:center;gap:5px;border:none;background:var(--ctrl);color:var(--tx);font-size:11.5px;font-weight:500;padding:3px 9px;border-radius:7px;cursor:pointer;margin-left:8px;white-space:nowrap;}
+.cpm-modbtn:hover{background:#e6e6ea;}
+.cpm-modbtn:disabled{opacity:.5;cursor:default;}
 /* modal (cronograma cliente) */
 .cpm-modal-back{position:fixed;inset:0;background:rgba(0,0,0,.3);display:flex;align-items:center;justify-content:center;padding:16px;z-index:60;}
 .cpm-modal{background:var(--surf);border-radius:16px;box-shadow:0 20px 50px rgba(0,0,0,.25);width:100%;max-width:760px;max-height:88vh;overflow-y:auto;padding:18px;}

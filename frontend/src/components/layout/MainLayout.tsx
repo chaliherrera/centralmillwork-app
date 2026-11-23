@@ -24,6 +24,8 @@ export default function MainLayout() {
   const title = pageTitles[base] ?? 'Central Millwork'
   const isGlass = theme === 'glass'
   const isTareas = base === '/tareas'
+  // El PM (Plan de Ingeniería / cronograma) usa ancho completo (Gantt amplio).
+  const isWide = base === '/pm'
 
   // Solo /tareas usa el mesh transparente en modo glass. Las demas paginas
   // siguen siendo paper aunque el theme este en glass — opt-in por pagina.
@@ -38,7 +40,7 @@ export default function MainLayout() {
           className={useGlassChrome ? 'flex-1 overflow-y-auto' : 'flex-1 overflow-y-auto bg-gray-50'}
           style={useGlassChrome ? { background: 'transparent' } : undefined}
         >
-          <div className="max-w-[1400px] mx-auto px-6 py-6">
+          <div className={isWide ? 'w-full px-4 py-6' : 'max-w-[1400px] mx-auto px-6 py-6'}>
             <Outlet />
           </div>
         </main>

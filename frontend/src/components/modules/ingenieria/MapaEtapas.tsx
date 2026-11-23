@@ -55,6 +55,21 @@ function LookaheadPanel({ etapas, semanas }: { etapas: IngCargaEtapas['etapas'];
         : (
         <div className="overflow-x-auto">
           <div style={{ minWidth: 240 + data.dias.length * DW }}>
+            {/* meses (referencia de hasta dónde llega el rango) */}
+            {(() => {
+              const grupos: { label: string; span: number }[] = []
+              data.dias.forEach((dia) => {
+                const dt = d(dia); const lbl = `${MES[dt.getMonth()]} ${dt.getFullYear()}`
+                const last = grupos[grupos.length - 1]
+                if (last && last.label === lbl) last.span++; else grupos.push({ label: lbl, span: 1 })
+              })
+              return (
+                <div className="flex items-stretch border-b border-stone-200 bg-white">
+                  <div className="shrink-0" style={{ width: 240 }} />
+                  {grupos.map((g, i) => <div key={i} className="shrink-0 px-2 py-1 text-[12px] font-bold text-forest-700 border-l border-stone-300 truncate capitalize" style={{ width: g.span * DW }} title={g.label}>{g.label}</div>)}
+                </div>
+              )
+            })()}
             {/* días */}
             <div className="flex items-stretch border-b border-stone-100 bg-stone-50/60">
               <div className="shrink-0 px-3 py-1.5 text-[10px] uppercase tracking-wide text-stone-400 font-semibold" style={{ width: 180 }}>Proyecto</div>
