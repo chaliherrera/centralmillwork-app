@@ -79,7 +79,7 @@ export default function IngenieriaPlan({ embedded, initialProyecto, initialMode 
   if (loading) return <div className="py-20 text-center text-stone-400">Cargando plan de Ingeniería…</div>
 
   return (
-    <div className={`max-w-[1180px] mx-auto px-2 space-y-5 ${embedded ? '' : 'py-6'}`}>
+    <div className={`max-w-[1760px] mx-auto px-4 space-y-5 ${embedded ? '' : 'py-6'}`}>
       {/* Header */}
       <div className="flex items-center gap-3 flex-wrap">
         {!embedded && <div className="w-11 h-11 rounded-2xl bg-forest-50 flex items-center justify-center"><Gauge className="text-forest-600" size={22} /></div>}

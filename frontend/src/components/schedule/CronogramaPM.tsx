@@ -6,7 +6,7 @@
 // en etapas B/C. El % de avance es SIEMPRE el real calculado (nunca tecleado).
 // ─────────────────────────────────────────────────────────────────────────────
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import { Search, Plus, Loader2, Trash2, Pin, PinOff, MoreHorizontal, Flag, CalendarClock, X, Package, FlaskConical, Wrench, Wallet, ChevronDown } from 'lucide-react'
+import { Search, Plus, Loader2, Trash2, Pin, PinOff, MoreHorizontal, Flag, CalendarClock, X, Package, FlaskConical, Wrench, Wallet, ChevronDown, Printer } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { ingenieriaService, type IngProyecto, type IngTarea, type IngPlan, type IngTareaPlan } from '@/services/ingenieria'
 import CronogramaCliente, { ganttDesdePlan } from '@/components/schedule/CronogramaCliente'
@@ -220,6 +220,17 @@ export default function CronogramaPM({ proyectos, all, plan, planLoading, sel, s
     finally { setBaseBusy(false); setMenuOpen(false) }
   }
 
+  // Imprimir / exportar a PDF (Tabloid 11x17 landscape). El navegador abre el
+  // diálogo; el usuario elige "Guardar como PDF". Despliega todas las tareas y
+  // oculta la interfaz interactiva (toolbar, inspector, menú) vía @media print.
+  function imprimir() {
+    setMenuOpen(false); setSelId(null); setModOpen(true)
+    document.body.classList.add('cpm-printing')
+    const cleanup = () => { document.body.classList.remove('cpm-printing'); window.removeEventListener('afterprint', cleanup) }
+    window.addEventListener('afterprint', cleanup)
+    setTimeout(() => window.print(), 120)
+  }
+
   // Scroll a "hoy" al montar / cambiar zoom
   useEffect(() => {
     const el = scrollRef.current
@@ -273,6 +284,7 @@ export default function CronogramaPM({ proyectos, all, plan, planLoading, sel, s
               {menuOpen && <>
                 <div className="cpm-menu-backdrop" onClick={() => setMenuOpen(false)} />
                 <div className="cpm-menu">
+                  <button className="cpm-menu-item" disabled={!plan} onClick={imprimir}><Printer size={15} /> Imprimir / PDF (Tabloid)</button>
                   <button className="cpm-menu-item" disabled={baseBusy || !plan} onClick={guardarLineaBase}><Flag size={15} /> {baseBusy ? 'Guardando…' : 'Guardar línea base'}</button>
                   <button className="cpm-menu-item" disabled={!plan} onClick={() => { setCronoOpen(true); setMenuOpen(false) }}><CalendarClock size={15} /> Cronograma del cliente</button>
                   <div className="cpm-menu-cambiar"><CambiarIngeniero proyectoExt={sel} propuesto={propuesto} ingenieros={todosIng} onDone={() => { onRefresh(); setMenuOpen(false) }} label="Cambiar ingeniero" /></div>
@@ -651,9 +663,11 @@ const CSS = `
 .cpm-head{flex:none;display:flex;flex-wrap:wrap;align-items:flex-start;gap:16px 24px;}
 .cpm-head-left{min-width:0;}
 .cpm-title-row{display:flex;align-items:center;gap:8px;}
-.cpm-proj{appearance:none;border:none;background:transparent;font-size:21px;font-weight:700;letter-spacing:-0.02em;color:var(--tx);cursor:pointer;padding:0 20px 0 0;max-width:520px;
-  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%238e8e93' stroke-width='3'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right center;}
-.cpm-proj:focus{outline:none;}
+/* selector de proyecto: aspecto de título PERO claramente interactivo (chip + chevron) */
+.cpm-proj{appearance:none;border:1px solid var(--div);background:var(--surf);font-size:21px;font-weight:700;letter-spacing:-0.02em;color:var(--tx);cursor:pointer;padding:4px 34px 4px 12px;max-width:560px;border-radius:10px;transition:background .12s,border-color .12s;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%230a6cdf' stroke-width='3'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 10px center;}
+.cpm-proj:hover{background-color:var(--acc-bg);border-color:#cfe0f7;}
+.cpm-proj:focus{outline:none;border-color:var(--acc);}
 .cpm-meta{display:flex;flex-wrap:wrap;align-items:center;gap:6px;font-size:13px;color:var(--tx2);margin-top:2px;}
 .cpm-dot-sep{color:#c7c7cc;}
 .cpm-sync{display:inline-flex;align-items:center;gap:6px;}
@@ -809,4 +823,23 @@ const CSS = `
 .cpm-modal-head h3{font-size:14px;font-weight:700;color:var(--tx);margin:0;}
 .cpm-modal-ic{color:var(--acc);}
 .cpm-modal-sub{font-size:11px;color:var(--tx3);margin:0 0 12px;}
+/* ───────── Impresión / PDF (Tabloid 11x17 landscape) ───────── */
+@media print {
+  @page { size: 11in 17in landscape; margin: 0.4in; }
+  body.cpm-printing { background:#fff !important; }
+  body.cpm-printing * { visibility:hidden !important; }
+  body.cpm-printing .cpm-root, body.cpm-printing .cpm-root * { visibility:visible !important; }
+  body.cpm-printing .cpm-root { position:absolute !important; left:0; top:0; width:auto !important; height:auto !important; gap:8px !important; }
+  body.cpm-printing .cpm-card { height:auto !important; box-shadow:none !important; border:1px solid #e5e5ea; }
+  body.cpm-printing .cpm-scroll { overflow:visible !important; height:auto !important; }
+  body.cpm-printing .cpm-thead { position:static !important; }
+  body.cpm-printing .cpm-taskcol { position:static !important; }
+  /* oculta la interfaz interactiva */
+  body.cpm-printing .cpm-toolbar,
+  body.cpm-printing .cpm-inspector,
+  body.cpm-printing .cpm-menu-wrap,
+  body.cpm-printing .cpm-mods-more,
+  body.cpm-printing .cpm-mods-chev { display:none !important; }
+  body.cpm-printing .cpm-bar, body.cpm-printing .cpm-barfill, body.cpm-printing .cpm-hito { -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+}
 `
