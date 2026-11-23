@@ -167,6 +167,33 @@ export default function CronogramaPM({ proyectos, plan, planLoading, sel, setSel
     return plan.aristas.filter((a) => a.tarea_id === selId || a.depende_de_id === selId)
   }, [selId, plan])
 
+  // ── Tarea seleccionada + sus predecesoras (para el inspector) ──
+  const selTarea = useMemo(() => tareas.find((t) => t.id === selId) ?? null, [tareas, selId])
+  const predecesoras = useMemo(() => {
+    if (selId == null || !plan) return [] as { t: IngTareaPlan; tipo: string }[]
+    return plan.aristas.filter((a) => a.tarea_id === selId)
+      .map((a) => ({ t: tareas.find((x) => x.id === a.depende_de_id), tipo: a.tipo }))
+      .filter((x): x is { t: IngTareaPlan; tipo: string } => !!x.t)
+  }, [selId, plan, tareas])
+
+  // Orden visible de tareas (para navegar con ↑/↓)
+  const visibleIds = useMemo(() => rows.rows.filter((r) => r.type === 'task').map((r) => (r as any).t.id as number), [rows])
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const el = e.target as HTMLElement
+      if (el && (el.tagName === 'INPUT' || el.tagName === 'SELECT' || el.tagName === 'TEXTAREA')) return
+      if (e.key === 'Escape') { setSelId(null); return }
+      if ((e.key === 'ArrowDown' || e.key === 'ArrowUp') && selId != null) {
+        const i = visibleIds.indexOf(selId)
+        if (i === -1) return
+        const j = e.key === 'ArrowDown' ? Math.min(visibleIds.length - 1, i + 1) : Math.max(0, i - 1)
+        e.preventDefault(); setSelId(visibleIds[j])
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [selId, visibleIds])
+
   // Scroll a "hoy" al montar / cambiar zoom
   useEffect(() => {
     const el = scrollRef.current
@@ -381,6 +408,67 @@ export default function CronogramaPM({ proyectos, plan, planLoading, sel, setSel
             </div>
           </div>
         )}
+
+        {/* ───────── Inspector lateral (Etapa B · por ahora SOLO LECTURA) ───────── */}
+        {selTarea && (() => {
+          const t = selTarea
+          const inicio = t.early_start || t.fecha_inicio, fin = t.early_finish || t.fecha_fin
+          const v = t.variance_dias
+          const varStyle = v == null || v === 0 ? { background: '#e9e9ee', color: '#6e6e73' } : v > 0 ? { background: '#fde4e4', color: '#c4262c' } : { background: '#dcf1e5', color: '#1a7f4b' }
+          return (
+            <div className="cpm-inspector">
+              <div className="cpm-insp-head">
+                <span className="cpm-insp-crumb">{(t.fase || '— Sin fase —')} · #{t.fila}</span>
+                {t.critico && <span className="cpm-insp-crit">Ruta crítica</span>}
+                <button className="cpm-insp-x" onClick={() => setSelId(null)} title="Cerrar (Esc)">×</button>
+              </div>
+              <div className="cpm-insp-name">{t.nombre}</div>
+
+              {/* estado (resalta el actual — editable en la Etapa B) */}
+              <div className="cpm-insp-seg">
+                {([['pendiente', 'Pendiente'], ['en_curso', 'En curso'], ['bloqueada', 'Bloqueada'], ['hecha', 'Hecha']] as const).map(([k, l]) => (
+                  <span key={k} className={t.estado === k ? 'on' : ''}>{l}</span>
+                ))}
+              </div>
+
+              <div className="cpm-insp-section">Asignación</div>
+              <div className="cpm-insp-group">
+                <div className="cpm-insp-row"><span>Asignado a</span><span className={t.asignado_nombre ? 'v' : 'muted'}>{t.asignado_nombre || 'Sin asignar'}</span></div>
+                <div className="cpm-insp-row"><span>Asignación</span><span className="v">{Math.round((t.allocation_pct || 0) * 100)}%</span></div>
+              </div>
+
+              <div className="cpm-insp-section">Planificación</div>
+              <div className="cpm-insp-group">
+                <div className="cpm-insp-row"><span>Inicio</span><span className="v">{fmtD(inicio)}{t.no_antes_de ? ' 📌' : ''}</span></div>
+                <div className="cpm-insp-row"><span>Duración</span><span className="v">{t.dur_dias} d</span></div>
+                <div className="cpm-insp-row"><span>Fin</span><span className="muted">{fmtD(fin)}</span></div>
+                <div className="cpm-insp-row col">
+                  <span>Predecesoras</span>
+                  <div className="cpm-chips">
+                    {predecesoras.length === 0 ? <span className="muted">Ninguna</span>
+                      : predecesoras.map((p, i) => (
+                        <button key={i} className="cpm-chip" onClick={() => setSelId(p.t.id)} title={`Ir a #${p.t.fila}`}>#{p.t.fila} {p.t.nombre}{p.tipo !== 'FS' ? ` · ${p.tipo}` : ''}</button>
+                      ))}
+                  </div>
+                </div>
+              </div>
+
+              <div className="cpm-insp-section">Línea base</div>
+              <div className="cpm-insp-group">
+                <div className="cpm-insp-row"><span>Inicio base</span><span className="muted">{fmtD(t.baseline_inicio)}</span></div>
+                <div className="cpm-insp-row"><span>Fin base</span><span className="muted">{fmtD(t.baseline_fin)}</span></div>
+                <div className="cpm-insp-row"><span>Variación</span><span className="cpm-var" style={varStyle}>{v == null ? '—' : v > 0 ? `+${v} d` : v < 0 ? `${v} d` : '0 d'}</span></div>
+              </div>
+
+              {t.comentario && <>
+                <div className="cpm-insp-section">Comentarios</div>
+                <div className="cpm-insp-note">{t.comentario}</div>
+              </>}
+
+              <div className="cpm-insp-foot">Vista de lectura · la edición llega en la Etapa B.</div>
+            </div>
+          )
+        })()}
       </div>
     </div>
   )
@@ -414,7 +502,7 @@ const CSS = `
 .cpm-cell-pill{justify-content:center;}
 .cpm-statuspill{font-size:13px;font-weight:600;padding:5px 12px;border-radius:999px;white-space:nowrap;}
 /* tarjeta gantt */
-.cpm-card{flex:1;min-height:0;display:flex;flex-direction:column;background:var(--surf);border-radius:16px;box-shadow:0 0 0 .5px rgba(0,0,0,.06),0 1px 3px rgba(0,0,0,.05);overflow:hidden;}
+.cpm-card{position:relative;flex:1;min-height:0;display:flex;flex-direction:column;background:var(--surf);border-radius:16px;box-shadow:0 0 0 .5px rgba(0,0,0,.06),0 1px 3px rgba(0,0,0,.05);overflow:hidden;}
 /* toolbar */
 .cpm-toolbar{flex:none;display:flex;flex-wrap:wrap;align-items:center;gap:10px;padding:12px 14px;border-bottom:.5px solid var(--div);}
 .cpm-spacer{flex:1;}
@@ -471,4 +559,29 @@ const CSS = `
 .cpm-barlabel{position:absolute;font-size:13px;font-weight:500;color:#3a3a3c;white-space:nowrap;line-height:1;align-self:center;pointer-events:none;top:50%;transform:translateY(-50%);}
 .cpm-slackline{position:absolute;height:0;border-top:2px dotted #c7c7cc;}
 .cpm-slackline span{position:absolute;left:4px;top:-14px;font-size:10px;color:var(--tx3);}
+/* inspector lateral (flotante dentro de la tarjeta) */
+.cpm-inspector{position:absolute;top:66px;right:16px;bottom:16px;width:340px;background:var(--surf);border-radius:16px;z-index:40;overflow-y:auto;
+  box-shadow:0 0 0 .5px rgba(0,0,0,.08),0 20px 50px rgba(0,0,0,.18);padding-bottom:16px;}
+.cpm-insp-head{display:flex;align-items:center;gap:8px;padding:14px 16px 4px;}
+.cpm-insp-crumb{font-size:12px;color:var(--tx3);}
+.cpm-insp-crit{font-size:11px;font-weight:600;color:#c4262c;background:#fde4e4;padding:2px 8px;border-radius:999px;}
+.cpm-insp-x{margin-left:auto;width:28px;height:28px;border:none;border-radius:999px;background:var(--ctrl);color:var(--tx2);font-size:16px;line-height:1;cursor:pointer;}
+.cpm-insp-x:hover{background:#e6e6ea;}
+.cpm-insp-name{font-size:21px;font-weight:700;letter-spacing:-0.02em;padding:2px 16px 10px;}
+.cpm-insp-seg{display:flex;gap:2px;margin:0 16px 4px;background:var(--ctrl);border-radius:9px;padding:2px;}
+.cpm-insp-seg span{flex:1;text-align:center;font-size:12px;font-weight:500;color:var(--tx2);padding:5px 4px;border-radius:7px;}
+.cpm-insp-seg span.on{background:#fff;color:var(--tx);box-shadow:0 1px 2px rgba(0,0,0,.12),0 0 0 .5px rgba(0,0,0,.04);}
+.cpm-insp-section{font-size:12px;font-weight:500;color:var(--tx3);text-transform:uppercase;letter-spacing:.02em;padding:14px 0 6px 34px;}
+.cpm-insp-group{background:var(--bg);border-radius:12px;margin:0 20px;overflow:hidden;}
+.cpm-insp-row{display:flex;align-items:center;justify-content:space-between;gap:10px;min-height:42px;padding:8px 14px;border-top:.5px solid var(--div);font-size:14px;color:var(--tx2);}
+.cpm-insp-row:first-child{border-top:none;}
+.cpm-insp-row.col{flex-direction:column;align-items:flex-start;gap:8px;}
+.cpm-insp-row .v{color:var(--tx);font-weight:500;}
+.cpm-insp-row .muted{color:var(--tx3);}
+.cpm-var{font-size:12px;font-weight:600;padding:2px 9px;border-radius:999px;}
+.cpm-chips{display:flex;flex-wrap:wrap;gap:6px;width:100%;}
+.cpm-chip{border:none;background:var(--acc-bg);color:#0a5cc2;font-size:12px;font-weight:500;padding:4px 9px;border-radius:999px;cursor:pointer;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.cpm-chip:hover{background:#dbe8fb;}
+.cpm-insp-note{margin:0 20px;background:#fdf3e4;border-radius:12px;padding:10px 14px;font-size:13px;color:var(--tx);white-space:pre-wrap;}
+.cpm-insp-foot{padding:16px 20px 0;font-size:11px;color:var(--tx3);font-style:italic;}
 `
