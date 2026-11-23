@@ -137,7 +137,7 @@ export default function MapaEtapas({ sugerenciaExt }: { sugerenciaExt?: string }
       <div className="rounded-2xl border border-stone-200 bg-white overflow-hidden">
       <div className="flex items-center gap-2 px-4 py-3 border-b border-stone-100">
         <Layers size={17} className="text-forest-600" />
-        <h2 className="font-bold text-stone-800">Portafolio por etapas · cada semana</h2>
+        <h2 className="font-bold text-stone-800">Lookahead por etapas · cada semana</h2>
         <span className="ml-auto text-xs text-stone-400">
           {hayOverlay ? <>el <b className="text-forest-700">borde verde</b> = dónde caería este proyecto</> : 'cuántos proyectos hay en cada etapa · click para verlos'}
         </span>
