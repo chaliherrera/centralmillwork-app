@@ -5,6 +5,11 @@ import { ingenieriaService, type IngProyecto, type IngTarea, type TareaInput, ty
 import MapaEtapas from '@/components/modules/ingenieria/MapaEtapas'
 import CronogramaCliente, { ganttDesdePlan } from '@/components/schedule/CronogramaCliente'
 import CambiarIngeniero from '@/components/modules/ingenieria/CambiarIngeniero'
+import CronogramaPM from '@/components/schedule/CronogramaPM'
+
+// Rediseño Apple-native del cronograma PM (handoff design_handoff_cronograma_pm).
+// Flag para volver a la vista anterior al instante si hace falta.
+const USA_CRONO_NUEVO = true
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Plan de Ingeniería — réplica de la estructura del Master.Sched (Smartsheet):
@@ -100,7 +105,9 @@ export default function IngenieriaPlan({ embedded, initialProyecto, initialMode 
       {mode === 'disponibilidad'
         ? <VistaDisponibilidad carga={carga} />
         : mode === 'proyecto'
-          ? <VistaProyecto proyectos={proyectos} all={all} plan={plan} planLoading={planLoading} sel={selProj} setSel={setSelProj} onEdit={setEdit} onRefresh={loadPlan} />
+          ? (USA_CRONO_NUEVO
+              ? <CronogramaPM proyectos={proyectos} all={all} plan={plan} planLoading={planLoading} sel={selProj} setSel={setSelProj} onEdit={setEdit} onRefresh={loadPlan} />
+              : <VistaProyecto proyectos={proyectos} all={all} plan={plan} planLoading={planLoading} sel={selProj} setSel={setSelProj} onEdit={setEdit} onRefresh={loadPlan} />)
           : mode === 'etapas'
             ? <MapaEtapas />
             : <VistaCarga all={all} proyectos={proyectos} selEng={selEng} setSelEng={setSelEng} onEdit={setEdit} />}
