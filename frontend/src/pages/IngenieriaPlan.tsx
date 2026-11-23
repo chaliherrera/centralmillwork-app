@@ -36,6 +36,22 @@ const cmpOrden = (a: IngTareaPlan, b: IngTareaPlan) => {
   return ka < kb ? -1 : ka > kb ? 1 : a.id - b.id
 }
 
+// Tokens Apple compartidos por las vistas Disponibilidad / Carga (mismo look que el
+// Cronograma PM y el Lookahead). Se inyectan con <style> y se aplican vía .lk-root/.lk-card.
+const ACC = '#0a6cdf'
+const SCHED_CSS = `
+.lk-root{font-family:-apple-system,BlinkMacSystemFont,'SF Pro Text','Helvetica Neue',Helvetica,Arial,sans-serif;letter-spacing:-0.01em;color:#1d1d1f;font-variant-numeric:tabular-nums;}
+.lk-card{background:#fff;border-radius:16px;box-shadow:0 0 0 .5px rgba(0,0,0,.06),0 1px 3px rgba(0,0,0,.05);overflow:hidden;}
+.lk-modalcard{background:#fff;border-radius:16px;box-shadow:0 20px 50px rgba(0,0,0,.25);}
+`
+// Paleta de celdas (semáforo de congestión) en tonos Apple
+const cellApple = (n: number, uno = 1, dos = 2): { bg: string; txt: string } => {
+  if (n <= 0) return { bg: 'transparent', txt: '' }
+  if (n <= uno) return { bg: '#d6efe1', txt: '#1a7f4b' }
+  if (n <= dos) return { bg: '#fdf0dc', txt: '#a65f00' }
+  return { bg: '#fde4e4', txt: '#c4262c' }
+}
+
 export default function IngenieriaPlan({ embedded, initialProyecto, initialMode }: { embedded?: boolean; initialProyecto?: string; initialMode?: 'disponibilidad' | 'proyecto' | 'carga' | 'etapas' }) {
   const [resumen, setResumen] = useState<{ tareas: number; proyectos: number; ingenieros: number } | null>(null)
   const [proyectos, setProyectos] = useState<IngProyecto[]>([])
@@ -156,21 +172,17 @@ export function VistaDisponibilidad({ carga, foco, ruta }: { carga: IngCarga | n
   if (!carga) return <div className="py-20 text-center text-stone-400"><Loader2 className="animate-spin inline" size={22} /></div>
   if (!g) return <div className="py-16 text-center text-stone-400">Sin datos de carga de ingeniería.</div>
   // color por CANTIDAD de tareas: libre / 1 verde / 2 ámbar / 3+ rojo (sobrecarga)
-  const cell = (n: number): { bg: string; txt: string } => {
-    if (n <= 0) return { bg: '#f5f5f4', txt: '' }
-    if (n === 1) return { bg: '#bbf7d0', txt: '#166534' }
-    if (n === 2) return { bg: '#fde68a', txt: '#92400e' }
-    return { bg: '#fecaca', txt: '#991b1b' }
-  }
-  const libCls = (l: number) => l <= 0 ? 'bg-rose-200 text-rose-900' : l === 1 ? 'bg-amber-100 text-amber-800' : 'bg-emerald-100 text-emerald-800'
+  const cell = (n: number) => cellApple(n, 1, 2)
+  const libCls = (l: number) => l <= 0 ? 'bg-rose-100 text-rose-700' : l === 1 ? 'bg-amber-100 text-amber-800' : 'bg-emerald-100 text-emerald-700'
   const fmtW = (w: string) => `${d(w).getDate()} ${MES[d(w).getMonth()]}`
   const GUT = 176
 
   return (
-    <div className="space-y-4">
-      <div className="rounded-2xl border border-stone-200 bg-white overflow-hidden">
+    <div className="lk-root space-y-4">
+      <style>{SCHED_CSS}</style>
+      <div className="lk-card">
         <div className="flex items-center gap-2 px-4 py-3 border-b border-stone-100">
-          <Activity size={17} className="text-forest-600" />
+          <Activity size={17} style={{ color: ACC }} />
           <h2 className="font-bold text-stone-800">{foco && !verTodos ? `Carga de ${foco} · el ingeniero propuesto` : 'Carga por ingeniero · tareas cada semana'}</h2>
           <span className="ml-auto text-xs text-stone-400">cuántas tareas tiene encimadas · click en una celda para verlas</span>
         </div>
@@ -179,7 +191,7 @@ export function VistaDisponibilidad({ carga, foco, ruta }: { carga: IngCarga | n
           <div className="flex items-stretch border-b border-stone-100 bg-stone-50/60">
             <div className="shrink-0 px-3 py-1.5 text-[10px] uppercase tracking-wide text-stone-400 font-semibold" style={{ width: GUT }}>Ingeniero</div>
             <div className="relative flex-1 h-7">
-              {g.months.map((m, i) => <div key={i} className="absolute top-0 bottom-0 border-l border-stone-200 flex items-center pl-1.5 text-[10.5px] font-semibold text-forest-700" style={{ left: `${m.startPct}%` }}>{m.label}</div>)}
+              {g.months.map((m, i) => <div key={i} className="absolute top-0 bottom-0 border-l border-stone-200 flex items-center pl-1.5 text-[10.5px] font-semibold" style={{ left: `${m.startPct}%`, color: ACC }}>{m.label}</div>)}
               {g.hoyPct !== null && <div className="absolute top-0 bottom-0 border-l-2 border-rose-400 z-10" style={{ left: `${g.hoyPct}%` }}><span className="absolute top-0 left-1 text-[9px] font-bold text-rose-500">hoy</span></div>}
             </div>
           </div>
@@ -199,28 +211,28 @@ export function VistaDisponibilidad({ carga, foco, ruta }: { carga: IngCarga | n
           {/* una fila por ingeniero — heatmap de cantidad de tareas */}
           {(mostrarTodos ? g.ingenieros : g.ingenieros.filter((e) => e.nombre === foco)).map((e) => { const picoN = Math.max(0, ...e.n_tareas); const esFoco = e.nombre === foco; return (
             <Fragment key={e.nombre}>
-            <div className={`flex items-center border-b border-stone-50 ${esFoco ? 'bg-forest-50/60 ring-1 ring-inset ring-forest-200' : 'hover:bg-stone-50/40'}`}>
+            <div className={`flex items-center border-b border-stone-50 ${esFoco ? 'ring-1 ring-inset' : 'hover:bg-stone-50/40'}`} style={esFoco ? { background: '#eef4fd', boxShadow: 'inset 0 0 0 1px rgba(10,108,223,.25)' } : undefined}>
               <div className="shrink-0 px-3 py-1.5 flex items-center gap-1.5" style={{ width: GUT }}>
-                <span className={`text-[12.5px] truncate flex-1 ${esFoco ? 'font-bold text-forest-800' : 'font-semibold text-stone-700'}`}>{e.nombre}</span>
-                {esFoco && <span className="text-[9px] font-bold uppercase tracking-wide text-forest-600 bg-forest-100 rounded-full px-1.5 py-0.5 shrink-0">propuesto</span>}
+                <span className="text-[12.5px] truncate flex-1 font-semibold" style={{ color: esFoco ? '#0a5cc2' : '#44403c', fontWeight: esFoco ? 700 : 600 }}>{e.nombre}</span>
+                {esFoco && <span className="text-[9px] font-bold uppercase tracking-wide rounded-full px-1.5 py-0.5 shrink-0" style={{ color: ACC, background: '#e8f0fc' }}>propuesto</span>}
                 <span className={`text-[11px] font-bold tabular-nums ${picoN > 2 ? 'text-rose-600' : 'text-stone-400'}`} title="pico: máximo de tareas en una semana">{picoN}</span>
               </div>
               <div className="flex-1 flex gap-px py-1">
                 {g.semanas.map((wk, i) => { const n = e.n_tareas[i] ?? 0; const pct = e.cargas[i] ?? 0; const c = cell(n); return (
                   <button key={i} onClick={() => n > 0 && abrirCelda(e.nombre, wk)} disabled={n <= 0}
                     title={`${e.nombre} · ${fmtW(wk)}: ${n} tarea${n === 1 ? '' : 's'} · ${Math.round(pct * 100)}% de asignación${n > 0 ? ' — click para ver' : ''}`}
-                    className={`flex-1 h-6 rounded-sm flex items-center justify-center text-[10px] font-bold transition-shadow ${n > 0 ? 'cursor-pointer hover:ring-2 hover:ring-forest-400' : 'cursor-default'}`}
-                    style={{ background: c.bg, color: c.txt }}>
+                    className={`flex-1 h-6 rounded-md flex items-center justify-center text-[10px] font-bold transition-shadow ${n > 0 ? 'cursor-pointer hover:ring-2' : 'cursor-default'}`}
+                    style={{ background: c.bg, color: c.txt, ['--tw-ring-color' as any]: 'rgba(10,108,223,.4)' }}>
                     {n > 0 ? n : ''}
                   </button>
                 ) })}
               </div>
             </div>
             {esFoco && ruta && ruta.some(Boolean) && (
-              <div className="flex items-stretch border-b border-stone-100 bg-forest-50/30">
-                <div className="shrink-0 px-3 py-1 text-[10px] font-semibold text-forest-700 flex items-center gap-1" style={{ width: GUT }}><span className="w-2 h-2 rounded-sm bg-forest-500 inline-block" /> ruta de este proyecto</div>
+              <div className="flex items-stretch border-b border-stone-100" style={{ background: '#eef4fd' }}>
+                <div className="shrink-0 px-3 py-1 text-[10px] font-semibold flex items-center gap-1" style={{ width: GUT, color: ACC }}><span className="w-2 h-2 rounded-sm inline-block" style={{ background: ACC }} /> ruta de este proyecto</div>
                 <div className="flex-1 flex gap-px py-1.5 items-center">
-                  {g.semanas.map((_, i) => <div key={i} title={ruta[i] ? 'este proyecto ocupa esta semana' : ''} className={`flex-1 h-2 rounded-sm ${ruta[i] ? 'bg-forest-500' : 'bg-transparent'}`} />)}
+                  {g.semanas.map((_, i) => <div key={i} title={ruta[i] ? 'este proyecto ocupa esta semana' : ''} className="flex-1 h-2 rounded-sm" style={{ background: ruta[i] ? ACC : 'transparent' }} />)}
                 </div>
               </div>
             )}
@@ -230,16 +242,16 @@ export function VistaDisponibilidad({ carga, foco, ruta }: { carga: IngCarga | n
         {foco && (
           <div className="px-4 py-2 border-t border-stone-100">
             <button onClick={() => setVerTodos((v) => !v)}
-              className="inline-flex items-center gap-1.5 text-xs font-semibold text-forest-700 hover:text-forest-900">
+              className="inline-flex items-center gap-1.5 text-xs font-semibold hover:opacity-80" style={{ color: ACC }}>
               {verTodos ? <><ChevronUp size={14} /> Ver solo el ingeniero propuesto</> : <><ChevronDown size={14} /> Ver la carga de todos los ingenieros ({g.total})</>}
             </button>
           </div>
         )}
         <div className="px-4 py-2 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-stone-500 items-center border-t border-stone-100">
-          <span className="inline-flex items-center gap-1.5"><span className="w-3.5 h-3.5 rounded-sm inline-block" style={{ background: '#f5f5f4' }} /> libre</span>
-          <span className="inline-flex items-center gap-1.5"><span className="w-3.5 h-3.5 rounded-sm inline-block" style={{ background: '#bbf7d0' }} /> 1 tarea</span>
-          <span className="inline-flex items-center gap-1.5"><span className="w-3.5 h-3.5 rounded-sm inline-block" style={{ background: '#fde68a' }} /> 2 tareas</span>
-          <span className="inline-flex items-center gap-1.5"><span className="w-3.5 h-3.5 rounded-sm inline-block" style={{ background: '#fecaca' }} /> 3+ sobrecarga</span>
+          <span className="inline-flex items-center gap-1.5"><span className="w-3.5 h-3.5 rounded inline-block border border-stone-200" style={{ background: '#f0f0f2' }} /> libre</span>
+          <span className="inline-flex items-center gap-1.5"><span className="w-3.5 h-3.5 rounded inline-block" style={{ background: '#d6efe1' }} /> 1 tarea</span>
+          <span className="inline-flex items-center gap-1.5"><span className="w-3.5 h-3.5 rounded inline-block" style={{ background: '#fdf0dc' }} /> 2 tareas</span>
+          <span className="inline-flex items-center gap-1.5"><span className="w-3.5 h-3.5 rounded inline-block" style={{ background: '#fde4e4' }} /> 3+ sobrecarga</span>
           <span className="italic text-stone-400">El número es cuántas tareas tiene encimadas esa semana. A la izquierda, el pico. Click en una celda para ver cuáles.</span>
         </div>
       </div>
@@ -247,9 +259,10 @@ export function VistaDisponibilidad({ carga, foco, ruta }: { carga: IngCarga | n
       {/* Modal: detalle de tareas de una celda */}
       {sel && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4" onClick={() => setSel(null)}>
-          <div className="bg-white rounded-2xl border border-stone-200 shadow-xl max-w-lg w-full max-h-[80vh] overflow-hidden flex flex-col" onClick={(ev) => ev.stopPropagation()}>
+          <div className="lk-root lk-modalcard max-w-lg w-full max-h-[80vh] overflow-hidden flex flex-col" onClick={(ev) => ev.stopPropagation()}>
+            <style>{SCHED_CSS}</style>
             <div className="flex items-center gap-2 px-4 py-3 border-b border-stone-100">
-              <Activity size={16} className="text-forest-600" />
+              <Activity size={16} style={{ color: ACC }} />
               <div>
                 <div className="font-bold text-stone-800 text-sm">{sel.ing}</div>
                 <div className="text-xs text-stone-400">semana del {fmtW(sel.sem)}{detail ? ` · ${detail.length} tarea${detail.length === 1 ? '' : 's'}` : ''}</div>
@@ -968,13 +981,15 @@ function VistaCarga({ all, proyectos, selEng, setSelEng, onEdit }: { all: IngTar
   }, [all, selEng, ingenieros])
 
   return (
-    <div className="space-y-4">
+    <div className="lk-root space-y-4">
+      <style>{SCHED_CSS}</style>
       <div className="flex flex-wrap gap-2">
         {ingenieros.map((e) => {
           const on = e.nombre === selEng
           return (
-            <button key={e.nombre} onClick={() => setSelEng(e.nombre)} className={`rounded-xl border px-3 py-2 text-left transition-colors ${on ? 'border-forest-500 bg-forest-50 ring-1 ring-forest-300' : 'border-stone-200 bg-white hover:border-stone-300'}`}>
-              <div className={`text-sm font-semibold ${on ? 'text-forest-800' : 'text-stone-700'}`}>{e.nombre}</div>
+            <button key={e.nombre} onClick={() => setSelEng(e.nombre)} className="rounded-xl border px-3 py-2 text-left transition-colors"
+              style={on ? { borderColor: ACC, background: '#eef4fd', boxShadow: 'inset 0 0 0 1px rgba(10,108,223,.3)' } : { borderColor: '#e5e5ea', background: '#fff' }}>
+              <div className="text-sm font-semibold" style={{ color: on ? '#0a5cc2' : '#44403c' }}>{e.nombre}</div>
               <div className="text-[10.5px] text-stone-400">{e.nProj} proyectos · pico <b className={e.pico >= 3 ? 'text-rose-600' : 'text-stone-600'}>{e.pico}</b></div>
             </button>
           )
@@ -982,16 +997,16 @@ function VistaCarga({ all, proyectos, selEng, setSelEng, onEdit }: { all: IngTar
       </div>
 
       {eng && (
-        <div className="rounded-2xl border border-stone-200 bg-white overflow-hidden">
+        <div className="lk-card">
           <div className="flex items-center gap-3 px-4 py-3 border-b border-stone-100 flex-wrap">
-            <Gauge size={17} className="text-forest-600" /><h2 className="font-bold text-stone-800">{eng.meta.nombre}</h2>
+            <Gauge size={17} style={{ color: ACC }} /><h2 className="font-bold text-stone-800">{eng.meta.nombre}</h2>
             <span className="text-xs text-stone-400">{fmtD(eng.meta.min.toISOString().slice(0, 10))} → {fmtD(eng.meta.max.toISOString().slice(0, 10))} · {eng.lanes.length} proyectos · pico <b className={eng.meta.pico >= 3 ? 'text-rose-600' : 'text-stone-600'}>{eng.meta.pico} a la vez</b></span>
           </div>
           <div className="overflow-x-auto"><div className="min-w-[820px]">
             <div className="flex items-stretch border-b border-stone-100 bg-stone-50/60">
               <div className="w-52 shrink-0 px-3 py-1.5 text-[10px] uppercase tracking-wide text-stone-400 font-semibold">Proyecto</div>
               <div className="relative flex-1 h-7">
-                {eng.months.map((m, i) => <div key={i} className="absolute top-0 bottom-0 border-l border-stone-200 flex items-center pl-1.5 text-[10.5px] font-semibold text-forest-700" style={{ left: `${m.startPct}%` }}>{m.label}</div>)}
+                {eng.months.map((m, i) => <div key={i} className="absolute top-0 bottom-0 border-l border-stone-200 flex items-center pl-1.5 text-[10.5px] font-semibold" style={{ left: `${m.startPct}%`, color: ACC }}>{m.label}</div>)}
                 {eng.hoyPct !== null && <div className="absolute top-0 bottom-0 border-l-2 border-rose-400 z-10" style={{ left: `${eng.hoyPct}%` }} />}
               </div>
             </div>
