@@ -5,7 +5,7 @@
 // resumen + lista + Gantt de SOLO LECTURA. La edición (inspector) y el drag llegan
 // en etapas B/C. El % de avance es SIEMPRE el real calculado (nunca tecleado).
 // ─────────────────────────────────────────────────────────────────────────────
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type PointerEvent as RPE } from 'react'
 import { Search, Plus, Loader2, Trash2, Pin, PinOff, MoreHorizontal, Flag, CalendarClock, X, Package, FlaskConical, Wrench, Wallet, ChevronDown, Printer, Lock, LockOpen } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { ingenieriaService, type IngProyecto, type IngTarea, type IngPlan, type IngTareaPlan, type InstalacionDetalle } from '@/services/ingenieria'
@@ -21,6 +21,7 @@ const MES3 = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oc
 const DAY = 86400000
 const d = (iso: string) => new Date(iso + 'T00:00:00')
 const diffDays = (a: Date, b: Date) => Math.round((a.getTime() - b.getTime()) / DAY)
+const addDaysIso = (iso: string, n: number) => { const x = d(iso); x.setDate(x.getDate() + n); return x.toISOString().slice(0, 10) }
 const mondayOf = (dt: Date) => { const x = new Date(dt); const wd = (x.getDay() + 6) % 7; x.setDate(x.getDate() - wd); x.setHours(0, 0, 0, 0); return x }
 const fmtD = (iso: string | null) => (iso ? `${d(iso).getDate()} ${MES3[d(iso).getMonth()]}` : '—')
 const isWeekend = (dt: Date) => { const w = dt.getDay(); return w === 0 || w === 6 }
@@ -70,6 +71,14 @@ export default function CronogramaPM({ proyectos, all, plan, planLoading, sel, s
   const [instOpen, setInstOpen] = useState(false)                  // modal detalle de instalación
   const [instDet, setInstDet] = useState<InstalacionDetalle | null>(null)
   const [instBusy, setInstBusy] = useState(false)
+  // Drag de BARRA (mover la fecha de inicio = fijar, restricción MSP)
+  const [barDrag, setBarDrag] = useState<{ id: number; startX: number; origStart: string; deltaDays: number; movable: boolean } | null>(null)
+  const barDragRef = useRef(barDrag); barDragRef.current = barDrag
+  const [barDragBusy, setBarDragBusy] = useState(false)
+  // Drag de FILA (reordenar la lista, no toca fechas)
+  const [rowDrag, setRowDrag] = useState<number | null>(null)
+  const [dropId, setDropId] = useState<{ id: number; after: boolean } | null>(null)
+  const [rowBusy, setRowBusy] = useState(false)
 
   const scrollRef = useRef<HTMLDivElement>(null)
   const [gridH, setGridH] = useState(520)
@@ -240,6 +249,41 @@ export default function CronogramaPM({ proyectos, all, plan, planLoading, sel, s
     setInstOpen(true); setInstBusy(true); setInstDet(null)
     try { setInstDet((await ingenieriaService.instalacionDetalle(sel)).data) }
     catch { setInstDet({ items: [], punch: [] }) } finally { setInstBusy(false) }
+  }
+
+  // Drag de barra: mientras arrastro, mido el desfase en días; al soltar, fijo el
+  // inicio (fijarFecha). Si no me moví (deltaDays 0) fue un click → selecciono.
+  useEffect(() => {
+    if (!barDrag) return
+    const onMove = (e: PointerEvent) => setBarDrag((dr) => dr && dr.movable ? { ...dr, deltaDays: Math.round((e.clientX - dr.startX) / px) } : dr)
+    const onUp = async () => {
+      const dr = barDragRef.current; setBarDrag(null)
+      if (!dr) return
+      if (!dr.movable || dr.deltaDays === 0) { setSelId(dr.id); return }
+      setBarDragBusy(true)
+      try { await ingenieriaService.fijarFecha(dr.id, 'inicio', addDaysIso(dr.origStart, dr.deltaDays)); await onRefresh() }
+      catch (e: any) { toast.error(e?.response?.data?.message || 'No se pudo mover la fecha') }
+      finally { setBarDragBusy(false) }
+    }
+    window.addEventListener('pointermove', onMove); window.addEventListener('pointerup', onUp)
+    return () => { window.removeEventListener('pointermove', onMove); window.removeEventListener('pointerup', onUp) }
+  }, [barDrag?.id, px])  // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Soltar una FILA: reordena orden_visual de todas las tareas del proyecto (no toca fechas).
+  async function soltarFila() {
+    const dragId = rowDrag, target = dropId
+    setRowDrag(null); setDropId(null)
+    if (dragId == null || !target || rowBusy || dragId === target.id) return
+    const orden = [...tareas].sort((a, b) => (a.orden_visual ?? 1e9) - (b.orden_visual ?? 1e9) || a.fila - b.fila).map((t) => t.id)
+    const from = orden.indexOf(dragId); if (from === -1) return
+    orden.splice(from, 1)
+    let to = orden.indexOf(target.id); if (to === -1) return
+    if (target.after) to += 1
+    orden.splice(to, 0, dragId)
+    setRowBusy(true)
+    try { await ingenieriaService.reordenarVisual(sel, orden); await onRefresh() }
+    catch (e: any) { toast.error(e?.response?.data?.message || 'No se pudo reordenar') }
+    finally { setRowBusy(false) }
   }
 
   // Imprimir / exportar a PDF (Tabloid 11x17 landscape). El navegador abre el
@@ -431,8 +475,16 @@ export default function CronogramaPM({ proyectos, all, plan, planLoading, sel, s
                     const t = r.t, est = estadoInfo(t.estado)
                     const dim = criticalOnly && !t.critico
                     const ava = t.asignado_nombre ? AVA[hashIdx(t.asignado_nombre, AVA.length)] : null
+                    const movable = t.estado !== 'hecha' && t.estado !== 'na' && !buscando
+                    const dropTop = dropId?.id === t.id && !dropId.after, dropBot = dropId?.id === t.id && dropId.after
                     return (
-                      <div key={i} className={`cpm-trow ${selId === t.id ? 'sel' : ''}`} style={{ height: RH, opacity: dim ? 0.45 : 1 }} onClick={() => setSelId(t.id)}>
+                      <div key={i} className={`cpm-trow ${selId === t.id ? 'sel' : ''} ${rowDrag === t.id ? 'dragging' : ''} ${dropTop ? 'drop-top' : ''} ${dropBot ? 'drop-bot' : ''}`} style={{ height: RH, opacity: dim ? 0.45 : 1 }}
+                        onClick={() => setSelId(t.id)}
+                        draggable={movable}
+                        onDragStart={() => setRowDrag(t.id)}
+                        onDragEnd={() => { setRowDrag(null); setDropId(null) }}
+                        onDragOver={(e) => { if (rowDrag == null || rowDrag === t.id) return; e.preventDefault(); const rc = e.currentTarget.getBoundingClientRect(); setDropId({ id: t.id, after: e.clientY > rc.top + rc.height / 2 }) }}
+                        onDrop={(e) => { e.preventDefault(); soltarFila() }}>
                         <span className="cpm-sdot" style={{ background: est.dot }} title={est.label} />
                         <div className="cpm-tnames">
                           <div className="cpm-tname" title={t.nombre}>{t.nombre}</div>
@@ -446,7 +498,7 @@ export default function CronogramaPM({ proyectos, all, plan, planLoading, sel, s
                 </div>
 
                 {/* timeline */}
-                <div className="cpm-timeline" style={{ width: geo?.width ?? 0, height: rows.bodyH }}>
+                <div className="cpm-timeline" style={{ width: geo?.width ?? 0, height: rows.bodyH, opacity: barDragBusy || rowBusy ? 0.6 : 1, transition: 'opacity .1s' }}>
                   {/* líneas verticales */}
                   {zoom === 'semana' && headerMarks.ticks.map((t, i) => (
                     <div key={`v${i}`} className="cpm-vline" style={{ left: t.x, borderColor: new Date(geo!.day0.getTime() + Math.round(t.x / px) * DAY).getDay() === 1 ? '#e5e5ea' : '#f5f5f7' }} />
@@ -487,21 +539,31 @@ export default function CronogramaPM({ proyectos, all, plan, planLoading, sel, s
                     const ring = selBar ? '0 0 0 2px #fff, 0 0 0 4px #0a6cdf' : vecino ? '0 0 0 2px #fff, 0 0 0 3.5px rgba(10,108,223,.4)' : undefined
                     // holgura (línea punteada tras la barra)
                     const slackPx = showSlack && t.late_finish && t.early_finish ? Math.max(0, diffDays(d(t.late_finish), d(t.early_finish)) * px) : 0
+                    const movableBar = t.estado !== 'hecha' && t.estado !== 'na' && !!(t.early_start || t.fecha_inicio)
+                    const dx = barDrag?.id === t.id && barDrag.deltaDays !== 0 ? barDrag.deltaDays * px : 0
+                    const startDrag = (e: RPE) => { e.stopPropagation(); setBarDrag({ id: t.id, startX: e.clientX, origStart: t.early_start || t.fecha_inicio || '', deltaDays: 0, movable: movableBar }) }
                     if (g.hito) {
                       return (
-                        <div key={i} style={{ position: 'absolute', left: g.x, top: r.y, height: RH, display: 'flex', alignItems: 'center', opacity: dim ? 0.4 : 1 }}>
-                          <span className="cpm-hito" style={{ width: barH * 0.9, height: barH * 0.9, background: fill, boxShadow: ring }} title={`${t.nombre} · hito ${fmtD(t.early_start)}`} onClick={() => setSelId(t.id)} />
+                        <div key={i} style={{ position: 'absolute', left: g.x + dx, top: r.y, height: RH, display: 'flex', alignItems: 'center', opacity: dim ? 0.4 : 1 }}>
+                          <span className="cpm-hito" style={{ width: barH * 0.9, height: barH * 0.9, background: fill, boxShadow: ring, cursor: movableBar ? 'grab' : 'pointer' }} title={`${t.nombre} · hito ${fmtD(t.early_start)}`} onPointerDown={startDrag} />
+                          {dx !== 0 && <span className="cpm-dragtip" style={{ left: 14 }}>{fmtD(addDaysIso(t.early_start || t.fecha_inicio || '', barDrag!.deltaDays))} ({barDrag!.deltaDays > 0 ? '+' : ''}{barDrag!.deltaDays} d)</span>}
                           <span className="cpm-barlabel">{t.nombre}</span>
                         </div>
                       )
                     }
                     return (
                       <div key={i} style={{ position: 'absolute', left: 0, right: 0, top: topBar, height: barH, opacity: dim ? 0.4 : 1 }}>
+                        {/* línea base (MSP): barra fina gris apenas debajo de la tarea */}
+                        {geo && t.baseline_inicio && t.baseline_fin && (() => {
+                          const bx = geo.x(t.baseline_inicio!); const bw = Math.max((geo.x(t.baseline_fin!) + px) - bx, 4)
+                          return <div className="cpm-baseline" style={{ left: bx, width: bw }} title={`Línea base: ${fmtD(t.baseline_inicio)} → ${fmtD(t.baseline_fin)}`} />
+                        })()}
                         {slackPx > 0 && <div className="cpm-slackline" style={{ left: g.x + g.w, width: slackPx, top: barH / 2 }}><span>+{diffDays(d(t.late_finish!), d(t.early_finish!))} d</span></div>}
-                        <div className="cpm-bar" style={{ left: g.x, width: g.w, height: barH, background: track, boxShadow: ring }} title={`${t.nombre}\n${fmtD(t.early_start)} → ${fmtD(t.early_finish)}\n${Math.round(ava)}% · holgura ${t.holgura_dias ?? '—'} d`} onClick={() => setSelId(t.id)}>
+                        <div className="cpm-bar" style={{ left: g.x, width: g.w, height: barH, background: track, boxShadow: ring, transform: dx ? `translateX(${dx}px)` : undefined, cursor: movableBar ? 'grab' : 'pointer' }} title={`${t.nombre}\n${fmtD(t.early_start)} → ${fmtD(t.early_finish)}\n${Math.round(ava)}% · holgura ${t.holgura_dias ?? '—'} d`} onPointerDown={startDrag}>
                           <div className="cpm-barfill" style={{ width: `${ava}%`, background: fill }} />
                         </div>
-                        <span className="cpm-barlabel" style={{ left: g.x + g.w + 10 }}>{t.nombre}{(est.key === 'prog' || est.key === 'block') && ava > 0 ? ` · ${Math.round(ava)}%` : ''}</span>
+                        {dx !== 0 && <div className="cpm-dragtip" style={{ left: g.x + dx }}>{fmtD(addDaysIso(t.early_start || t.fecha_inicio || '', barDrag!.deltaDays))} ({barDrag!.deltaDays > 0 ? '+' : ''}{barDrag!.deltaDays} d)</div>}
+                        <span className="cpm-barlabel" style={{ left: g.x + g.w + 10, transform: dx ? `translateX(${dx}px)` : undefined }}>{t.nombre}{(est.key === 'prog' || est.key === 'block') && ava > 0 ? ` · ${Math.round(ava)}%` : ''}</span>
                       </div>
                     )
                   })}
@@ -765,7 +827,16 @@ const CSS = `
 .cpm-hoy-line{position:absolute;top:0;bottom:0;border-left:2px solid var(--acc);box-shadow:0 0 0 3px rgba(10,108,223,.12);z-index:1;}
 .cpm-entrega-line{position:absolute;top:0;bottom:0;border-left:1.5px dashed #e5484d;opacity:.6;z-index:1;}
 .cpm-deps{position:absolute;inset:0;pointer-events:none;z-index:2;}
-.cpm-bar{position:absolute;border-radius:8px;overflow:hidden;cursor:pointer;}
+.cpm-bar{position:absolute;border-radius:8px;overflow:hidden;cursor:pointer;touch-action:none;user-select:none;}
+/* línea base (MS Project): barra fina gris apenas debajo de la tarea */
+.cpm-baseline{position:absolute;top:100%;margin-top:1px;height:3px;background:#9ca3af;border-radius:2px;pointer-events:none;}
+/* tooltip al arrastrar una barra */
+.cpm-dragtip{position:absolute;top:-22px;background:#1d1d1f;color:#fff;font-size:11px;font-weight:600;padding:2px 7px;border-radius:7px;white-space:nowrap;z-index:5;pointer-events:none;}
+/* drag de filas */
+.cpm-trow.dragging{opacity:.4;}
+.cpm-trow.drop-top{box-shadow:inset 0 2px 0 0 var(--acc);}
+.cpm-trow.drop-bot{box-shadow:inset 0 -2px 0 0 var(--acc);}
+.cpm-hito{touch-action:none;user-select:none;}
 .cpm-barfill{position:absolute;inset:0;}
 .cpm-hito{border-radius:4px;transform:rotate(45deg);cursor:pointer;flex:none;}
 .cpm-barlabel{position:absolute;font-size:13px;font-weight:500;color:#3a3a3c;white-space:nowrap;line-height:1;align-self:center;pointer-events:none;top:50%;transform:translateY(-50%);}
