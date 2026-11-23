@@ -6,8 +6,9 @@
 // en etapas B/C. El % de avance es SIEMPRE el real calculado (nunca tecleado).
 // ─────────────────────────────────────────────────────────────────────────────
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import { Search, Plus, Loader2 } from 'lucide-react'
-import type { IngProyecto, IngTarea, IngPlan, IngTareaPlan } from '@/services/ingenieria'
+import { Search, Plus, Loader2, Trash2, Pin, PinOff } from 'lucide-react'
+import toast from 'react-hot-toast'
+import { ingenieriaService, type IngProyecto, type IngTarea, type IngPlan, type IngTareaPlan } from '@/services/ingenieria'
 
 // ── Helpers de fecha (día-a-día, en px) ──
 const MES = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre']
@@ -49,7 +50,7 @@ type Props = {
   onRefresh: () => void
 }
 
-export default function CronogramaPM({ proyectos, plan, planLoading, sel, setSel, onEdit }: Props) {
+export default function CronogramaPM({ proyectos, all, plan, planLoading, sel, setSel, onEdit, onRefresh }: Props) {
   const [zoom, setZoom] = useState<'semana' | 'mes' | 'trimestre'>('mes')
   const [query, setQuery] = useState('')
   const [criticalOnly, setCriticalOnly] = useState(false)
@@ -193,6 +194,9 @@ export default function CronogramaPM({ proyectos, plan, planLoading, sel, setSel
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [selId, visibleIds])
+
+  // Ingenieros disponibles (para el select de "Asignado a" del inspector)
+  const todosIng = useMemo(() => [...new Set(all.map((t) => t.asignado_nombre).filter(Boolean) as string[])].sort((a, b) => a.localeCompare(b)), [all])
 
   // Scroll a "hoy" al montar / cambiar zoom
   useEffect(() => {
@@ -409,66 +413,139 @@ export default function CronogramaPM({ proyectos, plan, planLoading, sel, setSel
           </div>
         )}
 
-        {/* ───────── Inspector lateral (Etapa B · por ahora SOLO LECTURA) ───────── */}
-        {selTarea && (() => {
-          const t = selTarea
-          const inicio = t.early_start || t.fecha_inicio, fin = t.early_finish || t.fecha_fin
-          const v = t.variance_dias
-          const varStyle = v == null || v === 0 ? { background: '#e9e9ee', color: '#6e6e73' } : v > 0 ? { background: '#fde4e4', color: '#c4262c' } : { background: '#dcf1e5', color: '#1a7f4b' }
-          return (
-            <div className="cpm-inspector">
-              <div className="cpm-insp-head">
-                <span className="cpm-insp-crumb">{(t.fase || '— Sin fase —')} · #{t.fila}</span>
-                {t.critico && <span className="cpm-insp-crit">Ruta crítica</span>}
-                <button className="cpm-insp-x" onClick={() => setSelId(null)} title="Cerrar (Esc)">×</button>
-              </div>
-              <div className="cpm-insp-name">{t.nombre}</div>
+        {/* ───────── Inspector lateral (Etapa B · edición con guardado) ───────── */}
+        {selTarea && <Inspector t={selTarea} tareas={tareas} engineers={todosIng} predecesoras={predecesoras}
+          onRefresh={onRefresh} onClose={() => setSelId(null)} goTo={setSelId} />}
+      </div>
+    </div>
+  )
+}
 
-              {/* estado (resalta el actual — editable en la Etapa B) */}
-              <div className="cpm-insp-seg">
-                {([['pendiente', 'Pendiente'], ['en_curso', 'En curso'], ['bloqueada', 'Bloqueada'], ['hecha', 'Hecha']] as const).map(([k, l]) => (
-                  <span key={k} className={t.estado === k ? 'on' : ''}>{l}</span>
-                ))}
-              </div>
+// ─────────────────────────────────────────────────────────────────────────────
+// Inspector lateral — edición con guardado. Edita las decisiones de PLANIFICACIÓN
+// del PM (nombre, responsable, %, duración, inicio, predecesoras, comentario).
+// El ESTADO queda de solo-lectura: el cumplimiento lo reporta el ingeniero desde
+// su escritorio (preserva el reparto a escritorios y los handoffs a Compras/Prod).
+// Cada cambio llama al backend y refresca el plan (recalcula fechas/holgura/var).
+// ─────────────────────────────────────────────────────────────────────────────
+function Inspector({ t, tareas, engineers, predecesoras, onRefresh, onClose, goTo }: {
+  t: IngTareaPlan
+  tareas: IngTareaPlan[]
+  engineers: string[]
+  predecesoras: { t: IngTareaPlan; tipo: string }[]
+  onRefresh: () => void
+  onClose: () => void
+  goTo: (id: number) => void
+}) {
+  const [nombre, setNombre] = useState(t.nombre)
+  const [coment, setComent] = useState(t.comentario ?? '')
+  const [busy, setBusy] = useState(false)
+  const [addSel, setAddSel] = useState('')
+  // Re-sincroniza los campos locales al cambiar de tarea
+  useEffect(() => { setNombre(t.nombre); setComent(t.comentario ?? ''); setAddSel('') }, [t.id])  // eslint-disable-line react-hooks/exhaustive-deps
 
-              <div className="cpm-insp-section">Asignación</div>
-              <div className="cpm-insp-group">
-                <div className="cpm-insp-row"><span>Asignado a</span><span className={t.asignado_nombre ? 'v' : 'muted'}>{t.asignado_nombre || 'Sin asignar'}</span></div>
-                <div className="cpm-insp-row"><span>Asignación</span><span className="v">{Math.round((t.allocation_pct || 0) * 100)}%</span></div>
-              </div>
+  const inicio = t.early_start || t.fecha_inicio, fin = t.early_finish || t.fecha_fin
+  const alloc = Math.round((t.allocation_pct || 0) * 100)
+  const v = t.variance_dias
+  const varStyle = v == null || v === 0 ? { background: '#e9e9ee', color: '#6e6e73' } : v > 0 ? { background: '#fde4e4', color: '#c4262c' } : { background: '#dcf1e5', color: '#1a7f4b' }
+  const preIds = new Set(predecesoras.map((p) => p.t.id))
+  // Candidatas para "+ Añadir": del mismo proyecto, no ella misma, no ya-predecesoras.
+  const candidatas = tareas.filter((x) => x.id !== t.id && !preIds.has(x.id)).sort((a, b) => a.fila - b.fila)
 
-              <div className="cpm-insp-section">Planificación</div>
-              <div className="cpm-insp-group">
-                <div className="cpm-insp-row"><span>Inicio</span><span className="v">{fmtD(inicio)}{t.no_antes_de ? ' 📌' : ''}</span></div>
-                <div className="cpm-insp-row"><span>Duración</span><span className="v">{t.dur_dias} d</span></div>
-                <div className="cpm-insp-row"><span>Fin</span><span className="muted">{fmtD(fin)}</span></div>
-                <div className="cpm-insp-row col">
-                  <span>Predecesoras</span>
-                  <div className="cpm-chips">
-                    {predecesoras.length === 0 ? <span className="muted">Ninguna</span>
-                      : predecesoras.map((p, i) => (
-                        <button key={i} className="cpm-chip" onClick={() => setSelId(p.t.id)} title={`Ir a #${p.t.fila}`}>#{p.t.fila} {p.t.nombre}{p.tipo !== 'FS' ? ` · ${p.tipo}` : ''}</button>
-                      ))}
-                  </div>
-                </div>
-              </div>
+  async function save(fn: () => Promise<any>) {
+    if (busy) return
+    setBusy(true)
+    try { await fn(); await onRefresh() }
+    catch (e: any) { toast.error(e?.response?.data?.message || 'No se pudo guardar') }
+    finally { setBusy(false) }
+  }
+  const setAlloc = (n: number) => save(() => ingenieriaService.actualizarTarea(t.id, { allocation_pct: Math.max(0, Math.min(100, n)) / 100 }))
+  const setDur = (n: number) => save(() => ingenieriaService.actualizarTarea(t.id, { dur_dias: Math.max(0, n) }))
 
-              <div className="cpm-insp-section">Línea base</div>
-              <div className="cpm-insp-group">
-                <div className="cpm-insp-row"><span>Inicio base</span><span className="muted">{fmtD(t.baseline_inicio)}</span></div>
-                <div className="cpm-insp-row"><span>Fin base</span><span className="muted">{fmtD(t.baseline_fin)}</span></div>
-                <div className="cpm-insp-row"><span>Variación</span><span className="cpm-var" style={varStyle}>{v == null ? '—' : v > 0 ? `+${v} d` : v < 0 ? `${v} d` : '0 d'}</span></div>
-              </div>
+  return (
+    <div className={`cpm-inspector ${busy ? 'busy' : ''}`}>
+      <div className="cpm-insp-head">
+        <span className="cpm-insp-crumb">{(t.fase || '— Sin fase —')} · #{t.fila}</span>
+        {t.critico && <span className="cpm-insp-crit">Ruta crítica</span>}
+        <button className="cpm-insp-x" onClick={onClose} title="Cerrar (Esc)">×</button>
+      </div>
 
-              {t.comentario && <>
-                <div className="cpm-insp-section">Comentarios</div>
-                <div className="cpm-insp-note">{t.comentario}</div>
-              </>}
+      {/* nombre editable */}
+      <input className="cpm-insp-name-in" value={nombre} onChange={(e) => setNombre(e.target.value)}
+        onBlur={() => { const n = nombre.trim(); if (n && n !== t.nombre) save(() => ingenieriaService.actualizarTarea(t.id, { nombre: n })) }}
+        onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }} />
 
-              <div className="cpm-insp-foot">Vista de lectura · la edición llega en la Etapa B.</div>
-            </div>
-          )
-        })()}
+      {/* estado: SOLO LECTURA (lo marca el ingeniero desde su escritorio) */}
+      <div className="cpm-insp-seg ro">
+        {([['pendiente', 'Pendiente'], ['en_curso', 'En curso'], ['hecha', 'Hecha']] as const).map(([k, l]) => (
+          <span key={k} className={t.estado === k ? 'on' : ''}>{l}</span>
+        ))}
+      </div>
+      <div className="cpm-insp-hint">Estado: lo reporta el ingeniero desde su escritorio{t.estado === 'na' ? ' · (N/A)' : ''}. Avance real: {Math.round((t.avance_pct ?? 0) * 100)}%.</div>
+
+      <div className="cpm-insp-section">Asignación</div>
+      <div className="cpm-insp-group">
+        <div className="cpm-insp-row"><span>Asignado a</span>
+          <select className="cpm-insp-sel" value={t.asignado_nombre ?? ''} disabled={busy}
+            onChange={(e) => save(() => ingenieriaService.actualizarTarea(t.id, { asignado_nombre: e.target.value || null }))}>
+            <option value="">Sin asignar</option>
+            {engineers.map((e) => <option key={e} value={e}>{e}</option>)}
+          </select>
+        </div>
+        <div className="cpm-insp-row"><span>Asignación</span>
+          <span className="cpm-step"><button disabled={busy || alloc <= 0} onClick={() => setAlloc(alloc - 25)}>−</button><b>{alloc}%</b><button disabled={busy || alloc >= 100} onClick={() => setAlloc(alloc + 25)}>+</button></span>
+        </div>
+      </div>
+
+      <div className="cpm-insp-section">Planificación</div>
+      <div className="cpm-insp-group">
+        <div className="cpm-insp-row"><span>Inicio {t.no_antes_de && <Pin size={11} className="cpm-pinic" />}</span>
+          <span className="cpm-insp-datewrap">
+            <input className="cpm-insp-date" type="date" value={inicio ?? ''} disabled={busy}
+              onChange={(e) => save(() => ingenieriaService.fijarFecha(t.id, 'inicio', e.target.value || null))} />
+            {t.no_antes_de && <button className="cpm-unpin" title="Liberar la fecha fijada" disabled={busy} onClick={() => save(() => ingenieriaService.fijarFecha(t.id, 'inicio', null))}><PinOff size={13} /></button>}
+          </span>
+        </div>
+        <div className="cpm-insp-row"><span>Duración</span>
+          <span className="cpm-step"><button disabled={busy || t.dur_dias <= 0} onClick={() => setDur(t.dur_dias - 1)}>−</button><b>{t.dur_dias} d{t.dur_dias === 0 ? ' · Hito' : ''}</b><button disabled={busy} onClick={() => setDur(t.dur_dias + 1)}>+</button></span>
+        </div>
+        <div className="cpm-insp-row"><span>Fin</span><span className="muted">{fmtD(fin)}</span></div>
+        <div className="cpm-insp-row col">
+          <span>Predecesoras</span>
+          <div className="cpm-chips">
+            {predecesoras.length === 0 && <span className="muted">Ninguna</span>}
+            {predecesoras.map((p, i) => (
+              <span key={i} className="cpm-chip">
+                <button className="cpm-chip-go" onClick={() => goTo(p.t.id)} title={`Ir a #${p.t.fila}`}>#{p.t.fila} {p.t.nombre}{p.tipo !== 'FS' ? ` · ${p.tipo}` : ''}</button>
+                <button className="cpm-chip-x" disabled={busy} title="Quitar" onClick={() => save(() => ingenieriaService.borrarDep(t.id, p.t.id))}>×</button>
+              </span>
+            ))}
+          </div>
+          <select className="cpm-insp-sel cpm-addpre" value={addSel} disabled={busy}
+            onChange={(e) => { const id = Number(e.target.value); if (id) save(() => ingenieriaService.agregarDep(t.id, id, 0, 'FS')) }}>
+            <option value="">+ Añadir predecesora…</option>
+            {candidatas.map((c) => <option key={c.id} value={c.id}>#{c.fila} {c.nombre}</option>)}
+          </select>
+        </div>
+      </div>
+
+      <div className="cpm-insp-section">Línea base</div>
+      <div className="cpm-insp-group">
+        <div className="cpm-insp-row"><span>Inicio base</span><span className="muted">{fmtD(t.baseline_inicio)}</span></div>
+        <div className="cpm-insp-row"><span>Fin base</span><span className="muted">{fmtD(t.baseline_fin)}</span></div>
+        <div className="cpm-insp-row"><span>Variación</span><span className="cpm-var" style={varStyle}>{v == null ? '—' : v > 0 ? `+${v} d` : v < 0 ? `${v} d` : '0 d'}</span></div>
+      </div>
+
+      <div className="cpm-insp-section">Comentarios</div>
+      <textarea className="cpm-insp-ta" rows={3} placeholder="Añade un comentario…" value={coment} disabled={busy}
+        style={{ background: coment ? '#fdf3e4' : '#f5f5f7' }}
+        onChange={(e) => setComent(e.target.value)}
+        onBlur={() => { if ((coment || '') !== (t.comentario || '')) save(() => ingenieriaService.actualizarTarea(t.id, { comentario: coment || null })) }} />
+
+      <div className="cpm-insp-footer">
+        <button className="cpm-del" disabled={busy} onClick={() => { if (window.confirm(`¿Eliminar la tarea "${t.nombre}"?\nSe quita también de las predecesoras de otras tareas. No se puede deshacer.`)) save(async () => { await ingenieriaService.borrarTarea(t.id); onClose() }) }}>
+          <Trash2 size={14} /> Eliminar
+        </button>
       </div>
     </div>
   )
@@ -584,4 +661,31 @@ const CSS = `
 .cpm-chip:hover{background:#dbe8fb;}
 .cpm-insp-note{margin:0 20px;background:#fdf3e4;border-radius:12px;padding:10px 14px;font-size:13px;color:var(--tx);white-space:pre-wrap;}
 .cpm-insp-foot{padding:16px 20px 0;font-size:11px;color:var(--tx3);font-style:italic;}
+/* inspector — controles editables */
+.cpm-inspector.busy{opacity:.75;}
+.cpm-insp-name-in{display:block;width:calc(100% - 32px);margin:2px 16px 8px;border:none;background:transparent;font-size:21px;font-weight:700;letter-spacing:-0.02em;color:var(--tx);}
+.cpm-insp-name-in:focus{outline:none;}
+.cpm-insp-seg.ro span{cursor:default;}
+.cpm-insp-hint{padding:4px 20px 0;font-size:11px;color:var(--tx3);}
+.cpm-insp-sel{appearance:none;border:none;background:transparent;font-size:14px;font-weight:500;color:var(--acc);text-align:right;cursor:pointer;max-width:170px;padding-right:14px;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 24 24' fill='none' stroke='%230a6cdf' stroke-width='3'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right center;}
+.cpm-insp-sel:focus{outline:none;}
+.cpm-addpre{text-align:left;margin-top:8px;background-position:right center;width:100%;color:var(--acc);}
+.cpm-step{display:inline-flex;align-items:center;gap:8px;}
+.cpm-step button{width:24px;height:24px;border:none;border-radius:7px;background:var(--ctrl2);color:var(--tx);font-size:15px;line-height:1;cursor:pointer;}
+.cpm-step button:disabled{opacity:.4;cursor:default;}
+.cpm-step b{font-size:14px;font-weight:600;color:var(--tx);min-width:58px;text-align:center;}
+.cpm-insp-datewrap{display:inline-flex;align-items:center;gap:6px;}
+.cpm-insp-date{border:none;background:var(--ctrl2);border-radius:7px;padding:4px 8px;font-size:13px;color:var(--tx);font-family:inherit;}
+.cpm-pinic{color:#e8860c;vertical-align:-1px;}
+.cpm-unpin{border:none;background:var(--ctrl);border-radius:6px;width:24px;height:24px;display:inline-flex;align-items:center;justify-content:center;color:var(--tx2);cursor:pointer;}
+.cpm-chip{display:inline-flex;align-items:center;background:var(--acc-bg);border-radius:999px;overflow:hidden;max-width:100%;}
+.cpm-chip-go{border:none;background:transparent;color:#0a5cc2;font-size:12px;font-weight:500;padding:4px 4px 4px 9px;cursor:pointer;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.cpm-chip-x{border:none;background:transparent;color:#0a5cc2;font-size:14px;line-height:1;padding:4px 8px 4px 4px;cursor:pointer;opacity:.7;}
+.cpm-chip-x:hover{opacity:1;}
+.cpm-insp-ta{display:block;width:calc(100% - 40px);margin:0 20px;border:none;border-radius:12px;padding:10px 14px;font-size:13px;font-family:inherit;color:var(--tx);resize:vertical;}
+.cpm-insp-ta:focus{outline:2px solid var(--acc);outline-offset:-1px;}
+.cpm-insp-footer{display:flex;padding:16px 20px 4px;border-top:.5px solid var(--div);margin-top:16px;}
+.cpm-del{display:inline-flex;align-items:center;gap:6px;height:36px;border:none;border-radius:10px;background:#fdeceb;color:#d70015;font-size:13px;font-weight:600;padding:0 14px;cursor:pointer;}
+.cpm-del:disabled{opacity:.5;cursor:default;}
 `
