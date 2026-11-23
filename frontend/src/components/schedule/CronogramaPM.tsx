@@ -6,9 +6,13 @@
 // en etapas B/C. El % de avance es SIEMPRE el real calculado (nunca tecleado).
 // ─────────────────────────────────────────────────────────────────────────────
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import { Search, Plus, Loader2, Trash2, Pin, PinOff } from 'lucide-react'
+import { Search, Plus, Loader2, Trash2, Pin, PinOff, MoreHorizontal, Flag, CalendarClock, X, Package, FlaskConical, Wrench, Wallet, ChevronDown } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { ingenieriaService, type IngProyecto, type IngTarea, type IngPlan, type IngTareaPlan } from '@/services/ingenieria'
+import CronogramaCliente, { ganttDesdePlan } from '@/components/schedule/CronogramaCliente'
+import CambiarIngeniero from '@/components/modules/ingenieria/CambiarIngeniero'
+
+const shortProj = (p: string | null) => (p || '—').replace(/^\s*(\d{2}-\d{3})\s*/, '$1 · ')
 
 // ── Helpers de fecha (día-a-día, en px) ──
 const MES = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre']
@@ -57,6 +61,10 @@ export default function CronogramaPM({ proyectos, all, plan, planLoading, sel, s
   const [showSlack, setShowSlack] = useState(false)
   const [selId, setSelId] = useState<number | null>(null)          // selección (resalta; inspector = etapa B)
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({})
+  const [menuOpen, setMenuOpen] = useState(false)                  // menú "···" (acciones del proyecto)
+  const [cronoOpen, setCronoOpen] = useState(false)                // modal cronograma cliente
+  const [baseBusy, setBaseBusy] = useState(false)
+  const [modOpen, setModOpen] = useState(false)                    // fila de módulos (Compras/Muestras/...) desplegada
 
   const scrollRef = useRef<HTMLDivElement>(null)
   const [gridH, setGridH] = useState(520)
@@ -197,6 +205,20 @@ export default function CronogramaPM({ proyectos, all, plan, planLoading, sel, s
 
   // Ingenieros disponibles (para el select de "Asignado a" del inspector)
   const todosIng = useMemo(() => [...new Set(all.map((t) => t.asignado_nombre).filter(Boolean) as string[])].sort((a, b) => a.localeCompare(b)), [all])
+  // Ingeniero propuesto = el más asignado del plan (para "Cambiar ingeniero")
+  const propuesto = useMemo(() => {
+    const f = new Map<string, number>()
+    for (const t of tareas) if (t.asignado_nombre) f.set(t.asignado_nombre, (f.get(t.asignado_nombre) ?? 0) + 1)
+    return [...f.entries()].sort((a, b) => b[1] - a[1])[0]?.[0]
+  }, [tareas])
+
+  async function guardarLineaBase() {
+    if (!sel) return
+    setBaseBusy(true)
+    try { const r = await ingenieriaService.guardarBaseline(sel); toast.success(`Línea base guardada (${r.data.n} tareas)`); await onRefresh() }
+    catch (e: any) { toast.error(e?.response?.data?.message || 'No se pudo guardar la línea base') }
+    finally { setBaseBusy(false); setMenuOpen(false) }
+  }
 
   // Scroll a "hoy" al montar / cambiar zoom
   useEffect(() => {
@@ -245,6 +267,18 @@ export default function CronogramaPM({ proyectos, all, plan, planLoading, sel, s
             <select className="cpm-proj" value={sel} onChange={(e) => { setSel(e.target.value); setSelId(null) }}>
               {proyectos.map((pr) => <option key={pr.proyecto_ext} value={pr.proyecto_ext}>{pr.proyecto_ext}</option>)}
             </select>
+            {/* menú de acciones del proyecto (···) */}
+            <div className="cpm-menu-wrap">
+              <button className="cpm-menu-btn" onClick={() => setMenuOpen((v) => !v)} title="Más acciones"><MoreHorizontal size={18} /></button>
+              {menuOpen && <>
+                <div className="cpm-menu-backdrop" onClick={() => setMenuOpen(false)} />
+                <div className="cpm-menu">
+                  <button className="cpm-menu-item" disabled={baseBusy || !plan} onClick={guardarLineaBase}><Flag size={15} /> {baseBusy ? 'Guardando…' : 'Guardar línea base'}</button>
+                  <button className="cpm-menu-item" disabled={!plan} onClick={() => { setCronoOpen(true); setMenuOpen(false) }}><CalendarClock size={15} /> Cronograma del cliente</button>
+                  <div className="cpm-menu-cambiar"><CambiarIngeniero proyectoExt={sel} propuesto={propuesto} ingenieros={todosIng} onDone={() => { onRefresh(); setMenuOpen(false) }} label="Cambiar ingeniero" /></div>
+                </div>
+              </>}
+            </div>
           </div>
           <div className="cpm-meta">
             <span>{sel}</span>
@@ -269,6 +303,30 @@ export default function CronogramaPM({ proyectos, all, plan, planLoading, sel, s
           <div className="cpm-cell cpm-cell-pill"><span className="cpm-statuspill" style={{ background: pill.bg, color: pill.fg }}>{pill.t}</span></div>
         </div>}
       </div>
+
+      {/* ───────── Fila de módulos (B1): resumen compacto de Compras/Muestras/Instalación/Depósito ───────── */}
+      {plan && (plan.compras.hay || plan.muestras.hay || plan.instalacion.hay || plan.deposito.confirmado_finanzas || tareas.some((t) => t.tipo_clave === 'material_deposit')) && (() => {
+        const c = plan.compras, m = plan.muestras, ins = plan.instalacion, dep = plan.deposito
+        const hayDeposito = tareas.some((t) => t.tipo_clave === 'material_deposit') && plan.proyecto_estado === 'activo'
+        return (
+          <div className="cpm-mods">
+            <button className="cpm-mods-bar" onClick={() => setModOpen((v) => !v)}>
+              <ChevronDown size={14} className="cpm-mods-chev" style={{ transform: modOpen ? 'none' : 'rotate(-90deg)' }} />
+              {hayDeposito && <span className="cpm-modchip"><Wallet size={13} /> Depósito: {dep.confirmado_finanzas ? 'confirmado' : dep.override_pm ? 'abierto a mano' : 'pendiente'}</span>}
+              {c.hay && <span className="cpm-modchip"><Package size={13} /> Compras {Math.round(c.pct_disponible * 100)}%</span>}
+              {m.hay && <span className="cpm-modchip"><FlaskConical size={13} /> Muestras {m.aprobadas}/{m.total}</span>}
+              {ins.hay && <span className="cpm-modchip"><Wrench size={13} /> Instalación {Math.round(ins.pct * 100)}%{ins.punch_abiertos > 0 ? ` · ${ins.punch_abiertos} punch` : ''}</span>}
+              <span className="cpm-mods-more">{modOpen ? 'ocultar' : 'detalle'}</span>
+            </button>
+            {modOpen && <div className="cpm-mods-detail">
+              {hayDeposito && <div className="cpm-moddet"><Wallet size={14} className="cpm-moddet-ic" /><b>Depósito.</b> {dep.confirmado_finanzas ? `Confirmado por Finanzas${dep.fecha_confirmacion ? ' · ' + fmtD(dep.fecha_confirmacion) : ''} · compras habilitadas` : dep.override_pm ? `Gate abierto a mano por ${dep.override_por ?? '—'} · las compras siguen` : 'Finanzas aún no lo confirmó · long leads y materiales frenados'}{(dep.dias_atribuibles_cliente ?? 0) > 0 ? ` · ${dep.dias_atribuibles_cliente} d atribuibles al cliente` : ''}</div>}
+              {c.hay && <div className="cpm-moddet"><Package size={14} className="cpm-moddet-ic" /><b>Compras.</b> {c.n_materiales} materiales{c.fecha_mto ? ` · MTO ${fmtD(c.fecha_mto)}` : ''} · {c.con_precio} c/precio → {c.en_oc} en OC → {c.recibidos} recibidos{c.en_stock > 0 ? ` (+${c.en_stock} stock)` : ''} · <b>{Math.round(c.pct_disponible * 100)}% disponible</b></div>}
+              {m.hay && <div className="cpm-moddet"><FlaskConical size={14} className="cpm-moddet-ic" /><b>Muestras.</b> {m.total} en total · {m.aprobadas} aprobadas{m.pendientes > 0 ? ` · ${m.pendientes} en curso` : ''}{m.rechazadas > 0 ? ` · ${m.rechazadas} rechazadas` : ''}{m.todas_aprobadas ? ' · todas OK ✓' : ''} · <i>no bloquea, corre en paralelo</i></div>}
+              {ins.hay && <div className="cpm-moddet"><Wrench size={14} className="cpm-moddet-ic" /><b>Instalación.</b> {ins.instalados} de {ins.total} instalados{ins.fecha_ultima ? ` · última ${fmtD(ins.fecha_ultima)}` : ''}{ins.punch_abiertos > 0 ? ` · ${ins.punch_abiertos} punch abierto${ins.punch_abiertos === 1 ? '' : 's'}` : ''}{ins.completa ? ' · lista ✓' : ''} · <b>{Math.round(ins.pct * 100)}%</b></div>}
+            </div>}
+          </div>
+        )
+      })()}
 
       {/* ───────── Tarjeta Gantt ───────── */}
       <div className="cpm-card">
@@ -417,6 +475,21 @@ export default function CronogramaPM({ proyectos, all, plan, planLoading, sel, s
         {selTarea && <Inspector t={selTarea} tareas={tareas} engineers={todosIng} predecesoras={predecesoras}
           onRefresh={onRefresh} onClose={() => setSelId(null)} goTo={setSelId} />}
       </div>
+
+      {/* Cronograma del cliente (reusa el componente existente) */}
+      {cronoOpen && (
+        <div className="cpm-modal-back" onClick={() => setCronoOpen(false)}>
+          <div className="cpm-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="cpm-modal-head">
+              <CalendarClock size={18} className="cpm-modal-ic" />
+              <h3>Cronograma del cliente · {shortProj(sel)}</h3>
+              <button className="cpm-insp-x" onClick={() => setCronoOpen(false)}><X size={16} /></button>
+            </div>
+            <p className="cpm-modal-sub">Es lo que ve el cliente en el portal. Descargalo para adjuntarlo a un email.</p>
+            <CronogramaCliente nombre={shortProj(sel)} fechaObjetivo={plan?.fecha_entrega ?? null} gantt={ganttDesdePlan(plan?.tareas ?? [])} />
+          </div>
+        </div>
+      )}
     </div>
   )
 }
@@ -439,10 +512,12 @@ function Inspector({ t, tareas, engineers, predecesoras, onRefresh, onClose, goT
 }) {
   const [nombre, setNombre] = useState(t.nombre)
   const [coment, setComent] = useState(t.comentario ?? '')
+  const [predTxt, setPredTxt] = useState(t.predecesores_txt)
   const [busy, setBusy] = useState(false)
   const [addSel, setAddSel] = useState('')
-  // Re-sincroniza los campos locales al cambiar de tarea
+  // Re-sincroniza los campos locales al cambiar de tarea (o al recalcular el plan)
   useEffect(() => { setNombre(t.nombre); setComent(t.comentario ?? ''); setAddSel('') }, [t.id])  // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { setPredTxt(t.predecesores_txt) }, [t.predecesores_txt])
 
   const inicio = t.early_start || t.fecha_inicio, fin = t.early_finish || t.fecha_fin
   const alloc = Math.round((t.allocation_pct || 0) * 100)
@@ -461,6 +536,15 @@ function Inspector({ t, tareas, engineers, predecesoras, onRefresh, onClose, goT
   }
   const setAlloc = (n: number) => save(() => ingenieriaService.actualizarTarea(t.id, { allocation_pct: Math.max(0, Math.min(100, n)) / 100 }))
   const setDur = (n: number) => save(() => ingenieriaService.actualizarTarea(t.id, { dur_dias: Math.max(0, n) }))
+  // Predecesoras estilo MS Project ("5FF+2d, 3SS"): tipos FS/SS/FF/SF + desfases.
+  async function savePred() {
+    if (predTxt.trim() === (t.predecesores_txt ?? '')) return
+    if (busy) return
+    setBusy(true)
+    try { const r = await ingenieriaService.setPredecesores(t.id, predTxt.trim()); const n = r.data?.diffs?.length ?? 0; toast.success(n ? `Guardado · ${n} tarea${n === 1 ? '' : 's'} recalculada${n === 1 ? '' : 's'}` : 'Guardado'); await onRefresh() }
+    catch (e: any) { const errs = e?.response?.data?.errores as { mensaje: string }[] | undefined; toast.error(errs?.[0]?.mensaje || e?.response?.data?.message || 'No se pudo guardar'); setPredTxt(t.predecesores_txt) }
+    finally { setBusy(false) }
+  }
 
   return (
     <div className={`cpm-inspector ${busy ? 'busy' : ''}`}>
@@ -523,9 +607,15 @@ function Inspector({ t, tareas, engineers, predecesoras, onRefresh, onClose, goT
           </div>
           <select className="cpm-insp-sel cpm-addpre" value={addSel} disabled={busy}
             onChange={(e) => { const id = Number(e.target.value); if (id) save(() => ingenieriaService.agregarDep(t.id, id, 0, 'FS')) }}>
-            <option value="">+ Añadir predecesora…</option>
+            <option value="">+ Añadir predecesora (FS)…</option>
             {candidatas.map((c) => <option key={c.id} value={c.id}>#{c.fila} {c.nombre}</option>)}
           </select>
+          {/* Avanzado: texto estilo MS Project con tipos (FS/SS/FF/SF) y desfases (+2d) */}
+          <input className="cpm-pred-txt" value={predTxt} disabled={busy} placeholder="Avanzado: 5FF+2d, 3SS"
+            title='Número de fila + tipo (FS/SS/FF/SF) + desfase. Ej: "5FF+2d, 3SS"'
+            onChange={(e) => setPredTxt(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); if (e.key === 'Escape') { setPredTxt(t.predecesores_txt); (e.target as HTMLInputElement).blur() } }}
+            onBlur={savePred} />
         </div>
       </div>
 
@@ -688,4 +778,35 @@ const CSS = `
 .cpm-insp-footer{display:flex;padding:16px 20px 4px;border-top:.5px solid var(--div);margin-top:16px;}
 .cpm-del{display:inline-flex;align-items:center;gap:6px;height:36px;border:none;border-radius:10px;background:#fdeceb;color:#d70015;font-size:13px;font-weight:600;padding:0 14px;cursor:pointer;}
 .cpm-del:disabled{opacity:.5;cursor:default;}
+.cpm-pred-txt{width:100%;margin-top:8px;border:none;background:var(--ctrl);border-radius:8px;padding:6px 10px;font-size:12px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--tx);}
+.cpm-pred-txt:focus{outline:2px solid var(--acc);outline-offset:-1px;}
+/* menú de acciones (···) */
+.cpm-menu-wrap{position:relative;}
+.cpm-menu-btn{width:30px;height:30px;border:none;border-radius:8px;background:var(--ctrl);color:var(--tx2);display:inline-flex;align-items:center;justify-content:center;cursor:pointer;}
+.cpm-menu-btn:hover{background:#e6e6ea;}
+.cpm-menu-backdrop{position:fixed;inset:0;z-index:50;}
+.cpm-menu{position:absolute;top:36px;left:0;z-index:51;min-width:220px;background:var(--surf);border-radius:12px;padding:6px;box-shadow:0 0 0 .5px rgba(0,0,0,.08),0 12px 32px rgba(0,0,0,.16);display:flex;flex-direction:column;gap:2px;}
+.cpm-menu-item{display:flex;align-items:center;gap:9px;width:100%;border:none;background:transparent;font-size:13px;font-weight:500;color:var(--tx);padding:8px 10px;border-radius:8px;cursor:pointer;text-align:left;}
+.cpm-menu-item:hover{background:var(--bg);}
+.cpm-menu-item:disabled{opacity:.5;cursor:default;}
+.cpm-menu-cambiar{padding:2px;}
+.cpm-menu-cambiar>button{width:100%;justify-content:flex-start;}
+/* fila de módulos (B1) */
+.cpm-mods{flex:none;background:var(--surf);border-radius:12px;box-shadow:0 0 0 .5px rgba(0,0,0,.06),0 1px 2px rgba(0,0,0,.04);overflow:hidden;}
+.cpm-mods-bar{display:flex;align-items:center;gap:10px;width:100%;border:none;background:transparent;padding:8px 14px;cursor:pointer;flex-wrap:wrap;}
+.cpm-mods-chev{color:var(--tx3);transition:transform .15s;}
+.cpm-modchip{display:inline-flex;align-items:center;gap:5px;font-size:12.5px;font-weight:500;color:var(--tx);}
+.cpm-modchip svg{color:var(--tx3);}
+.cpm-mods-more{margin-left:auto;font-size:11px;color:var(--acc);font-weight:500;}
+.cpm-mods-detail{border-top:.5px solid var(--div);padding:8px 14px;display:flex;flex-direction:column;gap:5px;}
+.cpm-moddet{font-size:12.5px;color:var(--tx2);display:flex;align-items:baseline;gap:7px;}
+.cpm-moddet b{color:var(--tx);font-weight:600;}
+.cpm-moddet-ic{color:var(--tx3);flex:none;position:relative;top:2px;}
+/* modal (cronograma cliente) */
+.cpm-modal-back{position:fixed;inset:0;background:rgba(0,0,0,.3);display:flex;align-items:center;justify-content:center;padding:16px;z-index:60;}
+.cpm-modal{background:var(--surf);border-radius:16px;box-shadow:0 20px 50px rgba(0,0,0,.25);width:100%;max-width:760px;max-height:88vh;overflow-y:auto;padding:18px;}
+.cpm-modal-head{display:flex;align-items:center;gap:8px;margin-bottom:6px;}
+.cpm-modal-head h3{font-size:14px;font-weight:700;color:var(--tx);margin:0;}
+.cpm-modal-ic{color:var(--acc);}
+.cpm-modal-sub{font-size:11px;color:var(--tx3);margin:0 0 12px;}
 `
