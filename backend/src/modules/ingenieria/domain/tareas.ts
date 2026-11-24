@@ -362,6 +362,11 @@ export async function getPlanProyecto(runner: QueryRunner, proyectoExt: string):
   const h = hdr[0] ?? { ini: null, entrega: null, status: null, n_items: null, presupuesto: null, estado: null }
 
   const tareas = await listTareas(runner, proyectoExt)
+  // Orden ESTABLE de la FILA: por orden_visual (el drag del scheduler) y, si falta,
+  // por id (orden de creación). NUNCA por fecha → cambiar una dependencia mueve la
+  // BARRA (fechas) pero NO la fila (pedido del scheduler 2026-11-23). `fila` se deriva
+  // de este orden, así que queda estable salvo que el scheduler reordene a mano.
+  tareas.sort((a, b) => (a.orden_visual ?? 1e9) - (b.orden_visual ?? 1e9) || a.id - b.id)
   const ids = tareas.map((t) => t.id)
   const { rows: deps } = ids.length
     ? await runner.query<AristaPlan>(

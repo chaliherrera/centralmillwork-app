@@ -507,10 +507,11 @@ export default function CronogramaPM({ proyectos, all, plan, planLoading, sel, s
                   {entregaX != null && <div className="cpm-entrega-line" style={{ left: entregaX }} />}
                   {hoyX != null && <div className="cpm-hoy-line" style={{ left: hoyX }} />}
 
-                  {/* conectores de dependencias (solo del seleccionado) */}
-                  {selId != null && depsSel.length > 0 && (
+                  {/* conectores de dependencias: SIEMPRE visibles (tenues); la tarea
+                      seleccionada resalta las suyas en azul */}
+                  {plan && plan.aristas.length > 0 && (
                     <svg className="cpm-deps" width={geo?.width ?? 0} height={rows.bodyH}>
-                      {depsSel.map((a, i) => {
+                      {plan.aristas.map((a, i) => {
                         const pre = tareas.find((t) => t.id === a.depende_de_id), suc = tareas.find((t) => t.id === a.tarea_id)
                         if (!pre || !suc) return null
                         const gp = barDe(pre), gs = barDe(suc)
@@ -518,7 +519,8 @@ export default function CronogramaPM({ proyectos, all, plan, planLoading, sel, s
                         if (!gp || !gs || yp == null || ys == null) return null
                         const x1 = gp.x + gp.w, y1 = yp + RH / 2, x2 = gs.x, y2 = ys + RH / 2
                         const mx = Math.max(x1 + 8, x2 - 10)
-                        return <path key={i} d={`M ${x1} ${y1} L ${mx} ${y1} L ${mx} ${y2} L ${x2} ${y2}`} fill="none" stroke="#0a6cdf" strokeWidth={2} opacity={0.7} />
+                        const hot = selId != null && (a.tarea_id === selId || a.depende_de_id === selId)
+                        return <path key={i} d={`M ${x1} ${y1} L ${mx} ${y1} L ${mx} ${y2} L ${x2} ${y2}`} fill="none" stroke={hot ? '#0a6cdf' : '#c7c7cc'} strokeWidth={hot ? 2 : 1} opacity={hot ? 0.95 : 0.5} />
                       })}
                     </svg>
                   )}
