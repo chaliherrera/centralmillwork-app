@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Loader2, X, Layers } from 'lucide-react'
+import { Loader2, X, Layers, Printer } from 'lucide-react'
 import { ingenieriaService, type IngCargaEtapas, type IngProyectoEtapa, type IngLookahead, type IngLookaheadProyecto } from '@/services/ingenieria'
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -36,9 +36,17 @@ function LookaheadPanel({ etapas, semanas }: { etapas: IngCargaEtapas['etapas'];
 
   // Proyectos/tareas activos en el día i (ya están en los datos, sin pedir al backend)
   const activosDia = (i: number) => (data?.proyectos ?? []).filter((p) => p.dias[i])
+  // Borde de inicio de semana (día hábil 0 de cada semana) — más grueso y visible.
+  const wkBorder = (i: number) => (i % 5 === 0 ? '2px solid var(--acc)' : undefined)
+  function imprimir() {
+    document.body.classList.add('lk-printing')
+    const cleanup = () => { document.body.classList.remove('lk-printing'); window.removeEventListener('afterprint', cleanup) }
+    window.addEventListener('afterprint', cleanup)
+    setTimeout(() => window.print(), 120)
+  }
 
   return (
-    <div className="lk-card">
+    <div className="lk-card lk-print-area">
       <div className="lk-head">
         <Layers size={16} className="lk-head-ic" />
         <h2>Lookahead · día a día</h2>
@@ -52,6 +60,7 @@ function LookaheadPanel({ etapas, semanas }: { etapas: IngCargaEtapas['etapas'];
           <div className="lk-seg">
             {[2, 4, 6, 8].map((n) => <button key={n} className={sem === n ? 'on' : ''} onClick={() => setSem(n)}>{n} sem</button>)}
           </div>
+          <button className="lk-print" onClick={imprimir} title="Imprimir / PDF"><Printer size={14} /> Imprimir</button>
         </div>
       </div>
 
@@ -75,18 +84,26 @@ function LookaheadPanel({ etapas, semanas }: { etapas: IngCargaEtapas['etapas'];
                 </div>
               )
             })()}
+            {/* semanas laborales (Sem N + fecha de inicio) — para diferenciar de un vistazo cuántas son */}
+            <div className="lk-row lk-weeks">
+              <div className="lk-gut" style={{ width: 240 }} />
+              {Array.from({ length: Math.ceil(data.dias.length / 5) }, (_, w) => {
+                const start = w * 5; const span = Math.min(5, data.dias.length - start); const dia0 = data.dias[start]
+                return <div key={w} className={`lk-week ${w % 2 ? 'alt' : ''}`} style={{ width: span * DW }}>Sem {w + 1} · {d(dia0).getDate()} {MES[d(dia0).getMonth()]}</div>
+              })}
+            </div>
             {/* días */}
             <div className="lk-row lk-days">
               <div className="lk-gut lk-colh" style={{ width: 180 }}>Proyecto</div>
               <div className="lk-gut lk-colh" style={{ width: 60, textAlign: 'right' }}>Ítems</div>
-              {data.dias.map((dia, i) => <div key={i} className="lk-dc" style={{ width: DW, borderLeft: i % 5 === 0 ? '1px solid #e5e5ea' : undefined }} title={dia}>{d(dia).getDate()}</div>)}
+              {data.dias.map((dia, i) => <div key={i} className="lk-dc" style={{ width: DW, borderLeft: wkBorder(i), fontWeight: i % 5 === 0 ? 700 : 400, color: i % 5 === 0 ? 'var(--acc)' : undefined }} title={dia}>{d(dia).getDate()}</div>)}
             </div>
             {/* simultáneos (clickeable: tareas de ese día) */}
             <div className="lk-row lk-sim">
               <div className="lk-gut lk-simlbl" style={{ width: 240 }}>Simultáneos</div>
               {data.simultaneos.map((n, i) => (
                 <button key={i} className="lk-simcell" disabled={n <= 0} onClick={() => n > 0 && setSelDia({ i })}
-                  style={{ width: DW, background: celC(n), color: celT(n), cursor: n > 0 ? 'pointer' : 'default' }}
+                  style={{ width: DW, background: celC(n), color: celT(n), cursor: n > 0 ? 'pointer' : 'default', borderLeft: wkBorder(i) }}
                   title={n > 0 ? `${n} proyecto${n === 1 ? '' : 's'} el ${data.dias[i]} — click para ver` : undefined}>{n || ''}</button>
               ))}
             </div>
@@ -100,7 +117,7 @@ function LookaheadPanel({ etapas, semanas }: { etapas: IngCargaEtapas['etapas'];
                 <div className="lk-gut lk-pitems" style={{ width: 60 }}>{p.n_items ?? '—'}</div>
                 {p.dias.map((on, i) => (
                   <button key={i} className="lk-pcell" disabled={!on} onClick={() => on && setSelDia({ i, p })}
-                    style={{ width: DW, borderLeft: i % 5 === 0 ? '1px solid #eef0f3' : undefined, background: on ? FOREST : 'transparent', cursor: on ? 'pointer' : 'default' }}
+                    style={{ width: DW, borderLeft: wkBorder(i), background: on ? FOREST : 'transparent', cursor: on ? 'pointer' : 'default' }}
                     title={on ? `${p.proyecto_ext} trabaja el ${data.dias[i]} — click para ver` : undefined} />
                 ))}
               </div>
@@ -342,4 +359,20 @@ const LK_CSS = `
 .lk-trow-proj{font-size:13px;font-weight:600;flex:1;}
 .lk-trow-eng{font-size:11px;color:var(--tx2);}
 .lk-trow-sub{font-size:11px;color:var(--tx3);margin-top:2px;}
+/* fila de semanas laborales */
+.lk-weeks{border-bottom:.5px solid var(--div);background:var(--surf);}
+.lk-week{flex:none;border-left:2px solid var(--acc);padding:3px 6px;font-size:11px;font-weight:700;color:var(--acc);white-space:nowrap;overflow:hidden;}
+.lk-week.alt{background:var(--acc-bg);}
+.lk-print{height:32px;border:none;border-radius:9px;background:var(--ctrl);font-size:13px;font-weight:600;color:var(--tx);padding:0 12px;display:inline-flex;align-items:center;gap:6px;cursor:pointer;}
+.lk-print:hover{background:#e6e6ea;}
+/* impresión del lookahead (landscape) */
+@media print {
+  @page { size: landscape; margin: 0.4in; }
+  body.lk-printing * { visibility:hidden !important; }
+  body.lk-printing .lk-print-area, body.lk-printing .lk-print-area * { visibility:visible !important; }
+  body.lk-printing .lk-print-area { position:absolute !important; left:0; top:0; box-shadow:none !important; }
+  body.lk-printing .lk-scroll { overflow:visible !important; }
+  body.lk-printing .lk-controls, body.lk-printing .lk-print { display:none !important; }
+  body.lk-printing .lk-week, body.lk-printing .lk-simcell, body.lk-printing .lk-pcell { -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+}
 `

@@ -56,7 +56,7 @@ type Props = {
   onRefresh: () => void
 }
 
-export default function CronogramaPM({ proyectos, all, plan, planLoading, sel, setSel, onEdit, onRefresh }: Props) {
+export default function CronogramaPM({ proyectos, all, plan, planLoading, sel, setSel, onRefresh }: Props) {
   const [zoom, setZoom] = useState<'semana' | 'mes' | 'trimestre'>('mes')
   const [query, setQuery] = useState('')
   const [criticalOnly, setCriticalOnly] = useState(false)
@@ -232,6 +232,20 @@ export default function CronogramaPM({ proyectos, all, plan, planLoading, sel, s
     try { const r = await ingenieriaService.guardarBaseline(sel); toast.success(`Línea base guardada (${r.data.n} tareas)`); await onRefresh() }
     catch (e: any) { toast.error(e?.response?.data?.message || 'No se pudo guardar la línea base') }
     finally { setBaseBusy(false); setMenuOpen(false) }
+  }
+
+  // Nueva tarea SIN modal viejo: crea una tarea en blanco, refresca y la selecciona
+  // para editarla en el panel lateral (nombre, predecesoras, etc.) — todo en la interfaz nueva.
+  const [nuevaBusy, setNuevaBusy] = useState(false)
+  async function crearTareaNueva() {
+    if (!sel || nuevaBusy) return
+    setNuevaBusy(true)
+    try {
+      const r = await ingenieriaService.crearTarea({ proyecto_ext: sel, nombre: 'Nueva tarea', allocation_pct: 1, dur_dias: 1, estado: 'pendiente' })
+      await onRefresh()
+      setSelId(r.data.id)   // abre el inspector en la tarea nueva
+    } catch (e: any) { toast.error(e?.response?.data?.message || 'No se pudo crear la tarea') }
+    finally { setNuevaBusy(false) }
   }
 
   // Acción del gate del depósito: el PM lo abre/cierra a mano (la confirmación de
@@ -433,7 +447,7 @@ export default function CronogramaPM({ proyectos, all, plan, planLoading, sel, s
             ))}
           </div>
           <button className="cpm-tbtn" onClick={() => { const el = scrollRef.current; if (el && hoyX != null) el.scrollTo({ left: Math.max(0, hoyX - el.clientWidth * 0.55 + TASKCOL), behavior: 'smooth' }) }}>Hoy</button>
-          <button className="cpm-tbtn cpm-primary" onClick={() => onEdit('new')}><Plus size={14} /> Nueva tarea</button>
+          <button className="cpm-tbtn cpm-primary" disabled={nuevaBusy || !plan} onClick={crearTareaNueva}><Plus size={14} /> {nuevaBusy ? 'Creando…' : 'Nueva tarea'}</button>
         </div>
 
         {/* rejilla */}
@@ -485,6 +499,7 @@ export default function CronogramaPM({ proyectos, all, plan, planLoading, sel, s
                         onDragEnd={() => { setRowDrag(null); setDropId(null) }}
                         onDragOver={(e) => { if (rowDrag == null || rowDrag === t.id) return; e.preventDefault(); const rc = e.currentTarget.getBoundingClientRect(); setDropId({ id: t.id, after: e.clientY > rc.top + rc.height / 2 }) }}
                         onDrop={(e) => { e.preventDefault(); soltarFila() }}>
+                        <span className="cpm-tnum" title="N.º de la tarea (para las predecesoras)">{t.fila}</span>
                         <span className="cpm-sdot" style={{ background: est.dot }} title={est.label} />
                         <div className="cpm-tnames">
                           <div className="cpm-tname" title={t.nombre}>{t.nombre}</div>
@@ -817,6 +832,7 @@ const CSS = `
 .cpm-trow{display:flex;align-items:center;gap:8px;padding:0 12px;border-bottom:.5px solid #f0f0f2;cursor:pointer;}
 .cpm-trow:hover{background:#f7f9fc;}
 .cpm-trow.sel{background:var(--sel);}
+.cpm-tnum{flex:none;min-width:18px;text-align:right;font-size:10px;font-weight:600;color:var(--tx3);font-variant-numeric:tabular-nums;}
 .cpm-sdot{width:8px;height:8px;border-radius:999px;flex:none;}
 .cpm-tnames{min-width:0;flex:1;}
 .cpm-tname{font-size:13px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}

@@ -1046,7 +1046,20 @@ export async function agregarDep(runner: QueryRunner, tareaId: number, dependeDe
 }
 
 export async function borrarDep(runner: QueryRunner, tareaId: number, dependeDeId: number): Promise<boolean> {
+  // Capturamos la fecha ACTUAL de la tarea antes de borrar, por si queda huérfana.
+  const { rows: [antes] } = await runner.query<{ fi: string | null; nad: string | null }>(
+    `SELECT to_char(fecha_inicio,'YYYY-MM-DD') AS fi, to_char(no_antes_de,'YYYY-MM-DD') AS nad
+       FROM ing_tareas WHERE id = $1`, [tareaId])
   const { rowCount } = await runner.query(`DELETE FROM ing_tarea_deps WHERE tarea_id = $1 AND depende_de_id = $2`, [tareaId, dependeDeId])
+  // Si al quitar el predecesor la tarea quedó SIN predecesoras activas y no estaba fijada,
+  // la fijamos en su fecha actual para que NO se vaya al inicio del proyecto (pedido del
+  // scheduler 2026-11-25). Así cambiar una dependencia mueve la BARRA solo si corresponde,
+  // no la manda al día cero. El scheduler puede liberar la fecha a mano si quiere.
+  if ((rowCount ?? 0) > 0 && antes?.fi && !antes.nad) {
+    const { rows: [c] } = await runner.query<{ n: string }>(
+      `SELECT count(*)::int AS n FROM ing_tarea_deps WHERE tarea_id = $1 AND ignorada_at IS NULL`, [tareaId])
+    if (Number(c?.n ?? 0) === 0) await runner.query(`UPDATE ing_tareas SET no_antes_de = $2::date WHERE id = $1`, [tareaId, antes.fi])
+  }
   return (rowCount ?? 0) > 0
 }
 
