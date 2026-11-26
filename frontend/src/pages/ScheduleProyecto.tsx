@@ -36,7 +36,7 @@ export default function ScheduleProyecto() {
             <>
               <div className="flex items-center gap-2">
                 <span className="font-mono text-[12px] font-bold text-forest-700">{proyecto.codigo}</span>
-                <span className="text-xs text-stone-400">Schedule</span>
+                <span className="text-xs text-stone-400">Journey</span>
               </div>
               <h1 className="text-lg font-bold text-stone-900 truncate">{proyecto.nombre}</h1>
             </>

@@ -31,12 +31,15 @@ interface NavItem {
 // personal de ADMIN, no aplica a observador) ni Usuarios (gestión sensible).
 const NAV_ITEMS: NavItem[] = [
   { to: '/',               label: 'Dashboard',         icon: LayoutDashboard, roles: ['ADMIN','PROCUREMENT','PROJECT_MANAGEMENT','SCHEDULER','PRODUCTION','SHOP_MANAGER','VIEWER'] },
-  { to: '/schedule',       label: 'Schedule',           icon: RouteIcon,       roles: ['ADMIN','PROJECT_MANAGEMENT','SCHEDULER','SHOP_MANAGER','ENGINEERING','VIEWER'] },
+  // Journey (ex "Schedule"): vista de cartera. El menú lo ve SOLO el admin; el Scheduler/PM
+  // abren el cronograma de cada proyecto desde los links "Ver el plan" de su escritorio
+  // (la ruta /schedule sigue habilitada para ellos en App.tsx — solo se ocultó del menú).
+  { to: '/schedule',       label: 'Journey',            icon: RouteIcon,       roles: ['ADMIN'] },
   { to: '/proyectos',      label: 'Proyectos',          icon: FolderOpen,      roles: ['ADMIN','PROCUREMENT','PROJECT_MANAGEMENT','SCHEDULER','SHOP_MANAGER','VIEWER'] },
   { to: '/informes',       label: 'Informes',           icon: FileText,        roles: ['ADMIN','PROCUREMENT','PROJECT_MANAGEMENT','SCHEDULER','SHOP_MANAGER','VIEWER'] },
   { to: '/estimados',      label: 'Estimados',          icon: FileSignature,   roles: ['ADMIN','PROJECT_MANAGEMENT','ESTIMADOS'] },
   { to: '/ingenieria',     label: 'Ingeniería',         icon: DraftingCompass, roles: ['ADMIN','ENGINEERING','PROJECT_MANAGEMENT','SCHEDULER'] },
-  { to: '/pm',             label: 'PM',                 icon: ClipboardList,   roles: ['ADMIN','PROJECT_MANAGEMENT','SCHEDULER'] },
+  { to: '/pm',             label: 'Scheduler',          icon: ClipboardList,   roles: ['ADMIN','PROJECT_MANAGEMENT','SCHEDULER'] },
   { to: '/finanzas',       label: 'Finanzas',           icon: Wallet,          roles: ['ADMIN','CONTABILIDAD'] },
   { to: '/logistica',      label: 'Logística',          icon: Send,            roles: ['ADMIN','LOGISTICA','PROJECT_MANAGEMENT','SCHEDULER'] },
   { to: '/field',          label: 'Campo',              icon: Ruler,           roles: ['ADMIN','FIELD','ENGINEERING','PROJECT_MANAGEMENT','SCHEDULER'] },

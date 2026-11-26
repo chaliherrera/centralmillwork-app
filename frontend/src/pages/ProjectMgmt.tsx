@@ -34,7 +34,7 @@ export default function ProjectMgmt() {
             <ClipboardList className="text-forest-600" size={22} />
           </div>
           <div>
-            <h1 className="text-xl font-bold text-stone-900">PM · Dirección de proyecto</h1>
+            <h1 className="text-xl font-bold text-stone-900">Scheduler · Dirección de proyecto</h1>
             <p className="text-sm text-stone-500">Tu bandeja y la gestión de recursos de Ingeniería, en un solo lugar.</p>
           </div>
         </div>

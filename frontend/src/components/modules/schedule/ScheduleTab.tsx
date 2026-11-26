@@ -82,7 +82,6 @@ export default function ScheduleTab({ proyectoId }: { proyectoId: number }) {
   const [data, setData] = useState<ScheduleData | null>(null)
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState(false)
-  const [fechaObjetivo, setFechaObjetivo] = useState('')
   const [selected, setSelected] = useState<string | null>(null)
   const [portal, setPortal] = useState<{ open: boolean; nombre: string; link: string | null }>({ open: false, nombre: '', link: null })
   const [planosUrl, setPlanosUrl] = useState<string | null>(null)
@@ -101,12 +100,6 @@ export default function ScheduleTab({ proyectoId }: { proyectoId: number }) {
   }
   useEffect(() => { load() }, [proyectoId])
 
-  async function generar() {
-    if (!fechaObjetivo) { toast.error('Elegí la fecha de entrega objetivo'); return }
-    setBusy(true)
-    try { await scheduleService.generar(proyectoId, fechaObjetivo); toast.success('Schedule generado'); await load() }
-    catch { /* toast */ } finally { setBusy(false) }
-  }
   async function recalcular() {
     setBusy(true)
     try { await scheduleService.recalcular(proyectoId); toast.success('Schedule recalculado'); await load() }
@@ -171,15 +164,12 @@ export default function ScheduleTab({ proyectoId }: { proyectoId: number }) {
         <div className="w-16 h-16 rounded-2xl bg-forest-50 flex items-center justify-center mx-auto">
           <CalendarClock className="text-forest-500" size={30} />
         </div>
-        <h3 className="mt-4 text-lg font-semibold text-stone-800">Este proyecto todavía no tiene schedule</h3>
+        <h3 className="mt-4 text-lg font-semibold text-stone-800">Este proyecto todavía no tiene cronograma</h3>
         <p className="mt-1.5 text-sm text-stone-500 leading-relaxed">
-          Elegí la fecha de entrega comprometida con el cliente. Las fechas de cada hito salen
-          del plan de ingeniería (el Gantt) y se mantienen vivas con lo que pasa en la operación.
+          El cronograma se arma desde el take-off: cuando Estimados crea el proyecto, el Scheduler
+          arma el plan (ve la carga real y calcula las fechas desde el Gantt) y queda acá. No se
+          genera a mano desde esta pantalla.
         </p>
-        <div className="mt-6 flex items-center justify-center gap-2">
-          <input type="date" value={fechaObjetivo} onChange={(e) => setFechaObjetivo(e.target.value)} className="input w-44" />
-          <button onClick={generar} disabled={busy} className="btn-primary"><CalendarClock size={16} /> Generar schedule</button>
-        </div>
       </div>
     )
   }

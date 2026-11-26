@@ -53,7 +53,7 @@ export default function Schedule() {
           <Route className="text-forest-600" size={22} />
         </div>
         <div className="flex-1">
-          <h1 className="text-xl font-bold text-stone-900">Schedule</h1>
+          <h1 className="text-xl font-bold text-stone-900">Journey</h1>
           <p className="text-sm text-stone-500">El estado de cada proyecto, de un vistazo. La columna vertebral del negocio.</p>
         </div>
         {!loading && rows.length > 0 && (
