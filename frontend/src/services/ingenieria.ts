@@ -207,10 +207,15 @@ export interface NovedadCliente {
 export interface Ingeniero { nombre: string; activo: boolean; hace_cnc: boolean; usuario_id: string | null; tareas_activas: number }
 export interface IngPlan {
   proyecto_ext: string
+  proyecto_id: number | null
+  nombre: string | null
+  cliente: string | null
   fecha_inicio: string | null
   fecha_entrega: string | null
   status_ext: string | null
   proyecto_estado: string | null
+  deal_estado: string | null      // esperando_pm = el Scheduler lo está armando; plan_propuesto = ya enviado a Estimados
+  propuesta_generada: boolean     // false = borrador (Gantt y totales vacíos hasta "Generar plan propuesto")
   n_items: number | null
   presupuesto: number | null
   fin_proyectado: string | null
@@ -280,6 +285,14 @@ export const ingenieriaService = {
     api.get<ApiResponse<ReservaProyecto[]>>('/ingenieria/reservas-pendientes').then((r) => r.data),
   confirmarReserva: (proyectoId: number, asignaciones?: { id: number; asignado_nombre: string }[]) =>
     api.post<ApiResponse<{ confirmadas: number }>>(`/ingenieria/reserva/${proyectoId}/confirmar`, { asignaciones }).then((r) => r.data),
+
+  // ── Scheduler arma el plan (proceso simplificado), todo desde "por proyecto" ──
+  proponerFechas: (proyectoId: number) =>
+    api.post<ApiResponse<{ ok: boolean }>>(`/ingenieria/proyecto/${proyectoId}/proponer-fechas`).then((r) => r.data),
+  generarPropuesto: (proyectoId: number) =>
+    api.post<ApiResponse<{ ok: boolean }>>(`/ingenieria/proyecto/${proyectoId}/generar-propuesto`).then((r) => r.data),
+  enviarEstimados: (proyectoId: number) =>
+    api.post<ApiResponse<{ ok: boolean }>>(`/ingenieria/proyecto/${proyectoId}/enviar-estimados`).then((r) => r.data),
 
   // ── Handoff Estimados → Cliente → Scheduler ──
   dealsEnCurso: () =>

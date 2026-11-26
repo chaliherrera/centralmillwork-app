@@ -12,7 +12,7 @@ function fmtDia(iso: string | null): string {
 // con su disponibilidad, respetando la entrega fija) → confirmar → reasigna TODAS las
 // tareas de ingeniería + recalcula. Reusado en la bandeja del PM (revisión del plan) y en
 // la vista "Por proyecto". `ingenieros` es opcional: si no viene, trae los activos.
-export default function CambiarIngeniero({ proyectoExt, propuesto, ingenieros, onDone, label = 'Cambiar ingeniero propuesto' }: {
+export default function CambiarIngeniero({ proyectoExt, propuesto, ingenieros, onDone, label = 'Cambiar ingeniero' }: {
   proyectoExt: string; propuesto?: string; ingenieros?: string[]; onDone: () => void; label?: string
 }) {
   const [abierto, setAbierto] = useState(false)
@@ -58,12 +58,12 @@ export default function CambiarIngeniero({ proyectoExt, propuesto, ingenieros, o
       <div className="bg-white rounded-2xl max-w-md w-full p-5 shadow-xl" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center gap-2 mb-1">
           <UserCog size={18} className="text-forest-600" />
-          <h3 className="font-semibold text-stone-800">Cambiar ingeniero propuesto</h3>
+          <h3 className="font-semibold text-stone-800">{propuesto ? 'Cambiar ingeniero' : 'Elegir ingeniero'}</h3>
           <button onClick={cerrar} className="ml-auto text-stone-400 hover:text-stone-700"><X size={18} /></button>
         </div>
         <p className="text-[12.5px] text-stone-500 mb-3">
-          Reasigna <b>todas</b> las tareas de ingeniería al nuevo y recalcula el plan según cuándo se libera.
-          Actual: <b className="text-stone-700">{propuesto ?? '—'}</b>.
+          Asigna <b>todas</b> las tareas de ingeniería al ingeniero que elijas y recalcula el plan según cuándo se libera.
+          {propuesto ? <> Actual: <b className="text-stone-700">{propuesto}</b>.</> : <> Todavía no hay ninguno elegido.</>}
         </p>
         <select value={sel} onChange={(e) => pedirPreview(e.target.value)}
           className="w-full border border-stone-300 rounded-lg px-3 py-2 text-sm text-stone-800">

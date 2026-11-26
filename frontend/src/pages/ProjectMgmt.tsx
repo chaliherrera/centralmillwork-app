@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react'
 import { ClipboardList, Inbox, Gauge, Users, Loader2 } from 'lucide-react'
 import PendientesScheduler from '@/components/modules/estimados/PendientesScheduler'
-import ReservasPendientes from '@/components/modules/estimados/ReservasPendientes'
 import DealsEnCurso from '@/components/modules/estimados/DealsEnCurso'
 import ReprogramacionesPendientes from '@/components/modules/ingenieria/ReprogramacionesPendientes'
 import DepositosBloqueando from '@/components/modules/ingenieria/DepositosBloqueando'
@@ -54,7 +53,6 @@ export default function ProjectMgmt() {
           <InstalacionesPM />
           <DepositosBloqueando onRevisar={onRevisar} />
           <ReprogramacionesPendientes onRevisar={onRevisar} />
-          <ReservasPendientes onRevisar={onRevisar} />
           <DealsEnCurso mode="pm" />
           {/* Piedra (countertops): proveedor externo, 100% del PM. Los 3 pasos (medición →
               fabricación → instalación) aparecen acá encadenados. Solo si hay algo (hideWhenEmpty). */}

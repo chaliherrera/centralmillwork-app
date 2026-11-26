@@ -6,7 +6,7 @@
 // en etapas B/C. El % de avance es SIEMPRE el real calculado (nunca tecleado).
 // ─────────────────────────────────────────────────────────────────────────────
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type PointerEvent as RPE } from 'react'
-import { Search, Plus, Loader2, Trash2, Pin, PinOff, MoreHorizontal, Flag, CalendarClock, X, Package, FlaskConical, Wrench, Wallet, ChevronDown, Printer, Lock, LockOpen } from 'lucide-react'
+import { Search, Plus, Loader2, Trash2, Pin, PinOff, MoreHorizontal, Flag, CalendarClock, X, Package, FlaskConical, Wrench, Wallet, ChevronDown, Printer, Lock, LockOpen, Wand2, Send, ClipboardList, CheckCircle2 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { ingenieriaService, type IngProyecto, type IngTarea, type IngPlan, type IngTareaPlan, type InstalacionDetalle } from '@/services/ingenieria'
 import CronogramaCliente, { ganttDesdePlan } from '@/components/schedule/CronogramaCliente'
@@ -71,6 +71,9 @@ export default function CronogramaPM({ proyectos, all, plan, planLoading, sel, s
   const [instOpen, setInstOpen] = useState(false)                  // modal detalle de instalación
   const [instDet, setInstDet] = useState<InstalacionDetalle | null>(null)
   const [instBusy, setInstBusy] = useState(false)
+  const [actBusy, setActBusy] = useState(false)                    // acciones del Scheduler (proponer/generar/enviar)
+  const [takeoffOpen, setTakeoffOpen] = useState(false)            // modal "Ver take off"
+  const [ingenierosActivos, setIngenierosActivos] = useState<string[]>([])  // TODOS los ingenieros activos (no solo los del plan)
   // Drag de BARRA (mover la fecha de inicio = fijar, restricción MSP)
   const [barDrag, setBarDrag] = useState<{ id: number; startX: number; origStart: string; deltaDays: number; movable: boolean } | null>(null)
   const barDragRef = useRef(barDrag); barDragRef.current = barDrag
@@ -217,14 +220,36 @@ export default function CronogramaPM({ proyectos, all, plan, planLoading, sel, s
     return () => window.removeEventListener('keydown', onKey)
   }, [selId, visibleIds])
 
-  // Ingenieros disponibles (para el select de "Asignado a" del inspector)
-  const todosIng = useMemo(() => [...new Set(all.map((t) => t.asignado_nombre).filter(Boolean) as string[])].sort((a, b) => a.localeCompare(b)), [all])
-  // Ingeniero propuesto = el más asignado del plan (para "Cambiar ingeniero")
+  // TODOS los ingenieros activos (para ELEGIR, aunque el plan no tenga ninguno asignado aún).
+  useEffect(() => {
+    ingenieriaService.getIngenieros()
+      .then((r) => setIngenierosActivos((r.data ?? []).filter((i) => i.activo).map((i) => i.nombre).sort((a, b) => a.localeCompare(b))))
+      .catch(() => {})
+  }, [])
+  // Lista para los selectores: los activos; si por algo falla, cae a los que ya están en el plan.
+  const todosIng = useMemo(() => {
+    const delPlan = [...new Set(all.map((t) => t.asignado_nombre).filter(Boolean) as string[])]
+    const union = [...new Set([...ingenierosActivos, ...delPlan])]
+    return union.sort((a, b) => a.localeCompare(b))
+  }, [all, ingenierosActivos])
+  // Ingeniero del proyecto = el más asignado del plan (null si todavía no se eligió).
   const propuesto = useMemo(() => {
     const f = new Map<string, number>()
     for (const t of tareas) if (t.asignado_nombre) f.set(t.asignado_nombre, (f.get(t.asignado_nombre) ?? 0) + 1)
     return [...f.entries()].sort((a, b) => b[1] - a[1])[0]?.[0]
   }, [tareas])
+
+  // ── Acciones del Scheduler (proceso simplificado), todas desde "por proyecto" ──
+  const accionScheduler = async (fn: () => Promise<unknown>, ok: string) => {
+    if (actBusy || !plan?.proyecto_id) return
+    setActBusy(true)
+    try { await fn(); toast.success(ok); onRefresh() }
+    catch (e: any) { toast.error(e?.response?.data?.message || 'No se pudo completar') }
+    finally { setActBusy(false) }
+  }
+  const proponerFechas = () => accionScheduler(() => ingenieriaService.proponerFechas(plan!.proyecto_id!), 'Fechas propuestas — ajustá lo que haga falta')
+  const generarPropuesto = () => accionScheduler(() => ingenieriaService.generarPropuesto(plan!.proyecto_id!), 'Plan propuesto generado')
+  const enviarEstimados = () => accionScheduler(() => ingenieriaService.enviarEstimados(plan!.proyecto_id!), 'Enviado a Estimados')
 
   async function guardarLineaBase() {
     if (!sel) return
@@ -383,18 +408,63 @@ export default function CronogramaPM({ proyectos, all, plan, planLoading, sel, s
           </div>
         </div>
 
-        {/* tarjeta de resumen */}
-        {plan && <div className="cpm-summary">
-          <div className="cpm-cell"><span className="cpm-cell-l">Entrega fija</span><span className="cpm-cell-v">{fmtD(plan.fecha_entrega)}</span></div>
-          <div className="cpm-cell"><span className="cpm-cell-l">Termina</span><span className="cpm-cell-v">{fmtD(plan.fin_proyectado)}</span></div>
-          <div className="cpm-cell"><span className="cpm-cell-l">Holgura</span><span className="cpm-cell-v" style={{ color: holgColor }}>{Math.abs(resumen.holg)} d</span></div>
-          <div className="cpm-cell">
-            <span className="cpm-cell-l">Avance · {Math.round(resumen.avance * 100)}%</span>
-            <span className="cpm-prog"><i style={{ width: `${Math.round(resumen.avance * 100)}%` }} /></span>
+        {/* tarjeta de resumen — los totales (Entrega estimada/Termina/Holgura) recién se
+            muestran cuando el Scheduler "Genera el plan propuesto"; antes es un borrador. */}
+        {plan && (plan.propuesta_generada ? (
+          <div className="cpm-summary">
+            <div className="cpm-cell"><span className="cpm-cell-l">Entrega estimada</span><span className="cpm-cell-v">{fmtD(plan.fecha_entrega)}</span></div>
+            <div className="cpm-cell"><span className="cpm-cell-l">Termina</span><span className="cpm-cell-v">{fmtD(plan.fin_proyectado)}</span></div>
+            <div className="cpm-cell"><span className="cpm-cell-l">Holgura</span><span className="cpm-cell-v" style={{ color: holgColor }}>{Math.abs(resumen.holg)} d</span></div>
+            <div className="cpm-cell">
+              <span className="cpm-cell-l">Avance · {Math.round(resumen.avance * 100)}%</span>
+              <span className="cpm-prog"><i style={{ width: `${Math.round(resumen.avance * 100)}%` }} /></span>
+            </div>
+            <div className="cpm-cell cpm-cell-pill"><span className="cpm-statuspill" style={{ background: pill.bg, color: pill.fg }}>{pill.t}</span></div>
           </div>
-          <div className="cpm-cell cpm-cell-pill"><span className="cpm-statuspill" style={{ background: pill.bg, color: pill.fg }}>{pill.t}</span></div>
-        </div>}
+        ) : (
+          <div className="cpm-summary">
+            <div className="cpm-cell"><span className="cpm-cell-l">Entrega estimada</span><span className="cpm-cell-v" style={{ color: '#aeaeb2' }}>—</span></div>
+            <div className="cpm-cell"><span className="cpm-cell-l">Termina</span><span className="cpm-cell-v" style={{ color: '#aeaeb2' }}>—</span></div>
+            <div className="cpm-cell"><span className="cpm-cell-l">Holgura</span><span className="cpm-cell-v" style={{ color: '#aeaeb2' }}>—</span></div>
+          </div>
+        ))}
       </div>
+
+      {/* ───────── Barra "Armar plan" del Scheduler (mientras construye, antes de enviar) ───────── */}
+      {plan && plan.deal_estado === 'esperando_pm' && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', background: '#f4f8ff', border: '1px solid #d6e4fb', borderRadius: 12, padding: '10px 14px', margin: '2px 0 4px' }}>
+          {!plan.propuesta_generada ? (
+            <>
+              <span style={{ fontSize: 13, color: '#3a4a63', flex: '1 1 220px' }}>
+                <b>Armá el plan:</b> elegí el ingeniero, poné las fechas de cada tarea (o usá <b>Proponer fechas</b> para un borrador) y después <b>Generá el plan propuesto</b>.
+              </span>
+              <CambiarIngeniero proyectoExt={sel} propuesto={propuesto} ingenieros={todosIng} onDone={onRefresh} label={propuesto ? `Ingeniero: ${propuesto}` : 'Elegir ingeniero'} />
+              <button onClick={proponerFechas} disabled={actBusy}
+                style={{ display: 'inline-flex', alignItems: 'center', gap: 6, border: '1px solid #c3d4ee', background: '#fff', color: '#3a4a63', borderRadius: 9, padding: '7px 12px', fontSize: 13, fontWeight: 600, cursor: actBusy ? 'default' : 'pointer' }}>
+                {actBusy ? <Loader2 size={15} className="animate-spin" /> : <Wand2 size={15} />} Proponer fechas
+              </button>
+              <button onClick={generarPropuesto} disabled={actBusy}
+                style={{ display: 'inline-flex', alignItems: 'center', gap: 6, border: 'none', background: '#0a6cdf', color: '#fff', borderRadius: 9, padding: '7px 13px', fontSize: 13, fontWeight: 700, cursor: actBusy ? 'default' : 'pointer' }}>
+                {actBusy ? <Loader2 size={15} className="animate-spin" /> : <CheckCircle2 size={15} />} Generar plan propuesto
+              </button>
+            </>
+          ) : (
+            <>
+              <span style={{ fontSize: 13, color: '#1a7f4b', flex: '1 1 260px' }}>
+                <b>Plan listo.</b> Revisá las fechas y enviáselo a Estimados para que lo mande al cliente.
+              </span>
+              <button onClick={generarPropuesto} disabled={actBusy}
+                style={{ display: 'inline-flex', alignItems: 'center', gap: 6, border: '1px solid #c3d4ee', background: '#fff', color: '#3a4a63', borderRadius: 9, padding: '7px 12px', fontSize: 13, fontWeight: 600, cursor: actBusy ? 'default' : 'pointer' }}>
+                {actBusy ? <Loader2 size={15} className="animate-spin" /> : <CheckCircle2 size={15} />} Regenerar
+              </button>
+              <button onClick={enviarEstimados} disabled={actBusy}
+                style={{ display: 'inline-flex', alignItems: 'center', gap: 6, border: 'none', background: '#1a7f4b', color: '#fff', borderRadius: 9, padding: '7px 13px', fontSize: 13, fontWeight: 700, cursor: actBusy ? 'default' : 'pointer' }}>
+                {actBusy ? <Loader2 size={15} className="animate-spin" /> : <Send size={15} />} Enviar a Estimados
+              </button>
+            </>
+          )}
+        </div>
+      )}
 
       {/* ───────── Fila de módulos (B1): resumen compacto de Compras/Muestras/Instalación/Depósito ───────── */}
       {plan && (plan.compras.hay || plan.muestras.hay || plan.instalacion.hay || plan.deposito.confirmado_finanzas || tareas.some((t) => t.tipo_clave === 'material_deposit')) && (() => {
@@ -439,6 +509,9 @@ export default function CronogramaPM({ proyectos, all, plan, planLoading, sel, s
           </button>
           <button className={`cpm-tbtn ${showSlack ? 'on-slack' : ''}`} onClick={() => setShowSlack((v) => !v)}>
             <span className="cpm-slackic">┄</span> Holgura
+          </button>
+          <button className="cpm-tbtn" onClick={() => setTakeoffOpen(true)} title="Lo que cargó Estimados en el take-off">
+            <ClipboardList size={14} /> Ver take off
           </button>
           <div className="cpm-spacer" />
           <div className="cpm-seg">
@@ -612,6 +685,27 @@ export default function CronogramaPM({ proyectos, all, plan, planLoading, sel, s
 
       {/* Detalle de instalación (ítem×ítem + punch) */}
       {instOpen && <InstalacionPanel det={instDet} busy={instBusy} proyecto={sel} onClose={() => setInstOpen(false)} />}
+
+      {/* "Ver take off": lo que cargó Estimados al crear el proyecto */}
+      {takeoffOpen && plan && (
+        <div className="fixed inset-0 bg-black/30 flex items-center justify-center p-4 z-50" onClick={() => setTakeoffOpen(false)}>
+          <div className="bg-white rounded-2xl max-w-md w-full p-5 shadow-xl" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center gap-2 mb-1">
+              <ClipboardList size={18} className="text-forest-600" />
+              <h3 className="font-semibold text-stone-800">Take-off de Estimados</h3>
+              <button onClick={() => setTakeoffOpen(false)} className="ml-auto text-stone-400 hover:text-stone-700"><X size={18} /></button>
+            </div>
+            <p className="text-[12.5px] text-stone-500 mb-3">Lo que cargó Estimados al crear el proyecto. Es la base para armar el plan.</p>
+            <dl className="text-sm divide-y divide-stone-100">
+              <div className="flex justify-between gap-3 py-2"><dt className="text-stone-500">Proyecto</dt><dd className="font-mono font-semibold text-forest-700">{plan.proyecto_ext}</dd></div>
+              <div className="flex justify-between gap-3 py-2"><dt className="text-stone-500">Nombre</dt><dd className="text-stone-800 text-right">{plan.nombre ?? '—'}</dd></div>
+              <div className="flex justify-between gap-3 py-2"><dt className="text-stone-500">Cliente</dt><dd className="text-stone-800 text-right">{plan.cliente ?? '—'}</dd></div>
+              <div className="flex justify-between gap-3 py-2"><dt className="text-stone-500">Fecha que pidió el cliente</dt><dd className="text-stone-800">{fmtD(plan.fecha_entrega)}</dd></div>
+              <div className="flex justify-between gap-3 py-2"><dt className="text-stone-500">Cantidad de ítems</dt><dd className="text-stone-800">{plan.n_items ?? '—'}</dd></div>
+            </dl>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
