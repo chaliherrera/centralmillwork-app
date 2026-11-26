@@ -978,16 +978,11 @@ export async function listReprogramaciones(runner: QueryRunner): Promise<Reprogr
  * secuencia — los días liberados se vuelven holgura (decisión de Chali).
  */
 export async function borrarTareaConReconexion(runner: QueryRunner, id: number): Promise<{ ok: boolean; reconectadas: number }> {
-  // sucesor de X depende de predecesor de X (evita self-loop y duplicados)
-  const { rowCount: rec } = await runner.query(
-    `INSERT INTO ing_tarea_deps (tarea_id, depende_de_id, tipo, lag_dias)
-       SELECT s.tarea_id, p.depende_de_id, 'FS', 0
-         FROM ing_tarea_deps s
-         JOIN ing_tarea_deps p ON p.tarea_id = $1
-        WHERE s.depende_de_id = $1 AND s.tarea_id <> p.depende_de_id
-     ON CONFLICT (tarea_id, depende_de_id) DO NOTHING`, [id])
+  // Decisión de Chali (2026-11-26): SIN reconexión automática. Se borra la tarea y sus
+  // aristas (cascade); los sucesores conservan sus OTRAS predecesoras pero NO se les
+  // inventa un puente a las predecesoras de la borrada (más limpio para armar a mano).
   const { rowCount } = await runner.query(`DELETE FROM ing_tareas WHERE id = $1`, [id]) // cascade borra sus aristas
-  return { ok: (rowCount ?? 0) > 0, reconectadas: rec ?? 0 }
+  return { ok: (rowCount ?? 0) > 0, reconectadas: 0 }
 }
 
 // ── Dependencias (aristas) editables ──
