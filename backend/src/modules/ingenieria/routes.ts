@@ -6,7 +6,7 @@ import {
   crearTareaHandler, actualizarTareaHandler, avanceTareaHandler, borrarTareaHandler,
   agregarDepHandler, borrarDepHandler, bulkDepsHandler, setPredecesoresHandler, fijarFechaHandler, guardarBaselineHandler, moverTareaHandler, reordenarVisualHandler, reasignarIngenieroHandler,
   reservarHandler, reservasPendientesHandler, confirmarReservaHandler, liberarReservaHandler,
-  dealsEnCursoHandler, enviarClienteHandler, clienteAproboHandler, activarProyectoHandler,
+  dealsEnCursoHandler, pendientesSchedulerHandler, enviarClienteHandler, clienteAproboHandler, activarProyectoHandler,
   overrideDepositoHandler, reprogramacionesHandler, depositosBloqueandoHandler, pagosPorCobrarHandler, instalacionesPMHandler, muestrasEstadoHandler,
   comprasEstadoHandler, instalacionDetalleHandler, escritorioHandler, escritorioResumenHandler,
   novedadesClienteHandler, ingenierosHandler, actualizarIngenieroHandler,
@@ -77,6 +77,7 @@ router.post('/reserva/:proyectoId/confirmar', PM, confirmarReservaHandler)
 // registrar decisión del cliente) lo hace Estimados (grupo DEAL). La ACTIVACIÓN
 // del proyecto la dispara el Scheduler/PM (grupo PM).
 router.get('/deals', READ, dealsEnCursoHandler)
+router.get('/scheduler/pendientes', PM, pendientesSchedulerHandler)  // bandeja del Scheduler: take-offs esperando plan
 router.post('/proyecto/:id/enviar-cliente', DEAL, enviarClienteHandler)
 router.post('/proyecto/:id/cliente-aprobo', DEAL, clienteAproboHandler)
 router.post('/proyecto/:id/activar', PM, activarProyectoHandler)

@@ -183,6 +183,32 @@ export async function listDealsEnCurso(runner: QueryRunner): Promise<DealEnCurso
   return rows
 }
 
+export interface PendienteScheduler {
+  proyecto_id: number; codigo: string; nombre: string; cliente: string | null
+  deal_estado: string
+  fecha_solicitada: string | null   // la que pidió el cliente en el take-off
+  fecha_objetivo: string | null     // si el Scheduler ya empezó a armar el plan
+  items_qty: number | null
+  n_tareas: number                  // tareas ya armadas (sugerencia o aceptadas)
+}
+
+/** Bandeja del Scheduler: take-offs de Estimados esperando que arme el plan.
+ *  esperando_scheduler = recién llegó de Estimados (sin plan todavía);
+ *  esperando_pm = el plan ya se está armando (sugerencia), falta devolverlo a Estimados. */
+export async function listPendientesScheduler(runner: QueryRunner): Promise<PendienteScheduler[]> {
+  const { rows } = await runner.query<PendienteScheduler>(
+    `SELECT p.id AS proyecto_id, p.codigo, p.nombre, p.cliente, p.deal_estado,
+            to_char(p.fecha_entrega_solicitada,'YYYY-MM-DD') AS fecha_solicitada,
+            to_char(sp.fecha_objetivo,'YYYY-MM-DD') AS fecha_objetivo,
+            p.items_qty,
+            (SELECT count(*)::int FROM ing_tareas t WHERE t.proyecto_id = p.id AND t.origen IN ('sugerencia','app')) AS n_tareas
+       FROM proyectos p
+       LEFT JOIN schedule_planes sp ON sp.proyecto_id = p.id AND sp.scope = 'proyecto'
+      WHERE p.estado = 'prospecto' AND p.deal_estado IN ('esperando_scheduler','esperando_pm')
+      ORDER BY p.fecha_entrega_solicitada NULLS LAST, p.codigo`)
+  return rows
+}
+
 /** Re-ancla el día cero del plan de ingeniería a la firma del contrato y recalcula.
  *  Guarda el inicio original la primera vez; el delta documenta la demora del cliente. */
 export async function reanclarPlanAFirma(runner: QueryRunner, proyectoId: number, fechaFirma: string): Promise<{ ok: boolean }> {

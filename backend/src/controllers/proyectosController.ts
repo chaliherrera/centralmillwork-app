@@ -91,15 +91,18 @@ export async function createProyecto(req: Request, res: Response, next: NextFunc
     const { codigo, nombre, cliente, descripcion, estado, fecha_inicio,
             fecha_fin_estimada, presupuesto, responsable,
             millwork_total, stone_total, items_qty, intake_comments, fecha_entrega_solicitada } = req.body
+    // Take-off de Estimados (prospecto): el deal arranca esperando que el Scheduler
+    // arme el plan. La fecha solicitada viaja en fecha_entrega_solicitada (migr. 120).
+    const dealEstado = (estado === 'prospecto') ? 'esperando_scheduler' : null
     const { rows } = await pool.query(
       `INSERT INTO proyectos (codigo, nombre, cliente, descripcion, estado,
         fecha_inicio, fecha_fin_estimada, presupuesto, responsable,
-        millwork_total, stone_total, items_qty, intake_comments, fecha_entrega_solicitada)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) RETURNING *`,
+        millwork_total, stone_total, items_qty, intake_comments, fecha_entrega_solicitada, deal_estado)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15) RETURNING *`,
       [codigo, nombre, cliente, descripcion || null, estado || 'activo',
        fecha_inicio || null, fecha_fin_estimada || null, presupuesto ?? 0, responsable || null,
        millwork_total ?? null, stone_total ?? null, items_qty ?? null,
-       intake_comments || null, fecha_entrega_solicitada || null]
+       intake_comments || null, fecha_entrega_solicitada || null, dealEstado]
     )
     res.status(201).json({ data: rows[0], message: 'Proyecto creado exitosamente' })
   } catch (err) { next(err) }

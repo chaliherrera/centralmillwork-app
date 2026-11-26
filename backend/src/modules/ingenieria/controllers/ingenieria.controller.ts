@@ -18,6 +18,7 @@ import { listIngenieros, actualizarIngeniero } from '../domain/ingenieros'
 import {
   generarPlanIngenieria, aceptarPlanPM,
   enviarAClienteDeal, registrarAprobacionCliente, activarProyecto, listDealsEnCurso,
+  listPendientesScheduler,
 } from '../domain/plan_inicial'
 import { estadoDeposito, overrideGate, listDepositosBloqueando, listPagosPorCobrar } from '../domain/deposito'
 import { listMuestrasPorProyecto } from '../domain/muestras'
@@ -73,6 +74,10 @@ export async function liberarReservaHandler(req: Request, res: Response, next: N
 // GET /api/ingenieria/deals — deals en curso (tracker de Estimados + activar del PM)
 export async function dealsEnCursoHandler(_req: Request, res: Response, next: NextFunction) {
   try { res.json({ data: await listDealsEnCurso(pool) }) } catch (e) { next(e) }
+}
+// GET /api/ingenieria/scheduler/pendientes — bandeja del Scheduler (take-offs esperando plan)
+export async function pendientesSchedulerHandler(_req: Request, res: Response, next: NextFunction) {
+  try { res.json({ data: await listPendientesScheduler(pool) }) } catch (e) { next(e) }
 }
 // POST /api/ingenieria/proyecto/:id/enviar-cliente — Estimados manda el schedule al cliente
 export async function enviarClienteHandler(req: Request, res: Response, next: NextFunction) {
