@@ -10,6 +10,13 @@
 - Nunca hacer push automático. El push siempre requiere confirmación explícita en el chat.
 - Para features grandes: trabajar en rama nueva (feat/nombre-corto), commits parciales en esa rama, y al final mergear a main con aprobación.
 
+## Sobre contexto y memoria (para NO perder trabajo entre ramas)
+- Antes de que Chali pruebe un área o feature, CRUZAR la memoria con el estado REAL de la rama de trabajo: verificar que los archivos y migraciones de ese feature estén EN esta rama. No alcanza con que esté "documentado" o hecho en otra rama — hay que confirmar que la rama actual lo tenga, y AVISAR antes de que Chali lo pruebe si falta.
+- Leer la carpeta de memoria (grep) antes de preguntar o afirmar sobre proceso/roles/fechas/arquitectura/estado de un feature. No re-preguntar lo documentado.
+- Mapa de ramas (crítico):
+  - `feat/cronograma-pm` = rama activa del Scheduler / cronograma / proceso simplificado del alta de proyecto.
+  - El rediseño del PORTAL del cliente (inglés + barrera de Términos y Condiciones + layout nuevo + link enmascarado, migración 101) vive en `feat/mobile-roles`, NO en `feat/cronograma-pm`. PENDIENTE de portar con un merge cuidadoso (no pisar la aprobación del PLAN del cliente, que vive en esta rama). Ver memoria `project_portal_no_en_cronograma_pm`.
+
 ## Sobre archivos sensibles que NO deben commitearse
 - database/seed_*_test.sql y seed_*_demo.sql son datos de prueba locales únicamente
 - Cualquier archivo .env* siempre ignorado
