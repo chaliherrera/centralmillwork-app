@@ -378,6 +378,7 @@ export interface ReasignarPreview {
   ingeniero_actual: string | null; ingeniero_nuevo: string; disponible_desde: string
   fin_actual: string | null; fin_nuevo: string; entrega: string
   holgura_dias: number; entra: boolean; n_tareas: number
+  sin_fechas?: boolean   // borrador sin fechas: se asigna sin preview de fechas
 }
 
 export interface CambioDep { tarea_id: number; depende_de_id: number; tipo?: string; lag_dias?: number }

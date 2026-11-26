@@ -1100,6 +1100,7 @@ export interface ReasignarPreview {
   ingeniero_actual: string | null; ingeniero_nuevo: string; disponible_desde: string
   fin_actual: string | null; fin_nuevo: string; entrega: string
   holgura_dias: number; entra: boolean; n_tareas: number
+  sin_fechas?: boolean   // true = borrador sin fechas aún: se asigna el ingeniero sin preview de fechas
 }
 
 /** Cambia el ingeniero PROPUESTO del proyecto: reasigna TODAS las tareas de rol
@@ -1114,7 +1115,6 @@ export async function reasignarIngeniero(
     `SELECT to_char(fecha_inicio,'YYYY-MM-DD') AS ini, to_char(fecha_entrega,'YYYY-MM-DD') AS entrega
        FROM ing_proyectos WHERE proyecto_ext = $1`, [proyectoExt])
   const h = hdr[0]
-  if (!h?.ini || !h?.entrega) return { ...base, error: 'el proyecto no tiene plan' }
 
   const feriados = await loadFeriados(runner)
   const colas = await cargarColaIngenieros(runner, { excluirProyectoExt: proyectoExt })
@@ -1133,6 +1133,20 @@ export async function reasignarIngeniero(
   const freq = new Map<string, number>()
   for (const r of ingRows) if (r.asignado_nombre) freq.set(r.asignado_nombre, (freq.get(r.asignado_nombre) ?? 0) + 1)
   const ingeniero_actual = [...freq.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? null
+
+  // BORRADOR sin fechas todavía (proceso simplificado): se asigna el ingeniero y su piso
+  // de disponibilidad SIN preview de fechas (no hay ancla). Al "Proponer fechas", el CPM
+  // arrancará el bloque de ingeniería cuando ese ingeniero se libere.
+  if (!h?.ini || !h?.entrega) {
+    const preview: ReasignarPreview = { ...base, ok: true, sin_fechas: true, ingeniero_actual, disponible_desde: disponible, entrega: h?.entrega ?? '', entra: true, n_tareas: ingIds.size }
+    if (dryRun) return preview
+    await runner.query(
+      `UPDATE ing_tareas t SET asignado_nombre = $2, no_antes_de = $3::date, updated_at = NOW()
+         FROM ing_tarea_tipos tt
+        WHERE t.tipo_id = tt.id AND t.proyecto_ext = $1 AND tt.rol = ANY($4)`,
+      [proyectoExt, nuevoIng, disponible, rolesIng])
+    return preview
+  }
 
   // Preview: corre el CPM con el piso actual (antes) y con el piso del nuevo ingeniero (después).
   const tareas = await listTareas(runner, proyectoExt)

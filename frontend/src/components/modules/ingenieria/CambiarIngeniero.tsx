@@ -73,7 +73,23 @@ export default function CambiarIngeniero({ proyectoExt, propuesto, ingenieros, o
 
         {busy && !prev && <div className="text-center py-4 text-stone-400"><Loader2 className="animate-spin inline" size={18} /></div>}
 
-        {prev && (
+        {prev && prev.sin_fechas && (
+          <div className="mt-3 space-y-2">
+            <div className="rounded-xl border border-stone-200 bg-stone-50 px-3 py-2.5 text-[13px] text-stone-600">
+              Se asignan las <b>{prev.n_tareas}</b> tareas de ingeniería a <b className="text-stone-800">{prev.ingeniero_nuevo}</b>.
+              Las fechas se calculan después con <b>Proponer fechas</b> (arrancan cuando el ingeniero se libera, el {fmtDia(prev.disponible_desde)}).
+            </div>
+            <div className="flex justify-end gap-2">
+              <button onClick={cerrar} disabled={busy} className="px-3 py-2 text-sm font-medium text-stone-500 hover:text-stone-800">Cancelar</button>
+              <button onClick={confirmar} disabled={busy}
+                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-forest-600 hover:bg-forest-700 disabled:opacity-50 text-white text-sm font-semibold">
+                {busy ? <Loader2 className="animate-spin" size={15} /> : <Check size={15} />} Asignar ingeniero
+              </button>
+            </div>
+          </div>
+        )}
+
+        {prev && !prev.sin_fechas && (
           <div className="mt-3 space-y-2">
             <div className={`rounded-xl border px-3 py-2.5 ${prev.entra ? 'border-emerald-200 bg-emerald-50/60' : 'border-rose-200 bg-rose-50/60'}`}>
               <div className="flex items-center gap-2 text-sm">
