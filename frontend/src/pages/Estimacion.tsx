@@ -5,10 +5,11 @@ import DealsEnCurso from '@/components/modules/estimados/DealsEnCurso'
 import Escritorio from '@/components/escritorio/Escritorio'
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Escritorio de Estimación — dos pestañas, como el del PM:
-//   · Bandeja: los deals que esperan tu acción (mandar el schedule al cliente,
-//     registrar la aprobación) después de que el PM aceptó el plan.
-//   · Crear proyecto: el wizard guiado (intake → factibilidad → PM → firma).
+// Escritorio de Estimación — dos pestañas:
+//   · Bandeja: lo que te toca (subir el contrato cuando el cliente aprueba) + los
+//     deals que te devolvió el Scheduler para mandarle el schedule al cliente.
+//   · Crear proyecto: el take-off (intake + fecha solicitada) → se manda solo al
+//     Scheduler, que arma el plan. La factibilidad ya NO es de Estimados (Fase 2).
 // ─────────────────────────────────────────────────────────────────────────────
 
 export default function Estimacion() {
@@ -39,7 +40,7 @@ export default function Estimacion() {
               del contrato = día cero, que destraba toda la cadena aguas abajo). */}
           <Escritorio rol="estimacion" titulo="Te toca a vos ahora"
             subtitulo="Tu próxima tarea de cada proyecto — completala y aparece la siguiente." />
-          <DealsEnCurso mode="estimados" emptyHint="Cuando el PM acepte un plan, el deal aparece acá para que le mandes el schedule al cliente." />
+          <DealsEnCurso mode="estimados" emptyHint="Cuando el Scheduler te devuelva un plan listo, el deal aparece acá para que le mandes el schedule al cliente." />
         </div>
       ) : (
         <EstimadosWizard />
