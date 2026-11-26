@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
-import { Link } from 'react-router-dom'
-import { Loader2, Send, Check, Rocket, CalendarRange, UserCheck, Eye, Link2, Copy, CalendarClock, X } from 'lucide-react'
+import { Loader2, Send, Check, Rocket, CalendarRange, UserCheck, Link2, Copy, CalendarClock, X } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { ingenieriaService, type IngDealEnCurso } from '@/services/ingenieria'
 import type { PortalGanttTarea } from '@/services/portal'
@@ -29,7 +28,7 @@ const fmtDateTime = (iso: string | null) => {
 }
 
 const CHIP: Record<string, { label: string; cls: string }> = {
-  plan_propuesto:    { label: 'PM aceptó el plan',  cls: 'text-forest-700 bg-forest-100' },
+  plan_propuesto:    { label: 'Scheduler propuso el plan',  cls: 'text-forest-700 bg-forest-100' },
   esperando_cliente: { label: 'con el cliente',      cls: 'text-amber-700 bg-amber-100' },
   aprobado:          { label: 'cliente aprobó',      cls: 'text-blue-700 bg-blue-100' },
 }
@@ -108,19 +107,15 @@ export default function DealsEnCurso({ mode, emptyHint }: { mode: 'estimados' | 
                 <span><b className="text-stone-700">{d.n_tareas}</b> tarea{d.n_tareas === 1 ? '' : 's'} en el plan</span>
               </div>
               <div className="mt-3 flex items-center gap-2 flex-wrap">
-                {/* Ver el plan que se manda al cliente (revisar antes de enviar / activar). */}
-                <Link to={`/schedule/${d.proyecto_id}`}
-                  className="inline-flex items-center gap-1.5 rounded-lg border border-stone-300 hover:bg-stone-50 text-stone-700 text-sm font-semibold px-3 py-2">
-                  <Eye size={15} /> Ver el plan
-                </Link>
+                {/* El cronograma del cliente (el Gantt) se ve con "Cronograma" (abajo). */}
                 <button onClick={() => abrirCrono(d)} disabled={cronoBusy === d.proyecto_id}
                   className="inline-flex items-center gap-1.5 rounded-lg border border-stone-300 hover:bg-stone-50 text-stone-700 text-sm font-semibold px-3 py-2">
                   {cronoBusy === d.proyecto_id ? <Loader2 className="animate-spin" size={15} /> : <CalendarClock size={15} />} Cronograma
                 </button>
                 {mode === 'estimados' && d.deal_estado === 'plan_propuesto' && (
-                  <button onClick={() => accion(d, () => ingenieriaService.enviarCliente(d.proyecto_id), 'Schedule enviado al cliente')} disabled={isBusy}
+                  <button onClick={() => accion(d, () => ingenieriaService.enviarCliente(d.proyecto_id), 'Link del portal listo abajo — copialo y mandáselo al cliente (el sistema no manda mails)')} disabled={isBusy}
                     className="inline-flex items-center gap-1.5 rounded-lg bg-forest-600 hover:bg-forest-700 disabled:opacity-50 text-white text-sm font-semibold px-3.5 py-2">
-                    {isBusy ? <Loader2 className="animate-spin" size={15} /> : <Send size={15} />} Enviar schedule al cliente
+                    {isBusy ? <Loader2 className="animate-spin" size={15} /> : <Send size={15} />} Preparar link para el cliente
                   </button>
                 )}
                 {mode === 'estimados' && d.deal_estado === 'esperando_cliente' && (
@@ -136,7 +131,7 @@ export default function DealsEnCurso({ mode, emptyHint }: { mode: 'estimados' | 
                   </button>
                 )}
                 <span className="text-[11px] text-stone-400">
-                  {d.deal_estado === 'plan_propuesto' && 'El PM aceptó — mandale el schedule al cliente para su OK.'}
+                  {d.deal_estado === 'plan_propuesto' && 'El Scheduler propuso el plan — copiá el link del portal y mandáselo al cliente para su OK.'}
                   {d.deal_estado === 'esperando_cliente' && 'Esperando el OK del cliente. Registralo cuando responda.'}
                   {d.deal_estado === 'aprobado' && esPM && 'El cliente ya aprobó. Activá para poner todo el plan en marcha.'}
                   {d.deal_estado === 'aprobado' && !esPM && 'El cliente aprobó. Subí el contrato firmado en tu escritorio; el Scheduler activa el proyecto.'}
