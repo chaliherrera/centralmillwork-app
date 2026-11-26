@@ -185,8 +185,11 @@ export default function CronogramaPM({ proyectos, all, plan, planLoading, sel, s
     return { total, hechas, avance, holg, nivel, sync }
   }, [tareas, plan])
 
-  const pill = { ok: { bg: '#dcf1e5', fg: '#1a7f4b', t: 'En fecha' }, ajustado: { bg: '#fdf0dc', fg: '#a65f00', t: 'Ajustado' }, tarde: { bg: '#fde4e4', fg: '#c4262c', t: 'Retrasado' } }[resumen.nivel]
-  const holgColor = resumen.nivel === 'tarde' ? '#d70015' : resumen.nivel === 'ajustado' ? '#c46a00' : '#1d1d1f'
+  // Framing del nuevo flujo: la "entrega estimada" = fin del plan (lo que el Scheduler
+  // puede prometer). La fecha del cliente es solo referencia. Si la estimada cae después
+  // de lo pedido NO es un "atraso" (nada arrancó): es simplemente la estimación honesta.
+  const pill = { ok: { bg: '#dcf1e5', fg: '#1a7f4b', t: 'Entra en fecha' }, ajustado: { bg: '#fdf0dc', fg: '#a65f00', t: 'Justo' }, tarde: { bg: '#fdf0dc', fg: '#a65f00', t: 'Después de lo pedido' } }[resumen.nivel]
+  const holgColor = resumen.nivel === 'ok' ? '#1a7f4b' : '#c46a00'
 
   // ── Dependencias del seleccionado (predecesoras → sel → sucesoras) ──
   const depsSel = useMemo(() => {
@@ -413,9 +416,9 @@ export default function CronogramaPM({ proyectos, all, plan, planLoading, sel, s
             muestran cuando el Scheduler "Genera el plan propuesto"; antes es un borrador. */}
         {plan && (plan.propuesta_generada ? (
           <div className="cpm-summary">
-            <div className="cpm-cell"><span className="cpm-cell-l">Entrega estimada</span><span className="cpm-cell-v">{fmtD(plan.fecha_entrega)}</span></div>
-            <div className="cpm-cell"><span className="cpm-cell-l">Termina</span><span className="cpm-cell-v">{fmtD(plan.fin_proyectado)}</span></div>
-            <div className="cpm-cell"><span className="cpm-cell-l">Holgura</span><span className="cpm-cell-v" style={{ color: holgColor }}>{Math.abs(resumen.holg)} d</span></div>
+            <div className="cpm-cell"><span className="cpm-cell-l">Entrega estimada</span><span className="cpm-cell-v">{fmtD(plan.fin_proyectado)}</span></div>
+            <div className="cpm-cell"><span className="cpm-cell-l">Pedida por el cliente</span><span className="cpm-cell-v" style={{ color: '#8a8780' }}>{fmtD(plan.fecha_entrega)}</span></div>
+            <div className="cpm-cell"><span className="cpm-cell-l">vs. lo pedido</span><span className="cpm-cell-v" style={{ color: holgColor }}>{resumen.holg >= 0 ? `${resumen.holg} d antes` : `${Math.abs(resumen.holg)} d después`}</span></div>
             <div className="cpm-cell">
               <span className="cpm-cell-l">Avance · {Math.round(resumen.avance * 100)}%</span>
               <span className="cpm-prog"><i style={{ width: `${Math.round(resumen.avance * 100)}%` }} /></span>
@@ -425,8 +428,8 @@ export default function CronogramaPM({ proyectos, all, plan, planLoading, sel, s
         ) : (
           <div className="cpm-summary">
             <div className="cpm-cell"><span className="cpm-cell-l">Entrega estimada</span><span className="cpm-cell-v" style={{ color: '#aeaeb2' }}>—</span></div>
-            <div className="cpm-cell"><span className="cpm-cell-l">Termina</span><span className="cpm-cell-v" style={{ color: '#aeaeb2' }}>—</span></div>
-            <div className="cpm-cell"><span className="cpm-cell-l">Holgura</span><span className="cpm-cell-v" style={{ color: '#aeaeb2' }}>—</span></div>
+            <div className="cpm-cell"><span className="cpm-cell-l">Pedida por el cliente</span><span className="cpm-cell-v" style={{ color: '#8a8780' }}>{fmtD(plan.fecha_entrega)}</span></div>
+            <div className="cpm-cell"><span className="cpm-cell-l">vs. lo pedido</span><span className="cpm-cell-v" style={{ color: '#aeaeb2' }}>—</span></div>
           </div>
         ))}
       </div>
@@ -545,7 +548,7 @@ export default function CronogramaPM({ proyectos, all, plan, planLoading, sel, s
                     </div>
                   ))}
                   {hoyX != null && <div className="cpm-hoy-pill" style={{ left: hoyX }}>Hoy</div>}
-                  {entregaX != null && <div className="cpm-entrega-pill" style={{ left: entregaX }}>Entrega</div>}
+                  {entregaX != null && <div className="cpm-entrega-pill" style={{ left: entregaX }}>Pedida</div>}
                 </div>
               </div>
 
