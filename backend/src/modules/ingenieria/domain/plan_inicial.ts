@@ -24,9 +24,10 @@ type QueryRunner = PoolClient | typeof pool
 function hoyISO(): string { return new Date().toISOString().slice(0, 10) }
 
 export async function generarPlanIngenieria(
-  runner: QueryRunner, proyectoId: number, opts?: { origen?: string }
+  runner: QueryRunner, proyectoId: number, opts?: { origen?: string; modo?: 'completo' | 'borrador' }
 ): Promise<{ creadas: number; error?: string; ubicacion?: Ubicacion }> {
   const origen = opts?.origen ?? 'app'
+  const modo = opts?.modo ?? 'completo'
   const { rows: pr } = await runner.query<{ codigo: string; items_qty: number | null; presupuesto: number | null; stone_total: number | null; incluye: boolean; fecha_objetivo: string | null }>(
     `SELECT p.codigo, p.items_qty, p.presupuesto, p.stone_total,
             COALESCE(p.incluye_instalacion, TRUE) AS incluye,
@@ -56,6 +57,40 @@ export async function generarPlanIngenieria(
   const feriados = await loadFeriados(runner)
   const plantilla = await cargarPlantillaRuta(runner, { itemsQty: items_qty, hayStone, incluyeInstalacion })
   if (!plantilla.pasos.length) return { creadas: 0, error: 'catálogo de tipos vacío' }
+
+  // ── MODO BORRADOR (proceso simplificado, Scheduler): crea la ESTRUCTURA en el orden
+  //    del catálogo, con las duraciones de la plantilla, PERO sin ingeniero y SIN fechas.
+  //    El inicio del proyecto queda NULL → el CPM no corre (getPlanProyecto exige
+  //    inicio+entrega) → el Gantt y los totales quedan VACÍOS hasta que el Scheduler
+  //    elija ingeniero y use "Proponer fechas" / ponga las fechas a mano. orden_visual
+  //    = orden del catálogo (así nunca sale "Millwork Fabrication" primero). ──
+  if (modo === 'borrador') {
+    await runner.query(
+      `INSERT INTO ing_proyectos (proyecto_ext, proyecto_id, fecha_inicio, fecha_entrega, fecha_inicio_original, n_items, presupuesto, origen, propuesta_generada)
+         VALUES ($1,$2,NULL,$3,NULL,$4,$5,$6,false)
+       ON CONFLICT (proyecto_ext) DO UPDATE SET proyecto_id=EXCLUDED.proyecto_id, fecha_inicio=NULL,
+         fecha_entrega=EXCLUDED.fecha_entrega, fecha_inicio_original=NULL, n_items=EXCLUDED.n_items,
+         presupuesto=EXCLUDED.presupuesto, origen=EXCLUDED.origen, propuesta_generada=false, updated_at=NOW()`,
+      [proyectoExt, proyectoId, fecha_objetivo, items_qty, presupuesto, origen])
+    const idPorClaveB = new Map<string, number>()
+    let pos = 0
+    for (const paso of plantilla.pasos) {
+      pos++
+      const { rows } = await runner.query<{ id: number }>(
+        `INSERT INTO ing_tareas (proyecto_ext, proyecto_id, tipo_id, nombre, asignado_nombre, allocation_pct, dur_dias, fecha_inicio, fecha_fin, no_antes_de, estado, origen, orden_visual)
+           VALUES ($1,$2,$3,$4,NULL,1.0,$5,NULL,NULL,NULL,'pendiente',$6,$7) RETURNING id`,
+        [proyectoExt, proyectoId, paso.tipoId, paso.nombre, paso.dur, origen, pos])
+      idPorClaveB.set(paso.clave, rows[0].id)
+    }
+    for (const a of plantilla.aristas) {
+      const tId = idPorClaveB.get(a.clave), dId = idPorClaveB.get(a.dependeDe)
+      if (tId && dId) await runner.query(
+        `INSERT INTO ing_tarea_deps (tarea_id, depende_de_id, tipo, lag_dias) VALUES ($1,$2,$3,$4) ON CONFLICT (tarea_id,depende_de_id) DO NOTHING`,
+        [tId, dId, a.tipo, a.lag])
+    }
+    return { creadas: plantilla.pasos.length }
+  }
+
   const colas = await cargarColaIngenieros(runner, { excluirProyectoExt: proyectoExt })
   const u = ubicarProyecto(plantilla, colas, { hoy: diaCero, diaCero, fechaEntrega: fecha_objetivo, feriados })
 
@@ -119,6 +154,31 @@ export async function aceptarPlanPM(runner: QueryRunner, proyectoId: number): Pr
     catch (err) { logger.error('aceptarPlanPM: recomputarYGuardar falló', { proyectoId, ext, err: (err as Error)?.message }); captureException(err, { tags: { area: 'aceptar_plan_recompute' }, extra: { proyectoId, ext } }) }
   }
   return { aceptadas: r.rowCount ?? 0 }
+}
+
+/** "Proponer fechas" (ayuda del Scheduler): enciende el ancla del proyecto (fecha_inicio
+ *  = hoy) para que el CPM calcule un cronograma de arranque desde las duraciones de la
+ *  plantilla y las dependencias. A partir de ahí el Scheduler ajusta cada fecha a mano
+ *  (inspector / arrastre). No pisa el ancla si ya estaba (no borra sus ajustes). */
+export async function proponerFechasBorrador(runner: QueryRunner, proyectoId: number): Promise<{ ok: boolean; error?: string }> {
+  const { rows } = await runner.query<{ codigo: string }>(`SELECT codigo FROM proyectos WHERE id = $1`, [proyectoId])
+  if (!rows[0]) return { ok: false, error: 'proyecto no encontrado' }
+  const { rowCount } = await runner.query(
+    `UPDATE ing_proyectos SET fecha_inicio = COALESCE(fecha_inicio, CURRENT_DATE), updated_at = NOW()
+      WHERE proyecto_ext = $1 AND fecha_entrega IS NOT NULL`, [rows[0].codigo])
+  return rowCount ? { ok: true } : { ok: false, error: 'el proyecto no tiene plan todavía (armalo primero)' }
+}
+
+/** "Generar plan propuesto": el Scheduler da por listas las fechas. Asegura el ancla y
+ *  marca la propuesta como generada → recién ahí la pantalla muestra Entrega estimada /
+ *  Termina / Holgura. No endurece el plan (eso lo hace "Enviar a Estimados"). */
+export async function generarPropuestaBorrador(runner: QueryRunner, proyectoId: number): Promise<{ ok: boolean; error?: string }> {
+  const { rows } = await runner.query<{ codigo: string }>(`SELECT codigo FROM proyectos WHERE id = $1`, [proyectoId])
+  if (!rows[0]) return { ok: false, error: 'proyecto no encontrado' }
+  const { rowCount } = await runner.query(
+    `UPDATE ing_proyectos SET fecha_inicio = COALESCE(fecha_inicio, CURRENT_DATE), propuesta_generada = true, updated_at = NOW()
+      WHERE proyecto_ext = $1 AND fecha_entrega IS NOT NULL`, [rows[0].codigo])
+  return rowCount ? { ok: true } : { ok: false, error: 'el proyecto no tiene plan todavía (armalo primero)' }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

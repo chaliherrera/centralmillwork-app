@@ -340,6 +340,7 @@ export interface PlanProyecto {
   proyecto_estado: string | null // estado del proyecto (prospecto|activo…): gates de UI solo cuando activo
   n_items: number | null
   presupuesto: number | null
+  propuesta_generada: boolean    // false = borrador recién armado por el Scheduler (totales ocultos hasta "Generar plan propuesto")
   fin_proyectado: string | null // cuándo termina la cadena
   holgura_proyecto: number      // días hábiles de holgura del proyecto (< 0 = riesgo)
   en_riesgo: boolean
@@ -354,12 +355,12 @@ export interface PlanProyecto {
 
 /** Devuelve el plan completo de un proyecto con la holgura de cada tarea. */
 export async function getPlanProyecto(runner: QueryRunner, proyectoExt: string): Promise<PlanProyecto> {
-  const { rows: hdr } = await runner.query<{ ini: string | null; entrega: string | null; status: string | null; n_items: number | null; presupuesto: string | null; estado: string | null }>(
+  const { rows: hdr } = await runner.query<{ ini: string | null; entrega: string | null; status: string | null; n_items: number | null; presupuesto: string | null; estado: string | null; propuesta_generada: boolean }>(
     `SELECT to_char(ip.fecha_inicio,'YYYY-MM-DD') AS ini, to_char(ip.fecha_entrega,'YYYY-MM-DD') AS entrega,
-            ip.status_ext AS status, ip.n_items, ip.presupuesto, p.estado
+            ip.status_ext AS status, ip.n_items, ip.presupuesto, p.estado, ip.propuesta_generada
        FROM ing_proyectos ip LEFT JOIN proyectos p ON p.id = ip.proyecto_id
       WHERE ip.proyecto_ext = $1`, [proyectoExt])
-  const h = hdr[0] ?? { ini: null, entrega: null, status: null, n_items: null, presupuesto: null, estado: null }
+  const h = hdr[0] ?? { ini: null, entrega: null, status: null, n_items: null, presupuesto: null, estado: null, propuesta_generada: true }
 
   const tareas = await listTareas(runner, proyectoExt)
   // Orden ESTABLE de la FILA: por orden_visual (el drag del scheduler) y, si falta,
@@ -462,6 +463,7 @@ export async function getPlanProyecto(runner: QueryRunner, proyectoExt: string):
     proyecto_ext: proyectoExt, fecha_inicio: h.ini, fecha_entrega: h.entrega, status_ext: h.status,
     proyecto_estado: h.estado,
     n_items: h.n_items, presupuesto: h.presupuesto != null ? +h.presupuesto : null,
+    propuesta_generada: h.propuesta_generada,
     fin_proyectado: finProyectado, holgura_proyecto: holguraProyecto, en_riesgo: enRiesgo,
     deposito, muestras, compras, instalacion, tareas: holgura, aristas: deps,
     error_cpm: errorCpm,

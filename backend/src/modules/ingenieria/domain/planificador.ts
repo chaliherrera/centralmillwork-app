@@ -24,7 +24,7 @@ type QueryRunner = PoolClient | typeof pool
 export const ROLES_INGENIERO = new Set(['ingenieria', 'field'])
 const STONE_CLAVES = ['stone_measure', 'stone_fab', 'stone_install']
 
-export interface PasoRuta { clave: string; tipoId: number; nombre: string; rol: string | null; dur: number }
+export interface PasoRuta { clave: string; tipoId: number; nombre: string; rol: string | null; dur: number; orden: number }
 export interface AristaRuta { clave: string; dependeDe: string; tipo: TipoDep; lag: number }
 export interface PlantillaRuta { pasos: PasoRuta[]; aristas: AristaRuta[] }
 
@@ -51,8 +51,8 @@ export interface Ubicacion {
 export async function cargarPlantillaRuta(
   runner: QueryRunner, opts: { itemsQty: number | null; hayStone: boolean; incluyeInstalacion: boolean }
 ): Promise<PlantillaRuta> {
-  const { rows: tipos } = await runner.query<{ id: number; clave: string; nombre: string; rol: string | null; dur_dias_tipico: number | null; dias_por_item: number | null }>(
-    `SELECT id, clave, nombre, rol, dur_dias_tipico, dias_por_item FROM ing_tarea_tipos`)
+  const { rows: tipos } = await runner.query<{ id: number; clave: string; nombre: string; rol: string | null; dur_dias_tipico: number | null; dias_por_item: number | null; orden: number }>(
+    `SELECT id, clave, nombre, rol, dur_dias_tipico, dias_por_item, orden FROM ing_tarea_tipos ORDER BY orden, id`)
   const incluir = tipos.filter((t) =>
     (opts.hayStone || !STONE_CLAVES.includes(t.clave)) &&
     (opts.incluyeInstalacion || t.clave !== 'installation'))
@@ -61,7 +61,7 @@ export async function cargarPlantillaRuta(
     let dur = Math.max(0, t.dur_dias_tipico ?? 3)
     if (opts.itemsQty != null && opts.itemsQty > 0 && t.dias_por_item != null && Number(t.dias_por_item) > 0)
       dur = Math.max(1, Math.round(opts.itemsQty * Number(t.dias_por_item)))
-    return { clave: t.clave, tipoId: t.id, nombre: t.nombre, rol: t.rol, dur }
+    return { clave: t.clave, tipoId: t.id, nombre: t.nombre, rol: t.rol, dur, orden: t.orden }
   })
   const { rows: deps } = await runner.query<{ tipo_clave: string; depende_de_clave: string; tipo: string; lag_dias: number }>(
     `SELECT tipo_clave, depende_de_clave, tipo, lag_dias FROM ing_tipo_deps`)

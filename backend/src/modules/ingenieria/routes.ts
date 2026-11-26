@@ -6,6 +6,7 @@ import {
   crearTareaHandler, actualizarTareaHandler, avanceTareaHandler, borrarTareaHandler,
   agregarDepHandler, borrarDepHandler, bulkDepsHandler, setPredecesoresHandler, fijarFechaHandler, guardarBaselineHandler, moverTareaHandler, reordenarVisualHandler, reasignarIngenieroHandler,
   reservarHandler, reservasPendientesHandler, confirmarReservaHandler, liberarReservaHandler,
+  proponerFechasHandler, generarPropuestaHandler, enviarEstimadosHandler,
   dealsEnCursoHandler, pendientesSchedulerHandler, enviarClienteHandler, clienteAproboHandler, activarProyectoHandler,
   overrideDepositoHandler, reprogramacionesHandler, depositosBloqueandoHandler, pagosPorCobrarHandler, instalacionesPMHandler, muestrasEstadoHandler,
   comprasEstadoHandler, instalacionDetalleHandler, escritorioHandler, escritorioResumenHandler,
@@ -69,6 +70,9 @@ router.post('/proyecto/:ext/deposito', PM, overrideDepositoHandler)
 
 // Reserva de capacidad (la dispara Estimados/PM)
 router.post('/proyecto/:id/reservar', PM, reservarHandler)
+router.post('/proyecto/:id/proponer-fechas', PM, proponerFechasHandler)   // ayuda del Scheduler: enciende el ancla + CPM
+router.post('/proyecto/:id/generar-propuesto', PM, generarPropuestaHandler) // Scheduler da por listas las fechas (muestra totales)
+router.post('/proyecto/:id/enviar-estimados', PM, enviarEstimadosHandler)   // concluye: endurece + deal → plan_propuesto
 router.delete('/proyecto/:id/reserva', PM, liberarReservaHandler)
 router.get('/reservas-pendientes', READ, reservasPendientesHandler)
 router.post('/reserva/:proyectoId/confirmar', PM, confirmarReservaHandler)

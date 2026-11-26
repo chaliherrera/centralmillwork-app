@@ -16,7 +16,7 @@ import {
 import { listReservasPendientes, liberarReserva } from '../domain/reservas'
 import { listIngenieros, actualizarIngeniero } from '../domain/ingenieros'
 import {
-  generarPlanIngenieria, aceptarPlanPM,
+  generarPlanIngenieria, aceptarPlanPM, proponerFechasBorrador, generarPropuestaBorrador,
   enviarAClienteDeal, registrarAprobacionCliente, activarProyecto, listDealsEnCurso,
   listPendientesScheduler,
 } from '../domain/plan_inicial'
@@ -33,19 +33,56 @@ function pid(req: Request): number {
   return id
 }
 
-// POST /api/ingenieria/proyecto/:id/reservar
-// Estimados envía al PM → se genera el plan SUGERIDO completo (origen='sugerencia',
-// no bloquea capacidad dura) y el deal pasa a 'esperando_pm'.
+// POST /api/ingenieria/proyecto/:id/reservar  — "Armar plan" del Scheduler.
+// Proceso simplificado: crea el BORRADOR del plan (18 pasos EN ORDEN, con las duraciones
+// de la plantilla, SIN ingeniero y SIN fechas). El Gantt queda vacío hasta que el
+// Scheduler elija ingeniero y ponga/proponga las fechas. El deal pasa a 'esperando_pm'
+// (= con el Scheduler, plan en construcción).
 export async function reservarHandler(req: Request, res: Response, next: NextFunction) {
   const client = await pool.connect()
   try {
     const id = pid(req)
     await client.query('BEGIN')
-    const r = await generarPlanIngenieria(client, id, { origen: 'sugerencia' })
+    const r = await generarPlanIngenieria(client, id, { origen: 'sugerencia', modo: 'borrador' })
     if (!r.error) await client.query(`UPDATE proyectos SET deal_estado = 'esperando_pm' WHERE id = $1`, [id])
     await client.query('COMMIT')
     if (r.error) return next(createError(r.error, 400))
     res.status(201).json({ data: r })
+  } catch (e) { await client.query('ROLLBACK').catch(() => {}); next(e) } finally { client.release() }
+}
+// POST /api/ingenieria/proyecto/:id/proponer-fechas — ayuda: enciende el ancla y el CPM
+// calcula un cronograma de arranque desde las duraciones + dependencias (el Scheduler ajusta).
+export async function proponerFechasHandler(req: Request, res: Response, next: NextFunction) {
+  try {
+    const r = await proponerFechasBorrador(pool, pid(req))
+    if (!r.ok) return next(createError(r.error ?? 'no se pudo proponer fechas', 400))
+    res.json({ data: r })
+  } catch (e) { next(e) }
+}
+// POST /api/ingenieria/proyecto/:id/generar-propuesto — el Scheduler da por listas las
+// fechas → se muestran Entrega estimada / Termina / Holgura.
+export async function generarPropuestaHandler(req: Request, res: Response, next: NextFunction) {
+  try {
+    const r = await generarPropuestaBorrador(pool, pid(req))
+    if (!r.ok) return next(createError(r.error ?? 'no se pudo generar la propuesta', 400))
+    res.json({ data: r })
+  } catch (e) { next(e) }
+}
+// POST /api/ingenieria/proyecto/:id/enviar-estimados — concluye la tarea del Scheduler:
+// endurece el plan (sugerencia→app) y se lo pasa a Estimados (deal → 'plan_propuesto').
+// Exige que la propuesta ya esté generada (fechas listas).
+export async function enviarEstimadosHandler(req: Request, res: Response, next: NextFunction) {
+  const client = await pool.connect()
+  try {
+    const id = pid(req)
+    await client.query('BEGIN')
+    const { rows } = await client.query<{ pg: boolean | null }>(
+      `SELECT ip.propuesta_generada AS pg FROM ing_proyectos ip JOIN proyectos p ON p.id = ip.proyecto_id WHERE p.id = $1`, [id])
+    if (!rows[0]?.pg) { await client.query('ROLLBACK').catch(() => {}); return next(createError('generá el plan propuesto antes de enviarlo a Estimados', 400)) }
+    const r = await aceptarPlanPM(client, id)
+    await client.query('COMMIT')
+    if (r.error) return next(createError(r.error, 400))
+    res.json({ data: r })
   } catch (e) { await client.query('ROLLBACK').catch(() => {}); next(e) } finally { client.release() }
 }
 // GET /api/ingenieria/reservas-pendientes
