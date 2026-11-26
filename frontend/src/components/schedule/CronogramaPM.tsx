@@ -24,6 +24,7 @@ const diffDays = (a: Date, b: Date) => Math.round((a.getTime() - b.getTime()) / 
 const addDaysIso = (iso: string, n: number) => { const x = d(iso); x.setDate(x.getDate() + n); return x.toISOString().slice(0, 10) }
 const mondayOf = (dt: Date) => { const x = new Date(dt); const wd = (x.getDay() + 6) % 7; x.setDate(x.getDate() - wd); x.setHours(0, 0, 0, 0); return x }
 const fmtD = (iso: string | null) => (iso ? `${d(iso).getDate()} ${MES3[d(iso).getMonth()]}` : '—')
+const usd = (n: number | null | undefined) => (n == null ? '—' : '$' + Math.round(n).toLocaleString('en-US'))
 const isWeekend = (dt: Date) => { const w = dt.getDay(); return w === 0 || w === 6 }
 
 // ── Estado de la tarea → colores del diseño (punto / pista / relleno) ──
@@ -702,6 +703,14 @@ export default function CronogramaPM({ proyectos, all, plan, planLoading, sel, s
               <div className="flex justify-between gap-3 py-2"><dt className="text-stone-500">Cliente</dt><dd className="text-stone-800 text-right">{plan.cliente ?? '—'}</dd></div>
               <div className="flex justify-between gap-3 py-2"><dt className="text-stone-500">Fecha que pidió el cliente</dt><dd className="text-stone-800">{fmtD(plan.fecha_entrega)}</dd></div>
               <div className="flex justify-between gap-3 py-2"><dt className="text-stone-500">Cantidad de ítems</dt><dd className="text-stone-800">{plan.n_items ?? '—'}</dd></div>
+              <div className="flex justify-between gap-3 py-2"><dt className="text-stone-500">Costo millwork</dt><dd className="text-stone-800 tabular-nums">{usd(plan.millwork_total)}</dd></div>
+              {(plan.stone_total ?? 0) > 0 && (
+                <div className="flex justify-between gap-3 py-2"><dt className="text-stone-500">Costo piedra</dt><dd className="text-stone-800 tabular-nums">{usd(plan.stone_total)}</dd></div>
+              )}
+              <div className="flex justify-between gap-3 py-2"><dt className="text-stone-600 font-semibold">Costo total del proyecto</dt><dd className="text-stone-900 font-bold tabular-nums">{usd(plan.presupuesto)}</dd></div>
+              {plan.intake_comments && (
+                <div className="py-2"><dt className="text-stone-500 mb-0.5">Notas</dt><dd className="text-stone-700 text-[13px] whitespace-pre-wrap">{plan.intake_comments}</dd></div>
+              )}
             </dl>
           </div>
         </div>

@@ -337,6 +337,9 @@ export interface PlanProyecto {
   proyecto_id: number | null    // para las acciones del deal (proponer/generar/enviar)
   nombre: string | null         // del take-off (para "Ver take off")
   cliente: string | null        // del take-off
+  millwork_total: number | null // costo de millwork cargado en el take-off
+  stone_total: number | null    // costo de piedra cargado en el take-off
+  intake_comments: string | null // notas del take-off
   fecha_inicio: string | null   // inicio del proyecto (ancla hacia adelante)
   fecha_entrega: string | null  // entrega FIJA (ancla hacia atrás) — sagrada
   status_ext: string | null
@@ -359,13 +362,13 @@ export interface PlanProyecto {
 
 /** Devuelve el plan completo de un proyecto con la holgura de cada tarea. */
 export async function getPlanProyecto(runner: QueryRunner, proyectoExt: string): Promise<PlanProyecto> {
-  const { rows: hdr } = await runner.query<{ ini: string | null; entrega: string | null; status: string | null; n_items: number | null; presupuesto: string | null; estado: string | null; deal_estado: string | null; propuesta_generada: boolean; proyecto_id: number | null; nombre: string | null; cliente: string | null }>(
+  const { rows: hdr } = await runner.query<{ ini: string | null; entrega: string | null; status: string | null; n_items: number | null; presupuesto: string | null; estado: string | null; deal_estado: string | null; propuesta_generada: boolean; proyecto_id: number | null; nombre: string | null; cliente: string | null; millwork_total: string | null; stone_total: string | null; intake_comments: string | null }>(
     `SELECT to_char(ip.fecha_inicio,'YYYY-MM-DD') AS ini, to_char(ip.fecha_entrega,'YYYY-MM-DD') AS entrega,
             ip.status_ext AS status, ip.n_items, ip.presupuesto, p.estado, p.deal_estado, ip.propuesta_generada,
-            p.id AS proyecto_id, p.nombre, p.cliente
+            p.id AS proyecto_id, p.nombre, p.cliente, p.millwork_total, p.stone_total, p.intake_comments
        FROM ing_proyectos ip LEFT JOIN proyectos p ON p.id = ip.proyecto_id
       WHERE ip.proyecto_ext = $1`, [proyectoExt])
-  const h = hdr[0] ?? { ini: null, entrega: null, status: null, n_items: null, presupuesto: null, estado: null, deal_estado: null, propuesta_generada: true, proyecto_id: null, nombre: null, cliente: null }
+  const h = hdr[0] ?? { ini: null, entrega: null, status: null, n_items: null, presupuesto: null, estado: null, deal_estado: null, propuesta_generada: true, proyecto_id: null, nombre: null, cliente: null, millwork_total: null, stone_total: null, intake_comments: null }
 
   const tareas = await listTareas(runner, proyectoExt)
   // Orden ESTABLE de la FILA: por orden_visual (el drag del scheduler) y, si falta,
@@ -466,6 +469,9 @@ export async function getPlanProyecto(runner: QueryRunner, proyectoExt: string):
 
   return {
     proyecto_ext: proyectoExt, proyecto_id: h.proyecto_id, nombre: h.nombre, cliente: h.cliente,
+    millwork_total: h.millwork_total != null ? +h.millwork_total : null,
+    stone_total: h.stone_total != null ? +h.stone_total : null,
+    intake_comments: h.intake_comments,
     fecha_inicio: h.ini, fecha_entrega: h.entrega, status_ext: h.status,
     proyecto_estado: h.estado, deal_estado: h.deal_estado,
     n_items: h.n_items, presupuesto: h.presupuesto != null ? +h.presupuesto : null,

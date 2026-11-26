@@ -210,6 +210,9 @@ export interface IngPlan {
   proyecto_id: number | null
   nombre: string | null
   cliente: string | null
+  millwork_total: number | null
+  stone_total: number | null
+  intake_comments: string | null
   fecha_inicio: string | null
   fecha_entrega: string | null
   status_ext: string | null
