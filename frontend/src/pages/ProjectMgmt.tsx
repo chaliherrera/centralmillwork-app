@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { ClipboardList, Inbox, Gauge, Users, Loader2 } from 'lucide-react'
+import PendientesScheduler from '@/components/modules/estimados/PendientesScheduler'
 import ReservasPendientes from '@/components/modules/estimados/ReservasPendientes'
 import DealsEnCurso from '@/components/modules/estimados/DealsEnCurso'
 import ReprogramacionesPendientes from '@/components/modules/ingenieria/ReprogramacionesPendientes'
@@ -46,6 +47,8 @@ export default function ProjectMgmt() {
 
       {tab === 'bandeja' && (
         <div className="max-w-3xl mx-auto space-y-5 mt-4">
+          {/* Fase 2: take-offs que Estimados mandó, esperando que el Scheduler arme el plan. */}
+          <PendientesScheduler onArmar={onRevisar} />
           <PagosPorCobrar />
           {/* Instalaciones (handoff 3 etapas): el PM inicia y, tras la verificación de Campo, cierra. */}
           <InstalacionesPM />

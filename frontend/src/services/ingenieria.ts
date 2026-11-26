@@ -111,9 +111,11 @@ export interface IngProyectoEtapa { proyecto_ext: string | null; nombre: string;
 // Lookahead: día a día de una etapa en un rango, across proyectos.
 export interface IngLookaheadProyecto { proyecto_ext: string | null; nombre: string; asignado_nombre: string | null; inicio: string | null; fin: string | null; n_items: number | null; dias: boolean[] }
 export interface IngLookahead { etapa: { clave: string; nombre: string } | null; dias: string[]; simultaneos: number[]; proyectos: IngLookaheadProyecto[] }
-// Deal en curso (handoff Estimados → Cliente → PM)
-export type DealEstado = 'borrador' | 'esperando_pm' | 'plan_propuesto' | 'esperando_cliente' | 'aprobado'
+// Deal en curso (handoff Estimados → Cliente → Scheduler)
+export type DealEstado = 'borrador' | 'esperando_scheduler' | 'esperando_pm' | 'plan_propuesto' | 'esperando_cliente' | 'aprobado'
 export interface IngDealEnCurso { proyecto_id: number; codigo: string; nombre: string; cliente: string | null; estado: string; deal_estado: DealEstado; fecha_objetivo: string | null; n_tareas: number; portal_token: string | null; deal_aprobado_at: string | null }
+// Bandeja del Scheduler: take-offs esperando que arme el plan.
+export interface PendienteScheduler { proyecto_id: number; codigo: string; nombre: string; cliente: string | null; deal_estado: 'esperando_scheduler' | 'esperando_pm'; fecha_solicitada: string | null; fecha_objetivo: string | null; items_qty: number | null; n_tareas: number }
 export interface ReservaTarea { id: number; nombre: string; asignado_nombre: string | null; fecha_inicio: string | null; fecha_fin: string | null; tipo_clave: string | null }
 export interface ReservaProyecto { proyecto_id: number; proyecto_codigo: string; proyecto_nombre: string; proyecto_ext: string | null; fecha_objetivo: string | null; tareas: ReservaTarea[] }
 
@@ -279,9 +281,11 @@ export const ingenieriaService = {
   confirmarReserva: (proyectoId: number, asignaciones?: { id: number; asignado_nombre: string }[]) =>
     api.post<ApiResponse<{ confirmadas: number }>>(`/ingenieria/reserva/${proyectoId}/confirmar`, { asignaciones }).then((r) => r.data),
 
-  // ── Handoff Estimados → Cliente → PM ──
+  // ── Handoff Estimados → Cliente → Scheduler ──
   dealsEnCurso: () =>
     api.get<ApiResponse<IngDealEnCurso[]>>('/ingenieria/deals').then((r) => r.data),
+  pendientesScheduler: () =>
+    api.get<ApiResponse<PendienteScheduler[]>>('/ingenieria/scheduler/pendientes').then((r) => r.data),
   enviarCliente: (proyectoId: number) =>
     api.post<ApiResponse<{ ok: boolean }>>(`/ingenieria/proyecto/${proyectoId}/enviar-cliente`).then((r) => r.data),
   clienteAprobo: (proyectoId: number) =>
