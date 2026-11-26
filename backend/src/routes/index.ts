@@ -81,7 +81,7 @@ const ADMIN      = requireRole('ADMIN')
 const WRITE      = requireRole('ADMIN', 'PROCUREMENT')
 // Estimados/PM crea y edita proyectos (alta desde el wizard, hoja de intake).
 // PROJECT_MANAGEMENT agregado 2026-08-28 (rediseño Estimados→PM).
-const PROY_WRITE = requireRole('ADMIN', 'PROCUREMENT', 'PROJECT_MANAGEMENT')
+const PROY_WRITE = requireRole('ADMIN', 'PROCUREMENT', 'PROJECT_MANAGEMENT', 'SCHEDULER', 'ESTIMADOS')
 // SHOP_MANAGER agregado 2026-06-13: el rol coordina el taller y debe poder
 // registrar recepciones (caso de uso real: operario hace la entrega física
 // y el SHOP_MANAGER la asienta en el sistema).
@@ -142,7 +142,7 @@ router.delete('/proyectos/:id',               WRITE, deleteProyecto)
 // ─── Informes guardados (armador transversal "Materiales por ítem") ───────────
 // Lectura: cualquier usuario. Crear: solo ADMIN y PM; editar/borrar solo el
 // creador o ADMIN (se chequea en el controlador).
-const INFORMES_WRITE = requireRole('ADMIN', 'PROJECT_MANAGEMENT')
+const INFORMES_WRITE = requireRole('ADMIN', 'PROJECT_MANAGEMENT', 'SCHEDULER')
 router.get('/informes',        getInformes)
 router.get('/informes/:id',    getInforme)
 router.post('/informes',       INFORMES_WRITE, createInforme)
@@ -216,7 +216,7 @@ router.get('/reportes/op/:numero',           requireRole('ADMIN', 'PROCUREMENT',
 // ─── Tareas — buzón de Muestras por rol ──────────────────────────────────────
 // Dedicado a Muestras: cada rol ve/gestiona sus tareas (scoping en el controller).
 // El viejo motor de reglas (sync-system) fue retirado — Tareas es solo Muestras.
-const TAREAS_ROLES = requireRole('ADMIN', 'PROCUREMENT', 'SHOP_MANAGER', 'ENGINEERING', 'PROJECT_MANAGEMENT')
+const TAREAS_ROLES = requireRole('ADMIN', 'PROCUREMENT', 'SHOP_MANAGER', 'ENGINEERING', 'PROJECT_MANAGEMENT', 'SCHEDULER')
 router.get('/tareas',                TAREAS_ROLES, getTareas)
 router.get('/tareas/stats',          TAREAS_ROLES, getTareasStats)
 router.get('/tareas/:id',            TAREAS_ROLES, getTarea)

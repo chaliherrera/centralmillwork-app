@@ -16,6 +16,7 @@ const ROLE_AREAS: Record<string, string[]> = {
   SHOP_MANAGER: ['shop_manager'],
   ENGINEERING: ['ingenieria'],
   PROJECT_MANAGEMENT: ['administracion', 'admin'],
+  SCHEDULER: ['administracion', 'admin'],   // mismas áreas que PM (capacidades paralelas)
 }
 /** Áreas que puede ver el usuario, o null si ve todo (ADMIN). */
 function areasForUser(req: Request): string[] | null {

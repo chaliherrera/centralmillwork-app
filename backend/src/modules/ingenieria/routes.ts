@@ -18,9 +18,12 @@ const router = Router()
 //  · READ  = ver el plan/carga (incluye ENGINEERING y VIEWER).
 //  · PM    = GESTIÓN de recursos = estructura del plan (crear/borrar/asignar/mover/deps).
 //  · EXEC  = REPORTAR AVANCE de la propia tarea (estado/comentario) — lo hace Ingeniería.
-const READ = requireRole('ADMIN', 'PROJECT_MANAGEMENT', 'ENGINEERING', 'VIEWER')
-const PM = requireRole('ADMIN', 'PROJECT_MANAGEMENT')
-const EXEC = requireRole('ADMIN', 'PROJECT_MANAGEMENT', 'ENGINEERING')
+const READ = requireRole('ADMIN', 'PROJECT_MANAGEMENT', 'SCHEDULER', 'ESTIMADOS', 'ENGINEERING', 'VIEWER')
+const PM = requireRole('ADMIN', 'PROJECT_MANAGEMENT', 'SCHEDULER')
+const EXEC = requireRole('ADMIN', 'PROJECT_MANAGEMENT', 'SCHEDULER', 'ENGINEERING')
+// DEAL = el "front del deal": proponer/enviar al cliente/registrar su decisión.
+// Lo comparten quien dirige la planificación (PM/Scheduler) y Estimados.
+const DEAL = requireRole('ADMIN', 'PROJECT_MANAGEMENT', 'SCHEDULER', 'ESTIMADOS')
 
 router.get('/resumen', READ, resumenHandler)
 router.get('/tareas', READ, tareasHandler)
@@ -37,7 +40,7 @@ router.get('/instalaciones-pm', READ, instalacionesPMHandler)  // instalaciones 
 router.get('/muestras-estado', READ, muestrasEstadoHandler)  // estado de muestras por proyecto → escritorio ingeniero (#6)
 router.get('/compras-estado', READ, comprasEstadoHandler)  // estado de compras por proyecto → escritorio ingeniero (#9)
 // Escritorio por rol (todos los roles operativos ven el suyo — Compras/Producción incluidos).
-const ESCRITORIO = requireRole('ADMIN', 'PROJECT_MANAGEMENT', 'ENGINEERING', 'PROCUREMENT', 'PRODUCTION', 'SHOP_MANAGER', 'LOGISTICA', 'CONTABILIDAD', 'FIELD')
+const ESCRITORIO = requireRole('ADMIN', 'PROJECT_MANAGEMENT', 'SCHEDULER', 'ESTIMADOS', 'ENGINEERING', 'PROCUREMENT', 'PRODUCTION', 'SHOP_MANAGER', 'LOGISTICA', 'CONTABILIDAD', 'FIELD')
 router.get('/escritorio/resumen', ESCRITORIO, escritorioResumenHandler)  // badge "te toca: N" del menú
 router.get('/escritorio/novedades-cliente', ESCRITORIO, novedadesClienteHandler)  // decisiones del cliente en el portal (#8)
 router.get('/escritorio', ESCRITORIO, escritorioHandler)
@@ -70,11 +73,12 @@ router.delete('/proyecto/:id/reserva', PM, liberarReservaHandler)
 router.get('/reservas-pendientes', READ, reservasPendientesHandler)
 router.post('/reserva/:proyectoId/confirmar', PM, confirmarReservaHandler)
 
-// Handoff Estimados → Cliente → PM. Estimados y PM comparten roles (ADMIN/PM);
-// la separación es por ubicación en la UI (tracker de Estimados vs bandeja del PM).
+// Handoff Estimados → Cliente → Scheduler. El front del deal (proponer/enviar/
+// registrar decisión del cliente) lo hace Estimados (grupo DEAL). La ACTIVACIÓN
+// del proyecto la dispara el Scheduler/PM (grupo PM).
 router.get('/deals', READ, dealsEnCursoHandler)
-router.post('/proyecto/:id/enviar-cliente', PM, enviarClienteHandler)
-router.post('/proyecto/:id/cliente-aprobo', PM, clienteAproboHandler)
+router.post('/proyecto/:id/enviar-cliente', DEAL, enviarClienteHandler)
+router.post('/proyecto/:id/cliente-aprobo', DEAL, clienteAproboHandler)
 router.post('/proyecto/:id/activar', PM, activarProyectoHandler)
 
 export default router

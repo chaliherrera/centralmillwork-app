@@ -19,7 +19,7 @@ type Vista =
 
 // Crear informes: solo ADMIN y PM. Editar/borrar: creador o ADMIN.
 const puedeCrear = (user: User | null) =>
-  !!user && (user.rol === 'ADMIN' || user.rol === 'PROJECT_MANAGEMENT')
+  !!user && (user.rol === 'ADMIN' || user.rol === 'PROJECT_MANAGEMENT' || user.rol === 'SCHEDULER')
 const puedeEditar = (user: User | null, inf: Informe) =>
   !!user && (user.rol === 'ADMIN' || user.id === inf.created_by)
 

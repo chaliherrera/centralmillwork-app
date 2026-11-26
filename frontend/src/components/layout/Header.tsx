@@ -9,6 +9,8 @@ const ROL_LABEL: Record<UserRole, string> = {
   PROCUREMENT:        'Procurement',
   PRODUCTION:         'Production',
   PROJECT_MANAGEMENT: 'Project Manager',
+  SCHEDULER:          'Scheduler',
+  ESTIMADOS:          'Estimados',
   CONTABILIDAD:       'Accounting',
   SHOP_MANAGER:       'Shop Manager',
   ENGINEERING:        'Engineering',

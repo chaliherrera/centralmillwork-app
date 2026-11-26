@@ -69,21 +69,21 @@ function MuestrasRoute({ children }: { children: React.ReactNode }) {
 // Estimación = puerta de entrada del schedule. La usa quien arranca los proyectos.
 function EstimacionRoute({ children }: { children: React.ReactNode }) {
   const { user } = useAuth()
-  const allowed = ['ADMIN', 'PROJECT_MANAGEMENT']
+  const allowed = ['ADMIN', 'PROJECT_MANAGEMENT', 'ESTIMADOS']
   if (!user || !allowed.includes(user.rol)) return <Navigate to="/" replace />
   return <>{children}</>
 }
 
 function IngenieriaRoute({ children }: { children: React.ReactNode }) {
   const { user } = useAuth()
-  const allowed = ['ADMIN', 'ENGINEERING', 'PROJECT_MANAGEMENT']
+  const allowed = ['ADMIN', 'ENGINEERING', 'PROJECT_MANAGEMENT', 'SCHEDULER']
   if (!user || !allowed.includes(user.rol)) return <Navigate to="/" replace />
   return <>{children}</>
 }
 
 function PmRoute({ children }: { children: React.ReactNode }) {
   const { user } = useAuth()
-  const allowed = ['ADMIN', 'PROJECT_MANAGEMENT']
+  const allowed = ['ADMIN', 'PROJECT_MANAGEMENT', 'SCHEDULER']
   if (!user || !allowed.includes(user.rol)) return <Navigate to="/" replace />
   return <>{children}</>
 }
@@ -93,7 +93,7 @@ function PmRoute({ children }: { children: React.ReactNode }) {
 // las enforce el backend por endpoint (VIEWER, por ej., ve pero no modifica).
 function ScheduleRoute({ children }: { children: React.ReactNode }) {
   const { user } = useAuth()
-  const allowed = ['ADMIN', 'PROJECT_MANAGEMENT', 'SHOP_MANAGER', 'ENGINEERING', 'VIEWER']
+  const allowed = ['ADMIN', 'PROJECT_MANAGEMENT', 'SCHEDULER', 'SHOP_MANAGER', 'ENGINEERING', 'VIEWER']
   if (!user || !allowed.includes(user.rol)) return <Navigate to="/" replace />
   return <>{children}</>
 }
@@ -107,14 +107,14 @@ function FinanzasRoute({ children }: { children: React.ReactNode }) {
 
 function LogisticaRoute({ children }: { children: React.ReactNode }) {
   const { user } = useAuth()
-  const allowed = ['ADMIN', 'LOGISTICA', 'PROJECT_MANAGEMENT']
+  const allowed = ['ADMIN', 'LOGISTICA', 'PROJECT_MANAGEMENT', 'SCHEDULER']
   if (!user || !allowed.includes(user.rol)) return <Navigate to="/" replace />
   return <>{children}</>
 }
 
 function FieldRoute({ children }: { children: React.ReactNode }) {
   const { user } = useAuth()
-  const allowed = ['ADMIN', 'FIELD', 'ENGINEERING', 'PROJECT_MANAGEMENT']
+  const allowed = ['ADMIN', 'FIELD', 'ENGINEERING', 'PROJECT_MANAGEMENT', 'SCHEDULER']
   if (!user || !allowed.includes(user.rol)) return <Navigate to="/" replace />
   return <>{children}</>
 }
@@ -122,7 +122,7 @@ function FieldRoute({ children }: { children: React.ReactNode }) {
 // Tareas = buzón de Muestras por rol. Cada rol ve sus tareas (scoping en el backend).
 function TareasRoute({ children }: { children: React.ReactNode }) {
   const { user } = useAuth()
-  const allowed = ['ADMIN', 'PROCUREMENT', 'SHOP_MANAGER', 'ENGINEERING', 'PROJECT_MANAGEMENT']
+  const allowed = ['ADMIN', 'PROCUREMENT', 'SHOP_MANAGER', 'ENGINEERING', 'PROJECT_MANAGEMENT', 'SCHEDULER']
   if (!user || !allowed.includes(user.rol)) return <Navigate to="/" replace />
   return <>{children}</>
 }
