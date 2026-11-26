@@ -86,15 +86,20 @@ export async function getEscritorio(
     esCampo ? " OR (tt.clave = 'field_measurements' AND t.estado = 'en_curso')" : ''} )`
 
   // Base: tareas pendientes/en_curso de la ruta REAL (no sugerencias), del rol pedido.
-  // Solo proyectos ACTIVOS: un plan 'app' entra a los escritorios recién cuando el PM
+  // Solo proyectos ACTIVOS: un plan 'app' entra a los escritorios recién cuando se
   // activa el proyecto (el cliente ya aceptó) — no mientras es prospecto/reserva. Los
   // importados del Excel (import_excel) son proyectos reales en curso: se muestran siempre.
+  // EXCEPCIÓN (proceso simplificado, Fase 3): la firma del contrato (po_execution = día
+  // cero) aparece para Estimados apenas el cliente APRUEBA el cronograma, aunque el
+  // proyecto siga en 'prospecto' — así "cliente aprueba → subí el contrato" es la próxima
+  // tarea, sin esperar a la activación (la firma es gate blando y no la bloquea).
   const base = `FROM ing_tareas t JOIN ing_tarea_tipos tt ON tt.id = t.tipo_id
     LEFT JOIN ing_proyectos ip ON ip.proyecto_ext = t.proyecto_ext
     LEFT JOIN proyectos p ON p.id = t.proyecto_id
     WHERE t.estado NOT IN ('hecha','na')
       AND t.origen IN ('app','import_excel')
-      AND (t.origen = 'import_excel' OR p.estado = 'activo')
+      AND ( t.origen = 'import_excel' OR p.estado = 'activo'
+         OR (tt.clave = 'po_execution' AND p.estado = 'prospecto' AND p.deal_estado = 'aprobado') )
       AND NOT (tt.clave = 'po_execution' AND t.origen <> 'app')
       AND tt.clave <> 'installation'
       AND ${rolCond} ${asigCond}`
@@ -157,7 +162,8 @@ export async function getEscritorioResumen(
        FROM ing_tareas t JOIN ing_tarea_tipos tt ON tt.id = t.tipo_id
        LEFT JOIN proyectos p ON p.id = t.proyecto_id
       WHERE t.estado NOT IN ('hecha','na') AND t.origen IN ('app','import_excel')
-        AND (t.origen = 'import_excel' OR p.estado = 'activo')
+        AND ( t.origen = 'import_excel' OR p.estado = 'activo'
+           OR (tt.clave = 'po_execution' AND p.estado = 'prospecto' AND p.deal_estado = 'aprobado') )
         AND NOT (tt.clave = 'po_execution' AND t.origen <> 'app')
         AND tt.clave <> 'installation'
         AND ${rolCond} ${asigCond}

@@ -12,8 +12,9 @@ import CronogramaCliente, { ganttDesdePlan } from '@/components/schedule/Cronogr
 //   mode='estimados' → deals que esperan acción de Estimados:
 //        plan_propuesto  → "Enviar schedule al cliente"
 //        esperando_cliente → "Registrar que el cliente aprobó"
-//   mode='pm' → deals aprobados por el cliente, listos para que el PM ACTIVE.
-// El PM es quien activa: no pierde control y todo su plan se enciende de una.
+//   mode='pm' → deals aprobados por el cliente, listos para ACTIVAR (lo ve el Scheduler,
+//        que es quien activa en el proceso simplificado; PM sigue en paralelo).
+// Al activar, el proyecto arranca y todo el plan se enciende de una.
 // ─────────────────────────────────────────────────────────────────────────────
 
 const MES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic']
@@ -52,7 +53,9 @@ export default function DealsEnCurso({ mode, emptyHint }: { mode: 'estimados' | 
   const cargar = () => ingenieriaService.dealsEnCurso()
     .then((r) => setDeals(r.data ?? []))
     .catch(() => {}).finally(() => setLoading(false))
-  useEffect(() => { cargar() }, [])
+  // Refresca solo: así, cuando el cliente aprueba en el portal, Estimados ve el cierre y
+  // el Scheduler ve el deal "listo para activar" sin tener que recargar la página.
+  useEffect(() => { cargar(); const t = setInterval(cargar, 20_000); return () => clearInterval(t) }, [])
 
   // Estimados también ve el deal 'aprobado' (como confirmación con fecha/hora) hasta que
   // el PM activa; antes desaparecía apenas el cliente aprobaba y Estimados quedaba sin cierre.
@@ -121,7 +124,7 @@ export default function DealsEnCurso({ mode, emptyHint }: { mode: 'estimados' | 
                   </button>
                 )}
                 {mode === 'estimados' && d.deal_estado === 'esperando_cliente' && (
-                  <button onClick={() => accion(d, () => ingenieriaService.clienteAprobo(d.proyecto_id), 'Aprobación registrada — el PM lo verá para activar')} disabled={isBusy}
+                  <button onClick={() => accion(d, () => ingenieriaService.clienteAprobo(d.proyecto_id), 'Aprobación registrada — subí el contrato y el Scheduler activará el proyecto')} disabled={isBusy}
                     className="inline-flex items-center gap-1.5 rounded-lg bg-forest-600 hover:bg-forest-700 disabled:opacity-50 text-white text-sm font-semibold px-3.5 py-2">
                     {isBusy ? <Loader2 className="animate-spin" size={15} /> : <Check size={15} />} El cliente aprobó
                   </button>
@@ -135,7 +138,8 @@ export default function DealsEnCurso({ mode, emptyHint }: { mode: 'estimados' | 
                 <span className="text-[11px] text-stone-400">
                   {d.deal_estado === 'plan_propuesto' && 'El PM aceptó — mandale el schedule al cliente para su OK.'}
                   {d.deal_estado === 'esperando_cliente' && 'Esperando el OK del cliente. Registralo cuando responda.'}
-                  {d.deal_estado === 'aprobado' && esPM && 'El cliente ya aprobó. Activá para poner el plan en marcha.'}
+                  {d.deal_estado === 'aprobado' && esPM && 'El cliente ya aprobó. Activá para poner todo el plan en marcha.'}
+                  {d.deal_estado === 'aprobado' && !esPM && 'El cliente aprobó. Subí el contrato firmado en tu escritorio; el Scheduler activa el proyecto.'}
                 </span>
               </div>
               {/* Estimados: confirmación de que el cliente aprobó (con fecha y hora). Queda
@@ -145,7 +149,7 @@ export default function DealsEnCurso({ mode, emptyHint }: { mode: 'estimados' | 
                   <UserCheck size={15} className="text-emerald-600 shrink-0 mt-0.5" />
                   <span>
                     <b>El cliente aprobó el schedule</b>{fmtDateTime(d.deal_aprobado_at) && <> el <b>{fmtDateTime(d.deal_aprobado_at)}</b></>}.
-                    <span className="text-emerald-700"> Esperando que el PM active el proyecto.</span>
+                    <span className="text-emerald-700"> Subí el contrato firmado en tu escritorio (arriba). El Scheduler activa el proyecto.</span>
                   </span>
                 </div>
               )}
