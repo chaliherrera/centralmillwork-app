@@ -1140,11 +1140,13 @@ export async function reasignarIngeniero(
   if (!h?.ini || !h?.entrega) {
     const preview: ReasignarPreview = { ...base, ok: true, sin_fechas: true, ingeniero_actual, disponible_desde: disponible, entrega: h?.entrega ?? '', entra: true, n_tareas: ingIds.size }
     if (dryRun) return preview
+    // Solo ASIGNA el ingeniero (sin anclar fechas): no toca no_antes_de para que el
+    // Scheduler pueda mover las fechas libremente. Los pines los pone él donde quiera.
     await runner.query(
-      `UPDATE ing_tareas t SET asignado_nombre = $2, no_antes_de = $3::date, updated_at = NOW()
+      `UPDATE ing_tareas t SET asignado_nombre = $2, no_antes_de = NULL, updated_at = NOW()
          FROM ing_tarea_tipos tt
-        WHERE t.tipo_id = tt.id AND t.proyecto_ext = $1 AND tt.rol = ANY($4)`,
-      [proyectoExt, nuevoIng, disponible, rolesIng])
+        WHERE t.tipo_id = tt.id AND t.proyecto_ext = $1 AND tt.rol = ANY($3)`,
+      [proyectoExt, nuevoIng, rolesIng])
     return preview
   }
 

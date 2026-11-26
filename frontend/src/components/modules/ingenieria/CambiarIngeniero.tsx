@@ -77,7 +77,7 @@ export default function CambiarIngeniero({ proyectoExt, propuesto, ingenieros, o
           <div className="mt-3 space-y-2">
             <div className="rounded-xl border border-stone-200 bg-stone-50 px-3 py-2.5 text-[13px] text-stone-600">
               Se asignan las <b>{prev.n_tareas}</b> tareas de ingeniería a <b className="text-stone-800">{prev.ingeniero_nuevo}</b>.
-              Las fechas se calculan después con <b>Proponer fechas</b> (arrancan cuando el ingeniero se libera, el {fmtDia(prev.disponible_desde)}).
+              Las fechas las ponés vos después (a mano o con <b>Proponer fechas</b>).
             </div>
             <div className="flex justify-end gap-2">
               <button onClick={cerrar} disabled={busy} className="px-3 py-2 text-sm font-medium text-stone-500 hover:text-stone-800">Cancelar</button>
