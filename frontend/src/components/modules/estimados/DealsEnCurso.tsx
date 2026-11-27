@@ -5,6 +5,7 @@ import toast from 'react-hot-toast'
 import { ingenieriaService, type IngDealEnCurso } from '@/services/ingenieria'
 import type { PortalGanttTarea } from '@/services/portal'
 import CronogramaCliente, { ganttDesdePlan } from '@/components/schedule/CronogramaCliente'
+import { copiarLinkEnmascarado, etiquetaPortal } from '@/utils/portalLink'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Handoff Estimados → Cliente → PM. Un mismo tracker, dos vistas:
@@ -155,7 +156,7 @@ export default function DealsEnCurso({ mode, emptyHint }: { mode: 'estimados' | 
                   <span className="text-[10px] font-bold uppercase tracking-wide text-stone-500 shrink-0">Portal del cliente</span>
                   <input readOnly value={portalLink} onFocus={(e) => e.currentTarget.select()}
                     className="flex-1 min-w-[160px] text-[11px] text-stone-600 bg-white border border-stone-200 rounded px-2 py-1" />
-                  <button onClick={() => { navigator.clipboard?.writeText(portalLink); toast.success('Link copiado') }}
+                  <button onClick={async () => { const ok = await copiarLinkEnmascarado(portalLink, etiquetaPortal(d.codigo, d.nombre)); ok ? toast.success('Link copiado (listo para pegar en un email)') : toast.error('No se pudo copiar') }}
                     className="inline-flex items-center gap-1 text-xs font-semibold text-stone-600 hover:text-stone-900 border border-stone-300 rounded-lg px-2.5 py-1.5">
                     <Copy size={13} /> Copiar
                   </button>
