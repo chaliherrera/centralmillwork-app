@@ -15,7 +15,7 @@
 - Leer la carpeta de memoria (grep) antes de preguntar o afirmar sobre proceso/roles/fechas/arquitectura/estado de un feature. No re-preguntar lo documentado.
 - Mapa de ramas (crítico):
   - `feat/cronograma-pm` = rama activa del Scheduler / cronograma / proceso simplificado del alta de proyecto.
-  - El rediseño del PORTAL del cliente (inglés + barrera de Términos y Condiciones + layout nuevo + link enmascarado, migración 101) vive en `feat/mobile-roles`, NO en `feat/cronograma-pm`. PENDIENTE de portar con un merge cuidadoso (no pisar la aprobación del PLAN del cliente, que vive en esta rama). Ver memoria `project_portal_no_en_cronograma_pm`.
+  - El PORTAL del cliente (inglés + T&C + layout, migr.091+101) YA FUE PORTADO a `feat/cronograma-pm` (2026-11-27, commit c8ba610) y verificado en staging. Falta un follow-up chico: la Consola de admin del portal + el link enmascarado en la bandeja de Estimados. Ver memoria `project_portal_no_en_cronograma_pm`.
 
 ## Sobre archivos sensibles que NO deben commitearse
 - database/seed_*_test.sql y seed_*_demo.sql son datos de prueba locales únicamente
