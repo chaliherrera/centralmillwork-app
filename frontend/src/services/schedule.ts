@@ -71,6 +71,22 @@ export interface ProyectoOverview {
   prox_semaforo: Semaforo | null
 }
 
+export interface PortalTokenRow {
+  id: number
+  token: string
+  contacto_nombre: string | null
+  contacto_email: string | null
+  activo: boolean
+  created_at: string
+  last_access_at: string | null
+  terms_accepted_at: string | null
+  terms_accepted_ip: string | null
+  terms_accepted_version: string | null
+  expires_at: string | null
+  vencido: boolean
+  dias_para_vencer: number | null
+}
+
 export const scheduleService = {
   // Índice de la cartera: todos los proyectos con schedule y su estado (nav "Schedule").
   getProyectosOverview: () =>
@@ -116,10 +132,14 @@ export const scheduleService = {
       .post<ApiResponse<{ ok: boolean; anterior: string }>>(`/schedule/proyecto/${proyectoId}/fecha-objetivo`, { fecha_objetivo })
       .then((r) => r.data),
 
-  crearPortalToken: (proyectoId: number, contacto_nombre?: string) =>
+  crearPortalToken: (proyectoId: number, contacto_nombre?: string, contacto_email?: string) =>
     api
-      .post<ApiResponse<{ token: string }>>(`/schedule/proyecto/${proyectoId}/portal-token`, { contacto_nombre })
+      .post<ApiResponse<{ token: string }>>(`/schedule/proyecto/${proyectoId}/portal-token`, { contacto_nombre, contacto_email })
       .then((r) => r.data),
+  listPortalTokens: (proyectoId: number) =>
+    api.get<ApiResponse<PortalTokenRow[]>>(`/schedule/proyecto/${proyectoId}/portal-tokens`).then((r) => r.data),
+  revocarPortalToken: (proyectoId: number, tokenId: number) =>
+    api.post<ApiResponse<{ ok: boolean }>>(`/schedule/proyecto/${proyectoId}/portal-token/${tokenId}/revocar`).then((r) => r.data),
 
   registrarHito: (proyectoId: number, codigo: string, fecha: string | null, nota?: string, importe?: number) =>
     api

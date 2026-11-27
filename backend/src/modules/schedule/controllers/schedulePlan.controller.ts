@@ -10,7 +10,7 @@ import { z } from 'zod'
 import pool from '../../../db/pool'
 import { createError } from '../../../middleware/errorHandler'
 import { generarPlan, recomputeScheduleForProyecto, cambiarFechaObjetivo } from '../domain/recompute'
-import { crearToken, revocarToken } from '../domain/portal'
+import { crearToken, revocarToken, armarVistaPublica } from '../domain/portal'
 import { registrarHito } from '../domain/registro'
 import { chequearFactibilidad } from '../domain/factibilidad'
 
@@ -198,7 +198,13 @@ export async function listPortalTokensHandler(req: Request, res: Response, next:
     const { rows } = await pool.query(
       `SELECT id, token, contacto_nombre, contacto_email, activo,
               to_char(created_at,'YYYY-MM-DD') AS created_at,
-              to_char(last_access_at,'YYYY-MM-DD"T"HH24:MI') AS last_access_at
+              to_char(last_access_at,'YYYY-MM-DD"T"HH24:MI') AS last_access_at,
+              to_char(terms_accepted_at,'YYYY-MM-DD"T"HH24:MI') AS terms_accepted_at,
+              terms_accepted_ip, terms_accepted_version,
+              to_char(expires_at,'YYYY-MM-DD') AS expires_at,
+              (expires_at IS NOT NULL AND expires_at <= NOW()) AS vencido,
+              CASE WHEN expires_at IS NULL THEN NULL
+                   ELSE GREATEST(0, EXTRACT(DAY FROM (expires_at - NOW()))::int) END AS dias_para_vencer
          FROM schedule_portal_tokens WHERE proyecto_id = $1 ORDER BY created_at DESC`, [proyectoId])
     res.json({ data: rows })
   } catch (err) { next(err) }
@@ -213,6 +219,18 @@ export async function revocarPortalTokenHandler(req: Request, res: Response, nex
     const ok = await revocarToken(pool, proyectoId, tokenId)
     if (!ok) return next(createError('token no encontrado o ya revocado', 404))
     res.json({ data: { ok: true }, message: 'Link del portal revocado' })
+  } catch (err) { next(err) }
+}
+
+// ── GET /api/schedule/proyecto/:id/portal-preview ────────────────────────────
+// La MISMA vista que ve el cliente, pero autenticada y por proyecto (sin token).
+// Para la Consola del portal: previsualizar cualquier proyecto.
+export async function portalPreviewHandler(req: Request, res: Response, next: NextFunction) {
+  try {
+    const proyectoId = parseProyectoId(req)
+    const vista = await armarVistaPublica(pool, proyectoId, null)
+    if (!vista) return next(createError('El proyecto no tiene plan / portal disponible', 404))
+    res.json({ data: vista })
   } catch (err) { next(err) }
 }
 

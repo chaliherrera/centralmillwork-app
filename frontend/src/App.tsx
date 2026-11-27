@@ -28,6 +28,7 @@ import Logistica from '@/pages/Logistica'
 import Field from '@/pages/Field'
 import KioskApp from '@/pages/kiosk/KioskApp'
 import ClientPortal from '@/pages/portal/ClientPortal'
+import PortalConsole from '@/pages/PortalConsole'
 import { Loader2 } from 'lucide-react'
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
@@ -164,6 +165,7 @@ export default function App() {
         {/* Plan de Ingeniería ahora vive dentro de /pm (es herramienta del PM). Redirect por links viejos. */}
         <Route path="ingenieria-plan"  element={<Navigate to="/pm" replace />} />
         <Route path="pm"               element={<PmRoute><ProjectMgmt /></PmRoute>} />
+        <Route path="portal-console"   element={<PmRoute><PortalConsole /></PmRoute>} />
         <Route path="finanzas"         element={<FinanzasRoute><Finanzas /></FinanzasRoute>} />
         <Route path="logistica"        element={<LogisticaRoute><Logistica /></LogisticaRoute>} />
         <Route path="field"            element={<FieldRoute><Field /></FieldRoute>} />
