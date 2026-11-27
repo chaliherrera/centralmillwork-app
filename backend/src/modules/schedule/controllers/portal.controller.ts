@@ -8,14 +8,30 @@
 import { Request, Response, NextFunction } from 'express'
 import { z } from 'zod'
 import pool from '../../../db/pool'
-import { getVistaPublica, aplicarAprobacion } from '../domain/portal'
+import { getVistaPublica, aplicarAprobacion, registrarAceptacionTerminos } from '../domain/portal'
+
+// Versión de los T&C que se muestra/registra (coincide con el documento del portal).
+export const TERMS_VERSION = '04/11/2025'
 
 // GET /api/portal/:token — vista de solo-lectura del proyecto + pendientes
 export async function portalVista(req: Request, res: Response, next: NextFunction) {
   try {
     const vista = await getVistaPublica(pool, String(req.params.token))
-    if (!vista) return res.status(404).json({ message: 'Link inválido o desactivado' })
+    if (!vista) return res.status(404).json({ message: 'Invalid or deactivated link.' })
     res.json({ data: vista })
+  } catch (err) { next(err) }
+}
+
+// POST /api/portal/:token/accept-terms — el cliente acepta los T&C (constancia simple)
+export async function portalAceptarTerminos(req: Request, res: Response, next: NextFunction) {
+  try {
+    // IP real detrás del proxy de Railway (x-forwarded-for) + navegador. Best-effort.
+    const fwd = (req.headers['x-forwarded-for'] as string | undefined)?.split(',')[0]?.trim()
+    const ip = (fwd || req.ip || '').slice(0, 64) || null
+    const ua = ((req.headers['user-agent'] as string | undefined) ?? '').slice(0, 400) || null
+    const r = await registrarAceptacionTerminos(pool, String(req.params.token), ip, ua, TERMS_VERSION)
+    if (!r.ok) return res.status(404).json({ message: r.error })
+    res.json({ data: { ok: true, terms_accepted_at: r.terms_accepted_at } })
   } catch (err) { next(err) }
 }
 
@@ -33,10 +49,12 @@ export async function portalAprobar(req: Request, res: Response, next: NextFunct
     const r = await aplicarAprobacion(client, String(req.params.token), codigo, decision, comentario ?? null)
     await client.query('COMMIT')
     if (!r.ok) return res.status(400).json({ message: r.error })
+    // (No se manda email: el proyecto no usa SMTP. El equipo ve la decisión en
+    //  "Novedades del cliente" dentro de la app.)
     res.json({ data: { ok: true } })
   } catch (err: any) {
     await client.query('ROLLBACK').catch(() => {})
-    if (err?.issues) return res.status(400).json({ message: 'datos inválidos' })
+    if (err?.issues) return res.status(400).json({ message: 'Invalid data.' })
     next(err)
   } finally {
     client.release()
